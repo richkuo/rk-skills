@@ -85,7 +85,7 @@ When posting a code-review comment (e.g. `@claude review`), the comment contains
 ## GitHub Issues
 
 - **Never create a placeholder, stub, or empty-bodied issue — no exceptions.** Every issue gets a complete body at creation: the complexity rationale line, a concrete problem statement, goal, and approach/acceptance criteria. This holds even when filing a batch of follow-ups at once — each one is fully specified before it is filed. If a follow-up isn't ready to spec, do not create it yet; track it in the parent issue or a notes file until it is.
-- When creating a GitHub issue (`gh issue create`), prefix the title with a bracketed complexity score: `[C<score>] <title>` — e.g. `[C70] Fix order-fill race`.
+- When creating a GitHub issue (`gh issue create`), prefix the title with a bracketed complexity score: `[C<score>] <title>`. The title is a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — precise about component and behavior, no unexplained jargon — e.g. `[C70] Orders can be filled twice when two fills arrive at the same moment`.
 - **Complexity score (0–100)** is an *approximation* of implementation complexity, **not** a time or effort estimate. Derive it from three factors:
   - **Scope** — breadth of the change: files, layers, and surfaces it touches.
   - **Risk** — blast radius; money, data integrity, security, or auto-protective mechanisms weigh heaviest.
