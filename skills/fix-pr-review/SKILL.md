@@ -1,0 +1,236 @@
+---
+name: fix-pr-review
+description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, and inline diff comments), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh @claude re-review.
+---
+
+# fix-pr-review
+
+Take all unaddressed review feedback on a pull request and resolve it fully and autonomously: re-validate each finding against the code, fix the ones that are real, push back on the ones that aren't, and for the judgment calls the reviewer couldn't make — and for the optional improvements — derive and implement the absolute-best solution rather than pausing. Then report back on the PR and request a re-review. Don't stop to ask the user; do the work.
+
+**The review is a hypothesis, not a work order.** A reviewer (human or `@claude`) can cite a stale line, misread a conditional, or flag a non-bug. Implementing a wrong suggestion ships a regression with a reviewer's blessing. So every finding is traced to current `file:line` and confirmed *before* you change anything. You are not performing agreement — you are verifying claims and acting only on the ones that hold.
+
+## Input
+
+The user provides one of:
+- Nothing — **default to the PR for the current branch** (`gh pr view`).
+- `#<N>` / `<N>` / full URL / `owner/repo#N`.
+
+If the current branch has no PR and none was given, say so and stop — there's nothing to fix.
+
+## Steps
+
+### 0. Resolve the PR and sync the branch
+
+```bash
+gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,state,isDraft
+git fetch origin
+git branch --show-current
+```
+
+- Confirm you are **on the PR's head branch** (`headRefName`). If not, check it out with `gh pr checkout <N>` — it handles fork-hosted head branches and sets upstream tracking. Fixes must land on the branch the PR tracks, never on `main` or a divergent branch. Never fix a review by committing to the base branch.
+- Note whether the PR is from a **fork** (`headRepositoryOwner` differs from the base repo's owner) — the head branch then lives in the fork, so pulls and pushes go to the branch's tracked upstream, not `origin`.
+- Pull the latest head so you fix against what the reviewer saw: `git pull --ff-only` on the tracked upstream (if it can't fast-forward, stop and tell the user the branch diverged).
+- Note the PR state. If it's already `merged` or `closed`, stop and report — don't reopen work on a closed PR without the user.
+
+### 1. Fetch all unaddressed review feedback
+
+Review feedback arrives through three channels: formal GitHub PR reviews, plain issue comments (the `@claude` bot posts the verdict-and-sections format as an issue comment), and **inline diff comments** (line-level threads, where human reviewers most often comment). Fetch all three:
+
+```bash
+# PR reviews (formal review events) — state included so DISMISSED reviews can be skipped
+gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '.[] | {id, user: .user.login, state, submitted_at, body}'
+# Issue comments on the PR (where @claude review output usually lands) — REST + --paginate for completeness
+gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, body}'
+# Inline diff threads WITH resolution state — REST can't report isResolved, so use GraphQL
+gh api graphql -F owner='{owner}' -F repo='{repo}' -F pr=<N> -f query='
+  query($owner:String!,$repo:String!,$pr:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+    reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
+      comments(first:50){ nodes{ databaseId author{login} createdAt body } } } } } } }'
+```
+
+(If `hasNextPage` is true, paginate with `endCursor` — don't silently drop threads past 100.)
+
+Determine the **cutoff**: the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review). Then collect:
+
+- Every formal review or review-formatted issue comment **newer than the cutoff** (no cutoff → everything since the PR opened) — it opens with a `LGTM` / `Needs Updates` verdict, contains review sections like `### Needs Fixing`, or is otherwise clearly review feedback. **If multiple reviews landed — e.g. two reviewers — address all of them**, not just the latest. Skip `DISMISSED` reviews.
+- Every **unresolved** inline thread (`isResolved: false`), **regardless of age** — resolution state, not timestamp, decides whether a thread is open work. A thread from before the cutoff that the reviewer never resolved is still open. Exception: if the thread's last comment is your own disposition reply and no one has responded since, it's awaiting the reviewer — skip it. `isOutdated` alone doesn't mean resolved. Treat each thread as one finding.
+- Ignore your own prior disposition comments and `@claude review` trigger comments.
+
+State what you picked (authors + timestamps) so the user can confirm it's the right set.
+
+**Note whether the collected set contains any blocking finding** — a `Needs Fixing` or `Requires Human Review` item from any review, or an inline thread asserting a real defect (classified in step 2). This drives the re-review routing in step 7.
+
+**If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 4), and file each `Create Follow-up Issue` item as a GitHub issue. Don't invent work the review never raised; if the feedback is a bare `LGTM` with no items at all and no open inline threads, report that the PR is approved and stop.
+
+### 2. Extract findings
+
+Parse all collected feedback — structured reviews and inline diff threads alike — into discrete findings, tagged by section:
+- **Needs Fixing** — blocking; reviewer asserts a real defect.
+- **Requires Human Review** — blocking; reviewer couldn't decide (a genuine tradeoff or missing context).
+- **Recommended Optional** — non-blocking improvement.
+- **Create Follow-up Issue** — out-of-scope, track separately.
+
+For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one reviewer or thread, merge into one finding and note all sources.
+
+### 3. Re-validate each finding against the code (the core step)
+
+For **every** finding — including ones that read as obviously correct — trace the claim to current code and assign a verdict. Endorsement is a verification act, not a relay: re-derive the finding from the code with your own `file:line`, don't transcribe the reviewer's reasoning.
+
+| Verdict | Meaning | Action |
+|---------|---------|--------|
+| ✅ **Confirmed** | Code at `file:line` matches the finding; the defect/improvement is real | Fix it (step 4) |
+| ❌ **Refuted** | Code does not do what the finding claims, or the suggested change would itself be wrong/regressive | Do **not** change; record a one-line, code-grounded rebuttal for the reply |
+| ⚠️ **Partial** | Real but narrower/broader than stated, or true only on one path | Fix the true part; note the correction |
+| ❓ **Judgment** | A real tradeoff or a decision the reviewer couldn't make (most `Requires Human Review` items) | Derive the absolute-best solution and **implement it** (see below) — don't pause, don't guess blindly, don't punt empty-handed |
+
+Validation discipline (this is where fixing a review goes wrong):
+- **Read the body, not just the cited line.** A name states intent; open the function and trace the conditional fully before agreeing.
+- **Prove negatives by reading the path.** "X is never validated / never freed / not awaited" — confirm the absence across *all* relevant paths, not the one the reviewer looked at; the behavior may be produced elsewhere.
+- **A suggested fix is its own claim.** "Just add a lock here" can deadlock; "default it to N" can break a caller. Verify the *remedy* is correct for this codebase, not only that the *problem* exists. Derive the right fix from first principles if the suggested one is suboptimal — correctness and safety outrank matching the reviewer's wording.
+- **Safety carve-out:** any finding touching money, data integrity, security, or an auto-protective mechanism gets fixed or escalated to the user even at low confidence — never silently dropped as Refuted unless you can prove from code it's a non-issue.
+
+**For every ❓ Judgment finding, do the analysis the reviewer couldn't and implement the result — don't hand the tradeoff back.** Trace the code, enumerate the viable approaches, and derive the **absolute-best solution**, evaluated as if cost, effort, time, resources, token spend, and code volume were unlimited — they are *not* factors and must never narrow the option space. The only things that can override "best" are correctness and safety. Choose the most correct, most robust design even when it's far more work, then implement it (step 4) in this same run. Do **not** pause to ask the user. Record the decision in the disposition comment — the chosen solution, the code-grounded reasoning (`file:line`), and the rejected alternatives in one line each — so the human can override after the fact if they disagree.
+
+This same absolute-best-solution standard governs `Recommended Optional` improvements: implement them too, choosing the best design with cost/effort/time/resources treated as non-factors.
+
+### 3.5 Select the working model from the validated findings
+
+Steps 2–3 always run inline in this session — validation is the hard thinking and doubles as the model-selection signal, so it never gets delegated. Now choose who implements, keyed to the **implementation complexity of the surviving work** — not its blocking/optional category (a blocking fix can be a trivial one-liner; an optional refactor can be genuinely hard).
+
+First, two absolute inline gates that override any complexity read:
+- Any ❓ Judgment call whose remedy is still open-ended, or any finding under the safety carve-out (money, data integrity, security, auto-protective mechanisms) — open decisions and high blast radius never get delegated.
+
+Otherwise, rate each surviving fix's complexity from your validation (you just traced the code, so you know): **scope** (files/layers touched, cross-cutting vs. local), **subtlety** (concurrency, ordering, invariants, edge-case reasoning vs. mechanical edits), and **verification difficulty** (needs careful test design vs. existing suite covers it). The **most complex fix** sets the tier for the whole set (never the average, never split across subagents):
+
+- **Opus subagent (`model: "opus"`)** — any fix is non-trivial: multi-file or cross-layer, touches subtle logic, or its correctness needs real reasoning to preserve.
+- **Sonnet subagent (`model: "sonnet"`)** — every fix is simple and mechanical: localized edits with a pinned-down remedy, plus any `Create Follow-up Issue` filings and Refuted rebuttals to write up.
+
+When in doubt between tiers, take the higher one — misrouting hard work down costs correctness; misrouting easy work up costs nothing that matters.
+
+When dispatching, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work (e.g. `Opus 4.8` / `Sonnet 5`), not the session model. When the subagent returns, relay its step-8 report to the user verbatim plus which model ran; don't redo its work.
+
+If the Agent tool's model override is unavailable in the current harness, fall back to running inline and note the intended model in the report.
+
+### 4. Implement the fixes
+
+Implement every finding that calls for a change: ✅ Confirmed, ⚠️ Partial (the true part), ❓ Judgment (the absolute-best solution you derived), and `Recommended Optional` (best-solution standard). Skip only ❌ Refuted and `Create Follow-up Issue` items.
+
+- Read the surrounding code and follow existing conventions before editing.
+- Keep each fix scoped to its finding; don't smuggle in unrelated refactors. (Scope ≠ minimalism: for Judgment and Optional items, pick the *best* design, not the smallest diff — correctness and robustness outrank brevity.)
+- After all fixes, **verify**: run the project's tests/build/lint (check the repo's `CLAUDE.md` / `package.json` / Makefile for the commands — e.g. `bun test`, `go test -race ./...`, `bun run build`). Evidence before assertions: do not claim a fix works without running verification, and report any failures honestly rather than papering over them.
+- If a fix turns out infeasible or reveals the finding was actually Refuted, move it to the Refuted bucket with the reason.
+
+### 5. Commit and push
+
+Only after verification passes:
+
+```bash
+git status                      # confirm only the files you edited are dirty
+git add <specific files>        # stage each file you changed for the fixes — never `git add -A` or `git add .`
+git commit -F <msg-file>        # see footer below
+git push                        # to the branch's tracked upstream — for a fork PR the head lives in the fork, so `git push origin <headRefName>` would be wrong
+```
+
+If the branch has no upstream set (manual checkout instead of `gh pr checkout`), push explicitly to the PR's **head repository** remote — never assume `origin`.
+
+Staging explicitly prevents sweeping in unrelated dirty files, scratch files, or untracked artifacts. If `git status` shows changes you didn't make, leave them unstaged and mention them in the report.
+
+Commit message: a concise summary of what review findings were addressed (reference the PR, e.g. "Address review on #<N>: <one-line summary>"). This is a revision to an existing PR, so the footer uses the **Updated** verb:
+
+```
+---
+Updated with LLM: <current model> | <effort> | Harness: Claude Code
+```
+
+Fill `<current model>` (e.g. `Opus 4.8`) and `<effort>` (`high` by default). Per the user's workflow, never include time/effort estimates in the message body.
+
+### 6. Post the disposition comment back to the PR
+
+Post one comment that tells the reviewer exactly what happened to each finding — this is how a refuted finding gets its pushback on the record. Write it as direct, scannable status:
+
+```
+Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
+
+### Fixed
+1. **<finding title>** — <what changed> (`file:line`).
+
+### Corrected scope (partial)
+1. **<finding title>** — <what was real and fixed vs. what wasn't> (`file:line`).
+
+### Not changed (refuted)
+1. **<finding title>** — <code-grounded reason the suggestion doesn't apply> (`file:line`).
+
+### Resolved judgment calls (was Requires Human Review)
+1. **<finding title>** — implemented <the absolute-best solution and why, `file:line`>. Alternatives rejected: <one line each>. Override if you'd prefer one of these.
+
+### Deferred to follow-up
+1. **<finding title>** — <why it's out of scope; issue link filed>.
+```
+
+Omit any empty section. Keep each item one line with a `file:line` anchor. For findings that came from inline diff threads, also post a one-line reply in the thread itself — use the root comment's `databaseId` from step 1's thread query: `gh api repos/{owner}/{repo}/pulls/<N>/comments/<databaseId>/replies -f body=...` — that's where the reviewer is watching. Post the main comment via:
+
+```bash
+gh pr comment <N> --body-file <file>
+```
+
+Footer on the comment uses the **Created** verb (it's a new comment):
+
+```
+---
+Created with LLM: <current model> | <effort> | Harness: Claude Code
+```
+
+### 7. Trigger the @claude re-review
+
+Route the re-review by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
+
+- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, or an inline thread that validated as a real defect): trigger plain — this repo's default (Opus) reviews the fix.
+- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to Sonnet via the `@claude sonnet` shorthand instead.
+
+Post a **separate** comment so the bot triggers cleanly on its own line:
+
+```bash
+# blocking findings were addressed
+gh pr comment <N> --body "@claude review"
+
+# only non-blocking items were addressed
+gh pr comment <N> --body "@claude sonnet review"
+```
+
+(If this repo uses a different review trigger phrase or model-shorthand syntax, match it — check the repo's `.github/workflows/claude.yml` for how it resolves `@claude <shorthand>`, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
+
+### 8. Report to the user
+
+Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
+
+## Red Flags — STOP
+
+| Situation | Action |
+|-----------|--------|
+| Finding cites a line that no longer matches current code | Re-validate against current `file:line`; it may already be fixed — mark Refuted with the reason |
+| Suggested fix would touch money/data/security/auto-protective logic | Never blind-apply; verify the remedy from first principles and implement the safest correct design |
+| Reviewer's remedy is plausible but you can't confirm it's correct here | Don't implement on faith — trace it, then implement the absolute-best solution you can stand behind from the code |
+| A collected "review" is actually your own prior disposition comment or an `@claude review` trigger | Skip it; act only on *actual* review feedback |
+| Only some feedback channels checked (e.g. formal reviews but not inline diff threads) | Fetch all three sources before extracting findings — inline threads are where human reviewers usually comment |
+| `git status` shows dirty files you didn't edit | Stage only your fix files; leave the rest and mention them in the report |
+| You're on `main` or a divergent branch, not the PR head | Check out the PR head first; never commit review fixes to the base branch |
+| Branch can't fast-forward to its upstream head | Stop — the branch diverged; surface to the user, don't force anything |
+| PR is from a fork | Check out with `gh pr checkout` and push to the tracked upstream — `origin` is the wrong remote for the head branch |
+| All findings refuted | Still post the disposition comment with the rebuttals and request re-review — don't silently no-op |
+| `Requires Human Review` item | Derive and **implement** the absolute-best solution (ignore cost/effort/time/resources; only correctness and safety override "best"); document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
+| Tests/build fail after fixes | Report the failure; don't push or claim success |
+
+## Common Mistakes
+
+- **Blind-implementing the review.** Performative agreement ships regressions. Validate first, every time.
+- **Delegating validation.** Steps 2–3 always run inline — the model-selection gate keys off *validated* verdicts, and a lighter model triaging its own workload defeats the gate. Dispatch only steps 4–8, tiered by the most complex surviving fix (open judgment/safety → inline, any non-trivial fix → Opus, all-mechanical → Sonnet), and never split one review across subagents. The subagent's footers must name the model that actually ran, not the session model.
+- **Missing inline diff comments.** Fetching only formal reviews and issue comments skips the line-level threads where human reviewers usually comment. Fetch all three channels.
+- **Addressing only the latest review when several landed.** Every review newer than your last disposition and every unresolved inline thread (any age) gets addressed.
+- **Routing the re-review by the newest verdict.** A later `LGTM` from one reviewer doesn't erase another's blocking findings — route by whether any blocking finding was addressed.
+- **`git add -A`.** Stage the fix files explicitly; a blanket add can commit unrelated dirty or untracked files.
+- **Dropping a refuted finding silently.** Push back on the record in the comment with a code-grounded reason — that's how the reviewer learns it was wrong.
+- **Committing to the base branch.** Fixes land on the PR head branch only.
+- **Skipping verification before push.** Run the tests/build; report real results.
+- **Pausing or punting on a judgment call.** Do the analysis the reviewer couldn't and *implement* the absolute-best solution (cost/effort/time/resources are not factors; only correctness and safety override it); document it for override. Don't stop to ask, don't relay the bare tradeoff, don't guess blindly.
+- **Skipping the optional improvements.** `Recommended Optional` items get implemented to the same best-solution standard, not deferred.
+- **Bundling the re-review trigger into the disposition comment.** Keep `@claude review` as its own comment so the bot fires reliably.
