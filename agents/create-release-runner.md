@@ -37,6 +37,7 @@ If any check fails: **stop and tell the user**. Do not proceed.
    | File | Field |
    |------|-------|
    | `package.json` | `"version"` |
+   | `.claude-plugin/plugin.json` | `"version"` |
    | `app.json` / `app.config.js` / `app.config.ts` | `expo.version` |
    | `pubspec.yaml` | `version` |
    | `Cargo.toml` | `[package] version` |

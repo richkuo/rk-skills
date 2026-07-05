@@ -1,7 +1,7 @@
 {
   "name": "rk-skills",
   "version": "1.0.0",
-  "description": "Installer for Richard Kuo's personal Claude Code skills — GitHub issue/PR/release workflow automation and Fable-driven planning.",
+  "description": "Installer for Claude Code workflow skills — GitHub issue/PR/release automation and Fable-driven planning.",
   "type": "module",
   "bin": {
     "rk-skills": "bin/install.mjs"

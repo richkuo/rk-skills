@@ -1,10 +1,8 @@
 # rk-skills
 
-Richard Kuo's personal [Claude Code](https://claude.com/claude-code) skills — the custom skills, global instructions, and slash command I use across every session.
+Workflow skills for [Claude Code](https://claude.com/claude-code) — automate GitHub issues, PR review loops, docs syncing, and releases.
 
 A "skill" is a reusable instruction file that teaches Claude Code how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and Claude follows its steps.
-
-The real files live in this repo. On my machine they're symlinked into `~/.claude`, so editing in either place is the same file and a `git commit` here captures the change. Third-party / marketplace-installed skills are deliberately excluded — they're reinstallable and not authored by me.
 
 ## Skills
 
@@ -60,8 +58,8 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 
 Also included:
 
-- `CLAUDE.md` — my global instructions for all Claude Code sessions (linked to `~/.claude/CLAUDE.md`). Many skills above are tuned to the conventions defined here (attribution footers, complexity scores, the branch+PR workflow).
-- `commands/commit.md` — the `/commit` slash command (linked to `~/.claude/commands/commit.md`).
+- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the branch+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
+- `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
 
 ## Install (with npx)
 
@@ -71,7 +69,7 @@ Copy every skill into your personal `~/.claude/skills/` with one command — no 
 npx rk-skills
 ```
 
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and their subagent files** (a few skills delegate their work to helper agents in `agents/`, which land in `~/.claude/agents/`); it does not install `CLAUDE.md` (my personal global config) or the `/commit` command.
+Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and their subagent files** (a few skills delegate their work to helper agents in `agents/`, which land in `~/.claude/agents/`); it does not install `CLAUDE.md` (the example global config) or the `/commit` command.
 
 ## Install (as a plugin)
 
@@ -82,7 +80,7 @@ This repo is a Claude Code plugin marketplace. In any Claude Code session:
 /plugin install rk-skills@rk-skills
 ```
 
-Claude Code auto-discovers everything under `skills/` (and the `/commit` command). `CLAUDE.md` is my personal global config and is **not** installed by the plugin — treat it as a reference. Restart Claude Code (or start a new session), then trigger any skill by name, e.g. `/fableplan <task>`.
+Claude Code auto-discovers everything under `skills/` (and the `/commit` command). `CLAUDE.md` is **not** installed by the plugin — treat it as a reference. Restart Claude Code (or start a new session), then trigger any skill by name, e.g. `/fableplan <task>`.
 
 Prefer to install a single skill? Each is just a directory with a `SKILL.md`, so you can copy one in directly:
 
