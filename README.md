@@ -8,6 +8,15 @@ The real files live in this repo. On my machine they're symlinked into `~/.claud
 
 Most workflow skills come in two forms: a **base** skill that does one step, and a **`-loop`** variant that drives the whole thing autonomously through review to a merged PR.
 
+```mermaid
+flowchart LR
+    A([validate-issue]) --> B([work-on-issue])
+    B --> C([PR + review])
+    C -- findings --> D([fix-pr-review])
+    D --> C
+    C -- LGTM --> E([issue complete])
+```
+
 - **Issues** — `new-issue`, `validate-issue`, `work-on-issue` (+ `-loop` variants): file a fully-specified, complexity-scored issue; verify its claims against the actual code; implement it end-to-end in an isolated worktree and open a PR.
 - **PR review** — `fix-pr-review` (+ `-loop`): re-validate every review finding against the code, fix the ones that hold, push, and re-trigger review until approved.
 - **Docs & release** — `sync-docs`, `sync-docs-release`, `create-release`: refresh `CLAUDE.md`/`README`/`SKILL.md` from recent commits, and cut versioned GitHub releases.
