@@ -58,7 +58,15 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 
 ### Review bot prerequisite
 
-The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships a ready-made GitHub Actions workflow for that: copy [`templates/claude-review.yml`](./templates/claude-review.yml) into your repo's `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the bot and skills speak the same format out of the box. Without a review bot, the loop skills will wait for a review that never arrives (they give up after ~30 minutes).
+The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships a ready-made GitHub Actions workflow for that: copy [`templates/claude-review.yml`](./templates/claude-review.yml) into your repo's `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the bot and skills speak the same format out of the box. Without a review bot, the loop skills detect its absence and stop instead of waiting for a review that never arrives.
+
+Grab the workflow directly into a repo:
+
+```sh
+mkdir -p .github/workflows && \
+  curl -fsSL https://raw.githubusercontent.com/richkuo/rk-skills/main/templates/claude-review.yml \
+  -o .github/workflows/claude.yml
+```
 
 Also included:
 

@@ -22,8 +22,9 @@ Locate the `new-issue` SKILL.md the subagent must follow — prefer the project-
 
 1. `<repo>/.claude/skills/new-issue/SKILL.md` (if it exists)
 2. `~/.claude/skills/new-issue/SKILL.md`
+3. Any other install location — search by name, e.g. `ls ~/.claude/plugins/*/skills/new-issue/SKILL.md` (plugin-marketplace installs live under a plugin directory, not `~/.claude/skills/`).
 
-Record the absolute path. If neither exists, stop and tell the user.
+Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the input is conversation-derived, write the scratchpad summary now (see Input). Do NOT pre-research or pre-draft the issue yourself — the subagent owns steps 1–6 of the procedure up to (but not including) the `gh issue create` call.
 
@@ -68,5 +69,6 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 ## Notes
 
 - The drafting subagent runs on Fable 5 regardless of the main agent's model — `model: fable` forces it.
+- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent drafts, main agent files) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

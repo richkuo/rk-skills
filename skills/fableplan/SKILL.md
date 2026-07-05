@@ -68,7 +68,7 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 
 ```
 ---
-Created with: Fable 5 | high | Claude Code | fableplan
+Created with LLM: Fable 5 | high | Harness: Claude Code | fableplan
 ```
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
@@ -94,4 +94,5 @@ In the worktree from step 6, the main agent builds the task per the plan. Confir
 ## Notes
 
 - The Plan subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
+- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (Plan subagent plans, main agent builds) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
 - If the user did not reference an issue, never invent one or post anywhere — just plan and build.

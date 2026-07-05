@@ -29,6 +29,8 @@ gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,
   ```
   Record the trigger timestamp, set `review_count = 1`, and go to step 2 to wait for it.
 
+**Preflight — confirm a review bot exists before waiting on one.** This loop assumes an automated reviewer that answers `@claude review` comments. Before entering the wait, check the repo for one: `gh api repos/{owner}/{repo}/contents/.github/workflows --jq '.[].name'` and look for a workflow that responds to `@claude` (e.g. `claude.yml`), or confirm the Claude GitHub App is installed. If you find none, don't sink 30 minutes into a review that will never come — tell the user no review bot is configured and point them at `templates/claude-review.yml` in this repo (copy it to `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret). Proceed into the wait only if a reviewer is present or the user confirms one is configured elsewhere.
+
 ### 2. Wait for the review to land
 
 Poll the PR for a new review or issue comment posted **after** the last trigger timestamp — reviews can land as a formal PR review or as an issue comment (the `@claude` bot usually posts as an issue comment; see fix-pr-review step 1 for the `gh` calls to check — it also fetches inline diff threads, which matter when a human reviewer weighs in). An until-loop is the right shape here — you want to be notified once the condition is true, not to busy-poll inline:

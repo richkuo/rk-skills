@@ -27,6 +27,8 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 gh pr comment <PR-number> --body "@claude review"
 ```
 
+**Preflight — confirm a review bot exists before waiting on one.** This loop assumes an automated reviewer that answers `@claude review` comments. Before entering the wait, check the repo for one: `gh api repos/{owner}/{repo}/contents/.github/workflows --jq '.[].name'` and look for a workflow that responds to `@claude` (e.g. `claude.yml`), or confirm the Claude GitHub App is installed. If you find none, don't sink 30 minutes into a review that will never come — tell the user the PR is pushed but no review bot is configured, and point them at `templates/claude-review.yml` in this repo (copy it to `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret). Proceed into the wait only if a reviewer is present or the user confirms one is configured elsewhere.
+
 Record the timestamp of the trigger comment and set `review_count = 1` — that review is #1 in flight.
 
 ### 2. Wait for the review to land
@@ -62,7 +64,7 @@ Evaluate in this order:
 
 Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 7).
 
-fix-pr-review also tiers its own working model by the PR's LGTM history (its step 1.5): no LGTM yet → inline on the session model, one LGTM → an Opus subagent, two or more → a Sonnet subagent. It counts LGTMs from the PR itself, so don't pass it a count or override its choice — just record which model each cycle reported running on, for the step 5 report.
+fix-pr-review also picks its own working model dynamically (its step 3.5): it always validates the findings inline on the session model, then tiers implementation by the complexity of the most complex surviving fix — open judgment calls and safety-class findings stay inline, any non-trivial fix routes the set to an Opus subagent, and all-mechanical work goes to a Sonnet subagent. It decides from the validated findings itself, so don't override its choice — just record which model each cycle reported running on, for the step 5 report.
 
 Increment `review_count`, record the new trigger timestamp from that comment, and go back to step 2.
 
@@ -90,7 +92,7 @@ Stop the loop and report the terminal state — don't claim blanket success:
 
 There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
 
-In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's LGTM tiering), any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
+In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's findings-based selection), any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
 
 **Cap the report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase or its internals.
 

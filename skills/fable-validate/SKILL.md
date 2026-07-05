@@ -23,8 +23,9 @@ Locate the `validate-issue` SKILL.md the subagent must follow — prefer the pro
 
 1. `<repo>/.claude/skills/validate-issue/SKILL.md` (if it exists)
 2. `~/.claude/skills/validate-issue/SKILL.md`
+3. Any other install location — search by name, e.g. `ls ~/.claude/plugins/*/skills/validate-issue/SKILL.md` (plugin-marketplace installs live under a plugin directory, not `~/.claude/skills/`).
 
-Record the absolute path. If neither exists, stop and tell the user.
+Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–7 of the procedure, including fetching. If no issue was referenced, the subagent resolves the latest open issue itself per the procedure.
 
@@ -69,5 +70,6 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 ## Notes
 
 - The validation subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
+- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent validates, main agent acts) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.
