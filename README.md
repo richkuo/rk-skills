@@ -20,7 +20,7 @@ flowchart LR
 - **Issues** — `new-issue`, `validate-issue`, `work-on-issue` (+ `-loop` variants): file a fully-specified, complexity-scored issue; verify its claims against the actual code; implement it end-to-end in an isolated worktree and open a PR.
 - **PR review** — `fix-pr-review` (+ `-loop`): re-validate every review finding against the code, fix the ones that hold, push, and re-trigger review until approved.
 - **Docs & release** — `sync-docs`, `sync-docs-release`, `create-release`: refresh `CLAUDE.md`/`README`/`SKILL.md` from recent commits, and cut versioned GitHub releases.
-- **Fable-driven** — `fableplan`, `fable-validate`, `fable-new-issue` (+ `-loop` variants): delegate planning / validation / issue-drafting to a Fable 5 subagent, then build with your main-session model.
+- **Fable-driven** — `fableplan`, `fable-validate`, `fable-new-issue` (+ `-loop` variants): delegate planning / validation / issue-drafting to a Fable 5 subagent, then build with your main-session model. `validate-issue-fableplan-loop` is a hybrid: it validates on your session model, then (only for C50+ or safety-flagged issues) has Fable produce the plan before driving the issue to a reviewed PR.
 
 Also included:
 
