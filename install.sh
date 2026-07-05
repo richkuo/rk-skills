@@ -26,6 +26,11 @@ for dir in "$REPO"/skills/*/; do
   link "skills/$name" "$CLAUDE/skills/$name"
 done
 
+for f in "$REPO"/agents/*.md; do
+  name="$(basename "$f")"
+  link "agents/$name" "$CLAUDE/agents/$name"
+done
+
 link "CLAUDE.md"          "$CLAUDE/CLAUDE.md"
 link "commands/commit.md" "$CLAUDE/commands/commit.md"
 
