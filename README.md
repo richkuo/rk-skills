@@ -56,6 +56,10 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 | `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only for issues scored C50+ or touching safety-critical code), then drives to a reviewed PR. |
 | `validate-issue-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when the issue is C50+ or safety-flagged, then drives to a reviewed PR. |
 
+### Review bot prerequisite
+
+The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships a ready-made GitHub Actions workflow for that: copy [`templates/claude-review.yml`](./templates/claude-review.yml) into your repo's `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the bot and skills speak the same format out of the box. Without a review bot, the loop skills will wait for a review that never arrives (they give up after ~30 minutes).
+
 Also included:
 
 - `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the branch+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
