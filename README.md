@@ -2,6 +2,8 @@
 
 Workflow skills for [Claude Code](https://claude.com/claude-code) — automate GitHub issues, PR review loops, docs syncing, and releases.
 
+[![npm](https://img.shields.io/npm/v/rk-skills)](https://www.npmjs.com/package/rk-skills)
+
 A "skill" is a reusable instruction file that teaches Claude Code how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and Claude follows its steps.
 
 ## Skills
