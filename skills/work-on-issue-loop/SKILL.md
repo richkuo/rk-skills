@@ -1,6 +1,6 @@
 ---
 name: work-on-issue-loop
-description: Use when the user asks to implement a GitHub issue and drive it through review to completion autonomously — "work on issue and loop until approved", "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop. Runs work-on-issue to implement and open the PR (which already triggers the first @claude review), then waits for each review to land and calls fix-pr-review to resolve it. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
+description: Use when the user asks to implement a GitHub issue and drive it through review to completion autonomously — "work on issue and loop until approved", "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop. Runs work-on-issue to implement and open the PR, triggers the first @claude review itself, then waits for each review to land and calls fix-pr-review to resolve it. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
 ---
 
 # work-on-issue-loop
@@ -14,15 +14,20 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ## Steps
 
-### 1. Implement and open the PR
+### 1. Implement, open the PR, and trigger the first review
 
-Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issue`). It implements the fix in an isolated worktree, verifies it, commits, pushes, opens the PR (`Closes #<N>`), and triggers the first `@claude review`.
+Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issue`). It implements the fix in an isolated worktree, verifies it, commits, pushes, and opens the PR (`Closes #<N>`) — it does **not** request review; that's this loop's job.
 
-**Gate on its outcome before looping — work-on-issue can legitimately stop early:**
+**Gate on its outcome before continuing — work-on-issue can legitimately stop early:**
 
 - **Stopped with no PR** (issue already closed, an existing PR already addresses it, wrong repo checked out) → there is nothing to drive; stop and relay its report.
-- **PR opened but review never triggered** (its bounded red-CI exit: CI stayed red after several fix rounds) → don't poll for a review that was never requested, and don't blindly retry what it already tried; stop and report per step 5.
-- **PR opened and review triggered** → capture the PR number/URL, the branch, and the timestamp of the trigger comment. Set `review_count = 1` — that review is #1 in flight.
+- **PR opened** → capture the PR number/URL and the branch, then trigger the first review yourself. Don't wait on CI or poll `gh pr checks` — CI runs in parallel and the reviewer surfaces check failures itself. Post a **separate, one-line** comment so the bot fires cleanly (match the repo's trigger phrase if it differs — check recent PR comments; a trigger mention is not authored content — no footer):
+
+```bash
+gh pr comment <PR-number> --body "@claude review"
+```
+
+Record the timestamp of the trigger comment and set `review_count = 1` — that review is #1 in flight.
 
 ### 2. Wait for the review to land
 
@@ -82,7 +87,6 @@ Stop the loop and report the terminal state — don't claim blanket success:
 | `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. |
 | Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the `@claude` GitHub Action / bot status. |
 | work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) | **Nothing to drive.** Relay its report; zero review cycles ran. |
-| work-on-issue opened the PR but its red-CI exit fired (review never triggered) | **Escalate.** Report the PR URL and the red CI state; the user decides whether to keep pushing on CI. |
 
 There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
 
@@ -100,7 +104,7 @@ In every case, give: PR URL, number of review cycles run, final verdict, which m
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
 | Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — below the cap, LGTM-with-findings still goes through fix-pr-review; only past the cap does the first LGTM end it regardless of findings |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
-| work-on-issue ended without triggering a review | Don't enter the wait loop — gate on its outcome in step 1 and report per step 5 |
+| work-on-issue stopped with no PR | Don't trigger a review or enter the wait loop — gate on its outcome in step 1 and report per step 5 |
 | About to report "Done" while the PR/README names follow-on work with no issue filed | Stop — run step 4.5 first; a named follow-on with no issue and no "deliberately unfiled" note in the report is a silent drop |
 
 ## Common Mistakes

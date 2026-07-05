@@ -1,11 +1,11 @@
 ---
 name: work-on-issue
-description: Use when the user says "work on issue", "work on this issue", "implement issue", "/work-on-issue", or otherwise asks to implement a GitHub issue end-to-end (not merely validate it). Takes a GitHub issue URL or number (defaults to the just-validated issue). Implements the fix in an isolated worktree, verifies it, commits and pushes, opens a PR that closes the issue, and triggers an @claude review on the PR. This is the default follow-on when validate-issue offers "work on issue".
+description: Use when the user says "work on issue", "work on this issue", "implement issue", "/work-on-issue", or otherwise asks to implement a GitHub issue end-to-end (not merely validate it). Takes a GitHub issue URL or number (defaults to the just-validated issue). Implements the fix in an isolated worktree, verifies it, commits and pushes, and opens a PR that closes the issue. This is the default follow-on when validate-issue offers "work on issue".
 ---
 
 # work-on-issue
 
-Take a GitHub issue from "validated" to "PR under review", autonomously and end-to-end: isolate the work in a fresh worktree, implement the fix to the codebase's conventions, verify it really works, commit and push, open a pull request that closes the issue, then request an `@claude` review. Don't stop to ask the user between steps — do the work and report at the end.
+Take a GitHub issue from "validated" to "PR open", autonomously and end-to-end: isolate the work in a fresh worktree, implement the fix to the codebase's conventions, verify it really works, commit and push, then open a pull request that closes the issue. The skill ends with the open PR — requesting review is the caller's job (work-on-issue-loop does it; standalone, the user decides). Don't stop to ask the user between steps — do the work and report at the end.
 
 **This is the natural follow-on to validate-issue.** When validate-issue ends with `→ Reply "work on issue"`, the user replying "work on issue" lands here. The skill is also valid standalone — invoke it when the user asks to implement an issue without a prior validation pass.
 
@@ -118,29 +118,11 @@ gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef
 
 Capture the PR number/URL from the command output.
 
-### 7. Check CI, then trigger the @claude review
+### 7. Report to the user
 
-Local verification isn't CI — environment differences and matrix jobs can fail on a tree that passed locally. Check the PR's checks before requesting review; a review of a red PR is wasted:
+The skill ends here — do **not** trigger an `@claude` review or wait on CI; requesting review belongs to the caller (work-on-issue-loop posts the trigger itself; standalone, the user decides whether and when to request one).
 
-```bash
-gh pr checks <PR-number>
-```
-
-- **Failing** → fix the failure, push, and re-check before triggering. **Bound the loop:** if CI is still red after two or three fix-push-recheck rounds, stop and report the PR's true state (open, CI red, what was tried) — an honestly-reported red PR beats an endless loop or a false success.
-- **Pending** → don't block the flow waiting; trigger the review and state the pending CI status in the final report.
-- **Empty output is not "no checks".** Immediately after the PR opens, CI may not have registered its runs yet. If the repo defines workflows (`ls .github/workflows/`), wait briefly and re-run `gh pr checks` before classifying; conclude "none configured" only when the repo has no CI workflows at all — then proceed and note it in the report.
-
-Then post a **separate, one-line** comment so the bot triggers cleanly on its own:
-
-```bash
-gh pr comment <PR-number> --body "@claude review"
-```
-
-(If the repo uses a different review trigger phrase, match it — check recent PR comments.) A trigger mention is not authored content — no footer.
-
-### 8. Report to the user
-
-Terse summary: the worktree/branch, what you implemented (one or two lines), the verification result, the CI-checks status (passing / pending / none — or red-after-bounded-attempts when step 7's exit fired), the commit SHA, the PR URL, that it closes #<N>, and that an `@claude` review was requested. The work is done and under review — not waiting on the user.
+Terse summary: the worktree/branch, what you implemented (one or two lines), the verification result, the commit SHA, the PR URL, and that it closes #<N>. The work is done and the PR is open — not waiting on the user.
 
 **Follow-on work named in the deliverables must not silently drop.** If the PR body, commit message, or any doc the diff adds names follow-on work ("own issue", "future work", "not yet wired"), state it in the report as **unfiled** — under work-on-issue-loop, its step 4.5 files these once review converges; standalone, tell the user the issues still need filing.
 
@@ -164,7 +146,5 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
 | Writing the PR body | Include `Closes #<N>` (without it the merge doesn't resolve the issue) and end with the repo's footer convention — **Created** verb, no `Co-authored-by` |
-| `gh pr checks` output is empty right after the PR opens | Not the same as "no CI" — check for workflows and re-poll before classifying |
-| CI checks failing after the PR opens | Fix and push before triggering review; if still red after a few rounds, stop and report the true state — never claim success on a red PR |
-| Bundling `@claude review` into the PR body or first comment | Keep it a separate one-line comment so the bot fires reliably |
-| Tempted to pause and ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, request review, then report |
+| Tempted to trigger an `@claude` review or wait on CI after opening the PR | Don't — the skill ends with the open PR; review requests are the caller's job |
+| Tempted to pause and ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report |

@@ -60,7 +60,7 @@ Keep the vetted plan's scratchpad file — step 5 passes it through. If fablepla
 
 Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations from the plan are allowed only when the code contradicts the plan, and must be named in the PR body. (If step 4 was skipped by the complexity gate, there is no plan — hand off the issue alone and note the skip.)
 
-It runs its full loop: work-on-issue implements in a worktree, opens the PR, triggers `@claude` review, and fix-pr-review cycles until convergence.
+It runs its full loop: work-on-issue implements in a worktree and opens the PR, the loop triggers `@claude` review, and fix-pr-review cycles until convergence.
 
 ### 6. Report
 

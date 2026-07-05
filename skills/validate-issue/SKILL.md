@@ -280,7 +280,7 @@ Scope: (omit unless the issue is too large per step 6.5)
 
 ### 7.5. When the user replies "work on issue" — hand off to the work-on-issue skill
 
-When the user opts to **work on** the issue (not merely validate or update it), **invoke the `work-on-issue` skill** — that is the default follow-on. It owns the full implementation flow: create and switch into a fresh isolated worktree off the latest default branch, implement the fix to the codebase's conventions, verify, commit and push, open a PR that `Closes #<N>`, and trigger an `@claude` review on it.
+When the user opts to **work on** the issue (not merely validate or update it), **invoke the `work-on-issue` skill** — that is the default follow-on. It owns the full implementation flow: create and switch into a fresh isolated worktree off the latest default branch, implement the fix to the codebase's conventions, verify, commit and push, and open a PR that `Closes #<N>` (it ends with the open PR — requesting review is the caller's job).
 
 Pass the issue number through; the skill is idempotent about the worktree (reuses an existing one for this issue). Don't start editing code or creating a worktree here yourself — delegate so the implement → PR → review chain stays consistent.
 
