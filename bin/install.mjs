@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const skillsSrc = join(pkgRoot, 'skills');
+const agentsSrc = join(pkgRoot, 'agents');
 
 if (!existsSync(skillsSrc)) {
 	console.error('rk-skills: could not find the skills/ directory in the package.');
@@ -25,17 +26,35 @@ if (skills.length === 0) {
 }
 
 const project = process.argv.includes('--project');
-const skillsDir = project
-	? join(process.cwd(), '.claude', 'skills')
-	: join(homedir(), '.claude', 'skills');
+const claudeDir = project
+	? join(process.cwd(), '.claude')
+	: join(homedir(), '.claude');
+const skillsDir = join(claudeDir, 'skills');
+const agentsDir = join(claudeDir, 'agents');
 
 mkdirSync(skillsDir, { recursive: true });
 for (const name of skills) {
 	cpSync(join(skillsSrc, name), join(skillsDir, name), { recursive: true });
 }
 
+// Some skills are dispatch shims that invoke subagents; install their agent files too.
+const agents = existsSync(agentsSrc)
+	? readdirSync(agentsSrc).filter((name) => name.endsWith('.md')).sort()
+	: [];
+if (agents.length > 0) {
+	mkdirSync(agentsDir, { recursive: true });
+	for (const name of agents) {
+		cpSync(join(agentsSrc, name), join(agentsDir, name));
+	}
+}
+
 const scope = project ? 'this project' : 'your personal skills';
 console.log(`rk-skills installed ${skills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
 console.log(`  ${skills.join(', ')}`);
+if (agents.length > 0) {
+	console.log(`\nAlso installed ${agents.length} subagents into:`);
+	console.log(`  ${agentsDir}`);
+	console.log(`  ${agents.map((n) => n.replace(/\.md$/, '')).join(', ')}`);
+}
 console.log('\nRestart Claude Code (or start a new session), then invoke any skill by name, e.g.\n  /fableplan <task to plan>');

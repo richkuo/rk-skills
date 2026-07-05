@@ -9,6 +9,7 @@
   "files": [
     "bin",
     "skills",
+    "agents",
     ".claude-plugin",
     "README.md",
     "LICENSE"
