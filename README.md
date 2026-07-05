@@ -2,11 +2,13 @@
 
 Richard Kuo's personal [Claude Code](https://claude.com/claude-code) skills — the custom skills, global instructions, and slash command I use across every session.
 
+A "skill" is a reusable instruction file that teaches Claude Code how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and Claude follows its steps.
+
 The real files live in this repo. On my machine they're symlinked into `~/.claude`, so editing in either place is the same file and a `git commit` here captures the change. Third-party / marketplace-installed skills are deliberately excluded — they're reinstallable and not authored by me.
 
 ## Skills
 
-Most workflow skills come in two forms: a **base** skill that does one step, and a **`-loop`** variant that drives the whole thing autonomously through review to a merged PR.
+Most workflow skills come in two forms: a **base** skill that does one step and stops, and a **`-loop`** variant that keeps going on its own — through code review and re-review — until the pull request (PR) is approved.
 
 ```mermaid
 flowchart LR
@@ -17,15 +19,59 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-- **Issues** — `new-issue`, `validate-issue`, `work-on-issue` (+ `-loop` variants): file a fully-specified, complexity-scored issue; verify its claims against the actual code; implement it end-to-end in an isolated worktree and open a PR.
-- **PR review** — `fix-pr-review` (+ `-loop`): re-validate every review finding against the code, fix the ones that hold, push, and re-trigger review until approved.
-- **Docs & release** — `sync-docs`, `sync-docs-release`, `create-release`: refresh `CLAUDE.md`/`README`/`SKILL.md` from recent commits, and cut versioned GitHub releases.
-- **Fable-driven** — `fableplan`, `fable-validate`, `fable-new-issue` (+ `-loop` variants): delegate planning / validation / issue-drafting to a Fable 5 subagent, then build with your main-session model. `validate-issue-fableplan-loop` is a hybrid: it validates on your session model, then (only for C50+ or safety-flagged issues) has Fable produce the plan before driving the issue to a reviewed PR.
+Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 rating of how hard an issue is to implement, put right in the issue title. "Fable" skills hand part of the work to a subagent running on the Fable 5 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
+
+### Issue skills
+
+| Skill | What it does |
+|-------|--------------|
+| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks the claims against the actual code first, adds a complexity score, and never files a half-empty stub. |
+| `new-issue-loop` | Runs `new-issue`, then automatically validates the new issue, implements it, and drives the PR through review — one command from idea to reviewed PR. Stops early if it finds a duplicate issue. |
+| `validate-issue` | Fact-checks an existing issue: verifies every claim against the real code (with file and line references), and checks that the proposed approach is feasible and self-consistent. |
+| `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
+| `work-on-issue` | Implements an issue end-to-end: builds the fix in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. |
+| `work-on-issue-loop` | Runs `work-on-issue`, requests a code review, then keeps fixing whatever the review finds until the PR gets an approval ("LGTM" — looks good to me). |
+
+### PR review skills
+
+| Skill | What it does |
+|-------|--------------|
+| `fix-pr-review` | Reads all unaddressed feedback on a PR, re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, pushes, replies point-by-point, and requests a fresh review. |
+| `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
+
+### Docs & release skills
+
+| Skill | What it does |
+|-------|--------------|
+| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits actually changed. |
+| `create-release` | Cuts a version tag and publishes a GitHub release with generated notes, bumping the package version first so publish workflows fire correctly. |
+| `sync-docs-release` | The two above in sequence: sync docs, commit, then cut the release. |
+
+### Fable-driven skills
+
+| Skill | What it does |
+|-------|--------------|
+| `fableplan` | Has a Fable 5 subagent write an implementation plan before you build; posts the plan to the related issue if there is one. |
+| `fable-new-issue` | Like `new-issue`, but a read-only Fable 5 subagent researches and drafts the issue; your main session spot-checks and files it. |
+| `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the new issue all the way to a reviewed PR automatically. |
+| `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5 subagent; your main session presents the verdict and acts on it. |
+| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only for issues scored C50+ or touching safety-critical code), then drives to a reviewed PR. |
+| `validate-issue-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when the issue is C50+ or safety-flagged, then drives to a reviewed PR. |
 
 Also included:
 
 - `CLAUDE.md` — my global instructions for all Claude Code sessions (linked to `~/.claude/CLAUDE.md`). Many skills above are tuned to the conventions defined here (attribution footers, complexity scores, the branch+PR workflow).
 - `commands/commit.md` — the `/commit` slash command (linked to `~/.claude/commands/commit.md`).
+
+## Install (with npx)
+
+Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
+
+```sh
+npx rk-skills
+```
+
+Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and their subagent files** (a few skills delegate their work to helper agents in `agents/`, which land in `~/.claude/agents/`); it does not install `CLAUDE.md` (my personal global config) or the `/commit` command.
 
 ## Install (as a plugin)
 
@@ -44,25 +90,6 @@ Prefer to install a single skill? Each is just a directory with a `SKILL.md`, so
 mkdir -p ~/.claude/skills/work-on-issue && \
   curl -fsSL https://raw.githubusercontent.com/richkuo/rk-skills/main/skills/work-on-issue/SKILL.md \
   -o ~/.claude/skills/work-on-issue/SKILL.md
-```
-
-## Install (with npx)
-
-Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
-
-```sh
-npx rk-skills
-```
-
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin above auto-updates. It installs the **skills only**; not `CLAUDE.md` (my personal global config) or the `/commit` command.
-
-## Restore on a new machine (my setup)
-
-Clone this repo, then run `./install.sh`. It symlinks every tracked item into `~/.claude`, backing up any existing real file to `<name>.bak` first. It only ever replaces symlinks — it never deletes your data.
-
-```bash
-git clone git@github.com:richkuo/rk-skills.git ~/Work/rk-skills
-cd ~/Work/rk-skills && ./install.sh
 ```
 
 ## License
