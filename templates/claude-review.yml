@@ -14,6 +14,10 @@
 # findings under four H3 sections, and blocking determined only by
 # "### Needs Fixing" and "### Requires Human Review". Edit the prompt and the
 # skills together if you change the contract.
+#
+# Reviews never gate on or wait for CI — CI intentionally runs longer than the
+# review and is enforced separately by branch protection. The review judges the
+# code itself.
 
 name: Claude PR Review
 
@@ -32,8 +36,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
-      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,28 +47,105 @@ jobs:
           # Route "@claude sonnet ..." to Sonnet; anything else uses the default model.
           model: ${{ contains(github.event.comment.body, 'sonnet') && 'claude-sonnet-5' || '' }}
           prompt: |
-            Review this pull request: inspect every changed file and check CI status.
+            Review this pull request. Inspect every changed file in the diff.
 
-            Post exactly ONE comment in this structure — nothing outside it:
+            Before writing the comment, sweep the FULL diff once per dimension
+            and collect every finding — do not stop at the first or most
+            salient issue. Dimensions: (1) correctness and logic (including
+            shadowed/dead code and wrong-scope declarations); (2) error paths
+            and failure handling (swallowed errors, fail-open vs fail-closed,
+            error states indistinguishable from empty states); (3) state and
+            lifecycle (stale UI/cache state, residual mutations, ordering);
+            (4) resource cost and scaling (unbounded queries or scans on
+            polled/hot paths, missing indexes, per-call cost growing with
+            history); (5) concurrency and locking; (6) security and input
+            handling (injection, unescaped output, authz). Report ALL findings
+            that survive the materiality filter in this single comment, not
+            one per round.
 
-            - First line: exactly `LGTM` or `Needs Updates`.
-            - Findings go under these H3 sections (omit empty ones):
-              `### Needs Fixing`, `### Recommended Optional`,
-              `### Create Follow-up Issue`, `### Requires Human Review`.
-            - Only `### Needs Fixing` and `### Requires Human Review` block merge.
-              Emit `Needs Updates` iff at least one finding sits in a blocking
-              section; otherwise emit `LGTM` (non-blocking findings may follow it).
-            - Each section is a numbered list; each item: a bold one-sentence
-              title, newline, then a description with `file:line` and why it
-              matters. `### Needs Fixing` / `### Recommended Optional` items add
-              **Invariant:** (the general property violated) and
-              **Must survive:** (1-3 adversarial cases a fix must handle).
-            - Drop trivia (style nits, subjective preferences, hypothetical edge
-              cases with no realistic trigger). Never drop findings touching
-              money, data integrity, security, or auto-protective mechanisms —
-              if unconfirmed, put them under `### Requires Human Review`.
-            - Only emit `LGTM` after inspecting every changed file and checking
-              CI status; if you could not, emit `Needs Updates` and record the
-              gap under `### Requires Human Review`.
-            - Write findings as direct instructions for an agent that will act
-              on them.
+            Post exactly ONE comment containing nothing except the structure
+            that follows — no preamble, summary, intro, header, emoji, or
+            footer outside it. Write the entire comment as direct instructions
+            for an agent that will read it and act on it.
+
+            Begin with a verdict line that is exactly one of: LGTM, or
+            Needs Updates.
+
+            Sort every surviving finding into exactly one of four H3 sections.
+            Two sections are merge-blocking: `### Needs Fixing` and
+            `### Requires Human Review`. Two are non-blocking:
+            `### Recommended Optional` and `### Create Follow-up Issue`.
+            Every finding belongs to exactly one section; omit empty sections.
+
+            Verdict rule: emit Needs Updates if and only if there is at least
+            one item under `### Needs Fixing` or `### Requires Human Review`.
+            Otherwise emit LGTM. A PR whose only findings are non-blocking
+            still gets LGTM — do NOT emit Needs Updates merely because
+            comments exist.
+
+            LGTM signals the agent reading it may merge and close the PR. When
+            the only findings are non-blocking, follow the LGTM line with the
+            relevant non-blocking sections; with no findings at all, LGTM
+            stands alone with no other text.
+
+            LGTM precondition: only emit LGTM after you have inspected every
+            changed file in the diff. If you could not review the full diff,
+            you MUST NOT emit LGTM — emit Needs Updates and record the gap
+            under `### Requires Human Review`. Do NOT gate the verdict on CI
+            status and do NOT wait for checks to finish — CI intentionally
+            runs longer than this review and is enforced separately by branch
+            protection; judge the code itself.
+
+            Materiality filter (apply before writing): drop only trivia —
+            style and naming nits, subjective preferences, micro-optimizations,
+            and hypothetical edge cases with no realistic trigger. Anything
+            you would prefix with 'minor' or 'nit' is trivia. Dropped trivia
+            is not mentioned anywhere. Do NOT drop a substantive finding just
+            because it is non-blocking — a real but non-merge-blocking
+            improvement belongs under `### Recommended Optional` or
+            `### Create Follow-up Issue`, never silently discarded.
+
+            Safety carve-out (overrides the materiality filter and any
+            confidence threshold): any finding that touches money, data
+            integrity, security, or an auto-protective mechanism (kill switch,
+            circuit breaker, stop-loss, reconciliation, position or fill
+            accounting) must always be surfaced, even at low confidence or
+            small magnitude. If you cannot confirm such a finding is real,
+            surface it under `### Requires Human Review` rather than dropping
+            it.
+
+            Within each non-empty section use a numbered list. Each item is a
+            single bold one-sentence title stating the item, then a newline,
+            then a short description containing only the critical details
+            (file:line and why it matters). For `### Needs Fixing` and
+            `### Recommended Optional` items, after the description add
+            **Invariant:** (one sentence stating the general property the code
+            must satisfy, independent of the example) and **Must survive:**
+            (1-3 adversarial cases beyond the example that any fix must
+            handle: compound states, inverse scenario, boundary).
+
+            `### Create Follow-up Issue` is the disposition of last resort —
+            strongly prefer keeping work in the current PR. Two conditions
+            must BOTH hold before suggesting a new issue: (1) the finding is
+            genuinely separate from the original issue or PR scope, AND (2) it
+            cannot reasonably be folded into this PR (substantial independent
+            scope, needs its own design decision, or would materially bloat or
+            destabilize the diff). A different file or subsystem alone does
+            NOT qualify: a trivially-fixable instance of the same bug class
+            this PR already addresses gets fixed here (safety-class →
+            `### Needs Fixing`, else `### Recommended Optional`), not
+            deferred. When in doubt, do NOT create an issue — route the
+            finding to another section.
+
+            `### Requires Human Review` is the escalation of last resort —
+            default to making a recommendation. Use it ONLY when you genuinely
+            cannot recommend: a real tradeoff with no objectively-correct
+            answer only the human can resolve, you provably lack the repo
+            context to judge, an unconfirmable safety-carve-out finding, or an
+            LGTM-precondition gap (could not review the full diff).
+            Uncertainty alone, or the effort of investigating further, is NOT
+            a reason to escalate — if you can recommend a fix, even a
+            tentative one with assumptions stated, route it to
+            `### Needs Fixing` or `### Recommended Optional` instead. Keep the
+            description under 50 words and end it by stating precisely what
+            the human must decide and why you cannot recommend.
