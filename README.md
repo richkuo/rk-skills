@@ -28,6 +28,7 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 | `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks the claims against the actual code first, adds a complexity score, and never files a half-empty stub. |
 | `new-issue-loop` | Runs `new-issue`, then automatically validates the new issue, implements it, and drives the PR through review — one command from idea to reviewed PR. Stops early if it finds a duplicate issue. |
 | `validate-issue` | Fact-checks an existing issue: verifies every claim against the real code (with file and line references), and checks that the proposed approach is feasible and self-consistent. |
+| `github-issue-format` | Reference skill: the required format for creating or editing any GitHub issue (`[C<score>]` title, complexity rationale line, complete-body rule). Loaded automatically before an issue is filed or edited. |
 | `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
 | `work-on-issue` | Implements an issue end-to-end: builds the fix in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. |
 | `work-on-issue-loop` | Runs `work-on-issue`, requests a code review, then keeps fixing whatever the review finds until the PR gets an approval ("LGTM" — looks good to me). |
@@ -36,8 +37,9 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 
 | Skill | What it does |
 |-------|--------------|
-| `fix-pr-review` | Reads all unaddressed feedback on a PR, re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, pushes, replies point-by-point, and requests a fresh review. |
-| `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
+| `fix-pr-review` | Reads all unaddressed feedback on a PR, re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review. |
+| `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved, and won't stop on an approval while the PR is still unmergeable. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
+| `pr-review-format` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out). Loaded automatically before a review is written. |
 
 ### Docs & release skills
 
