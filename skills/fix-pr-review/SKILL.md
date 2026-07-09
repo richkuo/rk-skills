@@ -123,7 +123,7 @@ Implement every finding that calls for a change: ✅ Confirmed, ⚠️ Partial (
 
 ### 4.5 Resolve merge conflicts with the base branch
 
-If step 0 flagged the PR as conflicting (or the push in step 5 gets rejected because the base moved), resolve the conflicts on the head branch — never on the base:
+If step 0 flagged the PR as conflicting (or the PR turns `CONFLICTING` after your fixes because the base moved mid-run — re-check before pushing if step 0 was a while ago), resolve the conflicts on the head branch — never on the base:
 
 ```bash
 git fetch origin <baseRefName>
