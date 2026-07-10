@@ -219,56 +219,56 @@ class ClassifyModeRoutingTest(unittest.TestCase):
     def test_review_word_later_in_sentence_no_longer_forces_review(self):
         # Keyword routing: only the FIRST word after @claude counts, so an
         # instruction that merely mentions review keeps a push-capable route —
-        # here the fix keyword, so the review-fixing playbook.
+        # here the fix-pr keyword, so the review-fixing playbook.
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude fix the review comments",
+            run_classify_mode("issue_comment", "@claude fix-pr the review comments",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
             "fix-pr-review",
         )
 
-    def test_fix_keyword_routes_to_fix_pr_review(self):
+    def test_fix_pr_keyword_routes_to_fix_pr_review(self):
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude fix",
+            run_classify_mode("issue_comment", "@claude fix-pr",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
             "fix-pr-review",
         )
 
-    def test_fix_keyword_after_model_shorthand_routes_to_fix_pr_review(self):
+    def test_fix_pr_keyword_after_model_shorthand_routes_to_fix_pr_review(self):
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude opus fix and be thorough",
+            run_classify_mode("issue_comment", "@claude opus fix-pr and be thorough",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
             "fix-pr-review",
         )
 
-    def test_retired_fix_pr_keyword_is_no_longer_special(self):
+    def test_retired_fix_keyword_is_no_longer_special(self):
         # The old trigger spelling routes like any non-keyword ask now.
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude fix-pr",
+            run_classify_mode("issue_comment", "@claude fix",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
             "fix-pr",
         )
 
-    def test_fix_keyword_untrusted_pr_author_is_review_only(self):
-        # Must survive: the fix keyword never earns push over an
+    def test_fix_pr_keyword_untrusted_pr_author_is_review_only(self):
+        # Must survive: the fix-pr keyword never earns push over an
         # external-author PR — fail-closed to read-only review.
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude fix",
+            run_classify_mode("issue_comment", "@claude fix-pr",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
             "review",
         )
 
-    def test_fix_keyword_on_plain_issue_is_implement(self):
+    def test_fix_pr_keyword_on_plain_issue_is_implement(self):
         # No PR context: the issue path wins before keyword routing.
         self.assertEqual(
-            run_classify_mode("issue_comment", "@claude fix",
+            run_classify_mode("issue_comment", "@claude fix-pr",
                               pr_url="", pr_author_assoc="MEMBER"),
             "implement",
         )
 
-    def test_fix_keyword_on_inline_review_surface_stays_review(self):
+    def test_fix_pr_keyword_on_inline_review_surface_stays_review(self):
         # PR-review surfaces are always read-only regardless of keyword.
         self.assertEqual(
-            run_classify_mode("pull_request_review_comment", "@claude fix",
+            run_classify_mode("pull_request_review_comment", "@claude fix-pr",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
             "review",
         )

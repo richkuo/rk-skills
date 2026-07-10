@@ -45,7 +45,7 @@ rk-skills at run time by the reusable workflow. Then:
 | Comment | Route | Push? |
 |---------|-------|-------|
 | `@claude review` | PR review (read-only contract, `LGTM` / `Needs Updates` format) | No |
-| `@claude fix` | fix-pr-review: re-validate all review feedback, fix what survives, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
+| `@claude fix-pr` | fix-pr-review: re-validate all review feedback, fix what survives, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@claude <anything else>` on a PR | fix-pr: in-place edit of the PR branch | Yes (trusted-author PRs only) |
 | `@claude <anything>` on an issue | implement: validate → implement → PR via the issue-workflow prompt | Yes |
 | `@claude sync docs` / `create release` / `sync release` | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
