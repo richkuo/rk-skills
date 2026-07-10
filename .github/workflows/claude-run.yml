@@ -1,6 +1,16 @@
 name: Claude Code run
 
 # Reusable body shared by the review and implement jobs in claude.yml (#1178).
+#
+# Published from richkuo/rk-skills (#5): consumer repos call this workflow via
+#   uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
+# with secrets: inherit. Prompt files and comment-patch scripts are fetched
+# from rk-skills at run time (templates/claude-workflow/), so updating
+# rk-skills updates every consumer repo on its next run with no per-repo sync.
+# A consumer repo appends route-specific tailoring by adding
+# .github/prompts/<prompt-name>-local.md (e.g. fix-pr-review-local.md), whose
+# text is appended to the shared prompt and validated by the same
+# shell-safety check.
 # The GITHUB_TOKEN permissions are NOT declared here on purpose: a called
 # workflow inherits the caller job's permissions, so the least-privilege review
 # job and the write-capable implement job differ only at the call site.
@@ -60,6 +70,28 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Shared prompts and scripts live in rk-skills, not the consumer repo.
+      # actions/checkout can only place them inside the workspace, so check out
+      # into a temp subdirectory, stash the needed assets in RUNNER_TEMP, and
+      # remove the checkout BEFORE Claude runs: an untracked directory in the
+      # workspace could be swept into a commit by the agent and would trip the
+      # dirty-tree check in the made-commits detection below.
+      - name: Checkout rk-skills (shared prompts and scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: richkuo/rk-skills
+          ref: main
+          path: .rk-skills-shared
+          fetch-depth: 1
+
+      - name: Stage shared assets outside the workspace
+        run: |
+          rm -rf "$RUNNER_TEMP/rk-shared"
+          mkdir -p "$RUNNER_TEMP/rk-shared"
+          cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
+          cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
+          rm -rf .rk-skills-shared
+
       - name: Prune stale worktrees before Claude runs
         # EnterWorktree (work-on-issue step 1) creates linked worktrees with
         # deterministic issue-<N>-<slug> names. On a persistent self-hosted
@@ -102,8 +134,11 @@ jobs:
           # allowlist. Otherwise implement mode runs the validate-then-implement
           # issue workflow with edit/skill tools, and review mode keeps the
           # read-only PR-review contract.
+          # Prompt files come from the rk-skills checkout staged in RUNNER_TEMP,
+          # not the consumer repo.
+          PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
           if [ -n "$FLOW" ]; then
-            PROMPT_FILE=.github/prompts/sync-docs-release.md
+            PROMPT_FILE=$PROMPTS_DIR/sync-docs-release.md
             case "$FLOW" in
               create-release)
                 # Explicit human release command: publish now, NO file edits. This
@@ -136,7 +171,7 @@ jobs:
                 ;;
             esac
           elif [ "$MODE" = "implement" ]; then
-            PROMPT_FILE=.github/prompts/issue-workflow.md
+            PROMPT_FILE=$PROMPTS_DIR/issue-workflow.md
             # Edit/Write/Skill needed to validate, edit the issue, and implement.
             ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,MultiEdit,Glob,Grep,Skill,EnterWorktree'
           elif [ "$MODE" = "fix-pr" ]; then
@@ -149,7 +184,7 @@ jobs:
             # there is no gh api (its --method flag reaches every mutating
             # endpoint). No EnterWorktree/Skill: this path never opens a new PR or
             # runs the issue workflow — it pushes to the existing PR branch.
-            PROMPT_FILE=.github/prompts/fix-pr.md
+            PROMPT_FILE=$PROMPTS_DIR/fix-pr.md
             ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Read,Edit,Write,MultiEdit,Glob,Grep'
           elif [ "$MODE" = "fix-pr-review" ]; then
             # Review-fixing playbook: fix-pr's allowlist plus gh api graphql
@@ -159,10 +194,10 @@ jobs:
             # intent, not a hard boundary (graphql can express mutations) — the
             # trust gate in claude.yml is the boundary. No interpreters or
             # build/test runners: the agent never executes the project's code.
-            PROMPT_FILE=.github/prompts/fix-pr-review.md
+            PROMPT_FILE=$PROMPTS_DIR/fix-pr-review.md
             ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,MultiEdit,Glob,Grep'
           else
-            PROMPT_FILE=.github/prompts/pr-review-format.md
+            PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md
             # This path is read-only by contract: Claude reads untrusted
             # PR/comment content but only needs to post a review comment, never
             # commit or push. The hard boundary is the job token (#1178): the
@@ -176,13 +211,21 @@ jobs:
             ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
           fi
 
-          # Single source of truth for prompt text lives in .github/prompts/*.md
-          # (pure prompt text). Flatten to one line and inject as --append-system-prompt.
+          # Single source of truth for prompt text lives in rk-skills
+          # templates/claude-workflow/prompts/*.md (pure prompt text). Flatten
+          # to one line and inject as --append-system-prompt. A consumer repo
+          # appends route-specific tailoring via .github/prompts/<name>-local.md.
           PROMPT=$(tr '\n' ' ' < "$PROMPT_FILE" | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//')
+          LOCAL_OVERRIDE=".github/prompts/$(basename "$PROMPT_FILE" .md)-local.md"
+          if [ -f "$LOCAL_OVERRIDE" ]; then
+            PROMPT="$PROMPT $(tr '\n' ' ' < "$LOCAL_OVERRIDE" | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//')"
+          fi
           # claude_args is shell-evaluated downstream: a double quote breaks the
-          # quoting, and a backtick or dollar sign would expand or execute.
+          # quoting, and a backtick or dollar sign would expand or execute. The
+          # check runs on the combined prompt so local override files are held
+          # to the same rule.
           if printf '%s' "$PROMPT" | grep -q '["`$]'; then
-            echo "::error::$PROMPT_FILE must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
+            echo "::error::$PROMPT_FILE (or $LOCAL_OVERRIDE) must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
             exit 1
           fi
           # State the harness identity in the prompt itself: the allowlist has no
@@ -262,7 +305,7 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           SELECT_ONLY: '1'
-        run: echo "id=$(bash .github/scripts/patch_claude_comment.sh)" >> "$GITHUB_OUTPUT"
+        run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
 
       - name: Revise CLAUDE.md with session learnings
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
@@ -278,7 +321,8 @@ jobs:
             claude-md-management@claude-plugins-official
           claude_args: --model ${{ inputs.model_id }} --effort ${{ inputs.effort }} --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
 
-      # Footer composition and comment patching live in .github/scripts
+      # Footer composition and comment patching live in the rk-skills scripts
+      # staged in RUNNER_TEMP
       # (patch_claude_comment.sh + compose_claude_comment.py) — shared with the
       # cancellation/failure step below and unit-tested. BOT_LOGIN (job env)
       # targets github-actions[bot] in review mode, claude[bot] otherwise; RUN_ID
@@ -297,7 +341,7 @@ jobs:
           # revise pass; empty in review/fix-pr mode, where the RUN_ID selection
           # applies (no revise pass runs, so no competing comment exists).
           TARGET_COMMENT_ID: ${{ steps.primary_comment.outputs.id }}
-        run: bash .github/scripts/patch_claude_comment.sh
+        run: bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
 
       - name: Mark cancellation for downstream status note
         if: always() && cancelled()
@@ -319,9 +363,10 @@ jobs:
           ON_MISS: post
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # A failure before (or during) checkout leaves no scripts to run with.
-          if [ ! -f .github/scripts/patch_claude_comment.sh ]; then
-            echo "::notice::Checkout unavailable — cannot patch the Claude comment."
+          # A failure before the rk-skills assets were staged leaves no scripts
+          # to run with.
+          if [ ! -f "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh" ]; then
+            echo "::notice::Shared scripts unavailable — cannot patch the Claude comment."
             exit 0
           fi
 
@@ -332,7 +377,7 @@ jobs:
           fi
           export STATUS_NOTE
 
-          bash .github/scripts/patch_claude_comment.sh
+          bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
 
       - name: Clean up worktrees after Claude runs
         if: always()

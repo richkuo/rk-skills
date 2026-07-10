@@ -19,7 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 # Least-privilege split (#1178): a zero-permission classify job plus the two
-# runner jobs. The runner body is shared via claude-run.yml; only the
+# runner jobs. The runner body is the reusable claude-run.yml workflow
+# published from richkuo/rk-skills — it fetches its prompts and scripts from
+# rk-skills at run time, so this file is the ONLY piece a consumer repo
+# vendors (plus optional .github/prompts/<route>-local.md tailoring); only the
 # permissions (and route) differ at the call sites below. The review job must
 # never carry contents: write or id-token: write — a review run reads
 # untrusted, potentially prompt-injected PR content, and id-token: write would
@@ -286,7 +289,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: ./.github/workflows/claude-run.yml
+    uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
     with:
       mode: review
       flow: ''
@@ -306,7 +309,7 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
-    uses: ./.github/workflows/claude-run.yml
+    uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
     with:
       mode: implement
       flow: ${{ needs.classify.outputs.flow }}
@@ -341,7 +344,7 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
-    uses: ./.github/workflows/claude-run.yml
+    uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
     with:
       mode: fix-pr
       flow: ''
@@ -368,7 +371,7 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
-    uses: ./.github/workflows/claude-run.yml
+    uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
     with:
       mode: fix-pr-review
       flow: ''
