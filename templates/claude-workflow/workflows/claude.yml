@@ -162,8 +162,11 @@ jobs:
           # falls through to the existing issue-workflow / PR-review paths in
           # claude-run.yml, so the read-only PR-review contract and today's behavior
           # are untouched for every non-trigger comment. sync-release is
-          # intentionally omitted: this repo has no merge-triggered release workflow
-          # to parse a docs-release/* branch, so create-release publishes directly.
+          # intentionally omitted from this template: it requires a repo-side
+          # merge-triggered release workflow that parses the docs-release/*
+          # branch name. The run body supports flow=sync-release — a repo that
+          # has such a workflow adds sync-release to the candidate list below,
+          # between create-release and sync-docs.
           #
           # Note: the model-shorthand parser above reads the flow word after @claude
           # (e.g. 'sync' in '@claude sync-docs') as an unknown model token and falls

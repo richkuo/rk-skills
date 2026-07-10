@@ -32,13 +32,40 @@ rk-skills at run time by the reusable workflow. Then:
    so the app must be installed on the repo.
 2. Optional: set the `DOCS_RELEASE_ENABLED` repository variable to `true` to
    enable the docs-sync / release comment flows (off by default, fail-closed).
-3. Tailor per repo with local override files, not by editing the shared
-   prompts: create `.github/prompts/<prompt-name>-local.md` (e.g.
-   `fix-pr-review-local.md`, `issue-workflow-local.md`) and its text is
-   appended to the shared prompt for that route. Overrides obey the same
-   character rule: no `"`, backticks, or `$`.
+3. Tailor per repo with prompt override files, not by editing the shared
+   prompts. Two forms, combinable per route:
+   - **Replace:** `.github/prompts/<prompt-name>.md` (e.g. `issue-workflow.md`)
+     is used INSTEAD of the shared prompt — for repos whose base prompt needs
+     safety-hardened language the shared text lacks.
+   - **Append:** `.github/prompts/<prompt-name>-local.md` (e.g.
+     `fix-pr-review-local.md`) is appended to whichever base was chosen.
+   Both obey the same character rule: no `"`, backticks, or `$`. Overrides are
+   read from the repository's **default branch**, never the event checkout, so
+   a change to them lands only after it merges (and a fork PR can never alter
+   the prompt for its own review).
 4. Run the tests from the rk-skills clone:
    `python3 -m unittest discover -s /tmp/rk-skills/templates/claude-workflow/scripts -p 'test_*.py'`.
+
+## Customization inputs
+
+Each call site in `claude.yml` can pass these optional `with:` inputs to the
+reusable workflow (defaults shown):
+
+| Input | Default | Purpose |
+|-------|---------|---------|
+| `runs_on` | `ubuntu-latest` | Runner label (e.g. `self-hosted`). |
+| `timeout_minutes` | `45` | Job timeout; raise for repos with long implement runs. |
+| `go_version` | (empty) | If set, installs Go — ONLY for `gofmt` on edited files (a formatter, never execution). Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
+| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts: no `"`, backticks, or `$`. |
+
+Self-hosted runners should provide `git`, `gh`, and `jq`; without `jq` the
+post-run Claude error check is skipped with a warning instead of failing.
+
+The `flow` input also accepts `sync-release` (docs sync + a `docs-release/v<version>`
+PR whose merge triggers the repo's own release workflow). The vendored
+`claude.yml` does not detect that phrase by default — add it to the flow
+candidate list only if your repo has a merge-triggered release workflow that
+parses the `docs-release/*` branch name.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 

@@ -7,10 +7,18 @@ name: Claude Code run
 # with secrets: inherit. Prompt files and comment-patch scripts are fetched
 # from rk-skills at run time (templates/claude-workflow/), so updating
 # rk-skills updates every consumer repo on its next run with no per-repo sync.
-# A consumer repo appends route-specific tailoring by adding
-# .github/prompts/<prompt-name>-local.md (e.g. fix-pr-review-local.md), whose
-# text is appended to the shared prompt and validated by the same
-# shell-safety check.
+# A consumer repo tailors prompts two ways (both validated by the same
+# shell-safety check):
+#   - replace: .github/prompts/<prompt-name>.md (e.g. issue-workflow.md)
+#     substitutes for the shared prompt entirely — for repos whose base prompt
+#     carries safety-hardened language the shared text lacks.
+#   - append:  .github/prompts/<prompt-name>-local.md (e.g.
+#     fix-pr-review-local.md) is appended to whichever base was chosen.
+# Both override files are read from the repo's DEFAULT BRANCH, never the event
+# checkout, so a fork PR can never supply the prompt for its own review run.
+# Runner, timeout, toolchain, and allowlist divergences are expressed via the
+# optional runs_on / timeout_minutes / go_version / extra_allowed_tools inputs
+# (issue #11), so consumer repos need no local fork of this file.
 # The GITHUB_TOKEN permissions are NOT declared here on purpose: a called
 # workflow inherits the caller job's permissions, so the least-privilege review
 # job and the write-capable implement job differ only at the call site.
@@ -41,7 +49,7 @@ on:
         required: true
         type: string
       flow:
-        description: 'Docs/release flow: empty, sync-docs, or create-release'
+        description: 'Docs/release flow: empty, sync-docs, create-release, or sync-release'
         required: false
         type: string
         default: ''
@@ -53,12 +61,33 @@ on:
         description: 'Resolved effort level for claude_args'
         required: true
         type: string
+      runs_on:
+        description: 'Runner label for the job (e.g. self-hosted)'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      timeout_minutes:
+        description: 'Job timeout in minutes (raise for repos whose implement runs exceed the default)'
+        required: false
+        type: number
+        default: 45
+      go_version:
+        description: 'If non-empty, install this Go version — ONLY for gofmt on edited files; pair with extra_allowed_tools: Bash(gofmt *)'
+        required: false
+        type: string
+        default: ''
+      extra_allowed_tools:
+        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   run:
-    runs-on: ubuntu-latest
-    # Bound hung runs (GitHub default is 360 minutes); recorded runs peak under 10.
-    timeout-minutes: 45
+    runs-on: ${{ inputs.runs_on }}
+    # Bound hung runs (GitHub default is 360 minutes); recorded runs peak under
+    # 10, but some repos' large implement runs need more — hence the input.
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
       CLAUDE_HARNESS: anthropics/claude-code-action@v1
       # With github_token bound (review mode) the agent's comments post as
@@ -112,14 +141,44 @@ jobs:
           done
           git worktree prune
 
-      # No JS toolchain or deps are installed: the agent never executes the
-      # project's code (no test suites, builds, simulations, or scripts) in
-      # any mode.
+      # No toolchain or deps are installed by default: the agent never executes
+      # the project's code (no test suites, builds, simulations, or scripts) in
+      # any mode. Go is the one opt-in exception, and ONLY for gofmt on edited
+      # files — a formatter, not execution. Callers pair it with
+      # extra_allowed_tools so the gofmt Bash rule reaches the allowlist.
+      - name: Set up Go (gofmt only)
+        if: inputs.go_version != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
 
-      - name: Record HEAD sha before Claude runs
+      - name: Record PR head sha before Claude runs
         if: inputs.mode == 'implement'
         id: pre_claude
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Hybrid baseline. When the trigger is a PR, read its head SHA from
+          # the API (authoritative remote ref) rather than the local checkout:
+          # claude-code-action does its own checkout, so comparing local
+          # git rev-parse HEAD before/after false-positives on comment-triggered
+          # PR runs. When the trigger is a plain issue or a docs flow there is
+          # no PR to consult, so fall back to the local HEAD — in-place commits
+          # (e.g. docs-sync) move it, keeping the revise pass reachable there.
+          SHA=""
+          KIND=local
+          if [ -n "$PR_NUMBER" ]; then
+            SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+          fi
+          if [ -n "$SHA" ]; then
+            KIND=pr
+          else
+            SHA=$(git rev-parse HEAD)
+          fi
+          echo "head_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "baseline_kind=$KIND" >> "$GITHUB_OUTPUT"
 
       - name: Compose Claude prompt
         id: compose_prompt
@@ -128,12 +187,14 @@ jobs:
           EFFORT: ${{ inputs.effort }}
           MODE: ${{ inputs.mode }}
           FLOW: ${{ inputs.flow }}
+          EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # Pick prompt + tool capability by route. A non-empty FLOW (issue #223
-          # docs-sync / create-release) uses the flow prompt with a flow-specific
-          # allowlist. Otherwise implement mode runs the validate-then-implement
-          # issue workflow with edit/skill tools, and review mode keeps the
-          # read-only PR-review contract.
+          # docs-sync / create-release / sync-release) uses the flow prompt with
+          # a flow-specific allowlist. Otherwise implement mode runs the
+          # validate-then-implement issue workflow with edit/skill tools, and
+          # review mode keeps the read-only PR-review contract.
           # Prompt files come from the rk-skills checkout staged in RUNNER_TEMP,
           # not the consumer repo.
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
@@ -159,15 +220,18 @@ jobs:
                 ALLOWED='Read,Glob,Grep,Bash(git status*),Bash(git log*),Bash(git tag --sort*),Bash(git fetch*),Bash(git rev-parse*),Bash(gh auth status),Bash(gh release create*),Bash(gh release view*)'
                 ;;
               *)
-                # sync-docs: edit docs, branch, push, open PR. NO tag creation, NO
-                # releases. No interpreters or build/test runners: the agent never
-                # executes the project's code in any mode. The git push glob
-                # (docs-sync/*) expresses intent, not a hard boundary. The real
-                # backstop is the job token scope plus the trigger gate
-                # (OWNER/MEMBER/COLLABORATOR only) and DOCS_RELEASE_ENABLED defaulting
-                # off — NOT the allowlist. git tag --sort is read-only listing; bare
-                # git tag creation stays disallowed.
-                ALLOWED='Read,Edit,Write,MultiEdit,Glob,Grep,Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git tag --sort*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout -b docs-sync/*),Bash(git add*),Bash(git commit*),Bash(git push origin docs-sync/*),Bash(gh pr create*),Bash(gh pr view*),Bash(gh issue view*)'
+                # sync-docs / sync-release Phase 1: edit docs, branch, push, open
+                # PR. NO tag creation, NO releases (sync-release publishes only
+                # via a consumer repo's merge-triggered workflow parsing the
+                # docs-release/* branch name). No interpreters or build/test
+                # runners: the agent never executes the project's code in any
+                # mode. The git push globs (docs-sync/*, docs-release/*) express
+                # intent, not a hard boundary. The real backstop is the job token
+                # scope plus the trigger gate (OWNER/MEMBER/COLLABORATOR only)
+                # and DOCS_RELEASE_ENABLED defaulting off — NOT the allowlist.
+                # git tag --sort is read-only listing; bare git tag creation
+                # stays disallowed.
+                ALLOWED='Read,Edit,Write,MultiEdit,Glob,Grep,Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git tag --sort*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout -b docs-sync/*),Bash(git checkout -b docs-release/*),Bash(git add*),Bash(git commit*),Bash(git push origin docs-sync/*),Bash(git push origin docs-release/*),Bash(gh pr create*),Bash(gh pr view*),Bash(gh issue view*)'
                 ;;
             esac
           elif [ "$MODE" = "implement" ]; then
@@ -211,21 +275,59 @@ jobs:
             ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
           fi
 
-          # Single source of truth for prompt text lives in rk-skills
-          # templates/claude-workflow/prompts/*.md (pure prompt text). Flatten
-          # to one line and inject as --append-system-prompt. A consumer repo
-          # appends route-specific tailoring via .github/prompts/<name>-local.md.
-          PROMPT=$(tr '\n' ' ' < "$PROMPT_FILE" | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//')
-          LOCAL_OVERRIDE=".github/prompts/$(basename "$PROMPT_FILE" .md)-local.md"
-          if [ -f "$LOCAL_OVERRIDE" ]; then
-            PROMPT="$PROMPT $(tr '\n' ' ' < "$LOCAL_OVERRIDE" | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//')"
+          # Append caller-supplied allowlist entries (e.g. Bash(gofmt *)) to
+          # every route EXCEPT create-release, whose no-interpreter allowlist is
+          # a hard lock (see above) that no input may widen. The combined list
+          # is shell-evaluated downstream inside claude_args, so hold the input
+          # to the same character rule as the prompt.
+          if [ -n "$EXTRA_ALLOWED" ]; then
+            if printf '%s' "$EXTRA_ALLOWED" | grep -q '["`$]'; then
+              echo "::error::extra_allowed_tools must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
+              exit 1
+            fi
+            if [ "$FLOW" = "create-release" ]; then
+              echo "::notice::extra_allowed_tools is ignored in the create-release flow (hard-locked allowlist)."
+            else
+              ALLOWED="$ALLOWED,$EXTRA_ALLOWED"
+            fi
+          fi
+
+          # Prompt sourcing is replace-or-append. The shared prompt staged from
+          # rk-skills templates/claude-workflow/prompts/*.md is the default
+          # base; a consumer repo REPLACES it by shipping
+          # .github/prompts/<name>.md (needed when its base text is
+          # safety-hardened beyond the shared version), and either base can be
+          # extended with .github/prompts/<name>-local.md, appended after.
+          # Both override files are read from the repository's DEFAULT BRANCH,
+          # never the working tree: on pull_request_review(_comment) events the
+          # checkout is the PR merge commit, so working-tree files are
+          # attacker-controlled on fork PRs — an override read from there could
+          # replace the review prompt itself. Flatten to one line and inject as
+          # --append-system-prompt.
+          flatten() { tr '\n' ' ' | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//'; }
+          TRUSTED_REF=""
+          if git fetch --quiet --depth 1 origin "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
+            TRUSTED_REF=FETCH_HEAD
+          else
+            echo "::warning::Could not fetch the default branch — repo prompt overrides are skipped this run."
+          fi
+          PROMPT_NAME=$(basename "$PROMPT_FILE")
+          REPLACEMENT_PATH=".github/prompts/$PROMPT_NAME"
+          LOCAL_PATH=".github/prompts/$(basename "$PROMPT_FILE" .md)-local.md"
+          if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$REPLACEMENT_PATH" 2>/dev/null; then
+            PROMPT=$(git show "$TRUSTED_REF:$REPLACEMENT_PATH" | flatten)
+          else
+            PROMPT=$(flatten < "$PROMPT_FILE")
+          fi
+          if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$LOCAL_PATH" 2>/dev/null; then
+            PROMPT="$PROMPT $(git show "$TRUSTED_REF:$LOCAL_PATH" | flatten)"
           fi
           # claude_args is shell-evaluated downstream: a double quote breaks the
           # quoting, and a backtick or dollar sign would expand or execute. The
-          # check runs on the combined prompt so local override files are held
-          # to the same rule.
+          # check runs on the combined prompt so override files are held to the
+          # same rule.
           if printf '%s' "$PROMPT" | grep -q '["`$]'; then
-            echo "::error::$PROMPT_FILE (or $LOCAL_OVERRIDE) must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
+            echo "::error::The prompt for this route ($PROMPT_NAME, including any $REPLACEMENT_PATH / $LOCAL_PATH override) must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
             exit 1
           fi
           # State the harness identity in the prompt itself: the allowlist has no
@@ -235,9 +337,9 @@ jobs:
           PROMPT="$PROMPT The harness identifier for LLM attribution footers in this run is ${CLAUDE_HARNESS}."
           # For a docs-sync/release flow, state the operation mode in the prompt so
           # the mode-agnostic prompt file executes exactly one flow. FLOW is drawn
-          # from a fixed set (sync-docs / create-release) that contains none of the
-          # shell-unsafe characters guarded above, so appending it after the
-          # validation is safe.
+          # from a fixed set (sync-docs / create-release / sync-release) that
+          # contains none of the shell-unsafe characters guarded above, so
+          # appending it after the validation is safe.
           if [ -n "$FLOW" ]; then
             PROMPT="$PROMPT The requested operation mode for this run is ${FLOW}."
           fi
@@ -280,23 +382,78 @@ jobs:
 
           claude_args: ${{ steps.compose_prompt.outputs.claude_args }}
 
+      # claude-code-action can exit 0 while Claude itself failed (e.g. an API
+      # error mid-run); surface that as a job failure instead of a green run
+      # that silently did nothing.
+      - name: Fail if Claude Code returned an error
+        if: steps.claude.outcome == 'success'
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          # jq ships on GitHub-hosted runners but not necessarily on
+          # self-hosted ones; degrade to a warning rather than failing every
+          # run on a runner without it.
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "::warning::jq is not installed on this runner — skipping the Claude Code error check."
+            exit 0
+          fi
+          if [ -z "$EXECUTION_FILE" ] || [ ! -f "$EXECUTION_FILE" ]; then
+            echo "::error::Claude Code execution output file is missing."
+            exit 1
+          fi
+
+          RESULT=$(jq -s '
+            def records:
+              .[] | if type == "array" then .[] else . end;
+            [records | select(type == "object" and .type == "result")] | last // {}
+          ' "$EXECUTION_FILE")
+          IS_ERROR=$(printf '%s' "$RESULT" | jq -r '.is_error // false')
+          if [ "$IS_ERROR" = "true" ]; then
+            API_STATUS=$(printf '%s' "$RESULT" | jq -r '.api_error_status // empty')
+            MESSAGE=$(printf '%s' "$RESULT" | jq -r '.result // "Claude Code reported an error."')
+            if [ -n "$API_STATUS" ]; then
+              echo "::error::Claude Code failed with API status ${API_STATUS}: ${MESSAGE}"
+            else
+              echo "::error::Claude Code failed: ${MESSAGE}"
+            fi
+            exit 1
+          fi
+
       - name: Detect if Claude made commits
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success'
         id: claude_changes
         env:
-          PRE_SHA: ${{ steps.pre_claude.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PRE_HEAD_SHA: ${{ steps.pre_claude.outputs.head_sha }}
+          BASELINE_KIND: ${{ steps.pre_claude.outputs.baseline_kind }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          # Local before/after HEAD comparison (plus a dirty-tree check): a
-          # docs-sync flow or any in-place commit moves HEAD; the issue workflow
-          # commits inside a linked worktree, so main's HEAD is unchanged and the
-          # revision pass is correctly skipped.
-          git fetch --quiet origin "$GITHUB_REF_NAME" 2>/dev/null || true
-          CURRENT_SHA=$(git rev-parse HEAD)
-          if [ "$PRE_SHA" != "$CURRENT_SHA" ] || ! git diff --quiet || [ -n "$(git status --porcelain)" ]; then
-            echo "made_commits=true" >> "$GITHUB_OUTPUT"
+          # PR baseline: compare the PR head SHA before/after via the API — a
+          # change means Claude pushed commits to the PR branch, and the
+          # action's own checkout cannot false-positive it.
+          # Local baseline (plain issue / docs flow): before/after HEAD
+          # comparison plus a dirty-tree check — a docs-sync flow or any
+          # in-place commit moves HEAD; the issue workflow commits inside a
+          # linked worktree, so HEAD is unchanged and the revision pass is
+          # correctly skipped.
+          if [ "$BASELINE_KIND" = "pr" ]; then
+            AFTER_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+            if [ -n "$AFTER_SHA" ] && [ "$PRE_HEAD_SHA" != "$AFTER_SHA" ]; then
+              echo "made_commits=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "made_commits=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::Claude pushed no commits — skipping CLAUDE.md revision."
+            fi
           else
-            echo "made_commits=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Claude made no code changes — skipping CLAUDE.md revision."
+            git fetch --quiet origin "$GITHUB_REF_NAME" 2>/dev/null || true
+            CURRENT_SHA=$(git rev-parse HEAD)
+            if [ "$PRE_HEAD_SHA" != "$CURRENT_SHA" ] || ! git diff --quiet || [ -n "$(git status --porcelain)" ]; then
+              echo "made_commits=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "made_commits=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::Claude made no code changes — skipping CLAUDE.md revision."
+            fi
           fi
 
       # Pin the footer target BEFORE the revise pass. The revise step below posts

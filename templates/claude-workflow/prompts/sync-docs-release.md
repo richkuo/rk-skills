@@ -1,4 +1,4 @@
-You have been invoked by a repository maintainer comment on GitHub. The requested operation mode for this run (sync-docs or create-release) is stated in the final sentence appended to this prompt. Execute exactly that mode and nothing else. Never push directly to the main branch. Never publish a GitHub release while in sync-docs mode; in that mode you only open a pull request and then stop.
+You have been invoked by a repository maintainer comment on GitHub. The requested operation mode for this run (sync-docs, create-release, or sync-release) is stated in the final sentence appended to this prompt. Execute exactly that mode and nothing else. Never push directly to the main branch. Never publish a GitHub release while in sync-docs or sync-release mode; in those two modes you only open a pull request and then stop.
 
 General rules for every mode:
 - Inspect the real repository state with git and gh commands. Never rely on memory for tags, versions, or the last sync point.
@@ -7,7 +7,7 @@ General rules for every mode:
 - If a precondition fails (a working tree dirty with unrelated changes, an already-existing tag, or a genuinely ambiguous version bump), stop and post a short comment explaining what blocked you instead of proceeding.
 - Obey the conventions and invariants documented in CLAUDE.md. Never weaken a money, data-integrity, security, or privacy invariant to make a change simpler.
 
-Mode sync-docs runs the documentation-sync procedure:
+Mode sync-docs and mode sync-release share the same documentation-sync procedure. Run it first in both of those modes:
 
 1. Find the last documentation-sync baseline. Use git log to locate the most recent commit whose subject mentions docs together with sync or CLAUDE. Record its short hash. That commit is the baseline. If none is found, review the last ten commits and pick a sensible starting point, stating your choice.
 2. List the commits since that baseline using git log in the baseline..HEAD range in oneline form. Ignore pure CI, workflow, and chore commits unless they change agent-facing behavior.
@@ -16,13 +16,24 @@ Mode sync-docs runs the documentation-sync procedure:
 5. This repository has no CHANGELOG.md and no MEMORY.md, and you must not create either as part of a sync.
 6. After editing, check the size of CLAUDE.md by running wc with the -c flag on it. If it exceeds 40000 bytes, condense it in place back under 38000 bytes without splitting it into multiple files.
 
-After the documentation edits are complete, follow the branch and pull-request procedure:
+After the documentation edits are complete, follow the branch and pull-request procedure for the current mode.
+
+In sync-docs mode:
 - Confirm git status shows only your documentation edits and nothing unrelated. If unrelated changes are present, stage only the documentation files by name.
 - Obtain the short hash of HEAD by running git rev-parse with the --short flag on HEAD.
 - Create a new branch whose name is the literal text docs-sync/ followed immediately by that short hash. Use git checkout with the -b flag.
 - Commit only the documentation files with a clear message referencing a docs sync. End the commit message with the standard attribution footer for this repository.
 - Push the branch with git push origin followed by the branch name.
 - Open a pull request with gh pr create, base branch main, whose body summarizes what changed and how it was verified. Do not mention any release. Report the pull-request URL. Then stop.
+
+In sync-release mode:
+- First determine the next semantic version. List existing tags by running git tag with the --sort flag set to -v:refname, and review the commits since the latest tag. Choose a major, minor, or patch bump and state the rationale in plain words: a breaking change is major, a new feature is minor, and fixes or polish are patch.
+- Confirm git status shows only your documentation edits, staging only the documentation files by name if anything unrelated is present.
+- Create a new branch whose name is the literal text docs-release/ followed immediately by the letter v and the chosen version, for example docs-release/v1.2.3. Use git checkout with the -b flag. This exact branch-name shape is load-bearing: a separate workflow in the repository parses the version out of it and publishes the release only after this pull request merges, so the version in the branch name must be the exact version you intend to publish. If the repository has no such merge-triggered release workflow, sync-release should not have been requested; stop and post a comment saying so instead of proceeding.
+- Commit only the documentation files, ending the message with the standard attribution footer.
+- Push the branch with git push origin followed by the branch name.
+- Open a pull request with gh pr create, base branch main. In the body, state the exact version that will be published, the bump rationale, a preview of the release notes, and a clear warning line that merging this pull request will automatically publish that release and that closing it without merging publishes nothing. Report the pull-request URL. Then stop.
+- Do not create any tag and do not publish any release yourself. The human merge is the only release gate.
 
 Mode create-release publishes a release immediately from the current main branch. This is a real and irreversible action. Follow these steps:
 
