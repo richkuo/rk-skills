@@ -39,7 +39,10 @@ rk-skills at run time by the reusable workflow. Then:
      safety-hardened language the shared text lacks.
    - **Append:** `.github/prompts/<prompt-name>-local.md` (e.g.
      `fix-pr-review-local.md`) is appended to whichever base was chosen.
-   Both obey the same character rule: no `"`, backticks, or `$`.
+   Both obey the same character rule: no `"`, backticks, or `$`. Overrides are
+   read from the repository's **default branch**, never the event checkout, so
+   a change to them lands only after it merges (and a fork PR can never alter
+   the prompt for its own review).
 4. Run the tests from the rk-skills clone:
    `python3 -m unittest discover -s /tmp/rk-skills/templates/claude-workflow/scripts -p 'test_*.py'`.
 
@@ -54,6 +57,9 @@ reusable workflow (defaults shown):
 | `timeout_minutes` | `45` | Job timeout; raise for repos with long implement runs. |
 | `go_version` | (empty) | If set, installs Go — ONLY for `gofmt` on edited files (a formatter, never execution). Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
 | `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts: no `"`, backticks, or `$`. |
+
+Self-hosted runners should provide `git`, `gh`, and `jq`; without `jq` the
+post-run Claude error check is skipped with a warning instead of failing.
 
 The `flow` input also accepts `sync-release` (docs sync + a `docs-release/v<version>`
 PR whose merge triggers the repo's own release workflow). The vendored
