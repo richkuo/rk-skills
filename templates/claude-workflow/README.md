@@ -9,35 +9,36 @@ setup deployed on the repos it was extracted from, genericized.
 
 | Path | Purpose |
 |------|---------|
-| `workflows/claude.yml` | Trigger + author gate + fail-closed route classifier (`classify`), and one caller job per route with least-privilege `permissions:`. |
-| `workflows/claude-run.yml` | Reusable run body shared by every route: prompt composition, Bash allowlists, the Claude Code action, LLM-footer comment patching, failure notes. |
-| `prompts/*.md` | One prompt file per route (pure prompt text — the single source of truth). Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
-| `scripts/` | Comment patch/compose helpers plus their unit tests, including `test_workflow_logic.py`, which extracts and executes the real classifier shell from `claude.yml`. |
+| `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger + author gate + fail-closed route classifier (`classify`), and one caller job per route with least-privilege `permissions:`, each calling the published run body. |
+| `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body shared by every route, published from rk-skills and called cross-repo via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Fetches the prompts and scripts below from rk-skills at run time — updating rk-skills updates every consumer repo on its next run. |
+| `prompts/*.md` | One prompt file per route (pure prompt text — the single source of truth, fetched at run time). Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
+| `scripts/` | Comment patch/compose helpers plus their unit tests, including `test_workflow_logic.py`, which extracts and executes the real classifier shell from `claude.yml`. Fetched at run time. |
 
 ## Install
 
-Copy the pieces into your repo's `.github/`:
+Copy the trigger workflow into your repo's `.github/workflows/`:
 
 ```sh
 git clone --depth 1 https://github.com/richkuo/rk-skills /tmp/rk-skills
-mkdir -p .github
-cp -R /tmp/rk-skills/templates/claude-workflow/workflows .github/
-cp -R /tmp/rk-skills/templates/claude-workflow/prompts   .github/
-cp -R /tmp/rk-skills/templates/claude-workflow/scripts   .github/
+mkdir -p .github/workflows
+cp /tmp/rk-skills/templates/claude-workflow/workflows/claude.yml .github/workflows/
 ```
 
-Then:
+Prompts, scripts, and the run body are NOT copied — they are fetched from
+rk-skills at run time by the reusable workflow. Then:
 
 1. Add the `CLAUDE_CODE_OAUTH_TOKEN` secret (Claude Code OAuth token). The
    write-capable routes authenticate as the Claude GitHub App (`claude[bot]`),
    so the app must be installed on the repo.
 2. Optional: set the `DOCS_RELEASE_ENABLED` repository variable to `true` to
    enable the docs-sync / release comment flows (off by default, fail-closed).
-3. Tailor the prompts: `issue-workflow.md`, `fix-pr.md`, and
-   `fix-pr-review.md` carry a repo-agnostic verification paragraph — adjust it
-   if your repo has specific conventions; `sync-docs-release.md` assumes no
-   CHANGELOG and no in-app version field.
-4. Run the tests: `python3 -m unittest discover -s .github/scripts -p 'test_*.py'`.
+3. Tailor per repo with local override files, not by editing the shared
+   prompts: create `.github/prompts/<prompt-name>-local.md` (e.g.
+   `fix-pr-review-local.md`, `issue-workflow-local.md`) and its text is
+   appended to the shared prompt for that route. Overrides obey the same
+   character rule: no `"`, backticks, or `$`.
+4. Run the tests from the rk-skills clone:
+   `python3 -m unittest discover -s /tmp/rk-skills/templates/claude-workflow/scripts -p 'test_*.py'`.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 
