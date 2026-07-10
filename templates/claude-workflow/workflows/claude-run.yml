@@ -1,0 +1,352 @@
+name: Claude Code run
+
+# Reusable body shared by the review and implement jobs in claude.yml (#1178).
+# The GITHUB_TOKEN permissions are NOT declared here on purpose: a called
+# workflow inherits the caller job's permissions, so the least-privilege review
+# job and the write-capable implement job differ only at the call site.
+# Mode-dependent behavior inside:
+#   - review:    the agent is bound to the job-scoped token via github_token
+#                (with app auth, its push power would come from the Claude
+#                GitHub App installation token, which the job permissions do not
+#                cap), the prompt is the read-only PR-review contract, and
+#                comments post as github-actions[bot].
+#   - implement: app auth (claude[bot]) with contents: write; routes to the
+#                issue-workflow prompt, or the docs-sync/release prompt when a
+#                flow is set, plus the CLAUDE.md-revision follow-up when commits
+#                were made.
+#   - fix-pr:    app auth (claude[bot]) with contents: write; routes to the
+#                fix-pr prompt, which checks out the triggering PR's own branch,
+#                makes the requested changes in place, and pushes to it (never
+#                opens a new PR). Only reached for trusted-author PRs (gated in
+#                claude.yml), so the write happens over a trusted diff.
+#   - fix-pr-review: same auth/permissions/gating as fix-pr, but routes to the
+#                review-fixing playbook prompt (validate all review feedback
+#                against the code, fix what survives, disposition comment,
+#                re-review trigger).
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: 'review, implement, fix-pr, or fix-pr-review'
+        required: true
+        type: string
+      flow:
+        description: 'Docs/release flow: empty, sync-docs, or create-release'
+        required: false
+        type: string
+        default: ''
+      model_id:
+        description: 'Resolved model id for claude_args'
+        required: true
+        type: string
+      effort:
+        description: 'Resolved effort level for claude_args'
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Bound hung runs (GitHub default is 360 minutes); recorded runs peak under 10.
+    timeout-minutes: 45
+    env:
+      CLAUDE_HARNESS: anthropics/claude-code-action@v1
+      # With github_token bound (review mode) the agent's comments post as
+      # github-actions[bot]; the comment-patch steps must target that author.
+      BOT_LOGIN: ${{ inputs.mode == 'review' && 'github-actions[bot]' || 'claude[bot]' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prune stale worktrees before Claude runs
+        # EnterWorktree (work-on-issue step 1) creates linked worktrees with
+        # deterministic issue-<N>-<slug> names. On a persistent self-hosted
+        # runner, checkout's clean wipes their working files but leaves the
+        # .git/worktrees admin entries behind, so a rerun on the same issue would
+        # fail with git's "already used by worktree" error. Clear every linked
+        # worktree before Claude runs. (Harmless in review mode, which creates
+        # none.)
+        run: |
+          # Scoped to EnterWorktree's directory so cleanup can never touch a
+          # worktree created outside this flow (e.g. an operator's debugging
+          # worktree left on the runner).
+          git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
+            case "$wt" in
+              "$GITHUB_WORKSPACE"/.claude/worktrees/*)
+                git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt" ;;
+            esac
+          done
+          git worktree prune
+
+      # No JS toolchain or deps are installed: the agent never executes the
+      # project's code (no test suites, builds, simulations, or scripts) in
+      # any mode.
+
+      - name: Record HEAD sha before Claude runs
+        if: inputs.mode == 'implement'
+        id: pre_claude
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Compose Claude prompt
+        id: compose_prompt
+        env:
+          MODEL_ID: ${{ inputs.model_id }}
+          EFFORT: ${{ inputs.effort }}
+          MODE: ${{ inputs.mode }}
+          FLOW: ${{ inputs.flow }}
+        run: |
+          # Pick prompt + tool capability by route. A non-empty FLOW (issue #223
+          # docs-sync / create-release) uses the flow prompt with a flow-specific
+          # allowlist. Otherwise implement mode runs the validate-then-implement
+          # issue workflow with edit/skill tools, and review mode keeps the
+          # read-only PR-review contract.
+          if [ -n "$FLOW" ]; then
+            PROMPT_FILE=.github/prompts/sync-docs-release.md
+            case "$FLOW" in
+              create-release)
+                # Explicit human release command: publish now, NO file edits. This
+                # flow has NO branch, tag-creation, or push capability at all (no git
+                # branch, no git tag creation — only git tag --sort read-only listing
+                # — and no git push), so it genuinely cannot move or land a commit on
+                # main. The release tag is created by gh at publish time via gh
+                # release create --target <current main sha>, not by a local git tag
+                # or push. This allowlist grants NO command interpreter at all (no
+                # Bash(bun *) / Bash(bunx *)) — only Read/Glob/Grep plus read-only git
+                # verbs and gh release create/view — so there is no shell-out-to-git
+                # escape here; this is a hard lock, not merely defense in depth. Do
+                # NOT add any interpreter to this ALLOWED line: doing so would reopen
+                # the push-to-main vector this flow is designed to foreclose. The
+                # remaining backstops (trigger gate OWNER/MEMBER/COLLABORATOR only,
+                # the job token scope, and DOCS_RELEASE_ENABLED defaulting off) are
+                # additional layers on top of the hard lock, not substitutes for it.
+                ALLOWED='Read,Glob,Grep,Bash(git status*),Bash(git log*),Bash(git tag --sort*),Bash(git fetch*),Bash(git rev-parse*),Bash(gh auth status),Bash(gh release create*),Bash(gh release view*)'
+                ;;
+              *)
+                # sync-docs: edit docs, branch, push, open PR. NO tag creation, NO
+                # releases. No interpreters or build/test runners: the agent never
+                # executes the project's code in any mode. The git push glob
+                # (docs-sync/*) expresses intent, not a hard boundary. The real
+                # backstop is the job token scope plus the trigger gate
+                # (OWNER/MEMBER/COLLABORATOR only) and DOCS_RELEASE_ENABLED defaulting
+                # off — NOT the allowlist. git tag --sort is read-only listing; bare
+                # git tag creation stays disallowed.
+                ALLOWED='Read,Edit,Write,MultiEdit,Glob,Grep,Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git tag --sort*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout -b docs-sync/*),Bash(git add*),Bash(git commit*),Bash(git push origin docs-sync/*),Bash(gh pr create*),Bash(gh pr view*),Bash(gh issue view*)'
+                ;;
+            esac
+          elif [ "$MODE" = "implement" ]; then
+            PROMPT_FILE=.github/prompts/issue-workflow.md
+            # Edit/Write/Skill needed to validate, edit the issue, and implement.
+            ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,MultiEdit,Glob,Grep,Skill,EnterWorktree'
+          elif [ "$MODE" = "fix-pr" ]; then
+            # In-place PR fix: check out the PR's branch, edit, commit, push to it.
+            # Reached only for trusted-author PRs (gated in claude.yml), so the
+            # diff being read is trusted; the allowlist is intent, not a hard
+            # boundary. No interpreters or build/test runners: the agent never
+            # executes the project's code. Push verbs are exact-match
+            # (no trailing wildcard) so a refspec or --force does not match, and
+            # there is no gh api (its --method flag reaches every mutating
+            # endpoint). No EnterWorktree/Skill: this path never opens a new PR or
+            # runs the issue workflow — it pushes to the existing PR branch.
+            PROMPT_FILE=.github/prompts/fix-pr.md
+            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Read,Edit,Write,MultiEdit,Glob,Grep'
+          elif [ "$MODE" = "fix-pr-review" ]; then
+            # Review-fixing playbook: fix-pr's allowlist plus gh api graphql
+            # (inline review threads carry resolution state only via GraphQL)
+            # and gh issue create (Create Follow-up Issue dispositions). Like
+            # fix-pr this path is trusted-author only and the allowlist is
+            # intent, not a hard boundary (graphql can express mutations) — the
+            # trust gate in claude.yml is the boundary. No interpreters or
+            # build/test runners: the agent never executes the project's code.
+            PROMPT_FILE=.github/prompts/fix-pr-review.md
+            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,MultiEdit,Glob,Grep'
+          else
+            PROMPT_FILE=.github/prompts/pr-review-format.md
+            # This path is read-only by contract: Claude reads untrusted
+            # PR/comment content but only needs to post a review comment, never
+            # commit or push. The hard boundary is the job token (#1178): the
+            # review job binds the agent to a contents: read token, so a
+            # prompt-injected diff cannot push or merge. No interpreters or
+            # build/test runners: the review is static — the agent never executes
+            # the project's code. git/gh are narrowed to read verbs + gh pr
+            # comment as defense-in-depth. No gh api (its --method flag reaches
+            # every mutating endpoint) and no CI readers: reviews intentionally do
+            # not gate on CI, which outlasts the review.
+            ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
+          fi
+
+          # Single source of truth for prompt text lives in .github/prompts/*.md
+          # (pure prompt text). Flatten to one line and inject as --append-system-prompt.
+          PROMPT=$(tr '\n' ' ' < "$PROMPT_FILE" | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//')
+          # claude_args is shell-evaluated downstream: a double quote breaks the
+          # quoting, and a backtick or dollar sign would expand or execute.
+          if printf '%s' "$PROMPT" | grep -q '["`$]'; then
+            echo "::error::$PROMPT_FILE must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
+            exit 1
+          fi
+          # State the harness identity in the prompt itself: the allowlist has no
+          # env-reading command (echo/printenv), so the CLAUDE_HARNESS env var is
+          # unreachable from inside the run — skills fill the footer's <harness>
+          # from this sentence instead.
+          PROMPT="$PROMPT The harness identifier for LLM attribution footers in this run is ${CLAUDE_HARNESS}."
+          # For a docs-sync/release flow, state the operation mode in the prompt so
+          # the mode-agnostic prompt file executes exactly one flow. FLOW is drawn
+          # from a fixed set (sync-docs / create-release) that contains none of the
+          # shell-unsafe characters guarded above, so appending it after the
+          # validation is safe.
+          if [ -n "$FLOW" ]; then
+            PROMPT="$PROMPT The requested operation mode for this run is ${FLOW}."
+          fi
+          ARGS="--model ${MODEL_ID} --effort ${EFFORT} --append-system-prompt \"${PROMPT}\" --allowedTools \"${ALLOWED}\""
+          {
+            printf 'claude_args<<CLAUDE_ARGS_EOF\n'
+            printf '%s\n' "$ARGS"
+            printf 'CLAUDE_ARGS_EOF\n'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # Review runs are bound to the job-scoped token (contents: read) so a
+          # prompt-injected diff cannot push/merge; an empty string is equivalent
+          # to unset, so implement runs keep Claude App auth, whose token the
+          # action mints via OIDC (#1178).
+          github_token: ${{ inputs.mode == 'review' && github.token || '' }}
+
+          # Allow Claude's own bot user to trigger reviews on its own PRs
+          # (work-on-issue posts an @claude review comment on the PR it opens)
+          allowed_bots: 'claude'
+
+          # Show full output in the job summary (important for code review results)
+          show_full_output: true
+
+          # Load the code-review plugin so @claude review uses structured review skill
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+
+          claude_args: ${{ steps.compose_prompt.outputs.claude_args }}
+
+      - name: Detect if Claude made commits
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success'
+        id: claude_changes
+        env:
+          PRE_SHA: ${{ steps.pre_claude.outputs.sha }}
+        run: |
+          # Local before/after HEAD comparison (plus a dirty-tree check): a
+          # docs-sync flow or any in-place commit moves HEAD; the issue workflow
+          # commits inside a linked worktree, so main's HEAD is unchanged and the
+          # revision pass is correctly skipped.
+          git fetch --quiet origin "$GITHUB_REF_NAME" 2>/dev/null || true
+          CURRENT_SHA=$(git rev-parse HEAD)
+          if [ "$PRE_SHA" != "$CURRENT_SHA" ] || ! git diff --quiet || [ -n "$(git status --porcelain)" ]; then
+            echo "made_commits=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "made_commits=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Claude made no code changes — skipping CLAUDE.md revision."
+          fi
+
+      # Pin the footer target BEFORE the revise pass. The revise step below posts
+      # its OWN claude[bot] comment carrying this run's /actions/runs/<id> link,
+      # which would win the footer step's latest-by-updated_at selection; capture
+      # the primary work comment id now so the footer lands on it, not on revise.
+      - name: Capture primary Claude comment before revise pass
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success'
+        id: primary_comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SELECT_ONLY: '1'
+        run: echo "id=$(bash .github/scripts/patch_claude_comment.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Revise CLAUDE.md with session learnings
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
+          plugin_marketplaces: |
+            https://github.com/anthropics/claude-code.git
+            https://github.com/anthropics/claude-plugins-official.git
+          plugins: |
+            code-review@claude-code-plugins
+            claude-md-management@claude-plugins-official
+          claude_args: --model ${{ inputs.model_id }} --effort ${{ inputs.effort }} --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
+
+      # Footer composition and comment patching live in .github/scripts
+      # (patch_claude_comment.sh + compose_claude_comment.py) — shared with the
+      # cancellation/failure step below and unit-tested. BOT_LOGIN (job env)
+      # targets github-actions[bot] in review mode, claude[bot] otherwise; RUN_ID
+      # pins the selection to this run's tracking comment (its body links
+      # /actions/runs/<run_id>), since github-actions[bot] is shared by every
+      # workflow and latest-by-author alone could stamp a foreign comment.
+      - name: Append LLM footer to Claude comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL_ID: ${{ inputs.model_id }}
+          EFFORT: ${{ inputs.effort }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          # Implement mode pins the primary work comment captured before the
+          # revise pass; empty in review/fix-pr mode, where the RUN_ID selection
+          # applies (no revise pass runs, so no competing comment exists).
+          TARGET_COMMENT_ID: ${{ steps.primary_comment.outputs.id }}
+        run: bash .github/scripts/patch_claude_comment.sh
+
+      - name: Mark cancellation for downstream status note
+        if: always() && cancelled()
+        run: echo "IS_CANCELLED=true" >> "$GITHUB_ENV"
+
+      # ON_MISS=post: a failure before the action creates its tracking comment
+      # (checkout, prompt composition) has no comment to patch — the
+      # note is posted as a NEW comment so it still reaches the thread instead of
+      # vanishing (or landing on an older run's comment).
+      - name: Note workflow cancellation/failure on Claude comment
+        if: always() && (cancelled() || failure())
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL_ID: ${{ inputs.model_id }}
+          EFFORT: ${{ inputs.effort }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ON_MISS: post
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A failure before (or during) checkout leaves no scripts to run with.
+          if [ ! -f .github/scripts/patch_claude_comment.sh ]; then
+            echo "::notice::Checkout unavailable — cannot patch the Claude comment."
+            exit 0
+          fi
+
+          if [ "${IS_CANCELLED:-}" = "true" ]; then
+            STATUS_NOTE="**Workflow cancelled before completion.** See [run log]($RUN_URL)."
+          else
+            STATUS_NOTE="**Workflow failed before completion.** See [run log]($RUN_URL)."
+          fi
+          export STATUS_NOTE
+
+          bash .github/scripts/patch_claude_comment.sh
+
+      - name: Clean up worktrees after Claude runs
+        if: always()
+        # Companion to the pre-run prune: free worktree disk right after every run
+        # (success, failure, or cancellation) instead of leaving it until the next
+        # invocation. The pre-run prune stays the crash-proof guarantee for reruns.
+        run: |
+          # Scoped to EnterWorktree's directory so cleanup can never touch a
+          # worktree created outside this flow (e.g. an operator's debugging
+          # worktree left on the runner).
+          git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
+            case "$wt" in
+              "$GITHUB_WORKSPACE"/.claude/worktrees/*)
+                git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt" ;;
+            esac
+          done
+          git worktree prune
