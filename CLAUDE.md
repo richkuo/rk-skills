@@ -33,7 +33,7 @@
 - Comment only where logic isn't self-evident.
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface — always.** Never pick the tidier design if it leaves any correctness/safety gap (money, data integrity, security, auto-protective mechanisms); weigh gaps against the realistic worst case, not the average. Derive the right solution from first principles even if it means more code.
-- **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (branch+PR workflow, verifying claims against code, destructive-action safety) override "best."
+- **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best."
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
@@ -69,4 +69,4 @@
 
 ## This Repository
 
-- **All changes land via branch + pull request — never commit directly to main.**
+- **All changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
