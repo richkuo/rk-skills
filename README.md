@@ -80,7 +80,7 @@ mkdir -p .github/workflows && \
 
 Also included:
 
-- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the branch+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
+- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
 - `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
 
 ## Install (with npx)
