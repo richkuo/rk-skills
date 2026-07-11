@@ -46,13 +46,23 @@ git branch --show-current   # where am I now?
 ```
 
 - **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
-- **Otherwise create and switch into one** with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
+- **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
 
 ```
 EnterWorktree(name: "issue-<N>-<slug>")
 ```
 
-`EnterWorktree` auto-prepends the coding-agent identifier as `<prefix>` — `cc` for Claude Code, `cursor` for Cursor, `codex` for Codex — so pass the name **without** a prefix; adding one yourself doubles it (`cc/cc/issue-…`). `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding` (worktree lands at `cc/issue-873-scale-in-pyramiding`). If a worktree for this issue already exists, enter it by `path`.
+Pass the name **without** a `cc/` prefix — if a `WorktreeCreate` hook is configured (e.g. one that prepends `cc/`, matching the convention below), it applies its own prefix, and adding one yourself doubles it (`cc/cc/issue-…`). No such hook configured is also fine — worktree lands unprefixed. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding`.
+
+- **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
+
+```bash
+git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "$DEFAULT_BRANCH"
+```
+
+(swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
+
+If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
 
 After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent:
 

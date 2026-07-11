@@ -70,4 +70,4 @@
 ## This Repository
 
 - **All changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
-- **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `cc/issue-873-scale-in-pyramiding`. `EnterWorktree` adds the `cc/` prefix itself — pass it an unprefixed name (`issue-873-…`). Tools/workflows without that auto-prefixing (raw `git worktree add`) must add the prefix by hand.
+- **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `cc/issue-873-scale-in-pyramiding`. On Claude Code, use the native `EnterWorktree` tool with an unprefixed name — a configured `WorktreeCreate` hook applies the `cc/` prefix; adding one yourself doubles it. On Cursor/Codex (no `EnterWorktree` tool), use `git worktree add` and add the `cursor/`/`codex/` prefix by hand.
