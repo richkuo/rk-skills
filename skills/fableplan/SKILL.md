@@ -81,11 +81,15 @@ Present the vetted plan to the user (the main agent). This is the plan you will 
 
 Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task, prefixed with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
 
-**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/`, verifies the base ref, and switches the tracked cwd; it uses the name verbatim, adding no prefix itself):
+**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the tracked cwd; it uses the name verbatim, adding no prefix itself). It branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default) — set to `head` it branches from the local HEAD, which may be stale — so fetch first and verify the base after:
 
 ```
+git fetch origin <default-branch>
 EnterWorktree(name: "cc/fableplan/<short-task-name>")
+git rev-parse HEAD origin/<default-branch>   # the two SHAs must match
 ```
+
+If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
 
 **On Cursor or Codex** (no `EnterWorktree` tool), create it by hand — the coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
 
