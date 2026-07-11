@@ -49,10 +49,10 @@ git branch --show-current   # where am I now?
 - **Otherwise create and switch into one** with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
 
 ```
-EnterWorktree(name: "<prefix>/issue-<N>-<slug>")
+EnterWorktree(name: "issue-<N>-<slug>")
 ```
 
-`<prefix>` identifies which coding agent is doing the work — `cc` for Claude Code, `cursor` for Cursor, `codex` for Codex. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. Claude Code on issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. If a worktree for this issue already exists, enter it by `path`.
+`EnterWorktree` auto-prepends the coding-agent identifier as `<prefix>` — `cc` for Claude Code, `cursor` for Cursor, `codex` for Codex — so pass the name **without** a prefix; adding one yourself doubles it (`cc/cc/issue-…`). `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding` (worktree lands at `cc/issue-873-scale-in-pyramiding`). If a worktree for this issue already exists, enter it by `path`.
 
 After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent:
 
