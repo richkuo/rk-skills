@@ -45,7 +45,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: 'review, implement, or fix-pr'
+        description: 'review, implement, or fix-pr (fix-pr-review is a deprecated alias for fix-pr)'
         required: true
         type: string
       flow:
@@ -238,7 +238,11 @@ jobs:
             PROMPT_FILE=$PROMPTS_DIR/issue-workflow.md
             # Edit/Write/Skill needed to validate, edit the issue, and implement.
             ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,MultiEdit,Glob,Grep,Skill,EnterWorktree'
-          elif [ "$MODE" = "fix-pr" ]; then
+          elif [ "$MODE" = "fix-pr" ] || [ "$MODE" = "fix-pr-review" ]; then
+            # fix-pr-review is a deprecated alias for fix-pr: consumer repos
+            # with an older vendored claude.yml still pass it, and this file is
+            # fetched live from @main — dropping the branch would silently
+            # route their review-fixing runs to the read-only review prompt.
             # Review-fixing playbook: check out the PR's branch, fetch and
             # validate all unaddressed review feedback, fix what survives, fold
             # in any additional instructions from the triggering comment, and
