@@ -82,8 +82,10 @@ Present the vetted plan to the user (the main agent). This is the plan you will 
 Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task:
 
 ```
-git worktree add ../<repo>-fableplan-<short-task-name> -b fableplan/<short-task-name>
+git worktree add ../<repo>-fableplan-<short-task-name> -b cc/fableplan/<short-task-name>
 ```
+
+Prefix the branch with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
 
 Do all of step 7's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
 

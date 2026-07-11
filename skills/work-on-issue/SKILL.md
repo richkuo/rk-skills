@@ -45,14 +45,14 @@ git fetch origin "$DEFAULT_BRANCH"
 git branch --show-current   # where am I now?
 ```
 
-- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
+- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
 - **Otherwise create and switch into one** with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
 
 ```
-EnterWorktree(name: "issue-<N>-<slug>")
+EnterWorktree(name: "<prefix>/issue-<N>-<slug>")
 ```
 
-`<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding`. If a worktree for this issue already exists, enter it by `path`.
+`<prefix>` identifies which coding agent is doing the work — `cc` for Claude Code, `cursor` for Cursor, `codex` for Codex. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. Claude Code on issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. If a worktree for this issue already exists, enter it by `path`.
 
 After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent:
 
@@ -88,7 +88,7 @@ Only after verification passes:
 git status                    # review BEFORE staging — any stray artifacts, logs, local config?
 git add -A                    # only if status showed nothing unrelated; otherwise stage files explicitly
 git commit -F <msg-file>
-git push -u origin <branch>   # the worktree's issue-<N>-<slug> branch
+git push -u origin <branch>   # the worktree's <prefix>/issue-<N>-<slug> branch
 ```
 
 If `git status` shows anything unrelated to the change, don't `add -A` — stage the intended files by name and leave the strays out.

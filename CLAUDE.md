@@ -70,3 +70,4 @@
 ## This Repository
 
 - **All changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
+- **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `cc/issue-873-scale-in-pyramiding`.
