@@ -68,10 +68,10 @@ If a worktree for this issue already exists, enter it by `path` (Claude Code) or
 After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — this applies to both paths. EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent. The manual `git worktree add` bases on `origin/$DEFAULT_BRANCH` (freshly fetched in step 1) — still confirm:
 
 ```bash
-git rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
+git -C .claude/worktrees/<prefix>/issue-<N>-<slug> rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
 ```
 
-If they differ on a worktree you **just created**, move it onto the fetched default with `git reset --hard origin/<default>` — safe only because the brand-new branch carries no commits. Never reset a re-entered worktree that already has work on it. Do every later step from inside the worktree.
+Anchor the check with `-C <worktree-path>` — shell state (including cwd) doesn't persist between Bash calls, so an unanchored `git rev-parse` in a fresh shell may run against the original checkout and report a spurious mismatch. If the SHAs differ on a worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default>` — anchored for the same reason (an unanchored reset in the original checkout would destroy uncommitted work there), and safe only because the brand-new branch carries no commits. Never reset a re-entered worktree that already has work on it. Do every later step from inside the worktree.
 
 ### 2. Understand the issue and the code
 
