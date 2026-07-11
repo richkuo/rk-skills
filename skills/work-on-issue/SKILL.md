@@ -57,6 +57,7 @@ Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as 
 - **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
 ```bash
+DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)   # re-detect inline — shell state doesn't persist between Bash calls
 git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "origin/$DEFAULT_BRANCH"
 ```
 
