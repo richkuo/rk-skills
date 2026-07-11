@@ -49,10 +49,10 @@ git branch --show-current   # where am I now?
 - **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
 
 ```
-EnterWorktree(name: "issue-<N>-<slug>")
+EnterWorktree(name: "cc/issue-<N>-<slug>")
 ```
 
-Pass the name **without** a `cc/` prefix — if a `WorktreeCreate` hook is configured (e.g. one that prepends `cc/`, matching the convention below), it applies its own prefix, and adding one yourself doubles it (`cc/cc/issue-…`). No such hook configured is also fine — worktree lands unprefixed. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding`.
+Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`.
 
 - **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
