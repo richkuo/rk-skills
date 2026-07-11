@@ -314,13 +314,29 @@ jobs:
           PROMPT_NAME=$(basename "$PROMPT_FILE")
           REPLACEMENT_PATH=".github/prompts/$PROMPT_NAME"
           LOCAL_PATH=".github/prompts/$(basename "$PROMPT_FILE" .md)-local.md"
+          # Deprecated-alias override fallback: a consumer still emitting
+          # mode=fix-pr-review may have authored fix-pr-review(-local).md
+          # overrides under the old prompt name. Honor them as a FALLBACK only
+          # — the new fix-pr(-local).md names win when both exist — so the
+          # alias preserves the documented override extension point, not just
+          # the base prompt.
+          LEGACY_REPLACEMENT_PATH=""
+          LEGACY_LOCAL_PATH=""
+          if [ "$MODE" = "fix-pr-review" ]; then
+            LEGACY_REPLACEMENT_PATH=".github/prompts/fix-pr-review.md"
+            LEGACY_LOCAL_PATH=".github/prompts/fix-pr-review-local.md"
+          fi
           if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$REPLACEMENT_PATH" 2>/dev/null; then
             PROMPT=$(git show "$TRUSTED_REF:$REPLACEMENT_PATH" | flatten)
+          elif [ -n "$TRUSTED_REF" ] && [ -n "$LEGACY_REPLACEMENT_PATH" ] && git cat-file -e "$TRUSTED_REF:$LEGACY_REPLACEMENT_PATH" 2>/dev/null; then
+            PROMPT=$(git show "$TRUSTED_REF:$LEGACY_REPLACEMENT_PATH" | flatten)
           else
             PROMPT=$(flatten < "$PROMPT_FILE")
           fi
           if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$LOCAL_PATH" 2>/dev/null; then
             PROMPT="$PROMPT $(git show "$TRUSTED_REF:$LOCAL_PATH" | flatten)"
+          elif [ -n "$TRUSTED_REF" ] && [ -n "$LEGACY_LOCAL_PATH" ] && git cat-file -e "$TRUSTED_REF:$LEGACY_LOCAL_PATH" 2>/dev/null; then
+            PROMPT="$PROMPT $(git show "$TRUSTED_REF:$LEGACY_LOCAL_PATH" | flatten)"
           fi
           # claude_args is shell-evaluated downstream: a double quote breaks the
           # quoting, and a backtick or dollar sign would expand or execute. The
