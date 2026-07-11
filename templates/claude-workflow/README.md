@@ -38,7 +38,7 @@ rk-skills at run time by the reusable workflow. Then:
      is used INSTEAD of the shared prompt — for repos whose base prompt needs
      safety-hardened language the shared text lacks.
    - **Append:** `.github/prompts/<prompt-name>-local.md` (e.g.
-     `fix-pr-review-local.md`) is appended to whichever base was chosen.
+     `fix-pr-local.md`) is appended to whichever base was chosen.
    Both obey the same character rule: no `"`, backticks, or `$`. Overrides are
    read from the repository's **default branch**, never the event checkout, so
    a change to them lands only after it merges (and a fork PR can never alter
@@ -72,8 +72,7 @@ parses the `docs-release/*` branch name.
 | Comment | Route | Push? |
 |---------|-------|-------|
 | `@claude review` | PR review (read-only contract, `LGTM` / `Needs Updates` format) | No |
-| `@claude fix-pr` | fix-pr-review: re-validate all review feedback, fix what survives, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
-| `@claude <anything else>` on a PR | fix-pr: in-place edit of the PR branch | Yes (trusted-author PRs only) |
+| `@claude <anything else>` on a PR | fix-pr: re-validate all unaddressed review feedback, fix what survives, fold in any comment text as additional scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@claude <anything>` on an issue | implement: validate → implement → PR via the issue-workflow prompt | Yes |
 | `@claude sync docs` / `create release` / `sync release` | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
 

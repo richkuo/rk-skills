@@ -29,7 +29,7 @@ HERE = os.path.dirname(__file__)
 CLAUDE_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "claude.yml"))
 
 VERIFY_STEP = "Verify @claude is an actual invocation (not in a code block or example)"
-CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, fix-pr, or fix-pr-review)"
+CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
 
 
 def _read(path):
@@ -219,25 +219,28 @@ class ClassifyModeRoutingTest(unittest.TestCase):
     def test_review_word_later_in_sentence_no_longer_forces_review(self):
         # Keyword routing: only the FIRST word after @claude counts, so an
         # instruction that merely mentions review keeps a push-capable route —
-        # here the fix-pr keyword, so the review-fixing playbook.
+        # the fix-pr review-fixing playbook, same as any other non-"review"
+        # first word.
         self.assertEqual(
             run_classify_mode("issue_comment", "@claude fix-pr the review comments",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
-            "fix-pr-review",
+            "fix-pr",
         )
 
-    def test_fix_pr_keyword_routes_to_fix_pr_review(self):
+    def test_fix_pr_keyword_routes_to_fix_pr(self):
+        # The "fix-pr" keyword is no longer special — it routes exactly like
+        # any other non-"review" first word.
         self.assertEqual(
             run_classify_mode("issue_comment", "@claude fix-pr",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
-            "fix-pr-review",
+            "fix-pr",
         )
 
-    def test_fix_pr_keyword_after_model_shorthand_routes_to_fix_pr_review(self):
+    def test_fix_pr_keyword_after_model_shorthand_routes_to_fix_pr(self):
         self.assertEqual(
             run_classify_mode("issue_comment", "@claude opus fix-pr and be thorough",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
-            "fix-pr-review",
+            "fix-pr",
         )
 
     def test_retired_fix_keyword_is_no_longer_special(self):

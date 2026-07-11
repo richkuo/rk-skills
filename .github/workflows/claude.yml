@@ -186,7 +186,7 @@ jobs:
             echo "::notice::Docs/release flow: $FLOW"
           fi
 
-      - name: Classify invocation route (review, implement, fix-pr, or fix-pr-review)
+      - name: Classify invocation route (review, implement, or fix-pr)
         if: steps.verify_invocation.outputs.invoked == 'true'
         id: classify_mode
         env:
@@ -206,7 +206,7 @@ jobs:
           PR_AUTHOR_LOGIN: ${{ github.event.issue.user.login }}
         run: |
           # Fail-closed routing keyed on the FIRST word after @claude (an
-          # optional model shorthand — opus/sonnet/fable — is skipped). Five
+          # optional model shorthand — opus/sonnet/fable — is skipped). Four
           # outcomes:
           #   - implement: a docs-sync/release FLOW, or a plain issue (an `issues`
           #     event, or an issue_comment whose issue is NOT a PR) — the
@@ -219,11 +219,11 @@ jobs:
           #     (external/fork) — read-only. NOTE: only the keyword position
           #     counts; "review" later in the sentence ("@claude fix the review
           #     comments") no longer forces read-only.
-          #   - fix-pr-review: keyword "fix-pr" on a trusted-author PR — the
+          #   - fix-pr: any other issue_comment on a trusted-author PR — the
           #     review-fixing playbook (validate all review feedback against the
-          #     code, fix what survives, disposition comment, re-review trigger).
-          #   - fix-pr: any other keyword on a trusted-author PR — generic
-          #     in-place PR edit per the comment's instructions.
+          #     code, fix what survives, disposition comment, re-review trigger),
+          #     with any text in the triggering comment folded in as additional
+          #     scope on top of that standard work.
           # Anything not positively identified as write-safe degrades to
           # read-only review (the review job holds no push capability, so a
           # misroute 403s on write rather than running write-capable over
@@ -262,8 +262,6 @@ jobs:
                   MODE=review
                 elif [ "$PR_AUTHOR_TRUSTED" != "true" ]; then
                   MODE=review
-                elif [ "$KEYWORD" = "fix-pr" ]; then
-                  MODE=fix-pr-review
                 else
                   MODE=fix-pr
                 fi
@@ -320,19 +318,22 @@ jobs:
       effort: ${{ needs.classify.outputs.effort }}
     secrets: inherit
 
-  # A fix-pr run edits the pull request's own branch in place and pushes to it
-  # (e.g. addressing review feedback), so it needs contents: write + Claude App
-  # auth like implement. Unlike a review run it does NOT read an untrusted
-  # author's diff: classify routes here ONLY for an issue_comment on a PR whose
-  # author is trusted (owner/member/collaborator, or claude[bot]). The `if`
-  # below RE-ASSERTS that trust from the event payload, independent of classify's
-  # output — classify runs with zero permissions and this job holds
-  # contents: write, so this second, independent gate ensures a classify bug can
-  # never grant push over an untrusted-author PR (the trust check is the sole
-  # security boundary here, since contents: write makes the allowlist bypassable
-  # through allowed interpreters). Trust is anchored on the PR author, not the
-  # commenter: the job-level trigger already requires an OWNER/MEMBER/COLLABORATOR
-  # commenter, so both the human asking and the diff being edited are trusted.
+  # A fix-pr run edits the pull request's own branch in place and pushes to it:
+  # fetch all unaddressed review feedback, validate each finding against the
+  # code, fix what survives, fold in any additional instructions carried by the
+  # triggering comment, post a disposition comment, and trigger a fresh
+  # @claude review. It needs contents: write + Claude App auth like implement.
+  # Unlike a review run it does NOT read an untrusted author's diff: classify
+  # routes here ONLY for an issue_comment on a PR whose author is trusted
+  # (owner/member/collaborator, or claude[bot]). The `if` below RE-ASSERTS that
+  # trust from the event payload, independent of classify's output — classify
+  # runs with zero permissions and this job holds contents: write, so this
+  # second, independent gate ensures a classify bug can never grant push over
+  # an untrusted-author PR (the trust check is the sole security boundary
+  # here, since contents: write makes the allowlist bypassable through allowed
+  # interpreters). Trust is anchored on the PR author, not the commenter: the
+  # job-level trigger already requires an OWNER/MEMBER/COLLABORATOR commenter,
+  # so both the human asking and the diff being edited are trusted.
   fix-pr:
     needs: classify
     if: >
@@ -350,33 +351,6 @@ jobs:
     uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
     with:
       mode: fix-pr
-      flow: ''
-      model_id: ${{ needs.classify.outputs.model_id }}
-      effort: ${{ needs.classify.outputs.effort }}
-    secrets: inherit
-
-  # The "@claude fix-pr" keyword route: same push capability and the same
-  # independent trusted-PR-author re-assertion as fix-pr (see the comment
-  # above), but runs the review-fixing playbook prompt — fetch all review
-  # feedback, validate each finding against the code, fix what survives, post
-  # a per-finding disposition comment, and trigger a fresh @claude review.
-  fix-pr-review:
-    needs: classify
-    if: >
-      needs.classify.outputs.invoked == 'true' &&
-      needs.classify.outputs.mode == 'fix-pr-review' &&
-      (
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association) ||
-        github.event.issue.user.login == 'claude[bot]'
-      )
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-    uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
-    with:
-      mode: fix-pr-review
       flow: ''
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
