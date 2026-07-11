@@ -57,14 +57,14 @@ Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as 
 - **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
 ```bash
-git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "$DEFAULT_BRANCH"
+git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "origin/$DEFAULT_BRANCH"
 ```
 
 (swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
 
 If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
 
-After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent:
+After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — this applies to both paths. EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent. The manual `git worktree add` bases on `origin/$DEFAULT_BRANCH` (freshly fetched in step 1) — still confirm:
 
 ```bash
 git rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
