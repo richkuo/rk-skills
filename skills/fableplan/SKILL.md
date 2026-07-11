@@ -86,10 +86,10 @@ Before making any code changes, move the build into its own git worktree so it n
 ```
 git fetch origin <default-branch>
 EnterWorktree(name: "cc/fableplan/<short-task-name>")
-git rev-parse HEAD origin/<default-branch>   # the two SHAs must match
+git -C .claude/worktrees/cc/fableplan/<short-task-name> rev-parse HEAD origin/<default-branch>   # the two SHAs must match
 ```
 
-If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
+Anchor the check (and any reset) with `-C <worktree-path>` — cwd doesn't reliably persist between Bash calls, and an unanchored command in the original checkout would misreport or, worse, destroy uncommitted work there. If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
 
 **On Cursor or Codex** (no `EnterWorktree` tool), create it by hand — the coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
 
