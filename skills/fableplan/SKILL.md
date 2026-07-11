@@ -79,14 +79,22 @@ Present the vetted plan to the user (the main agent). This is the plan you will 
 
 ### 6. Set up an isolated git worktree
 
-Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task:
+Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task, prefixed with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
+
+**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/`, verifies the base ref, and switches the tracked cwd; it uses the name verbatim, adding no prefix itself):
+
+```
+EnterWorktree(name: "cc/fableplan/<short-task-name>")
+```
+
+**On Cursor or Codex** (no `EnterWorktree` tool), create it by hand — the coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
 
 ```
 git fetch origin <default-branch>
-git worktree add ../<repo>-fableplan-<short-task-name> -b cc/fableplan/<short-task-name> origin/<default-branch>
+git worktree add ../<repo>-fableplan-cursor-<short-task-name> -b cursor/fableplan/<short-task-name> origin/<default-branch>
 ```
 
-Prefix the branch with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
+(swap `cursor` for `codex` on Codex), then `cd` into it and re-verify `pwd` before later steps — shell state doesn't persist between Bash calls.
 
 Do all of step 7's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
 
