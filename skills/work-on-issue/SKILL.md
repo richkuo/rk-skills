@@ -45,22 +45,33 @@ git fetch origin "$DEFAULT_BRANCH"
 git branch --show-current   # where am I now?
 ```
 
-- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
-- **Otherwise create and switch into one** with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
+- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
+- **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
 
 ```
-EnterWorktree(name: "issue-<N>-<slug>")
+EnterWorktree(name: "cc/issue-<N>-<slug>")
 ```
 
-`<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. 873 "Scale-in / pyramiding support for open positions" → `issue-873-scale-in-pyramiding`. If a worktree for this issue already exists, enter it by `path`.
+Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`.
 
-After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent:
+- **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
 ```bash
-git rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
+DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)   # re-detect inline — shell state doesn't persist between Bash calls
+git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "origin/$DEFAULT_BRANCH"
 ```
 
-If they differ on a worktree you **just created**, move it onto the fetched default with `git reset --hard origin/<default>` — safe only because the brand-new branch carries no commits. Never reset a re-entered worktree that already has work on it. Do every later step from inside the worktree.
+(swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
+
+If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
+
+After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — this applies to both paths. EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent. The manual `git worktree add` bases on `origin/$DEFAULT_BRANCH` (freshly fetched in step 1) — still confirm:
+
+```bash
+git -C .claude/worktrees/<prefix>/issue-<N>-<slug> rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
+```
+
+Anchor the check with `-C <worktree-path>` — shell state (including cwd) doesn't persist between Bash calls, so an unanchored `git rev-parse` in a fresh shell may run against the original checkout and report a spurious mismatch. If the SHAs differ on a worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default>` — anchored for the same reason (an unanchored reset in the original checkout would destroy uncommitted work there), and safe only because the brand-new branch carries no commits. Never reset a re-entered worktree that already has work on it. Do every later step from inside the worktree.
 
 ### 2. Understand the issue and the code
 
@@ -88,7 +99,7 @@ Only after verification passes:
 git status                    # review BEFORE staging — any stray artifacts, logs, local config?
 git add -A                    # only if status showed nothing unrelated; otherwise stage files explicitly
 git commit -F <msg-file>
-git push -u origin <branch>   # the worktree's issue-<N>-<slug> branch
+git push -u origin <branch>   # the worktree's <prefix>/issue-<N>-<slug> branch
 ```
 
 If `git status` shows anything unrelated to the change, don't `add -A` — stage the intended files by name and leave the strays out.
