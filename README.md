@@ -113,7 +113,7 @@ Copy every skill into your personal `~/.claude/skills/` with one command — no 
 npx rk-skills
 ```
 
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and their subagent files** (a few skills delegate their work to helper agents in `agents/`, which land in `~/.claude/agents/`); it does not install `CLAUDE.md` (the example global config) or the `/commit` command.
+Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills, their subagent files, and any dynamic workflow scripts** (a few skills delegate their work to helper agents in `agents/`, which land in `~/.claude/agents/`; the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/`); it does not install `CLAUDE.md` (the example global config) or the `/commit` command.
 
 ## Install (as a plugin)
 
