@@ -31,6 +31,11 @@ for f in "$REPO"/agents/*.md; do
   link "agents/$name" "$CLAUDE/agents/$name"
 done
 
+for f in "$REPO"/workflows/*.js; do
+  name="$(basename "$f")"
+  link "workflows/$name" "$CLAUDE/workflows/$name"
+done
+
 link "CLAUDE.md"          "$CLAUDE/CLAUDE.md"
 link "commands/commit.md" "$CLAUDE/commands/commit.md"
 

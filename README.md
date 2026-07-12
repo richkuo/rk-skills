@@ -63,6 +63,26 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 | `fableplan-work-on-issue` | The trimmed chain: Fable 5 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
 | `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
 
+### App pipeline skills
+
+The full path from a raw app idea to a running multi-agent build, with a user checkpoint between every stage:
+
+```mermaid
+flowchart LR
+    A([app-prd]) --> B([prd-questions]) --> C([prd-to-issues]) --> D([execution-plan-review]) --> E([milestone-workflow])
+```
+
+| Skill | What it does |
+|-------|--------------|
+| `new-app-pipeline` | The orchestrator: idea → PRD → resolved questions → issues → execution-plan review → milestone workflow, stopping at every stage boundary for your review. Re-enterable mid-pipeline when artifacts already exist. |
+| `app-prd` | Turns an idea dump into a complete, section-numbered `PRD.md` landed via worktree + PR (bootstrapping an empty repo when needed), then iterates on the same PR as you refine. |
+| `prd-questions` | "Ask me all questions": sweeps the PRD for every open question and ambiguity, asks them in batched multiple-choice form with a recommended option, folds each answer into the owning spec section, and empties the Open Questions list. |
+| `prd-to-issues` | Breaks the refined PRD into dependency-ordered milestones and 15–25 complete, complexity-scored issues, each stamped with an `## Execution` block: build model, effort, whether a Fable plan comes first, and the `@claude` review trigger. |
+| `execution-plan-review` | Renders the per-issue model/effort/fableplan table from the issues themselves, takes your revisions ("11 should be medium"), pushes back once when a revision fights the heuristics, and writes changes back to the issues. |
+| `milestone-workflow` | Builds the dependency tracks for a milestone, presents the run plan for approval (mandatory), then runs the `milestone-pipeline` workflow and reports PRs and review-loop outcomes. |
+
+The `workflows/milestone-pipeline.js` dynamic workflow does the execution: per-issue model and effort read from the Execution blocks, an optional Fable planning stage, isolated-worktree implementation agents, `@claude` review loops until LGTM — parallel across dependency tracks, sequential within.
+
 ### Review bot prerequisite
 
 The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships two options:

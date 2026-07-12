@@ -1,0 +1,208 @@
+export const meta = {
+  name: 'milestone-pipeline',
+  description: 'Implement a milestone of Execution-block-stamped GitHub issues — optional Fable plan per issue, build on the assigned model/effort, open PRs, @claude review loops until LGTM — parallel across dependency tracks, sequential within',
+  whenToUse: 'When the user has approved a milestone-workflow run plan over issues that already carry ## Execution blocks (build model, effort, fableplan). args: { tracks: [[2,3,4],[9],[12]], reviewLoop?: true, maxReviewCycles?: 5 }',
+  phases: [
+    { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
+    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, trigger @claude review' },
+    { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; runs concurrently with later issues in the track' },
+  ],
+}
+
+// args.tracks: array of tracks; each track is an ordered array of issue numbers.
+// Tracks run in parallel; issues within a track run sequentially (later issues
+// get earlier issues' PR numbers as in-flight context). Cross-track dependencies
+// are NOT expressible here — chain separate workflow invocations per phase.
+// Unlike issue-pipeline, there is no validation stage and no complexity-threshold
+// model routing: issues arrive pre-refined, and model/effort/fableplan come from
+// each issue's ## Execution block (stamped by prd-to-issues, revised by
+// execution-plan-review).
+if (!args || !Array.isArray(args.tracks) || args.tracks.length === 0) {
+  throw new Error('milestone-pipeline requires args.tracks: an array of issue-number arrays, e.g. { tracks: [[2,3,4],[9],[12]] }')
+}
+const TRACKS = args.tracks
+const REVIEW_LOOP = args.reviewLoop ?? true
+const MAX_REVIEW_CYCLES = args.maxReviewCycles ?? 5
+const ALL_ISSUES = TRACKS.flat()
+
+const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
+const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 4.8', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
+
+const PREP_SCHEMA = {
+  type: 'object',
+  required: ['issues'],
+  properties: {
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['number', 'title', 'complexity', 'model', 'effort', 'fableplan'],
+        properties: {
+          number: { type: 'integer' },
+          title: { type: 'string' },
+          complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
+          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 4.8→opus, etc.' },
+          effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "Effort:" — clamp low→medium' },
+          fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
+          missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
+        },
+      },
+    },
+  },
+}
+
+const PLAN_SCHEMA = {
+  type: 'object',
+  required: ['plan', 'constraints'],
+  properties: {
+    plan: { type: 'string', description: 'The full implementation plan as posted to the issue' },
+    constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the builder must honor, distilled from the plan' },
+  },
+}
+
+const IMPLEMENT_SCHEMA = {
+  type: 'object',
+  required: ['pr_number', 'pr_url', 'summary', 'tests_passed'],
+  properties: {
+    pr_number: { type: 'integer', description: '0 if blocked / no PR opened' },
+    pr_url: { type: 'string' },
+    summary: { type: 'string' },
+    tests_passed: { type: 'boolean' },
+    blocker: { type: 'string', description: 'Only if blocked: what stopped you' },
+    flags: { type: 'array', items: { type: 'string' }, description: 'Anything the operator should know (pre-existing flakes, unfiled follow-ons)' },
+  },
+}
+
+const REVIEW_LOOP_SCHEMA = {
+  type: 'object',
+  required: ['final_status', 'cycles_run', 'summary'],
+  properties: {
+    final_status: { type: 'string', enum: ['lgtm', 'lgtm_with_nonblocking', 'max_cycles_exhausted', 'blocked'] },
+    cycles_run: { type: 'integer' },
+    summary: { type: 'string', description: 'Per-cycle findings fixed/rejected, and why the loop stopped' },
+    blocker: { type: 'string', description: 'Only when final_status is blocked' },
+  },
+}
+
+function planPrompt(issue) {
+  return `You are a read-only planning agent on Fable 5 in this repo. GitHub issue #${issue} is flagged "fableplan first" — the design is the hard part and a separate builder will implement your plan.
+
+Fetch the issue (\`gh issue view ${issue}\`), read the referenced PRD sections and any relevant code, and produce a concrete implementation plan: files to create/modify, data shapes, control flow, edge cases, and the test list. Plan the absolute-best solution — cost and code volume are not constraints; only correctness and safety are.
+
+Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable 5 | high | Harness: milestone-pipeline\`). Do NOT modify any files or start implementing.
+
+Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
+}
+
+function implementPrompt(issue, ex, plan, trackContext) {
+  const footerModel = MODEL_NAMES[ex.model]
+  return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
+${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body. Hard constraints from the plan:\n${plan.constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
+Invoke the \`work-on-issue\` skill with args \`${issue}\`: isolated worktree off latest origin/main, implement per the issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on unmodified main before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
+
+After the PR is open, comment exactly \`@claude\` on it (\`gh pr comment <num> --body "@claude"\`).
+
+Return via StructuredOutput: pr_number, pr_url, summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return the blocker instead of guessing.`
+}
+
+function reviewLoopPrompt(issue, prNumber, ex, plan) {
+  const footerModel = MODEL_NAMES[ex.model]
+  return `You are a PR review-resolution agent in this repo. Invoke the \`fix-pr-review-loop\` skill with args \`${prNumber}\` and follow it exactly:
+fetch the latest @claude review on PR #${prNumber}, RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, re-trigger with a \`@claude\` comment, wait for the re-review (find the Actions run and \`gh run watch\` it rather than sleeping), and repeat.
+
+Stop on a bare LGTM with nothing left to fix; past ${MAX_REVIEW_CYCLES} cycles stop at the first LGTM even with non-blocking findings remaining. If the current review is already a clean LGTM with no actionable findings, stop immediately and say so (0 cycles).
+
+The issue's Acceptance criteria${plan ? ' and the Fable plan\'s constraints (posted on the issue)' : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
+
+Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
+
+Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary of findings fixed vs rejected, and any blocker.`
+}
+
+// ---- Prep: one agent reads every issue's Execution block ----
+const prep = await agent(
+  `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
+- complexity: the integer from the [C<score>] title prefix (0 if absent)
+- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 4.8" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
+- effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium
+- fableplan: true when "**fableplan first:**" starts with "Yes"
+If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
+Return via StructuredOutput.`,
+  { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
+)
+if (!prep) throw new Error('prep agent failed — cannot resolve Execution blocks')
+const EX = new Map(prep.issues.map((i) => [i.number, i]))
+const missing = prep.issues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
+if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — running them on conservative defaults (fable/high)`)
+
+// ---- Tracks: parallel across, sequential within ----
+const results = []
+const reviewLoops = []
+
+await parallel(
+  TRACKS.map((track, ti) => async () => {
+    const done = [] // { issue, prNumber }
+    for (const issue of track) {
+      const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
+      const modelId = MODEL_IDS[ex.model] || 'fable'
+      const trackContext = done.map((d) => `- Issue #${d.issue} → PR #${d.prNumber} (open, not yet merged)`).join('\n')
+
+      let plan = null
+      if (ex.fableplan) {
+        plan = await agent(planPrompt(issue), {
+          model: 'fable',
+          effort: 'high',
+          schema: PLAN_SCHEMA,
+          phase: 'Plan',
+          label: `plan:#${issue}`,
+        })
+        if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
+      }
+
+      log(`#${issue} (C${ex.complexity}): implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
+      const impl = await agent(implementPrompt(issue, ex, plan, trackContext), {
+        model: modelId,
+        effort: ex.effort,
+        schema: IMPLEMENT_SCHEMA,
+        phase: 'Implement',
+        label: `implement:#${issue} (${modelId}/${ex.effort})`,
+      })
+      if (!impl || !impl.pr_number) {
+        log(`#${issue}: implementation ${impl ? `blocked — ${impl.blocker || 'no PR opened'}` : 'agent failed'}; continuing track ${ti + 1}`)
+        results.push({ issue, status: 'blocked', blocker: impl?.blocker })
+        continue
+      }
+
+      log(`#${issue}: PR #${impl.pr_number} open, @claude review triggered`)
+      const rec = { issue, status: 'pr_open', pr: impl.pr_number, pr_url: impl.pr_url, tests_passed: impl.tests_passed, flags: impl.flags || [] }
+      results.push(rec)
+      done.push({ issue, prNumber: impl.pr_number })
+
+      // Review loop runs concurrently — the track moves on to its next issue
+      // while this PR is driven to LGTM. Same model/effort as the build.
+      if (REVIEW_LOOP) {
+        reviewLoops.push(
+          agent(reviewLoopPrompt(issue, impl.pr_number, ex, plan), {
+            model: modelId,
+            effort: ex.effort,
+            schema: REVIEW_LOOP_SCHEMA,
+            phase: 'Review Loop',
+            label: `review-loop:PR#${impl.pr_number}`,
+          }).then((review) => {
+            rec.review = review || { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed' }
+            rec.status = rec.review.final_status === 'lgtm' || rec.review.final_status === 'lgtm_with_nonblocking' ? 'lgtm' : 'review_' + rec.review.final_status
+            log(`PR #${impl.pr_number}: review loop ${rec.review.final_status} after ${rec.review.cycles_run} cycle(s)`)
+          })
+        )
+      }
+    }
+  })
+)
+
+if (reviewLoops.length) {
+  log(`all tracks done; waiting on ${reviewLoops.length} review loop(s)`)
+  await Promise.all(reviewLoops)
+}
+
+return { results }
