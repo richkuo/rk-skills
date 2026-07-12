@@ -48,7 +48,7 @@ If **No**, skip straight to step 4.
 
 ### 4. Run fableplan — planning phase only (skip below C50)
 
-**Complexity gate:** if the verdict's validated complexity score is **below 50**, skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for low-complexity changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score.
+**Complexity gate:** if the verdict's validated complexity score is **below 50**, skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for low-complexity changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. (If the user wants a plan unconditionally, that's `fable-validate-fableplan-loop` — this same chain with the gate removed.)
 
 Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. **Do NOT execute fableplan's steps 6–7 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
 
