@@ -41,4 +41,6 @@ Re-render the final table once after all revisions land. This table is what the 
 | An issue lacks an Execution block | Add one using the prd-to-issues heuristics, flag it in the table |
 | User revision references a row that doesn't exist | Show the table again, ask which issue they meant |
 | Revision would put effort at `low` | Set `medium` and say why (effort floor) |
+| Revision would put an Opus 4.8 build at `medium` | Set `high`, or switch the build to Fable 5 if medium was the point — Opus runs at high/xhigh only |
+| Revision would put validate effort at `xhigh` | Set `high` and say why — validate effort is only ever medium or high |
 | Edits collide with someone else's concurrent issue edits | Re-fetch, re-apply only your delta |

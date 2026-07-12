@@ -41,8 +41,8 @@ Append to every issue body, before the footer:
 ```
 ## Execution
 - **Build model:** <Fable 5 | Opus 4.8 | ...>
-- **Effort:** <medium | high | xhigh>
-- **Validate effort:** <medium | high | xhigh>   (optional — omit for the default, high)
+- **Effort:** <medium (Fable-only) | high | xhigh>
+- **Validate effort:** <medium | high>   (optional — omit for the default, high; never xhigh)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
 - **PR review:** standard `@claude` review trigger
 ```
@@ -60,11 +60,11 @@ Assignment heuristics:
 | Mechanical scaffolding, config plumbing | Opus 4.8, high |
 | CRUD flows, contained components on known APIs | Opus 4.8, high |
 | Design-heavy but routine to code | Opus 4.8 + **fableplan: Yes** — the bridge tier |
-| Design work with no correctness risk (landing pages) | Either model, medium; use the frontend-design skill |
+| Design work with no correctness risk (landing pages) | Fable 5, medium; use the frontend-design skill |
 
 - **fableplan is for issues where the design is the hard part and the code is routine.** Never on Fable-built issues (planning is inherent) or on issues so small the plan would just be the implementation in prose.
-- **Validate effort** (the pre-build Fable validation pass): default high; drop to medium for small contained issues, raise to xhigh when the issue sits deep in a dependency chain (most staleness exposure) or guards money/safety invariants.
-- Effort floor is **medium** — never low. When unsure between two tiers, take the higher (best-solution rule).
+- **Validate effort** (the pre-build Fable validation pass): **only ever medium or high — never xhigh.** Default high; drop to medium for small contained issues.
+- Effort floor is **medium** — never low, and medium is Fable-only: **Opus 4.8 builds run at high or xhigh, never medium.** When unsure between two tiers, take the higher (best-solution rule).
 - PR review is always the standard `@claude` review trigger — no model routing in the review line.
 
 ### 5. Report
