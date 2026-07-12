@@ -13,8 +13,10 @@ Present the per-issue execution assignments (build model, effort, fableplan) as 
 
 Fetch every issue in the milestone (`gh issue list --milestone ... --json number,title,body`) and parse the `## Execution` blocks. The table:
 
-| Issue | C | Build model | Effort | fableplan first? |
-|---|---|---|---|---|
+| Issue | C | Build model | Effort | Validate effort | fableplan first? |
+|---|---|---|---|---|---|
+
+(Validate effort defaults to high when an issue's block omits the line — show the effective value.)
 
 Follow with 2–3 sentences on the pattern (which issues run on the top model and why, where fableplan bridges, what the review trigger is) — enough for the user to sanity-check the logic, not a lecture.
 

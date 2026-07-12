@@ -42,6 +42,7 @@ Append to every issue body, before the footer:
 ## Execution
 - **Build model:** <Fable 5 | Opus 4.8 | ...>
 - **Effort:** <medium | high | xhigh>
+- **Validate effort:** <medium | high | xhigh>   (optional — omit for the default, high)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
 - **PR review:** standard `@claude` review trigger
 ```
@@ -62,6 +63,7 @@ Assignment heuristics:
 | Design work with no correctness risk (landing pages) | Either model, medium; use the frontend-design skill |
 
 - **fableplan is for issues where the design is the hard part and the code is routine.** Never on Fable-built issues (planning is inherent) or on issues so small the plan would just be the implementation in prose.
+- **Validate effort** (the pre-build Fable validation pass): default high; drop to medium for small contained issues, raise to xhigh when the issue sits deep in a dependency chain (most staleness exposure) or guards money/safety invariants.
 - Effort floor is **medium** — never low. When unsure between two tiers, take the higher (best-solution rule).
 - PR review is always the standard `@claude` review trigger — no model routing in the review line.
 

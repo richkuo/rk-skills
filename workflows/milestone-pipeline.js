@@ -47,6 +47,7 @@ const PREP_SCHEMA = {
           complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 4.8→opus, etc.' },
           effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "Effort:" — clamp low→medium' },
+          validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From the optional "Validate effort:" line; default high when absent; clamp low→medium' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
         },
@@ -169,6 +170,7 @@ const prep = await agent(
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 4.8" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium
+- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
 Return via StructuredOutput.`,
@@ -193,7 +195,7 @@ await parallel(
 
       const validation = await agent(validatePrompt(issue, trackContext), {
         model: 'fable',
-        effort: 'high',
+        effort: ex.validate_effort || 'high',
         schema: VALIDATION_SCHEMA,
         phase: 'Validate',
         label: `validate:#${issue}`,
