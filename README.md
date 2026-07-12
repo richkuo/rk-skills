@@ -60,6 +60,7 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 | `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only for issues scored C50+ or touching safety-critical code), then drives to a reviewed PR. |
 | `validate-issue-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when the issue is C50+ or safety-flagged, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | The trimmed chain: Fable 5 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
+| `fableplan-work-on-issue-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
 
 ### Review bot prerequisite
 

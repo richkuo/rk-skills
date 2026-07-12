@@ -36,7 +36,7 @@ Keep the vetted plan's scratchpad file — step 2 passes it through. If fablepla
 
 Invoke the `work-on-issue` skill for the same issue number (Skill tool, `skill: work-on-issue`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations from the plan are allowed only when the code contradicts the plan, and must be named in the PR body.
 
-work-on-issue runs its full process: it implements in a fresh worktree, verifies, commits, pushes, and opens a PR that closes the issue. It ends at the open PR — **requesting review is out of scope for this skill.** If the user wants the PR driven through review to convergence, that's `validate-issue-fableplan-loop` or a separate `fix-pr-review-loop` run; say so rather than triggering review here.
+work-on-issue runs its full process: it implements in a fresh worktree, verifies, commits, pushes, and opens a PR that closes the issue. It ends at the open PR — **requesting review is out of scope for this skill.** If the user wants the PR driven through review to convergence, that's `fableplan-work-on-issue-loop` (this chain plus the review loop), `validate-issue-fableplan-loop`, or a separate `fix-pr-review-loop` run; say so rather than triggering review here.
 
 ### 3. Report
 
@@ -52,6 +52,6 @@ Relay work-on-issue's final summary (the worktree/branch, what was implemented, 
 | Tempted to run validate-issue first | Not part of this skill — that's validate-issue-fableplan-loop; this trimmed variant deliberately skips validation |
 | fableplan about to enter its build steps (6–7) | Don't — stop it at step 5; work-on-issue owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't hand a broken plan to work-on-issue, and don't silently re-plan |
-| Tempted to trigger `@claude` review or loop on the PR after it opens | Out of scope — this skill ends at the open PR; point the user at validate-issue-fableplan-loop or fix-pr-review-loop if they want review driven to convergence |
+| Tempted to trigger `@claude` review or loop on the PR after it opens | Out of scope — this skill ends at the open PR; point the user at fableplan-work-on-issue-loop or fix-pr-review-loop if they want review driven to convergence |
 | No issue could be resolved | Stop and ask — work-on-issue needs a concrete issue to target and close |
 | Issue is closed, or a PR already addresses it (step 0) | Don't plan — alert the user and ask what to do next; only proceed on their say-so |
