@@ -32,9 +32,10 @@ Show: the tracks with issue titles, each issue's model/effort/fableplan from its
 Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [[...], ...], reviewLoop: true, maxReviewCycles: 5}}`. The workflow:
 
 1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan.
-2. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent whose plan is posted to the issue; the builder implements against it.
-3. **Implement** — per-issue agent on its assigned model/effort, isolated worktree, `work-on-issue` procedure, opens the PR, triggers `@claude`.
-4. **Review Loop** — `fix-pr-review-loop` per PR until LGTM, concurrent with later issues in the track.
+2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the *current* code (issues go stale as earlier PRs land): verdict, issue-body corrections, hard implementation constraints. `INVALID` issues are skipped and reported, never built.
+3. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent (validation-aware) whose plan is posted to the issue; the builder implements against it.
+4. **Implement** — per-issue agent on its assigned model/effort applies the validation corrections to the issue, then isolated worktree, `work-on-issue` procedure, opens the PR, triggers `@claude`.
+5. **Review Loop** — `fix-pr-review-loop` per PR until LGTM, concurrent with later issues in the track; validation constraints outrank reviewer suggestions.
 
 ### 5. Monitor and close out
 

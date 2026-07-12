@@ -81,7 +81,7 @@ flowchart LR
 | `execution-plan-review` | Renders the per-issue model/effort/fableplan table from the issues themselves, takes your revisions ("11 should be medium"), pushes back once when a revision fights the heuristics, and writes changes back to the issues. |
 | `milestone-workflow` | Builds the dependency tracks for a milestone, presents the run plan for approval (mandatory), then runs the `milestone-pipeline` workflow and reports PRs and review-loop outcomes. |
 
-The `workflows/milestone-pipeline.js` dynamic workflow does the execution: per-issue model and effort read from the Execution blocks, an optional Fable planning stage, isolated-worktree implementation agents, `@claude` review loops until LGTM — parallel across dependency tracks, sequential within.
+The `workflows/milestone-pipeline.js` dynamic workflow does the execution: per-issue model and effort read from the Execution blocks, a Fable validation pass against the current code as each issue starts (staleness check — earlier PRs change the ground truth), an optional Fable planning stage, isolated-worktree implementation agents, `@claude` review loops until LGTM — parallel across dependency tracks, sequential within.
 
 ### Review bot prerequisite
 

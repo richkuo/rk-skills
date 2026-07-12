@@ -1,9 +1,10 @@
 export const meta = {
   name: 'milestone-pipeline',
-  description: 'Implement a milestone of Execution-block-stamped GitHub issues — optional Fable plan per issue, build on the assigned model/effort, open PRs, @claude review loops until LGTM — parallel across dependency tracks, sequential within',
+  description: 'Implement a milestone of Execution-block-stamped GitHub issues — Fable-validate each issue against the current code, optional Fable plan, build on the assigned model/effort, open PRs, @claude review loops until LGTM — parallel across dependency tracks, sequential within',
   whenToUse: 'When the user has approved a milestone-workflow run plan over issues that already carry ## Execution blocks (build model, effort, fableplan). args: { tracks: [[2,3,4],[9],[12]], reviewLoop?: true, maxReviewCycles?: 5 }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
+    { title: 'Validate', detail: 'Fable validates each issue against the current code right before it starts', model: 'fable' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, trigger @claude review' },
     { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; runs concurrently with later issues in the track' },
@@ -14,10 +15,12 @@ export const meta = {
 // Tracks run in parallel; issues within a track run sequentially (later issues
 // get earlier issues' PR numbers as in-flight context). Cross-track dependencies
 // are NOT expressible here — chain separate workflow invocations per phase.
-// Unlike issue-pipeline, there is no validation stage and no complexity-threshold
-// model routing: issues arrive pre-refined, and model/effort/fableplan come from
-// each issue's ## Execution block (stamped by prd-to-issues, revised by
-// execution-plan-review).
+// Unlike issue-pipeline, there is no complexity-threshold model routing:
+// model/effort/fableplan come from each issue's ## Execution block (stamped by
+// prd-to-issues, revised by execution-plan-review). Validation still runs as the
+// first step of every issue — even freshly-authored issues go stale as earlier
+// PRs in the milestone change the ground truth, so each issue is re-checked
+// against the current code immediately before it starts.
 if (!args || !Array.isArray(args.tracks) || args.tracks.length === 0) {
   throw new Error('milestone-pipeline requires args.tracks: an array of issue-number arrays, e.g. { tracks: [[2,3,4],[9],[12]] }')
 }
@@ -49,6 +52,18 @@ const PREP_SCHEMA = {
         },
       },
     },
+  },
+}
+
+const VALIDATION_SCHEMA = {
+  type: 'object',
+  required: ['verdict', 'summary', 'corrections', 'implementation_constraints'],
+  properties: {
+    verdict: { type: 'string', enum: ['VALID', 'VALID_WITH_CORRECTIONS', 'INVALID'] },
+    summary: { type: 'string', description: 'One-paragraph verdict summary' },
+    corrections: { type: 'array', items: { type: 'string' }, description: 'Concrete edits the issue body needs (empty if none)' },
+    implementation_constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the implementer must honor (invariants, refuted approaches, preferred option, merge-order notes)' },
+    invalid_reason: { type: 'string', description: 'Only when verdict is INVALID: why' },
   },
 }
 
@@ -85,9 +100,29 @@ const REVIEW_LOOP_SCHEMA = {
   },
 }
 
-function planPrompt(issue) {
+function validatePrompt(issue, trackContext) {
+  return [
+    `You are a read-only validation agent in this repo. Invoke the \`validate-issue\` skill with args \`${issue}\` and follow its procedure exactly:`,
+    `fetch GitHub issue #${issue} with \`gh issue view ${issue}\`, verify every factual claim (including PRD section references) against the actual code and PRD with file:line citations,`,
+    `check architectural feasibility and self-consistency of the approach, and check for staleness: whether code merged since the issue was filed changes its best approach.`,
+    trackContext ? `\nRelevant in-flight context from earlier issues in this dependency chain (account for these landing first):\n${trackContext}` : '',
+    `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
+    `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
+    `and the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes).`,
+  ].join(' ')
+}
+
+function planPrompt(issue, validation) {
+  const corrections = validation.corrections.length
+    ? `\nA Fable validation pass found these issue-body corrections (a later agent applies them — plan as if they were already applied):\n${validation.corrections.map((c) => `- ${c}`).join('\n')}\n`
+    : ''
+  const constraints = (validation.implementation_constraints || []).length
+    ? `\nHard constraints from validation:\n${validation.implementation_constraints.map((c) => `- ${c}`).join('\n')}\n`
+    : ''
   return `You are a read-only planning agent on Fable 5 in this repo. GitHub issue #${issue} is flagged "fableplan first" — the design is the hard part and a separate builder will implement your plan.
 
+Validation summary: ${validation.summary}
+${corrections}${constraints}
 Fetch the issue (\`gh issue view ${issue}\`), read the referenced PRD sections and any relevant code, and produce a concrete implementation plan: files to create/modify, data shapes, control flow, edge cases, and the test list. Plan the absolute-best solution — cost and code volume are not constraints; only correctness and safety are.
 
 Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable 5 | high | Harness: milestone-pipeline\`). Do NOT modify any files or start implementing.
@@ -95,25 +130,33 @@ Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable
 Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
 }
 
-function implementPrompt(issue, ex, plan, trackContext) {
+function implementPrompt(issue, ex, validation, plan, trackContext) {
   const footerModel = MODEL_NAMES[ex.model]
+  const corrections = validation.corrections.length
+    ? validation.corrections.map((c) => `- ${c}`).join('\n')
+    : ''
+  const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
-${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body. Hard constraints from the plan:\n${plan.constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
-Invoke the \`work-on-issue\` skill with args \`${issue}\`: isolated worktree off latest origin/main, implement per the issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on unmodified main before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
+
+Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
+${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
+Invoke the \`work-on-issue\` skill with args \`${issue}\`: isolated worktree off latest origin/main, implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on unmodified main before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
 
 After the PR is open, comment exactly \`@claude\` on it (\`gh pr comment <num> --body "@claude"\`).
 
 Return via StructuredOutput: pr_number, pr_url, summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return the blocker instead of guessing.`
 }
 
-function reviewLoopPrompt(issue, prNumber, ex, plan) {
+function reviewLoopPrompt(issue, prNumber, ex, validation, plan) {
   const footerModel = MODEL_NAMES[ex.model]
+  const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   return `You are a PR review-resolution agent in this repo. Invoke the \`fix-pr-review-loop\` skill with args \`${prNumber}\` and follow it exactly:
 fetch the latest @claude review on PR #${prNumber}, RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, re-trigger with a \`@claude\` comment, wait for the re-review (find the Actions run and \`gh run watch\` it rather than sleeping), and repeat.
 
 Stop on a bare LGTM with nothing left to fix; past ${MAX_REVIEW_CYCLES} cycles stop at the first LGTM even with non-blocking findings remaining. If the current review is already a clean LGTM with no actionable findings, stop immediately and say so (0 cycles).
 
-The issue's Acceptance criteria${plan ? ' and the Fable plan\'s constraints (posted on the issue)' : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
+The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
+${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
 
 Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
 
@@ -148,9 +191,27 @@ await parallel(
       const modelId = MODEL_IDS[ex.model] || 'fable'
       const trackContext = done.map((d) => `- Issue #${d.issue} → PR #${d.prNumber} (open, not yet merged)`).join('\n')
 
+      const validation = await agent(validatePrompt(issue, trackContext), {
+        model: 'fable',
+        effort: 'high',
+        schema: VALIDATION_SCHEMA,
+        phase: 'Validate',
+        label: `validate:#${issue}`,
+      })
+      if (!validation) {
+        log(`#${issue}: validation agent failed — skipping issue, continuing track ${ti + 1}`)
+        results.push({ issue, status: 'validation_failed' })
+        continue
+      }
+      if (validation.verdict === 'INVALID') {
+        log(`#${issue}: INVALID — ${validation.invalid_reason || validation.summary}; not implementing, continuing track ${ti + 1}`)
+        results.push({ issue, status: 'invalid', reason: validation.invalid_reason || validation.summary })
+        continue
+      }
+
       let plan = null
       if (ex.fableplan) {
-        plan = await agent(planPrompt(issue), {
+        plan = await agent(planPrompt(issue, validation), {
           model: 'fable',
           effort: 'high',
           schema: PLAN_SCHEMA,
@@ -160,8 +221,8 @@ await parallel(
         if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
       }
 
-      log(`#${issue} (C${ex.complexity}): implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
-      const impl = await agent(implementPrompt(issue, ex, plan, trackContext), {
+      log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
+      const impl = await agent(implementPrompt(issue, ex, validation, plan, trackContext), {
         model: modelId,
         effort: ex.effort,
         schema: IMPLEMENT_SCHEMA,
@@ -183,7 +244,7 @@ await parallel(
       // while this PR is driven to LGTM. Same model/effort as the build.
       if (REVIEW_LOOP) {
         reviewLoops.push(
-          agent(reviewLoopPrompt(issue, impl.pr_number, ex, plan), {
+          agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
             model: modelId,
             effort: ex.effort,
             schema: REVIEW_LOOP_SCHEMA,
