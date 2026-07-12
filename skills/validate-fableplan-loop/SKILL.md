@@ -1,9 +1,9 @@
 ---
-name: validate-issue-fableplan-loop
-description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-issue-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan (skipped for issues below C50 with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The non-Fable-validation counterpart to fable-validate-loop.
+name: validate-fableplan-loop
+description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan (skipped for issues below C50 with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The non-Fable-validation counterpart to fable-validate-loop.
 ---
 
-# validate-issue-fableplan-loop
+# validate-fableplan-loop
 
 Chain validate-issue → (conditional) update issue → (conditional) fableplan → work-on-issue-loop into one autonomous run: your session model validates the issue against the code, the main agent fixes the issue description if needed, Fable 5 plans the implementation for non-trivial issues (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence.
 
@@ -42,7 +42,7 @@ Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already a
 
 ### 3. Apply the update-issue edits, if called for
 
-If the verdict says **Update issue description? Yes**, apply validate-issue's step 8 now — the suggested title/body edits plus the stacked `Updated with LLM: …` attribution line (harness suffix `validate-issue-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
+If the verdict says **Update issue description? Yes**, apply validate-issue's step 8 now — the suggested title/body edits plus the stacked `Updated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
 
 If **No**, skip straight to step 4.
 
