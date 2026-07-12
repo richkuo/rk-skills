@@ -21,12 +21,14 @@ export const meta = {
 // first step of every issue — even freshly-authored issues go stale as earlier
 // PRs in the milestone change the ground truth, so each issue is re-checked
 // against the current code immediately before it starts.
-if (!args || !Array.isArray(args.tracks) || args.tracks.length === 0) {
+// Some harness paths deliver args as a JSON string — normalize before validating.
+const ARGS = typeof args === 'string' ? JSON.parse(args) : args
+if (!ARGS || !Array.isArray(ARGS.tracks) || ARGS.tracks.length === 0) {
   throw new Error('milestone-pipeline requires args.tracks: an array of issue-number arrays, e.g. { tracks: [[2,3,4],[9],[12]] }')
 }
-const TRACKS = args.tracks
-const REVIEW_LOOP = args.reviewLoop ?? true
-const MAX_REVIEW_CYCLES = args.maxReviewCycles ?? 5
+const TRACKS = ARGS.tracks
+const REVIEW_LOOP = ARGS.reviewLoop ?? true
+const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 const ALL_ISSUES = TRACKS.flat()
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
