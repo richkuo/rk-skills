@@ -101,12 +101,13 @@ const REVIEW_LOOP_SCHEMA = {
   },
 }
 
-function validatePrompt(issue, trackContext) {
+function validatePrompt(issue, trackContext, skippedContext) {
   return [
     `You are a read-only validation agent in this repo. Invoke the \`validate-issue\` skill with args \`${issue}\` and follow its procedure exactly:`,
     `fetch GitHub issue #${issue} with \`gh issue view ${issue}\`, verify every factual claim (including PRD section references) against the actual code and PRD with file:line citations,`,
     `check architectural feasibility and self-consistency of the approach, and check for staleness: whether code merged since the issue was filed changes its best approach.`,
     trackContext ? `\nRelevant in-flight context from earlier issues in this dependency chain (account for these landing first):\n${trackContext}` : '',
+    skippedContext ? `\nEarlier issues in this track were SKIPPED (blocked or invalid) — their code does NOT exist anywhere:\n${skippedContext}\nDetermine whether issue #${issue} hard-depends on any skipped issue's work (would build on code that was never written). If it does, return verdict INVALID with invalid_reason naming the unmet dependency (e.g. "unmet in-track dependency #N: <why>"). If it is independent of the skipped work (e.g. merely same-package), proceed normally.` : '',
     `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
     `and the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes).`,
@@ -131,7 +132,7 @@ Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable
 Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
 }
 
-function implementPrompt(issue, ex, validation, plan, trackContext) {
+function implementPrompt(issue, ex, validation, plan, trackContext, skippedContext) {
   const footerModel = MODEL_NAMES[ex.model]
   const corrections = validation.corrections.length
     ? validation.corrections.map((c) => `- ${c}`).join('\n')
@@ -140,7 +141,7 @@ function implementPrompt(issue, ex, validation, plan, trackContext) {
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
-${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
+${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${skippedContext ? `\nEarlier issues in this track were SKIPPED (blocked or invalid) — their code does NOT exist anywhere:\n${skippedContext}\nIf during implementation you find issue #${issue} hard-requires a skipped issue's work, STOP and return blocked (pr_number 0) with the unmet dependency as the blocker — never improvise the missing base yourself.\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
 Invoke the \`work-on-issue\` skill with args \`${issue}\`: isolated worktree off latest origin/main, implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on unmodified main before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
 
 After the PR is open, trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "@claude review"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
@@ -151,10 +152,10 @@ Return via StructuredOutput: pr_number, pr_url, summary, tests_passed, any block
 function reviewLoopPrompt(issue, prNumber, ex, validation, plan) {
   const footerModel = MODEL_NAMES[ex.model]
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
-  return `You are a PR review-resolution agent in this repo. Invoke the \`fix-pr-review-loop\` skill with args \`${prNumber}\` and follow it exactly:
+  return `You are a PR review-resolution agent in this repo. Invoke the \`fix-pr-review-loop\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: this run's review-cycle cap is ${MAX_REVIEW_CYCLES} — everywhere the skill says 5 cycles, read ${MAX_REVIEW_CYCLES} instead:
 fetch the latest @claude review on PR #${prNumber}, RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, re-trigger per the fix-pr-review skill's step-7 routing (\`@claude review\`, or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer), wait for the re-review (find the Actions run and \`gh run watch\` it rather than sleeping), and repeat.
 
-Stop on a bare LGTM with nothing left to fix; past ${MAX_REVIEW_CYCLES} cycles stop at the first LGTM even with non-blocking findings remaining. If the current review is already a clean LGTM with no actionable findings, stop immediately and say so (0 cycles).
+Stop on a bare LGTM with nothing left to fix; past ${MAX_REVIEW_CYCLES} cycles stop at the first LGTM even with non-blocking findings remaining (this is the cap override above, not the skill's default). If the current review is already a clean LGTM with no actionable findings, stop immediately and say so (0 cycles).
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
 ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
@@ -188,12 +189,14 @@ const reviewLoops = []
 await parallel(
   TRACKS.map((track, ti) => async () => {
     const done = [] // { issue, prNumber }
+    const skipped = [] // { issue, reason } — in-track issues that never produced a PR
     for (const issue of track) {
       const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
       const modelId = MODEL_IDS[ex.model] || 'fable'
       const trackContext = done.map((d) => `- Issue #${d.issue} → PR #${d.prNumber} (open, not yet merged)`).join('\n')
+      const skippedContext = skipped.map((s) => `- Issue #${s.issue}: ${s.reason}`).join('\n')
 
-      const validation = await agent(validatePrompt(issue, trackContext), {
+      const validation = await agent(validatePrompt(issue, trackContext, skippedContext), {
         model: 'fable',
         effort: ex.validate_effort || 'high',
         schema: VALIDATION_SCHEMA,
@@ -203,11 +206,13 @@ await parallel(
       if (!validation) {
         log(`#${issue}: validation agent failed — skipping issue, continuing track ${ti + 1}`)
         results.push({ issue, status: 'validation_failed' })
+        skipped.push({ issue, reason: 'validation agent failed — issue never validated or implemented' })
         continue
       }
       if (validation.verdict === 'INVALID') {
         log(`#${issue}: INVALID — ${validation.invalid_reason || validation.summary}; not implementing, continuing track ${ti + 1}`)
         results.push({ issue, status: 'invalid', reason: validation.invalid_reason || validation.summary })
+        skipped.push({ issue, reason: `validated INVALID — ${validation.invalid_reason || validation.summary}` })
         continue
       }
 
@@ -224,7 +229,7 @@ await parallel(
       }
 
       log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
-      const impl = await agent(implementPrompt(issue, ex, validation, plan, trackContext), {
+      const impl = await agent(implementPrompt(issue, ex, validation, plan, trackContext, skippedContext), {
         model: modelId,
         effort: ex.effort,
         schema: IMPLEMENT_SCHEMA,
@@ -234,6 +239,7 @@ await parallel(
       if (!impl || !impl.pr_number) {
         log(`#${issue}: implementation ${impl ? `blocked — ${impl.blocker || 'no PR opened'}` : 'agent failed'}; continuing track ${ti + 1}`)
         results.push({ issue, status: 'blocked', blocker: impl?.blocker })
+        skipped.push({ issue, reason: `implementation ${impl ? `blocked — ${impl.blocker || 'no PR opened'}` : 'agent failed'}` })
         continue
       }
 
@@ -252,10 +258,15 @@ await parallel(
             schema: REVIEW_LOOP_SCHEMA,
             phase: 'Review Loop',
             label: `review-loop:PR#${impl.pr_number}`,
-          }).then((review) => {
-            rec.review = review || { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed' }
-            rec.status = rec.review.final_status === 'lgtm' || rec.review.final_status === 'lgtm_with_nonblocking' ? 'lgtm' : 'review_' + rec.review.final_status
-            log(`PR #${impl.pr_number}: review loop ${rec.review.final_status} after ${rec.review.cycles_run} cycle(s)`)
+          }).then(
+            (review) => review || { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed' },
+            // Catch throws (e.g. token-budget exhaustion) so one failed loop
+            // can't reject Promise.all below and discard every collected result.
+            (err) => ({ final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${err?.message || err}` })
+          ).then((review) => {
+            rec.review = review
+            rec.status = review.final_status === 'lgtm' || review.final_status === 'lgtm_with_nonblocking' ? 'lgtm' : 'review_' + review.final_status
+            log(`PR #${impl.pr_number}: review loop ${review.final_status} after ${review.cycles_run} cycle(s)`)
           })
         )
       }
