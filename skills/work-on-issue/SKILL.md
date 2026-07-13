@@ -16,8 +16,9 @@ Take a GitHub issue from "validated" to "PR open", autonomously and end-to-end: 
 The user provides one of:
 - Nothing — **default to the issue just validated this session**, else the latest open issue (`gh issue list --limit 1`).
 - `#<N>` / `<N>` / full URL / `owner/repo#N`.
+- `{ issue: <N>, baseRefs: [{ pr: <PR number>, ref: "<head branch>", sha: "<head commit>" }, ...] }` — orchestration-only form for hard dependencies. `baseRefs` is optional; when present, its order is authoritative and deterministic (upstream track order), and every entry pins a predecessor pull request's reviewed readiness head.
 
-The steps assume the issue belongs to the repo of the current checkout. If `owner/repo#N` or the URL points at a different repo, do not proceed against the local checkout — locate a local clone of that repo and work there, or stop and tell the user which repo needs to be checked out. (`gh issue view`/`gh pr create` accept `-R owner/repo`, but the implementation itself needs the matching working tree.)
+The steps assume the issue belongs to the repo of the current checkout. If `owner/repo#N` or the URL points at a different repo, do not proceed against the local checkout — locate a local clone of that repo and work there, or stop and tell the user which repo needs to be checked out. (`gh issue view`/`gh pr create` accept `-R owner/repo`, but the implementation itself needs the matching working tree.) Standalone calls have no `baseRefs` and retain the latest default branch as their base.
 
 ## Steps
 
@@ -35,9 +36,9 @@ Two gates, checked while no worktree or code exists yet:
 - **The issue must still be open.** If it's closed, stop and report — don't implement a resolved issue.
 - **No existing PR may already address it** — discovering one later wastes the entire cycle, splits review, and orphans a branch. Inspect any search hit: a PR that merely mentions `#<N>` in passing doesn't count, one that fixes it does. If a genuine PR exists, surface it and stop (or, if it's this session's own branch, continue on it).
 
-### 1. Ensure an isolated worktree off the latest default branch
+### 1. Resolve and verify the worktree base
 
-All implementation happens in a fresh worktree branched from the repo's current default branch — never on the default branch itself, never on a divergent checked-out branch. Detect the default branch; don't assume `main` (repos use `master`, `develop`, etc.):
+All implementation happens in a fresh worktree — never on the default branch itself or a divergent checked-out branch. Detect and fetch the default branch even when dependencies are supplied because it remains the pull request base:
 
 ```bash
 DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
@@ -45,33 +46,50 @@ git fetch origin "$DEFAULT_BRANCH"
 git branch --show-current   # where am I now?
 ```
 
+If `baseRefs` is absent, the resolved worktree base is `origin/<default>` as before. If it is present, validate the complete list **before creating a worktree**:
+
+- Reject an empty list; duplicate PR numbers, refs, or SHAs; non-positive integer PR numbers; the default branch; refs that fail `git check-ref-format --branch "$ref"`; and SHAs that are not 40–64 hexadecimal characters. Never interpolate or execute an unvalidated field.
+- Preserve caller order. For each entry, verify `gh pr view <pr> --json headRefName,headRefOid,headRepository` belongs to this repository and exactly matches both `ref` and `sha`. Any mismatch means the reviewed head changed after readiness and is a blocker; never silently use the new head.
+- Fetch the pull request's GitHub ref explicitly into a namespaced local ref (`pull/<pr>/head:refs/rk-skills/dependencies/pr-<pr>`), verify that fetched ref resolves exactly to `sha`, and record that commit. A missing, ambiguous, cross-repository, or changed head is a blocker; never fall back to the default branch.
+- The first verified SHA is the initial worktree base. Remaining SHAs are integrated in caller order after worktree creation.
+
+### 1.1 Create the isolated worktree
+
 - **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
-- **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` — base ref verified below — AND switches the session cwd in one step — a bare `git worktree add` + `cd` leaves the session's tracked cwd on the old checkout, so always use the tool):
+- **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the session cwd in one step):
 
 ```
 EnterWorktree(name: "cc/issue-<N>-<slug>")
 ```
 
-Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`.
+Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. EnterWorktree starts from its configured base; when `baseRefs` is present, immediately move the brand-new, commit-free branch to the first verified SHA with an anchored `git -C <worktree-path> reset --hard <resolved-first-sha>`. Never do this to a re-entered worktree.
 
 - **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
 ```bash
-DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)   # re-detect inline — shell state doesn't persist between Bash calls
-git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> "origin/$DEFAULT_BRANCH"
+git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> <resolved-base>
 ```
 
 (swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
 
 If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
 
-After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and **verify the base** — this applies to both paths. EnterWorktree branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default); set to `head`, it branches from the local HEAD, which may be stale or divergent. The manual `git worktree add` bases on `origin/$DEFAULT_BRANCH` (freshly fetched in step 1) — still confirm:
+After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and verify that `HEAD` exactly matches the resolved base commit. Anchor every command with `-C <worktree-path>` because shell state does not persist. If a brand-new worktree differs, reset only that commit-free worktree to the resolved base; never reset a re-entered worktree.
 
 ```bash
-git -C .claude/worktrees/<prefix>/issue-<N>-<slug> rev-parse HEAD "origin/$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # the two SHAs must match
+git -C <worktree-path> rev-parse HEAD <resolved-base-sha>   # the two SHAs must match
 ```
 
-Anchor the check with `-C <worktree-path>` — shell state (including cwd) doesn't persist between Bash calls, so an unanchored `git rev-parse` in a fresh shell may run against the original checkout and report a spurious mismatch. If the SHAs differ on a worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default>` — anchored for the same reason (an unanchored reset in the original checkout would destroy uncommitted work there), and safe only because the brand-new branch carries no commits. Never reset a re-entered worktree that already has work on it. Do every later step from inside the worktree.
+### 1.2 Integrate multiple hard prerequisites
+
+When `baseRefs` contains more than one ref, create one deterministic integration base **before reading or changing product files**:
+
+1. From the worktree based on the first ref, merge all remaining recorded remote-tracking commits in caller order with one `git merge --no-commit --no-ff` invocation.
+2. If Git reports any conflict or cannot form the integration, abort the merge and return blocked with the conflicting refs. Do not resolve product conflicts speculatively, implement the issue, or open a pull request.
+3. If a merge is pending, commit it with a concise dependency-integration message and the repository's required LLM attribution footer. If every remaining ref was already contained, no integration commit is needed.
+4. For **every** recorded predecessor commit, run `git -C <worktree-path> merge-base --is-ancestor <sha> HEAD`. Any failure blocks implementation. Record the verified refs and their order for the pull request body.
+
+The resulting `HEAD` is the only authorized base for validation and implementation. A single `baseRefs` entry needs no merge but still needs the ancestry check. Do every later step from inside this verified worktree.
 
 ### 2. Understand the issue and the code
 
@@ -125,6 +143,7 @@ gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef
 
 - **Title:** match the repo's PR-title convention (the commit-title style is usually right).
 - **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified; keep it scannable. Don't restate the whole issue.
+- **Dependency base:** when `baseRefs` was supplied, list every predecessor pull request and verified head in integration order, state that they must merge first, and keep the PR base set to the repository's default branch.
 - **Footer:** same convention as the commit — **Created** verb, repo footer format (global default `Created with LLM: <current model> | <effort> | Harness: <harness>`, harness resolved per step 5: `Claude Code` interactively, the Action identifier in CI). No `Co-authored-by` trailer.
 
 Capture the PR number/URL from the command output.
@@ -144,7 +163,9 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Situation | Action |
 |-----------|--------|
 | About to implement on the default branch or a divergent checked-out branch | Stop — enter the isolated worktree first (step 1) |
-| Fresh worktree's HEAD doesn't match `origin/<default>` | `worktree.baseRef` may be `head` — reset the just-created, commit-free branch onto `origin/<default>` before implementing |
+| Caller supplies invalid, duplicate, missing, ambiguous, cross-repository, or changed `baseRefs` | Stop blocked — never fall back to the default branch or guess a replacement |
+| Fresh worktree's HEAD doesn't match the resolved base | Reset only the just-created, commit-free worktree to the verified base; never reset a re-entered worktree |
+| Multiple bases conflict or any verified predecessor is not an ancestor of the integration base | Abort the merge and return blocked before product changes |
 | Worktree for this issue already exists | Enter it by `path`; don't create a duplicate |
 | Issue lives in a different repo than the current checkout | Stop — work in a clone of that repo, or tell the user which repo to check out |
 | Issue is already closed | Stop and report — don't implement a resolved issue |
@@ -152,7 +173,7 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Issue description conflicts with what the code actually does | Trust the traced code; implement the real fix, note the discrepancy in the PR body |
 | Issue's proposed sketch was ⚠️/❌ in validation | Implement the optimal direction for this repo, not the original sketch |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
-| Anywhere the default branch is needed (fetch, worktree base, `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |
+| Anywhere the default branch is needed (fetch or PR `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |

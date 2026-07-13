@@ -5,21 +5,23 @@ description: Use when the user wants a milestone of Execution-block-stamped GitH
 
 # milestone-workflow
 
-Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dynamic dispatch: the dependency graph is decided here with the user; execution reacts to reviews and merges as they land.
+Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dependency-aware dispatch: the dependency graph is decided here with the user; execution waits for stable predecessor results and builds hard-dependent work from their reviewed code.
 
 ## Steps
 
 ### 1. Build the dependency tracks
 
-Fetch the milestone's issues. From their Approach/Problem sections, derive **tracks**: an array of issue-number arrays where tracks run in parallel and issues within a track run sequentially.
+Fetch the milestone's issues and build a typed dependency graph before grouping them into tracks.
 
-- The **spine** (scaffold → schema → auth) is the first track — or, when everything depends on it, run the spine as its own Workflow invocation first and fan out in a second invocation after it merges. Cross-track dependencies cannot be expressed inside one invocation; chain invocations per phase instead, staying in the loop between them.
-- Dependency-free islands (pure modules, landing pages) get single-issue tracks.
-- Two issues touching the same package never sit in different tracks.
+- Read `**Depends on:**` first for hard code/product prerequisites and `**Runs after:**` for ordering-only constraints. For older issues missing either field, infer only from Approach/Problem prose and label every inferred edge in the plan.
+- Reject missing issue references and cycles across the union of both edge kinds. A hard edge means the successor needs predecessor code; an ordering edge only prevents overlapping work.
+- Express each track as `{ issues: [...], after: [<track index>...], runsAfter: [<track index>...] }`. Dependency-free islands have neither predecessor list. Combine issues into one `issues` array only when every serial edge is truly hard; untyped serial edges are treated as hard by the workflow, so ordering-only chains must remain separate tracks joined by `runsAfter`.
+- Preserve concurrency: unrelated tracks start together. Multiple hard predecessors remain separate `after` entries so the runtime can create and verify one integration base containing every head.
+- Use separate workflow invocations only when repository policy requires prerequisites to merge to the default branch before successors can start.
 
 ### 2. Present the run plan — review before beginning (mandatory)
 
-Show: the tracks with issue titles, each issue's model/effort/fableplan from its Execution block, the review-loop behavior, and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
+Show: numbered tracks with issue titles; hard `after` edges separately from ordering-only `runsAfter` edges; which edges were inferred; each issue's model/effort/fableplan; the stable readiness boundary; and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
 
 ### 3. Preflight the repo
 
@@ -29,17 +31,18 @@ Show: the tracks with issue titles, each issue's model/effort/fableplan from its
 
 ### 4. Run
 
-Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [[...], ...], reviewLoop: true, maxReviewCycles: 5}}`. The workflow:
+Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop: true, maxReviewCycles: 5}}`. Legacy issue-array tracks remain accepted, but use typed objects for new plans. The workflow validates all assignments, predecessor indices, duplicates, and cycles before prep, then:
 
 1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan.
-2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the *current* code (issues go stale as earlier PRs land), at the issue's `Validate effort` (default high): verdict, issue-body corrections, hard implementation constraints. `INVALID` issues are skipped and reported, never built.
+2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the current dependency base, with deduplicated predecessor PRs/skips and hard base refs, at the issue's `Validate effort` (default high). `INVALID` issues are skipped and reported, never built.
 3. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent (validation-aware) whose plan is posted to the issue; the builder implements against it.
-4. **Implement** — per-issue agent on its assigned model/effort applies the validation corrections to the issue, then isolated worktree, `work-on-issue` procedure, opens the PR, triggers `@claude review`.
-5. **Review Loop** — `fix-pr-review-loop` per PR until LGTM, concurrent with later issues in the track; validation constraints outrank reviewer suggestions. Re-review triggers follow fix-pr-review's routing: `@claude review`, or `@claude sonnet review` when only non-blocking items were addressed.
+4. **Implement** — per-issue agent on its assigned model/effort applies validation corrections, invokes `work-on-issue` with the verified hard `baseRefs`, creates a deterministic integration base for multiple heads, opens the PR, and triggers `@claude review` when review loops are enabled.
+5. **Review readiness** — `fix-pr-review-loop` runs until LGTM before any hard or ordering successor starts, preventing review fixes from racing same-package work. Unrelated tracks and their review loops stay concurrent. With `reviewLoop: false`, implementation completion is the readiness boundary.
+6. **Failure propagation** — failed, blocked, or non-LGTM hard predecessors block descendants. Ordering-only skips without a PR do not; an unresolved predecessor PR does. Integration conflicts block before product changes.
 
 ### 5. Monitor and close out
 
-Relay meaningful progress (PRs opened, review loops finishing, blockers) — not raw logs. On completion, report a results table: issue → PR → review status, plus flags the agents raised. Recommend the merge order (track order). If a later phase was deferred pending this one's merges, offer to chain the next invocation.
+Relay meaningful progress (PRs opened, review loops finishing, blockers) — not raw logs. On completion, report a results table: issue → PR → review status, plus flags the agents raised. Recommend dependency order, with every hard prerequisite before its descendants. If a later phase was deferred pending merges, offer to chain the next invocation.
 
 ## Context discipline
 
@@ -51,6 +54,8 @@ The orchestrating session holds no implementation detail — issues and PRs are 
 |---|---|
 | An issue lacks an Execution block at run time | Stop before running; send it through execution-plan-review |
 | No `@claude` review workflow in the repo | Install from templates first, or run with `reviewLoop: false` and say what that forfeits |
-| A track's issue hard-depends on an unmerged earlier PR | The workflow passes in-flight context; implementers may branch off the dependency's PR branch and must note merge order in the PR body |
+| A successor hard-depends on unmerged predecessor PRs | Use `after`; the workflow waits for stable heads and `work-on-issue` verifies/integrates every base before implementation |
+| A same-package predecessor is ordering-only | Use `runsAfter`; the successor waits but does not inherit code |
+| A dependency integration conflicts | The affected track and hard descendants stop blocked before product changes; report the conflicting heads |
 | Workflow returns empty/odd results | Read the run's `journal.jsonl` before re-running; resume with `resumeFromRunId` rather than restarting |
 | User asks to start without reviewing the plan | Present the plan anyway — step 2 is not skippable |
