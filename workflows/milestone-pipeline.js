@@ -204,6 +204,24 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
   ].join(' ')
 }
 
+async function validateWithRetry(issue, prompt, options) {
+  let blocker = 'validation agent failed'
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const disposition = attempt === 1 ? 'retrying once' : 'retries exhausted'
+    try {
+      const validation = await agent(prompt, options)
+      if (validation) return { validation, blocker: null }
+      blocker = 'validation agent failed'
+      log(`#${issue}: validation attempt ${attempt}/2 returned no result; ${disposition}`)
+    } catch (error) {
+      const detail = error?.message || error
+      blocker = `validation threw: ${detail}`
+      log(`#${issue}: validation attempt ${attempt}/2 threw — ${detail}; ${disposition}`)
+    }
+  }
+  return { validation: null, blocker }
+}
+
 function planPrompt(issue, validation) {
   const corrections = validation.corrections.length
     ? `\nA Fable validation pass found these issue-body corrections (a later agent applies them — plan as if they were already applied):\n${validation.corrections.map((c) => `- ${c}`).join('\n')}\n`
@@ -384,21 +402,18 @@ async function executeTrack(trackIndex) {
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
-    let validation
-    try {
-      validation = await agent(validatePrompt(issue, completed, skipped, baseRefs), {
-        model: 'fable',
-        effort: ex.validate_effort || 'high',
-        schema: VALIDATION_SCHEMA,
-        phase: 'Validate',
-        label: `validate:#${issue}`,
-      })
-    } catch (error) {
-      validation = null
-      blocker = `validation threw: ${error?.message || error}`
+    const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
+    const validationOptions = {
+      model: 'fable',
+      effort: ex.validate_effort || 'high',
+      schema: VALIDATION_SCHEMA,
+      phase: 'Validate',
+      label: `validate:#${issue}`,
     }
+    const validationDispatch = await validateWithRetry(issue, validationPrompt, validationOptions)
+    const validation = validationDispatch.validation
+    blocker = validationDispatch.blocker
     if (!validation) {
-      blocker ||= 'validation agent failed'
       log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
       addResult({ issue, status: 'validation_failed', blocker })
       localSkipped.push({ issue, reason: `${blocker} — issue never implemented` })

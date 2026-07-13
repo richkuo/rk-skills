@@ -39,7 +39,7 @@ async function executeWorkflow(args, handlers = {}) {
   const events = []
   const logs = []
   const agent = async (prompt, options) => {
-    const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, prompt }
+    const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, schema: options.schema, prompt }
     events.push({ ...event, state: 'started' })
 
     const custom = handlers[options.label] || handlers[options.phase]
@@ -103,6 +103,137 @@ function promptFor(events, label) {
 }
 
 describe('milestone-pipeline dependency scheduling', () => {
+  test('dispatches a successful validation exactly once', async () => {
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false })
+
+    expect(events.filter((event) => event.state === 'started' && event.label === 'validate:#2')).toHaveLength(1)
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+    expect(logs.some((message) => message.includes('validation attempt'))).toBeFalse()
+  })
+
+  test.each([
+    ['null', 'null', false],
+    ['thrown error', 'throw', true],
+  ])('retries a first %s validation failure once with identical dispatch inputs', async (_name, firstFailure, fableplan) => {
+    let attempt = 0
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [{
+          number: 2,
+          title: 'Issue 2',
+          complexity: 20,
+          model: 'fable',
+          effort: 'high',
+          validate_effort: 'high',
+          fableplan,
+          missing_block: false,
+        }],
+      }),
+      'validate:#2': () => {
+        attempt += 1
+        if (attempt === 1) {
+          if (firstFailure === 'null') return null
+          throw new Error('transient validator crash')
+        }
+        return { verdict: 'VALID', summary: 'valid after retry', corrections: [], implementation_constraints: [] }
+      },
+    })
+    const attempts = events.filter((event) => event.state === 'started' && event.label === 'validate:#2')
+
+    expect(attempts).toHaveLength(2)
+    expect(attempts[1]).toEqual(attempts[0])
+    expect(started(events, 'plan:#2')).toBe(fableplan)
+    expect(started(events, 'implement:#2 (fable/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+    expect(logs.some((message) => message.includes('#2: validation attempt 1/2') && message.includes('retrying once'))).toBeTrue()
+  })
+
+  test.each([
+    ['null then null', ['null', 'null'], 'validation agent failed'],
+    ['null then throw', ['null', 'throw'], 'validation threw: failure 2'],
+    ['throw then null', ['throw', 'null'], 'validation agent failed'],
+    ['throw then throw', ['throw', 'throw'], 'validation threw: failure 2'],
+  ])('preserves dependency behavior after retry exhaustion: %s', async (_name, failures, expectedBlocker) => {
+    let attempt = 0
+    const { output, events, logs } = await executeWorkflow({
+      tracks: [
+        { issues: [2, 3] },
+        { issues: [9], after: [0] },
+        { issues: [12], runsAfter: [0] },
+      ],
+      reviewLoop: false,
+    }, {
+      'validate:#2': () => {
+        const failure = failures[attempt]
+        attempt += 1
+        if (failure === 'null') return null
+        throw new Error(`failure ${attempt}`)
+      },
+    })
+    const failed = output.results.find((result) => result.issue === 2)
+    const orderingPrompt = promptFor(events, 'validate:#12')
+
+    expect(events.filter((event) => event.state === 'started' && event.label === 'validate:#2')).toHaveLength(2)
+    expect(failed?.status).toBe('validation_failed')
+    expect(failed?.blocker).toBe(expectedBlocker)
+    expect(output.results.find((result) => result.issue === 3)?.status).toBe('dependency_blocked')
+    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
+    expect(started(events, 'validate:#3')).toBeFalse()
+    expect(started(events, 'validate:#9')).toBeFalse()
+    expect(output.results.find((result) => result.issue === 12)?.status).toBe('pr_open')
+    expect(orderingPrompt.match(/Issue #2:/g)).toHaveLength(1)
+    expect(orderingPrompt).toContain(expectedBlocker)
+    expect(logs.some((message) => message.includes('#2: validation attempt 2/2') && message.includes('retries exhausted'))).toBeTrue()
+  })
+
+  test('keeps validation retry state isolated across concurrent tracks', async () => {
+    const attempts = new Map([[2, 0], [3, 0]])
+    const retryThenSucceed = (issue, failure) => () => {
+      const attempt = attempts.get(issue) + 1
+      attempts.set(issue, attempt)
+      if (attempt === 1) {
+        if (failure === 'null') return null
+        throw new Error(`transient failure for #${issue}`)
+      }
+      return { verdict: 'VALID', summary: `valid #${issue}`, corrections: [], implementation_constraints: [] }
+    }
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
+      'validate:#2': retryThenSucceed(2, 'null'),
+      'validate:#3': retryThenSucceed(3, 'throw'),
+    })
+
+    expect(events.filter((event) => event.state === 'started' && event.label === 'validate:#2')).toHaveLength(2)
+    expect(events.filter((event) => event.state === 'started' && event.label === 'validate:#3')).toHaveLength(2)
+    expect(output.results.map((result) => result.status)).toEqual(['pr_open', 'pr_open'])
+    expect(logs.some((message) => message.includes('#2: validation attempt 1/2 returned no result'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3: validation attempt 1/2 threw — transient failure for #3'))).toBeTrue()
+    expect(logs.some((message) => message.startsWith('#2:') && message.includes('#3'))).toBeFalse()
+  })
+
+  test('does not retry planning, implementation, or review-loop failures', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewLoop: true }, {
+      Prep: () => ({
+        issues: [2, 3, 4].map((number) => ({
+          number,
+          title: `Issue ${number}`,
+          complexity: 20,
+          model: 'fable',
+          effort: 'high',
+          validate_effort: 'high',
+          fableplan: number === 2,
+          missing_block: false,
+        })),
+      }),
+      'plan:#2': () => { throw new Error('planner failed') },
+      'implement:#3 (fable/high)': () => { throw new Error('implementation failed') },
+      'review-loop:PR#1004': () => { throw new Error('review failed') },
+    })
+
+    expect(events.filter((event) => event.state === 'started' && event.label === 'plan:#2')).toHaveLength(1)
+    expect(events.filter((event) => event.state === 'started' && event.label === 'implement:#3 (fable/high)')).toHaveLength(1)
+    expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004')).toHaveLength(1)
+  })
+
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
       tracks: [[2], [3], [4], [5], [6], [7], [8]],
