@@ -355,6 +355,22 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(pullRequestLog.includes('@claude review triggered')).toBe(reviewEnabled)
   })
 
+  test('surfaces issue-edit authorization only when validation corrections exist', async () => {
+    const withCorrections = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Validate: () => ({
+        verdict: 'VALID_WITH_CORRECTIONS',
+        summary: 'valid with corrections',
+        corrections: ['Correct the stale file reference'],
+        implementation_constraints: [],
+      }),
+    })
+    const withoutCorrections = await executeWorkflow({ tracks: [[2]], reviewLoop: false })
+    const authorization = 'The user approved this milestone run plan, which explicitly authorizes applying these validation corrections to this issue.'
+
+    expect(promptFor(withCorrections.events, 'implement:#2 (fable/high)')).toContain(authorization)
+    expect(promptFor(withoutCorrections.events, 'implement:#2 (fable/high)')).not.toContain(authorization)
+  })
+
   test.each([
     ['empty track', { tracks: [[]] }, /track 1.*non-empty issues/i],
     ['duplicate issue', { tracks: [[2], [2]] }, /issue #2.*more than once/i],
