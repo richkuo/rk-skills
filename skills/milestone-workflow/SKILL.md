@@ -1,6 +1,6 @@
 ---
 name: milestone-workflow
-description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, @claude review loops until LGTM. Stage 5–6 of the new-app-pipeline.
+description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, and optional @claude review loops until LGTM. Stage 5–6 of the new-app-pipeline.
 ---
 
 # milestone-workflow
@@ -26,7 +26,7 @@ Show: numbered tracks with issue titles; hard `after` edges separately from orde
 
 ### 3. Preflight the repo
 
-- `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Review loops silently stall without it.
+- When review loops are enabled, `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Without a review bot, set `reviewLoop: false`; implementation then opens each PR without requesting review and becomes the readiness boundary.
 - Base branch protection / merge expectations understood: agents open PRs; merging stays with the user unless they've said otherwise.
 - CLAUDE.md in the target repo covers conventions the agents must follow (package manager, test commands).
 
