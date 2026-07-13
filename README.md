@@ -79,9 +79,9 @@ flowchart LR
 | `prd-questions` | "Ask me all questions": sweeps the PRD for every open question and ambiguity, asks them in batched multiple-choice form with a recommended option, folds each answer into the owning spec section, and empties the Open Questions list. |
 | `prd-to-issues` | Breaks the refined PRD into dependency-ordered milestones and 15–25 complete, complexity-scored issues, each stamped with an `## Execution` block: build model, effort, whether a Fable plan comes first, and the `@claude` review trigger. |
 | `execution-plan-review` | Renders the per-issue model/effort/fableplan table from the issues themselves, takes your revisions ("11 should be medium"), pushes back once when a revision fights the heuristics, and writes changes back to the issues. |
-| `milestone-workflow` | Builds the dependency tracks for a milestone, presents the run plan for approval (mandatory), then runs the `milestone-pipeline` workflow and reports PRs and review-loop outcomes. |
+| `milestone-workflow` | Builds typed dependency tracks for a milestone, presents the run plan for approval (mandatory), then runs `milestone-pipeline` and reports PRs, blocked descendants, and review outcomes. |
 
-The `workflows/milestone-pipeline.js` dynamic workflow does the execution: per-issue model and effort read from the Execution blocks, a Fable validation pass against the current code as each issue starts (staleness check — earlier PRs change the ground truth), an optional Fable planning stage, isolated-worktree implementation agents, `@claude` review loops until LGTM — parallel across dependency tracks, sequential within.
+The `workflows/milestone-pipeline.js` dynamic workflow validates the full dependency graph before starting. Typed tracks use `after` for hard prerequisites and `runsAfter` for ordering-only predecessors. Unrelated tracks run concurrently; both successor types wait for stable predecessor review results. Hard successors build from verified predecessor heads, including a checked integration base for multiple heads, while ordering-only successors inherit no code. Legacy array tracks remain compatible and treat serial edges as hard dependencies. Bun regression tests execute the workflow through its async harness.
 
 ### Review bot prerequisite
 

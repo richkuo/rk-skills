@@ -1,35 +1,107 @@
 export const meta = {
   name: 'milestone-pipeline',
-  description: 'Implement a milestone of Execution-block-stamped GitHub issues — Fable-validate each issue against the current code, optional Fable plan, build on the assigned model/effort, open PRs, @claude review loops until LGTM — parallel across dependency tracks, sequential within',
-  whenToUse: 'When the user has approved a milestone-workflow run plan over issues that already carry ## Execution blocks (build model, effort, fableplan). args: { tracks: [[2,3,4],[9],[12]], reviewLoop?: true, maxReviewCycles?: 5 }',
+  description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, and review each pull request to a stable readiness boundary',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, maxReviewCycles?: 5 }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
-    { title: 'Validate', detail: 'Fable validates each issue against the current code right before it starts', model: 'fable' },
+    { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, trigger @claude review' },
-    { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; runs concurrently with later issues in the track' },
+    { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
   ],
 }
 
-// args.tracks: array of tracks; each track is an ordered array of issue numbers.
-// Tracks run in parallel; issues within a track run sequentially (later issues
-// get earlier issues' PR numbers as in-flight context). Cross-track dependencies
-// are NOT expressible here — chain separate workflow invocations per phase.
+// args.tracks accepts legacy issue-number arrays and dependency-aware objects.
+// `after` is a hard code dependency; `runsAfter` is ordering only. Serial issues
+// within every track are conservative hard dependencies because their edge kind
+// is not explicit. The full graph is validated before any agent starts.
 // Unlike issue-pipeline, there is no complexity-threshold model routing:
 // model/effort/fableplan come from each issue's ## Execution block (stamped by
 // prd-to-issues, revised by execution-plan-review). Validation still runs as the
-// first step of every issue — even freshly-authored issues go stale as earlier
-// PRs in the milestone change the ground truth, so each issue is re-checked
-// against the current code immediately before it starts.
+// first step of every issue. Predecessor PRs change the ground truth, so each
+// issue is re-checked against its pinned dependency heads immediately before it
+// starts.
 // Some harness paths deliver args as a JSON string — normalize before validating.
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 if (!ARGS || !Array.isArray(ARGS.tracks) || ARGS.tracks.length === 0) {
-  throw new Error('milestone-pipeline requires args.tracks: an array of issue-number arrays, e.g. { tracks: [[2,3,4],[9],[12]] }')
+  throw new Error('milestone-pipeline requires a non-empty args.tracks array')
 }
-const TRACKS = ARGS.tracks
+
+function assertIndexList(value, field, trackIndex) {
+  if (!Array.isArray(value)) {
+    throw new Error(`track ${trackIndex + 1} requires ${field} to be an array of track indices`)
+  }
+  return [...value]
+}
+
+const issueOwners = new Map()
+const TRACK_KEYS = new Set(['issues', 'after', 'runsAfter'])
+const TRACKS = ARGS.tracks.map((input, trackIndex) => {
+  const legacy = Array.isArray(input)
+  if (!legacy && (!input || typeof input !== 'object' || Array.isArray(input))) {
+    throw new Error(`track ${trackIndex + 1} must be an issue array or { issues, after?, runsAfter? }`)
+  }
+  if (!legacy) {
+    const unknownKey = Object.keys(input).find((key) => !TRACK_KEYS.has(key))
+    if (unknownKey) {
+      throw new Error(`track ${trackIndex + 1} has unknown key "${unknownKey}"; allowed keys are issues, after, runsAfter`)
+    }
+  }
+
+  const issues = legacy ? input : input.issues
+  if (!Array.isArray(issues) || issues.length === 0) {
+    throw new Error(`track ${trackIndex + 1} requires a non-empty issues array`)
+  }
+  for (const issue of issues) {
+    if (!Number.isInteger(issue) || issue <= 0) {
+      throw new Error(`track ${trackIndex + 1} has invalid issue number ${String(issue)}`)
+    }
+    if (issueOwners.has(issue)) {
+      throw new Error(`issue #${issue} is assigned more than once (tracks ${issueOwners.get(issue) + 1} and ${trackIndex + 1})`)
+    }
+    issueOwners.set(issue, trackIndex)
+  }
+
+  const after = legacy ? [] : assertIndexList(input.after ?? [], 'after', trackIndex)
+  const runsAfter = legacy ? [] : assertIndexList(input.runsAfter ?? [], 'runsAfter', trackIndex)
+  const predecessors = new Set()
+  for (const predecessor of [...after, ...runsAfter]) {
+    if (!Number.isInteger(predecessor) || predecessor < 0 || predecessor >= ARGS.tracks.length) {
+      throw new Error(`track ${trackIndex + 1} has invalid predecessor index ${String(predecessor)}`)
+    }
+    if (predecessor === trackIndex) {
+      throw new Error(`track ${trackIndex + 1} cannot depend on itself`)
+    }
+    if (predecessors.has(predecessor)) {
+      throw new Error(`track ${trackIndex + 1} has duplicate predecessor index ${predecessor}`)
+    }
+    predecessors.add(predecessor)
+  }
+
+  return { issues: [...issues], after, runsAfter, legacy }
+})
+
+const visitState = TRACKS.map(() => 0)
+function visitTrack(trackIndex, path) {
+  if (visitState[trackIndex] === 2) return
+  if (visitState[trackIndex] === 1) {
+    const cycle = [...path, trackIndex].map((index) => `track ${index + 1}`).join(' → ')
+    throw new Error(`dependency cycle detected: ${cycle}`)
+  }
+  visitState[trackIndex] = 1
+  const nextPath = [...path, trackIndex]
+  for (const predecessor of [...TRACKS[trackIndex].after, ...TRACKS[trackIndex].runsAfter]) {
+    visitTrack(predecessor, nextPath)
+  }
+  visitState[trackIndex] = 2
+}
+TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
+
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
-const ALL_ISSUES = TRACKS.flat()
+if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
+if (!Number.isInteger(MAX_REVIEW_CYCLES) || MAX_REVIEW_CYCLES <= 0) throw new Error('maxReviewCycles must be a positive integer')
+const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 4.8', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
@@ -81,10 +153,12 @@ const PLAN_SCHEMA = {
 
 const IMPLEMENT_SCHEMA = {
   type: 'object',
-  required: ['pr_number', 'pr_url', 'summary', 'tests_passed'],
+  required: ['pr_number', 'pr_url', 'head_ref', 'head_sha', 'summary', 'tests_passed'],
   properties: {
     pr_number: { type: 'integer', description: '0 if blocked / no PR opened' },
     pr_url: { type: 'string' },
+    head_ref: { type: 'string', description: 'Verified pull request head branch; empty if blocked / no PR opened' },
+    head_sha: { type: 'string', description: 'Verified pull request head commit at implementation completion; empty if blocked / no PR opened' },
     summary: { type: 'string' },
     tests_passed: { type: 'boolean' },
     blocker: { type: 'string', description: 'Only if blocked: what stopped you' },
@@ -94,22 +168,35 @@ const IMPLEMENT_SCHEMA = {
 
 const REVIEW_LOOP_SCHEMA = {
   type: 'object',
-  required: ['final_status', 'cycles_run', 'summary'],
+  required: ['final_status', 'cycles_run', 'summary', 'head_ref', 'head_sha'],
   properties: {
     final_status: { type: 'string', enum: ['lgtm', 'lgtm_with_nonblocking', 'max_cycles_exhausted', 'blocked'] },
     cycles_run: { type: 'integer' },
     summary: { type: 'string', description: 'Per-cycle findings fixed/rejected, and why the loop stopped' },
+    head_ref: { type: 'string', description: 'Exact pull request head branch at the review readiness boundary' },
+    head_sha: { type: 'string', description: 'Exact pull request head commit at the review readiness boundary' },
     blocker: { type: 'string', description: 'Only when final_status is blocked' },
   },
 }
 
-function validatePrompt(issue, trackContext, skippedContext) {
+function completedContext(completed) {
+  return completed.map((record) => `- Issue #${record.issue} → PR #${record.prNumber} (head: ${record.head.ref} @ ${record.head.sha})`).join('\n')
+}
+
+function skippedContext(skipped) {
+  return skipped.map((record) => `- Issue #${record.issue}: ${record.reason}`).join('\n')
+}
+
+function validatePrompt(issue, completed, skipped, baseRefs) {
+  const predecessorContext = completedContext(completed)
+  const missingContext = skippedContext(skipped)
   return [
     `You are a read-only validation agent in this repo. Invoke the \`validate-issue\` skill with args \`${issue}\` and follow its procedure exactly:`,
     `fetch GitHub issue #${issue} with \`gh issue view ${issue}\`, verify every factual claim (including PRD section references) against the actual code and PRD with file:line citations,`,
     `check architectural feasibility and self-consistency of the approach, and check for staleness: whether code merged since the issue was filed changes its best approach.`,
-    trackContext ? `\nRelevant in-flight context from earlier issues in this dependency chain (account for these landing first):\n${trackContext}` : '',
-    skippedContext ? `\nEarlier issues in this track were SKIPPED (blocked or invalid) — their code does NOT exist anywhere:\n${skippedContext}\nDetermine whether issue #${issue} hard-depends on any skipped issue's work (would build on code that was never written). If it does, return verdict INVALID with invalid_reason naming the unmet dependency (e.g. "unmet in-track dependency #N: <why>"). If it is independent of the skipped work (e.g. merely same-package), proceed normally.` : '',
+    predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}` : '',
+    missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}` : '',
+    baseRefs.length ? `\nHard dependency base refs, ordered by predecessor track and pinned to the reviewed pull request commits: ${JSON.stringify(baseRefs)}. Verify each PR/ref/SHA tuple and validate against those exact commits, not only the default branch, before returning a valid verdict.` : '',
     `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
     `and the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes).`,
@@ -134,21 +221,26 @@ Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable
 Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
 }
 
-function implementPrompt(issue, ex, validation, plan, trackContext, skippedContext) {
+function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs) {
   const footerModel = MODEL_NAMES[ex.model]
   const corrections = validation.corrections.length
     ? validation.corrections.map((c) => `- ${c}`).join('\n')
     : ''
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
+  const predecessorContext = completedContext(completed)
+  const missingContext = skippedContext(skipped)
+  const workOnIssueArgs = baseRefs.length
+    ? `{ issue: ${issue}, baseRefs: ${JSON.stringify(baseRefs)} }`
+    : `{ issue: ${issue} }`
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
-${trackContext ? `\nIn-flight context from earlier issues in this dependency chain (their PRs are open, not merged — branch off the dependency's PR branch when your work hard-requires its code, and note merge order in your PR body):\n${trackContext}\n` : ''}${skippedContext ? `\nEarlier issues in this track were SKIPPED (blocked or invalid) — their code does NOT exist anywhere:\n${skippedContext}\nIf during implementation you find issue #${issue} hard-requires a skipped issue's work, STOP and return blocked (pr_number 0) with the unmet dependency as the blocker — never improvise the missing base yourself.\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
-Invoke the \`work-on-issue\` skill with args \`${issue}\`: isolated worktree off latest origin/main, implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on unmodified main before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
+${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
+Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
 
-After the PR is open, trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "@claude review"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
+${REVIEW_LOOP ? 'After the PR is open, trigger the review bot with its own one-line comment, no footer: `gh pr comment <num> --body "@claude review"`. (If the repo\'s .github/workflows/claude.yml uses a different trigger phrase, match it.)' : 'This run has reviewLoop disabled: do not trigger the review bot.'}
 
-Return via StructuredOutput: pr_number, pr_url, summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return the blocker instead of guessing.`
+Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact headRefName), head_sha (exact headRefOid), summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
 }
 
 function reviewLoopPrompt(issue, prNumber, ex, validation, plan) {
@@ -164,7 +256,7 @@ ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
 
 Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
 
-Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary of findings fixed vs rejected, and any blocker.`
+At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary, the exact head_ref and head_sha at that boundary, and any blocker.`
 }
 
 // ---- Prep: one agent reads every issue's Execution block ----
@@ -184,42 +276,135 @@ const EX = new Map(prep.issues.map((i) => [i.number, i]))
 const missing = prep.issues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
 if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — running them on conservative defaults (fable/high)`)
 
-// ---- Tracks: parallel across, sequential within ----
+// ---- Dependency graph: unrelated tracks run concurrently; every successor
+// waits for its predecessors' stable readiness boundary. ----
 const results = []
-const reviewLoops = []
+const recordedIssues = new Set()
 
-await parallel(
-  TRACKS.map((track, ti) => async () => {
-    const done = [] // { issue, prNumber }
-    const skipped = [] // { issue, reason } — in-track issues that never produced a PR
-    for (const issue of track) {
-      const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
-      const modelId = MODEL_IDS[ex.model] || 'fable'
-      const trackContext = done.map((d) => `- Issue #${d.issue} → PR #${d.prNumber} (open, not yet merged)`).join('\n')
-      const skippedContext = skipped.map((s) => `- Issue #${s.issue}: ${s.reason}`).join('\n')
+function addResult(result) {
+  if (recordedIssues.has(result.issue)) throw new Error(`internal error: duplicate result for issue #${result.issue}`)
+  recordedIssues.add(result.issue)
+  results.push(result)
+}
 
-      const validation = await agent(validatePrompt(issue, trackContext, skippedContext), {
+function dedupeRecords(records) {
+  const seen = new Set()
+  return records.filter((record) => {
+    if (seen.has(record.issue)) return false
+    seen.add(record.issue)
+    return true
+  })
+}
+
+function dedupeBaseRefs(values) {
+  const seen = new Set()
+  return values.filter((base) => {
+    if (!base || seen.has(base.pr)) return false
+    seen.add(base.pr)
+    return true
+  })
+}
+
+function verifiedHead(pr, ref, sha) {
+  if (!Number.isInteger(pr) || pr <= 0) return null
+  if (typeof ref !== 'string' || ref.length === 0) return null
+  if (typeof sha !== 'string' || !/^[0-9a-f]{40,64}$/i.test(sha)) return null
+  return { pr, ref, sha: sha.toLowerCase() }
+}
+
+function blockIssues(track, startIndex, reason, skipped) {
+  for (const issue of track.issues.slice(startIndex)) {
+    addResult({ issue, status: 'dependency_blocked', blocker: reason })
+    skipped.push({ issue, reason })
+    log(`#${issue}: blocked — ${reason}`)
+  }
+}
+
+function trackOutcome(status, completed, skipped, head, unresolved, blocker) {
+  return {
+    status,
+    completed: dedupeRecords(completed),
+    skipped: dedupeRecords(skipped),
+    head,
+    unresolved,
+    blocker,
+  }
+}
+
+async function executeTrack(trackIndex) {
+  const track = TRACKS[trackIndex]
+  const hardPredecessors = await Promise.all(track.after.map(async (index) => ({ index, outcome: await runTrack(index) })))
+  const orderingPredecessors = await Promise.all(track.runsAfter.map(async (index) => ({ index, outcome: await runTrack(index) })))
+  const predecessorOutcomes = [...hardPredecessors, ...orderingPredecessors].map((entry) => entry.outcome)
+  const inheritedCompleted = dedupeRecords(predecessorOutcomes.flatMap((outcome) => outcome.completed))
+  const inheritedSkipped = dedupeRecords(predecessorOutcomes.flatMap((outcome) => outcome.skipped))
+
+  const failedHard = hardPredecessors.find(({ outcome }) => outcome.status !== 'ready' || !outcome.head)
+  if (failedHard) {
+    const reason = `hard prerequisite track ${failedHard.index + 1} did not reach a stable code head: ${failedHard.outcome.blocker || failedHard.outcome.status}`
+    const localSkipped = []
+    blockIssues(track, 0, reason, localSkipped)
+    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, false, reason)
+  }
+
+  const unresolvedOrdering = orderingPredecessors.find(({ outcome }) => outcome.unresolved)
+  if (unresolvedOrdering) {
+    const reason = `ordering prerequisite track ${unresolvedOrdering.index + 1} has an unresolved pull request: ${unresolvedOrdering.outcome.blocker || unresolvedOrdering.outcome.status}`
+    const localSkipped = []
+    blockIssues(track, 0, reason, localSkipped)
+    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, false, reason)
+  }
+
+  const localCompleted = []
+  const localSkipped = []
+  let baseRefs = dedupeBaseRefs(hardPredecessors.map(({ outcome }) => outcome.head))
+  let head = null
+  let status = 'ready'
+  let blocker = null
+  let unresolved = false
+
+  for (let issueIndex = 0; issueIndex < track.issues.length; issueIndex += 1) {
+    const issue = track.issues[issueIndex]
+    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
+    const modelId = MODEL_IDS[ex.model] || 'fable'
+    const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
+    const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
+
+    let validation
+    try {
+      validation = await agent(validatePrompt(issue, completed, skipped, baseRefs), {
         model: 'fable',
         effort: ex.validate_effort || 'high',
         schema: VALIDATION_SCHEMA,
         phase: 'Validate',
         label: `validate:#${issue}`,
       })
-      if (!validation) {
-        log(`#${issue}: validation agent failed — skipping issue, continuing track ${ti + 1}`)
-        results.push({ issue, status: 'validation_failed' })
-        skipped.push({ issue, reason: 'validation agent failed — issue never validated or implemented' })
-        continue
-      }
-      if (validation.verdict === 'INVALID') {
-        log(`#${issue}: INVALID — ${validation.invalid_reason || validation.summary}; not implementing, continuing track ${ti + 1}`)
-        results.push({ issue, status: 'invalid', reason: validation.invalid_reason || validation.summary })
-        skipped.push({ issue, reason: `validated INVALID — ${validation.invalid_reason || validation.summary}` })
-        continue
-      }
+    } catch (error) {
+      validation = null
+      blocker = `validation threw: ${error?.message || error}`
+    }
+    if (!validation) {
+      blocker ||= 'validation agent failed'
+      log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
+      addResult({ issue, status: 'validation_failed', blocker })
+      localSkipped.push({ issue, reason: `${blocker} — issue never implemented` })
+      status = 'blocked'
+      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      break
+    }
+    if (validation.verdict === 'INVALID') {
+      blocker = validation.invalid_reason || validation.summary
+      log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
+      addResult({ issue, status: 'invalid', reason: blocker })
+      localSkipped.push({ issue, reason: `validated INVALID — ${blocker}` })
+      status = 'blocked'
+      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      break
+    }
 
-      let plan = null
-      if (ex.fableplan) {
+    let plan = null
+    if (ex.fableplan) {
+      try {
         plan = await agent(planPrompt(issue, validation), {
           model: 'fable',
           effort: 'high',
@@ -227,58 +412,125 @@ await parallel(
           phase: 'Plan',
           label: `plan:#${issue}`,
         })
-        if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
+      } catch (error) {
+        log(`#${issue}: fableplan threw — ${error?.message || error}; building without a posted plan`)
       }
+      if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
+    }
 
-      log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
-      const impl = await agent(implementPrompt(issue, ex, validation, plan, trackContext, skippedContext), {
+    log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
+    let impl
+    try {
+      impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs), {
         model: modelId,
         effort: ex.effort,
         schema: IMPLEMENT_SCHEMA,
         phase: 'Implement',
         label: `implement:#${issue} (${modelId}/${ex.effort})`,
       })
-      if (!impl || !impl.pr_number) {
-        log(`#${issue}: implementation ${impl ? `blocked — ${impl.blocker || 'no PR opened'}` : 'agent failed'}; continuing track ${ti + 1}`)
-        results.push({ issue, status: 'blocked', blocker: impl?.blocker })
-        skipped.push({ issue, reason: `implementation ${impl ? `blocked — ${impl.blocker || 'no PR opened'}` : 'agent failed'}` })
-        continue
+    } catch (error) {
+      impl = null
+      blocker = `implementation threw: ${error?.message || error}`
+    }
+
+    const implementationHead = impl ? verifiedHead(impl.pr_number, impl.head_ref, impl.head_sha) : null
+    if (!impl || !implementationHead) {
+      blocker ||= impl?.blocker || (impl?.pr_number ? 'opened pull request without a verified head ref and commit' : 'implementation agent failed or opened no pull request')
+      log(`#${issue}: blocked — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
+      addResult({ issue, status: 'blocked', blocker })
+      localSkipped.push({ issue, reason: `implementation blocked — ${blocker}` })
+      status = 'blocked'
+      unresolved = !impl || Boolean(impl.pr_number)
+      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      break
+    }
+
+    head = implementationHead
+    const record = {
+      issue,
+      status: 'pr_open',
+      pr: impl.pr_number,
+      pr_url: impl.pr_url,
+      head_ref: impl.head_ref,
+      head_sha: impl.head_sha,
+      tests_passed: impl.tests_passed,
+      flags: impl.flags || [],
+    }
+    addResult(record)
+    log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${REVIEW_LOOP ? '; waiting for review readiness' : ''}`)
+
+    if (REVIEW_LOOP) {
+      let review
+      try {
+        review = await agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
+          model: modelId,
+          effort: ex.effort,
+          schema: REVIEW_LOOP_SCHEMA,
+          phase: 'Review Loop',
+          label: `review-loop:PR#${impl.pr_number}`,
+        })
+      } catch (error) {
+        review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}` }
       }
-
-      log(`#${issue}: PR #${impl.pr_number} open, @claude review triggered`)
-      const rec = { issue, status: 'pr_open', pr: impl.pr_number, pr_url: impl.pr_url, tests_passed: impl.tests_passed, flags: impl.flags || [] }
-      results.push(rec)
-      done.push({ issue, prNumber: impl.pr_number })
-
-      // Review loop runs concurrently — the track moves on to its next issue
-      // while this PR is driven to LGTM. Same model/effort as the build.
-      if (REVIEW_LOOP) {
-        reviewLoops.push(
-          agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
-            model: modelId,
-            effort: ex.effort,
-            schema: REVIEW_LOOP_SCHEMA,
-            phase: 'Review Loop',
-            label: `review-loop:PR#${impl.pr_number}`,
-          }).then(
-            (review) => review || { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed' },
-            // Catch throws (e.g. token-budget exhaustion) so one failed loop
-            // can't reject Promise.all below and discard every collected result.
-            (err) => ({ final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${err?.message || err}` })
-          ).then((review) => {
-            rec.review = review
-            rec.status = review.final_status === 'lgtm' || review.final_status === 'lgtm_with_nonblocking' ? 'lgtm' : 'review_' + review.final_status
-            log(`PR #${impl.pr_number}: review loop ${review.final_status} after ${review.cycles_run} cycle(s)`)
-          })
-        )
+      review ||= { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed', head_ref: '', head_sha: '' }
+      record.review = review
+      const reviewApproved = review.final_status === 'lgtm' || review.final_status === 'lgtm_with_nonblocking'
+      const reviewHead = verifiedHead(impl.pr_number, review.head_ref, review.head_sha)
+      const reviewReady = reviewApproved && reviewHead?.ref === implementationHead.ref
+      if (reviewHead) {
+        head = reviewHead
+        record.head_ref = review.head_ref
+        record.head_sha = review.head_sha
+      }
+      record.status = reviewReady ? 'lgtm' : reviewApproved ? 'review_invalid_head' : `review_${review.final_status}`
+      log(`PR #${impl.pr_number}: review loop ${review.final_status} after ${review.cycles_run} cycle(s)`)
+      if (!reviewReady) {
+        blocker = reviewApproved
+          ? `PR #${impl.pr_number} review reached LGTM without a verified readiness head`
+          : `PR #${impl.pr_number} review did not reach LGTM: ${review.summary}`
+        localSkipped.push({ issue, reason: blocker })
+        status = 'blocked'
+        unresolved = true
+        blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+        break
       }
     }
-  })
-)
 
-if (reviewLoops.length) {
-  log(`all tracks done; waiting on ${reviewLoops.length} review loop(s)`)
-  await Promise.all(reviewLoops)
+    localCompleted.push({ issue, prNumber: impl.pr_number, prUrl: impl.pr_url, head })
+    baseRefs = [head]
+  }
+
+  return trackOutcome(
+    status,
+    [...inheritedCompleted, ...localCompleted],
+    [...inheritedSkipped, ...localSkipped],
+    head,
+    unresolved,
+    blocker,
+  )
 }
 
+const trackPromises = new Array(TRACKS.length)
+function runTrack(trackIndex) {
+  if (!trackPromises[trackIndex]) {
+    trackPromises[trackIndex] = executeTrack(trackIndex).catch((error) => {
+      const reason = `track ${trackIndex + 1} threw: ${error?.message || error}`
+      const skipped = []
+      const unresolved = REVIEW_LOOP && results.some((result) => TRACKS[trackIndex].issues.includes(result.issue) && result.pr && result.status !== 'lgtm')
+      for (const issue of TRACKS[trackIndex].issues) {
+        if (recordedIssues.has(issue)) continue
+        addResult({ issue, status: 'track_failed', blocker: reason })
+        skipped.push({ issue, reason })
+      }
+      log(reason)
+      return trackOutcome('blocked', [], skipped, null, unresolved, reason)
+    })
+  }
+  return trackPromises[trackIndex]
+}
+
+await parallel(TRACKS.map((_track, trackIndex) => () => runTrack(trackIndex)))
+
+const resultOrder = new Map(ALL_ISSUES.map((issue, index) => [issue, index]))
+results.sort((left, right) => resultOrder.get(left.issue) - resultOrder.get(right.issue))
 return { results }
