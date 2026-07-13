@@ -219,6 +219,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const pullRequestLog = logs.find((message) => message.startsWith('#2: PR #1002 open'))
 
     expect(prompt.includes('@claude review')).toBe(reviewEnabled)
+    expect(prompt.includes('do not request or trigger any pull request review')).toBe(!reviewEnabled)
     expect(events.some((event) => event.phase === 'Review Loop')).toBe(reviewEnabled)
     expect(pullRequestLog.includes('@claude review triggered')).toBe(reviewEnabled)
   })
