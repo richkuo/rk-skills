@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
-    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, trigger @claude review' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only when review loops are enabled' },
     { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
   ],
 }
@@ -222,7 +222,7 @@ Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable
 Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
 }
 
-function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs) {
+function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, reviewLoop) {
   const footerModel = MODEL_NAMES[ex.model]
   const corrections = validation.corrections.length
     ? validation.corrections.map((c) => `- ${c}`).join('\n')
@@ -233,13 +233,14 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
   const workOnIssueArgs = baseRefs.length
     ? `{ issue: ${issue}, baseRefs: ${JSON.stringify(baseRefs)} }`
     : `{ issue: ${issue} }`
+  const reviewRequest = reviewLoop
+    ? '\n\nAfter the PR is open, trigger the review bot with its own one-line comment, no footer: `gh pr comment <num> --body "@claude review"`. (If the repo\'s .github/workflows/claude.yml uses a different trigger phrase, match it.)'
+    : ''
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
 ${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
-Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.
-
-${REVIEW_LOOP ? 'After the PR is open, trigger the review bot with its own one-line comment, no footer: `gh pr comment <num> --body "@claude review"`. (If the repo\'s .github/workflows/claude.yml uses a different trigger phrase, match it.)' : 'This run has reviewLoop disabled: do not trigger the review bot.'}
+Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.${reviewRequest}
 
 Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact headRefName), head_sha (exact headRefOid), summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
 }
@@ -434,7 +435,7 @@ async function executeTrack(trackIndex) {
     log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
     let impl
     try {
-      impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs), {
+      impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP), {
         model: modelId,
         effort: ex.effort,
         schema: IMPLEMENT_SCHEMA,
@@ -470,7 +471,7 @@ async function executeTrack(trackIndex) {
       flags: impl.flags || [],
     }
     addResult(record)
-    log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${REVIEW_LOOP ? '; waiting for review readiness' : ''}`)
+    log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${REVIEW_LOOP ? ', @claude review triggered; waiting for review readiness' : ''}`)
 
     if (REVIEW_LOOP) {
       let review

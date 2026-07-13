@@ -210,6 +210,20 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test.each([
+    ['disabled', { tracks: [[2]], reviewLoop: false }, false],
+    ['enabled', { tracks: [[2]], reviewLoop: true }, true],
+    ['enabled by default', { tracks: [[2]] }, true],
+  ])('%s review loops control the initial review request and reporting', async (_name, args, reviewEnabled) => {
+    const { events, logs } = await executeWorkflow(args)
+    const prompt = promptFor(events, 'implement:#2 (fable/high)')
+    const pullRequestLog = logs.find((message) => message.startsWith('#2: PR #1002 open'))
+
+    expect(prompt.includes('@claude review')).toBe(reviewEnabled)
+    expect(events.some((event) => event.phase === 'Review Loop')).toBe(reviewEnabled)
+    expect(pullRequestLog.includes('@claude review triggered')).toBe(reviewEnabled)
+  })
+
+  test.each([
     ['empty track', { tracks: [[]] }, /track 1.*non-empty issues/i],
     ['duplicate issue', { tracks: [[2], [2]] }, /issue #2.*more than once/i],
     ['invalid predecessor', { tracks: [{ issues: [2], after: [1] }] }, /track 1.*invalid predecessor/i],
