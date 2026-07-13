@@ -39,7 +39,7 @@ async function executeWorkflow(args, handlers = {}) {
   const events = []
   const logs = []
   const agent = async (prompt, options) => {
-    const event = { label: options.label, phase: options.phase, prompt }
+    const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, prompt }
     events.push({ ...event, state: 'started' })
 
     const custom = handlers[options.label] || handlers[options.phase]
@@ -103,6 +103,54 @@ function promptFor(events, label) {
 }
 
 describe('milestone-pipeline dependency scheduling', () => {
+  test('normalizes forbidden effort tiers before every dispatch', async () => {
+    const { events, logs } = await executeWorkflow({
+      tracks: [[2], [3], [4], [5], [6], [7], [8]],
+      reviewLoop: true,
+    }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Fable medium', complexity: 20, model: 'fable', effort: 'medium', validate_effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 3, title: 'Opus medium', complexity: 20, model: 'opus', effort: 'medium', validate_effort: 'medium', fableplan: false, missing_block: false },
+          { number: 4, title: 'Sonnet medium', complexity: 20, model: 'sonnet', effort: 'medium', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 5, title: 'Haiku medium', complexity: 20, model: 'haiku', effort: 'medium', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 6, title: 'Valid defaults', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: 'Valid xhigh', complexity: 20, model: 'opus', effort: 'xhigh', validate_effort: 'medium', fableplan: false, missing_block: false },
+        ],
+      }),
+    })
+
+    const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
+    expect(effortFor('validate:#2')).toBe('high')
+    expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
+    expect(effortFor('review-loop:PR#1002')).toBe('medium')
+    expect(effortFor('validate:#3')).toBe('medium')
+    expect(effortFor('validate:#4')).toBe('high')
+    expect(effortFor('validate:#5')).toBe('high')
+    expect(effortFor('validate:#6')).toBe('high')
+    expect(effortFor('validate:#7')).toBe('high')
+
+    for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
+      expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
+      expect(effortFor(`review-loop:PR#${1000 + issue}`)).toBe('high')
+    }
+    expect(effortFor('implement:#6 (fable/high)')).toBe('high')
+    expect(effortFor('review-loop:PR#1006')).toBe('high')
+    expect(effortFor('implement:#7 (fable/high)')).toBe('high')
+    expect(effortFor('review-loop:PR#1007')).toBe('high')
+    expect(effortFor('validate:#8')).toBe('medium')
+    expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1008')).toBe('xhigh')
+
+    const normalizations = logs.filter((message) => message.includes('normalized'))
+    expect(normalizations).toEqual([
+      '#2: normalized validate effort xhigh → high',
+      '#3: normalized build effort medium → high for Opus 4.8',
+      '#4: normalized build effort medium → high for Sonnet 5',
+      '#5: normalized build effort medium → high for Haiku 4.5',
+    ])
+  })
+
   test('waits for reviewed hard prerequisites while independent tracks start immediately', async () => {
     const review = deferred()
     let independentStarted = false

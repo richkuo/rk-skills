@@ -17,10 +17,11 @@ export const meta = {
 // is not explicit. The full graph is validated before any agent starts.
 // Unlike issue-pipeline, there is no complexity-threshold model routing:
 // model/effort/fableplan come from each issue's ## Execution block (stamped by
-// prd-to-issues, revised by execution-plan-review). Validation still runs as the
-// first step of every issue. Predecessor PRs change the ground truth, so each
-// issue is re-checked against its pinned dependency heads immediately before it
-// starts.
+// prd-to-issues, revised by execution-plan-review). Prep preserves representable
+// stale combinations so the runtime can normalize and log them before dispatch.
+// Validation still runs as the first step of every issue. Predecessor PRs change
+// the ground truth, so each issue is re-checked against its pinned dependency
+// heads immediately before it starts.
 // Some harness paths deliver args as a JSON string — normalize before validating.
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 if (!ARGS || !Array.isArray(ARGS.tracks) || ARGS.tracks.length === 0) {
@@ -120,8 +121,8 @@ const PREP_SCHEMA = {
           title: { type: 'string' },
           complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 4.8→opus, etc.' },
-          effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "Effort:" — clamp low→medium' },
-          validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From the optional "Validate effort:" line; default high when absent; clamp low→medium' },
+          effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:" after low→medium; runtime normalizes non-Fable medium→high' },
+          validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
         },
@@ -264,16 +265,28 @@ const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 4.8" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
-- effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium
-- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high
+- effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium, but preserve medium on any model so the runtime can identify stale combinations
+- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
 )
 if (!prep) throw new Error('prep agent failed — cannot resolve Execution blocks')
-const EX = new Map(prep.issues.map((i) => [i.number, i]))
-const missing = prep.issues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
+const normalizedIssues = prep.issues.map((issue) => {
+  const normalized = { ...issue }
+  if (normalized.effort === 'medium' && normalized.model !== 'fable') {
+    log(`#${normalized.number}: normalized build effort medium → high for ${MODEL_NAMES[normalized.model] || normalized.model}`)
+    normalized.effort = 'high'
+  }
+  if (normalized.validate_effort === 'xhigh') {
+    log(`#${normalized.number}: normalized validate effort xhigh → high`)
+    normalized.validate_effort = 'high'
+  }
+  return normalized
+})
+const EX = new Map(normalizedIssues.map((i) => [i.number, i]))
+const missing = normalizedIssues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
 if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — running them on conservative defaults (fable/high)`)
 
 // ---- Dependency graph: unrelated tracks run concurrently; every successor
