@@ -15,6 +15,7 @@ describe('Execution block ordering contract', () => {
     expect(prdToIssues).toContain('- **Depends on:** #<n>[, #<n>…] | none')
     expect(prdToIssues).toContain('- **Runs after:** #<n>[, #<n>…] | none')
     expect(prdToIssues).toMatch(/same-package.*Runs after/i)
+    expect(prdToIssues).toContain("In the later issue's `Runs after`, list the earlier issue")
   })
 
   test('execution-plan-review exposes revisions and validates their combined graph', () => {

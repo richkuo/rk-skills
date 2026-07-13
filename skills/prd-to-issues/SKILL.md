@@ -85,6 +85,6 @@ A compact table: issue number, `C`, title. Note the spine/waves ordering and whi
 | Situation | Do this |
 |---|---|
 | An issue can't be specced without a decision the PRD doesn't make | Stop; run `prd-questions` for it first — never file a stub |
-| Two issues want to touch the same module in the same wave | Put the later issue's number in `Runs after`, or merge them if they are not independently implementable |
+| Two issues want to touch the same module in the same wave | In the later issue's `Runs after`, list the earlier issue, or merge them if they are not independently implementable |
 | A milestone exceeds ~12 issues | Split it; workflow waves get unwieldy past that |
 | Tempted to skip Execution blocks "for now" | Don't — cold agents need them; that's the point |
