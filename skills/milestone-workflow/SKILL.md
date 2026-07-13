@@ -24,6 +24,14 @@ Fetch the milestone's issues and build a typed dependency graph before grouping 
 
 Show: numbered tracks with issue titles; hard `after` edges separately from ordering-only `runsAfter` edges; which edges were inferred; each issue's model/effort/fableplan; the stable readiness boundary; and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
 
+Add a **Run size** line before asking for approval:
+
+- Compute the planned direct-agent count, assuming every issue reaches each enabled phase, as `1 prep + sum over issues of (1 validate + (fableplan ? 1 plan : 0) + 1 implement + (reviewLoop ? 1 review-loop : 0))`.
+- Label it as a direct-agent estimate, not a total-agent guarantee: validation or implementation failures can reduce the count, while review loops can dispatch nested fix agents that increase it. `maxReviewCycles` changes the stopping rule after an LGTM; it is not a guaranteed cap while reviews keep returning `Needs Updates`.
+- Compare the count with the effective Dynamic workflow size guideline when one is present in session context; otherwise use Claude Code's documented default warning threshold of more than 25 direct workflow agents. Name the threshold source in the plan so the comparison is inspectable. The [Claude Code workflow cost documentation](https://code.claude.com/docs/en/workflows#cost) is authoritative.
+- State that staying under the agent threshold can still trigger `Large workflow` when Claude Code's projected token total exceeds 1.5 million, and that ultracode sessions suppress the warning.
+- When either risk is apparent, call it out before approval and recommend splitting the milestone into separate tracked `Workflow` invocations. Disabling `reviewLoop` reduces the direct count but forfeits automatic review readiness. Lowering `maxReviewCycles` may reduce repeat work after non-blocking LGTM reviews, but never present it as a guaranteed cap.
+
 ### 3. Preflight the repo
 
 - When review loops are enabled, `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Without a review bot, set `reviewLoop: false`; implementation then opens each PR without requesting review and becomes the readiness boundary.

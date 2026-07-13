@@ -29,6 +29,16 @@ describe('Execution block ordering contract', () => {
     expect(milestoneWorkflow).toMatch(/inferred.*hard.*ordering/is)
   })
 
+  test('milestone-workflow surfaces direct-agent and token size risk before launch', () => {
+    expect(milestoneWorkflow).toMatch(/Run size/i)
+    expect(milestoneWorkflow).toMatch(/1 prep.*1 validate.*fableplan.*1 plan.*1 implement.*reviewLoop.*1 review-loop/is)
+    expect(milestoneWorkflow).toMatch(/effective Dynamic workflow size guideline.*more than 25/is)
+    expect(milestoneWorkflow).toMatch(/projected token total.*1\.5 million/i)
+    expect(milestoneWorkflow).toMatch(/not a total-agent guarantee/i)
+    expect(milestoneWorkflow).toMatch(/nested fix agents/i)
+    expect(milestoneWorkflow).toMatch(/maxReviewCycles.*not.*guaranteed cap/is)
+  })
+
   test('README publishes both ordering fields', () => {
     expect(readme).toContain('`Depends on`')
     expect(readme).toContain('`Runs after`')
