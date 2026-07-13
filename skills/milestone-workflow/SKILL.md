@@ -24,6 +24,8 @@ Fetch the milestone's issues and build a typed dependency graph before grouping 
 
 Show: numbered tracks with issue titles; hard `after` edges separately from ordering-only `runsAfter` edges; which edges were inferred; each issue's model/effort/fableplan; the stable readiness boundary; and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
 
+State the GitHub writes the run performs, so the approval covers them explicitly: agents apply validation corrections to issue bodies, post each `fableplan: Yes` issue's implementation plan as a comment on that issue, open PRs, and (with review loops on) post review-trigger and disposition comments. Merging still stays with the user.
+
 Add a **Run size** line before asking for approval:
 
 - Compute the planned direct-agent baseline, assuming every issue reaches each enabled phase, as `1 prep + sum over issues of (1 validate + (fableplan ? 1 plan : 0) + 1 implement + (reviewLoop ? 1 review-loop : 0))`.
