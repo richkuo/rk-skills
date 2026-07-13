@@ -36,6 +36,9 @@ describe('Execution block ordering contract', () => {
     expect(milestoneWorkflow).toMatch(/projected token total.*1\.5 million/i)
     expect(milestoneWorkflow).toMatch(/not a total-agent guarantee/i)
     expect(milestoneWorkflow).toMatch(/nested fix agents/i)
+    expect(milestoneWorkflow).toMatch(/retry-aware direct ceiling.*planned direct-agent count \+ number of issues/is)
+    expect(milestoneWorkflow).toMatch(/warning counts all scheduled agents/i)
+    expect(milestoneWorkflow).toMatch(/never label.*safe/i)
     expect(milestoneWorkflow).toMatch(/maxReviewCycles.*not.*guaranteed cap/is)
   })
 
