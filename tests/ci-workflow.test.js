@@ -52,6 +52,12 @@ describe('Bun test workflow contract', () => {
     expect(workflow).toContain('run: bun run test')
   })
 
+  test('bounds hung test runs', async () => {
+    const workflow = await readWorkflow()
+
+    expect(workflow).toContain('timeout-minutes: 5')
+  })
+
   test('cancels only superseded runs for the same workflow ref', async () => {
     const workflow = await readWorkflow()
 
