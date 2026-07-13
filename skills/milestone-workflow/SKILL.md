@@ -13,7 +13,8 @@ Turn a reviewed milestone into a running multi-agent pipeline. Static plan, depe
 
 Fetch the milestone's issues and build a typed dependency graph before grouping them into tracks.
 
-- Read `**Depends on:**` first for hard code/product prerequisites and `**Runs after:**` for ordering-only constraints. For older issues missing either field, infer only from Approach/Problem prose and label every inferred edge in the plan.
+- Read `**Depends on:**` first for hard code/product prerequisites and `**Runs after:**` for ordering-only constraints. An explicit `none` is authoritative: never infer an edge for a field that is present. For an older issue missing either field, infer only that missing edge kind from Approach/Problem prose and label every inferred edge in the plan.
+- Classify an inferred code/product prerequisite as a hard edge and an inferred same-package or no-overlap constraint as an ordering edge. If the prose does not establish the edge kind, flag it for the mandatory plan review instead of guessing.
 - Reject missing issue references and cycles across the union of both edge kinds. A hard edge means the successor needs predecessor code; an ordering edge only prevents overlapping work.
 - Express each track as `{ issues: [...], after: [<track index>...], runsAfter: [<track index>...] }`. Dependency-free islands have neither predecessor list. Combine issues into one `issues` array only when every serial edge is truly hard; untyped serial edges are treated as hard by the workflow, so ordering-only chains must remain separate tracks joined by `runsAfter`.
 - Preserve concurrency: unrelated tracks start together. Multiple hard predecessors remain separate `after` entries so the runtime can create and verify one integration base containing every head.

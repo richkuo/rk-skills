@@ -1,6 +1,6 @@
 ---
 name: prd-to-issues
-description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (build model, effort, fableplan, review trigger). Stage 3 of the new-app-pipeline.
+description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, review trigger). Stage 3 of the new-app-pipeline.
 ---
 
 # prd-to-issues
@@ -15,7 +15,7 @@ Break a refined PRD into milestones and fully-specified GitHub issues that cold 
 
 - Derive **milestones** from dependency structure, not feature themes. Typical shape: `v0 — Foundation & core <surface>` (scaffold, schema, auth, core domain flows, payments happy path), `v1 — Lifecycle & delivery` (jobs, schedulers, notifications, end-of-life), `v2 — <second surface> parity`, `v3 — Post-MVP`.
 - Aim for **15–25 issues** total; each independently implementable and PR-sized.
-- Identify the **dependency spine** (issues everything else needs, built serially) vs **parallel waves** (dependency-free islands). Name the risk concentrators — usually the schema and the money/pricing module.
+- Identify the **dependency spine** (issues everything else needs, built serially) vs **parallel waves** (dependency-free islands). For each planned issue, record its direct hard prerequisites separately from ordering-only predecessors. Name the risk concentrators — usually the schema and the money/pricing module.
 - Show the user the plan (titles, milestones, order) in chat before filing. Adjust on feedback.
 
 ### 2. Create milestones
@@ -40,12 +40,21 @@ Append to every issue body, before the footer:
 
 ```
 ## Execution
+- **Depends on:** #<n>[, #<n>…] | none
+- **Runs after:** #<n>[, #<n>…] | none
 - **Build model:** <Fable 5 | Opus 4.8 | ...>
 - **Effort:** <medium (Fable-only) | high | xhigh>
 - **Validate effort:** <medium | high>   (optional — omit for the default, high; never xhigh)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
 - **PR review:** standard `@claude` review trigger
 ```
+
+Ordering-field rules:
+
+- Stamp both fields from the approved spine/wave graph after final issue numbers are known. Record direct predecessor edges only, use comma-separated issue numbers, and write `none` when there is no edge of that kind.
+- **Depends on** means the issue needs the predecessor's code or product result to be correct; for example, an API issue that requires a schema introduced by another issue.
+- **Runs after** means the issues must not overlap but the later issue does not need the earlier issue's code; for example, two otherwise-independent issues editing the same package.
+- A same-package exclusion is `Runs after`, not `Depends on`. If an edge is genuinely hard, record it only in `Depends on`; never list one predecessor in both fields.
 
 Assignment heuristics:
 
@@ -76,6 +85,6 @@ A compact table: issue number, `C`, title. Note the spine/waves ordering and whi
 | Situation | Do this |
 |---|---|
 | An issue can't be specced without a decision the PRD doesn't make | Stop; run `prd-questions` for it first — never file a stub |
-| Two issues want to touch the same module in the same wave | Same track/serial order, or merge into one issue |
+| Two issues want to touch the same module in the same wave | Put the later issue's number in `Runs after`, or merge them if they are not independently implementable |
 | A milestone exceeds ~12 issues | Split it; workflow waves get unwieldy past that |
 | Tempted to skip Execution blocks "for now" | Don't — cold agents need them; that's the point |
