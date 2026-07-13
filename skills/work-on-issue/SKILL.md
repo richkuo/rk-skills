@@ -48,7 +48,7 @@ git branch --show-current   # where am I now?
 
 If `baseRefs` is absent, the resolved worktree base is `origin/<default>` as before. If it is present, validate the complete list **before creating a worktree**:
 
-- Reject an empty list; duplicate PR numbers, refs, or SHAs; non-positive integer PR numbers; the default branch; refs that fail `git check-ref-format --branch "$ref"`; and SHAs that are not 40–64 hexadecimal characters. Never interpolate or execute an unvalidated field.
+- Reject an empty list; duplicate PR numbers, refs, or SHAs; non-positive integer PR numbers; and SHAs that are not 40–64 hexadecimal characters. Before any field reaches a shell command, validate each ref as plain data against `^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`; this rejects leading-dash values (`-h`, `--normalize`), whitespace, semicolons, quotes, backticks, and shell expansions. Only after that static allowlist passes, reject the default branch and refs that fail `git check-ref-format --branch "$ref"`.
 - Preserve caller order. For each entry, verify `gh pr view <pr> --json headRefName,headRefOid,headRepository` belongs to this repository and exactly matches both `ref` and `sha`. Any mismatch means the reviewed head changed after readiness and is a blocker; never silently use the new head.
 - Fetch the pull request's GitHub ref explicitly into a namespaced local ref (`pull/<pr>/head:refs/rk-skills/dependencies/pr-<pr>`), verify that fetched ref resolves exactly to `sha`, and record that commit. A missing, ambiguous, cross-repository, or changed head is a blocker; never fall back to the default branch.
 - The first verified SHA is the initial worktree base. Remaining SHAs are integrated in caller order after worktree creation.

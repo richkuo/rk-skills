@@ -35,10 +35,17 @@ function assertIndexList(value, field, trackIndex) {
 }
 
 const issueOwners = new Map()
+const TRACK_KEYS = new Set(['issues', 'after', 'runsAfter'])
 const TRACKS = ARGS.tracks.map((input, trackIndex) => {
   const legacy = Array.isArray(input)
   if (!legacy && (!input || typeof input !== 'object' || Array.isArray(input))) {
     throw new Error(`track ${trackIndex + 1} must be an issue array or { issues, after?, runsAfter? }`)
+  }
+  if (!legacy) {
+    const unknownKey = Object.keys(input).find((key) => !TRACK_KEYS.has(key))
+    if (unknownKey) {
+      throw new Error(`track ${trackIndex + 1} has unknown key "${unknownKey}"; allowed keys are issues, after, runsAfter`)
+    }
   }
 
   const issues = legacy ? input : input.issues
