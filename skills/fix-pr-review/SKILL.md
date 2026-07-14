@@ -82,7 +82,7 @@ For **every** finding — including ones that read as obviously correct — trac
 | ✅ **Confirmed** | Code at `file:line` matches the finding; the defect/improvement is real | Fix it (step 4) |
 | ❌ **Refuted** | Code does not do what the finding claims, or the suggested change would itself be wrong/regressive | Do **not** change; record a one-line, code-grounded rebuttal for the reply |
 | ⚠️ **Partial** | Real but narrower/broader than stated, or true only on one path | Fix the true part; note the correction |
-| ❓ **Judgment** | A real tradeoff or a decision the reviewer couldn't make (most `Requires Human Review` items) | Derive the absolute-best solution and **implement it** (see below) — don't pause, don't guess blindly, don't punt empty-handed |
+| ❓ **Judgment** | A real tradeoff or a decision the reviewer couldn't make (most `Requires Human Review` items) | Derive the absolute-best solution and **implement it** (see below) — don't pause, don't guess blindly, don't punt empty-handed. When the finding includes **Recommended proposed solution:**, treat that as the reviewer's preferred option: verify it against the code and absolute-best standard, then implement it if it holds (or implement the better alternative and explain why in the disposition). |
 
 Validation discipline (this is where fixing a review goes wrong):
 - **Read the body, not just the cited line.** A name states intent; open the function and trace the conditional fully before agreeing.
@@ -233,7 +233,7 @@ Terse summary: which reviews/threads you acted on, counts per disposition (fixed
 | Branch can't fast-forward to its upstream head | Stop — the branch diverged; surface to the user, don't force anything |
 | PR is from a fork | Check out with `gh pr checkout` and push to the tracked upstream — `origin` is the wrong remote for the head branch |
 | All findings refuted | Still post the disposition comment with the rebuttals and request re-review — don't silently no-op |
-| `Requires Human Review` item | Derive and **implement** the absolute-best solution (ignore cost/effort/time/resources; only correctness and safety override "best"); document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
+| `Requires Human Review` item | Prefer the item's **Recommended proposed solution:** when present; still verify against absolute-best (cost/effort/time/resources ignored; only correctness and safety override). Implement the chosen solution; document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
 | Tests/build fail after fixes | Report the failure; don't push or claim success |
 | PR is `CONFLICTING` with the base branch | Resolve via step 4.5 (merge base into head, reconcile intent of both sides, re-verify) — never rebase a pushed PR branch, never resolve by blanket `ours`/`theirs`, never leave an approved PR unmergeable |
 | Conflict sides are irreconcilable in intent (esp. money/data/security/auto-protective code) | Stop and surface to the user instead of guessing a resolution |

@@ -152,5 +152,16 @@ jobs:
             a reason to escalate — if you can recommend a fix, even a
             tentative one with assumptions stated, route it to
             `### Needs Fixing` or `### Recommended Optional` instead. Keep the
-            description under 50 words and end it by stating precisely what
-            the human must decide and why you cannot recommend.
+            technical description under 50 words and end it by stating
+            precisely what the human must decide and why you cannot recommend.
+            Then each `### Requires Human Review` item MUST add two labeled
+            blocks in this exact order after the technical description:
+            **Plain simple English:** rewrite the decision in plain simple
+            English under 55 words — no jargon, no unexplained acronyms.
+            Prefer a concrete A/B question the human can answer without
+            reading the technical paragraph (example: "When the server leaves
+            field X out, should the phone: **A)** keep its copy, or **B)**
+            treat that as a delete and clear it?").
+            **Recommended proposed solution:** one short plain-simple-English
+            paragraph stating what you recommend they choose or do — the
+            concrete action, not a restatement of the tradeoff.
