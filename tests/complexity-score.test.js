@@ -37,32 +37,39 @@ const [validateIssue, newIssue, githubIssueFormat, prdToIssues, fableValidateLoo
   ])
 
 describe('complexity score band encoding', () => {
-  test('golden examples from validate-issue', () => {
-    expect(complexityScore({ scope: 4, coupling: 0, risk: 0, uncertainty: 0, verification: 0 })).toEqual({
-      capability: 0,
-      volume: 8,
-      score: 8,
-    })
-    expect(complexityScore({ scope: 0, coupling: 0, risk: 0, uncertainty: 4, verification: 0 })).toEqual({
-      capability: 3,
-      volume: 0,
-      score: 75,
-    })
-    expect(complexityScore({ scope: 0, coupling: 4, risk: 1, uncertainty: 1, verification: 0 })).toEqual({
-      capability: 2,
-      volume: 8,
-      score: 58,
-    })
-    expect(complexityScore({ scope: 0, coupling: 0, risk: 4, uncertainty: 0, verification: 0 })).toEqual({
-      capability: 3,
-      volume: 0,
-      score: 75,
-    })
-    expect(complexityScore({ scope: 0, coupling: 0, risk: 3, uncertainty: 0, verification: 0 })).toEqual({
-      capability: 2,
-      volume: 0,
-      score: 50,
-    })
+  /** Parse golden rows from validate-issue prose so table drift fails CI. */
+  function parseGoldenExamples(markdown) {
+    const section = markdown.split('#### Golden examples (consistency checklist)')[1]
+    expect(section).toBeTruthy()
+    const rows = []
+    const rowRe =
+      /^\| \((\d+),(\d+),(\d+),(\d+),(\d+)\) \| (\d+)[^|]*\| (\d+) \| \*\*(\d+)\*\* \|/gm
+    for (const m of section.matchAll(rowRe)) {
+      rows.push({
+        axes: {
+          scope: Number(m[1]),
+          coupling: Number(m[2]),
+          risk: Number(m[3]),
+          uncertainty: Number(m[4]),
+          verification: Number(m[5]),
+        },
+        documented: {
+          capability: Number(m[6]),
+          volume: Number(m[7]),
+          score: Number(m[8]),
+        },
+      })
+    }
+    return rows
+  }
+
+  test('golden examples in validate-issue prose match the executable formula', () => {
+    const rows = parseGoldenExamples(validateIssue)
+    expect(rows.length).toBeGreaterThanOrEqual(5)
+    for (const { axes, documented } of rows) {
+      const computed = complexityScore(axes)
+      expect(documented).toEqual(computed)
+    }
   })
 
   test('skills document the band formula and drop the old sum×5 / Risk floor', () => {
