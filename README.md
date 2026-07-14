@@ -19,7 +19,7 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 rating of how hard an issue is to implement, put right in the issue title. "Fable" skills hand part of the work to a subagent running on the Fable 5 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
+Several skills mention a **complexity score** (`C0`–`C100`): a model + effort routing signal in the issue title. **Capability** (which LLM / whether a Fable plan runs first) lives in the score band; **Volume** (how hard to push) lives in the depth inside the band — see `validate-issue` step 6. "Fable" skills hand part of the work to a subagent running on the Fable 5 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
 
 ### Issue skills
 
@@ -57,9 +57,9 @@ Several skills mention a **complexity score** (`C0`–`C100`): a rough 0–100 r
 | `fable-new-issue` | Like `new-issue`, but a read-only Fable 5 subagent researches and drafts the issue; your main session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the new issue all the way to a reviewed PR automatically. |
 | `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5 subagent; your main session presents the verdict and acts on it. |
-| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only for issues scored C50+ or touching safety-critical code), then drives to a reviewed PR. |
+| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only when Capability ≥ 2 / score ≥ 50, or touching safety-critical code), then drives to a reviewed PR. |
 | `fable-validate-fableplan-loop` | Same as above, but the Fable plan is unconditional — every issue gets a posted plan before implementation, no matter how simple. |
-| `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when the issue is C50+ or safety-flagged, then drives to a reviewed PR. |
+| `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when Capability ≥ 2 / score ≥ 50 or safety-flagged, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | The trimmed chain: Fable 5 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
 | `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
 

@@ -48,7 +48,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 ### 4. Score complexity
 
-Score the work to implement the fix **correctly, including tests** — five axes 0–4 (Scope, Coupling, Risk, Uncertainty, Verification), sum ×5 for a 0–100 base, risk floor: Risk 4 → ≥60, Risk 3 → ≥45. Derive the axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs). This is complexity, **not** a time or effort estimate — never put durations in the issue.
+Score the work to implement the fix **correctly, including tests** using the **canonical formula in `validate-issue` step 6** (load that skill or mirror it exactly): five axes 0–4 → **Capability** (0–3 from Risk/Uncertainty + Coupling≥3 bump) and **Volume** (0–24 from Scope+Coupling+Verification) → `score = 25 × Capability + Volume`. The score is a **model + effort routing signal**, not a time estimate — never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
 ### 5. Scope check — one issue or several?
 
@@ -105,5 +105,5 @@ Terse: issue URL, number, one-line summary of what it covers, complexity score, 
 | An existing open issue/PR already covers it | Stop; surface it and offer to update/comment instead |
 | The cheap design and the correct design diverge | Spec the correct one; cost, effort, and blast radius are not factors — only correctness and safety constrain |
 | Touches money / data integrity / security / auto-protective logic | Spec the safest correct design from first principles; surface the risk in the body and Risk axis |
-| Tempted to include a time/effort estimate | Don't — complexity score only, described via scope/risk/uncertainty |
+| Tempted to include a time/effort estimate | Don't — complexity score only (Capability band + Volume), described via the axes |
 | Repo has its own issue template or `CLAUDE.md` issue format | Follow the repo's format; it overrides this default |

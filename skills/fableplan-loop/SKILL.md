@@ -7,9 +7,9 @@ description: Use when the user wants a GitHub issue planned by Fable 5 and then 
 
 Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
 
-This is **fableplan-work-on-issue with the review loop added back** — the handoff goes to `work-on-issue-loop` (implement → PR → trigger `@claude` → fix-pr-review cycles until LGTM) instead of `work-on-issue` (single-shot, ends at the open PR). Equivalently, it's **validate-fableplan-loop with the validation stage removed**: no `validate-issue`, no update-issue edits, and no complexity gate — fableplan always runs. Reach for this when you already trust the issue, want a Fable-vetted plan, and want the PR reviewed to convergence without coming back.
+This is **fableplan-work-on-issue with the review loop added back** — the handoff goes to `work-on-issue-loop` (implement → PR → trigger `@claude` → fix-pr-review cycles until LGTM) instead of `work-on-issue` (single-shot, ends at the open PR). Equivalently, it's **validate-fableplan-loop with the validation stage removed**: no `validate-issue`, no update-issue edits, and no Capability gate — fableplan always runs. Reach for this when you already trust the issue, want a Fable-vetted plan, and want the PR reviewed to convergence without coming back.
 
-**Do not skip or reorder the chain.** The plan gates implementation — that's the point of routing through fableplan. There is no complexity gate here: unlike validate-fableplan-loop, this skill has no validation step to produce a score, so fableplan always runs. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
+**Do not skip or reorder the chain.** The plan gates implementation — that's the point of routing through fableplan. There is no Capability gate here: unlike validate-fableplan-loop, this skill has no validation step to produce a score, so fableplan always runs. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
 
 ## Input
 
@@ -48,7 +48,7 @@ Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final
 
 | Situation | Action |
 |---|---|
-| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill; there is no complexity gate, fableplan always runs |
+| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill; there is no Capability gate, fableplan always runs |
 | Tempted to run validate-issue first | Not part of this skill — that's validate-fableplan-loop; this variant deliberately skips validation |
 | fableplan about to enter its build steps (6–7) | Don't — stop it at step 5; work-on-issue-loop owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't hand a broken plan to work-on-issue-loop, and don't silently re-plan |

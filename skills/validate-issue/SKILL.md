@@ -204,25 +204,52 @@ Any **❌** or material **⚠️** → **Update issue description? Yes** (same a
 
 ### 6. Score complexity
 
-Rate the work to implement the fix **correctly, including tests** — not the happy-path diff, not the author's estimate. Score five axes 0–4, sum ×5 for a 0–100 base, then apply the risk floor.
+Rate the work to implement the fix **correctly, including tests** — not the happy-path diff, not the author's estimate. The `[C0]`–`[C100]` score is a **model + effort routing signal**: the **band** selects which LLM (and whether fableplan runs first); **depth inside the band** selects effort. Do **not** sum the axes into one mushy difficulty number.
 
-**Derive the axes from the change surface you traced, not the issue's prose.** List the concrete edits steps 3–5 imply — files/functions, configs/migrations, tests to add or rewrite — and size the axes from that list; a score not backed by it is a vibe. If a path is unresolved (5a/5c ⚠️/❌), raise **Uncertainty**, give a range (e.g. 55–75) not a point, and name the single unknown driving the spread.
+**Derive the axes from the change surface you traced, not the issue's prose.** List the concrete edits steps 3–5 imply — files/functions, configs/migrations, tests to add or rewrite — and size the axes from that list; a score not backed by it is a vibe. If a path is unresolved (5a/5c ⚠️/❌), raise **Uncertainty**, give a Capability-band range (e.g. 50–74) not a point, and name the single unknown driving the spread.
 
 **Count the surface that hides from the diff.** The usual undercount is Scope and Verification — account for tests to add/rewrite, parity/offline paths that must match, migrations or schema/config-version bumps, init/wizard/generate surfaces, probe/startup argv, and docs the change invalidates. A "one-file" fix often drags three of these.
 
-**Cross-check against your own step-5 verdicts.** If architecture is ❌ (5a) or several checks are ⚠️ (5c), the work includes redesign and can't land low — a low score next to an ❌ verdict is self-contradiction.
+**Cross-check against your own step-5 verdicts.** If architecture is ❌ (5a) or several checks are ⚠️ (5c), the work includes redesign and can't land in Capability 0–1 — a low band next to an ❌ verdict is self-contradiction.
 
 | Axis (0–4) | 0 | 2 | 4 |
 |---|---|---|---|
 | **Scope** — files/layers/languages; new abstraction vs localized | one file, localized | a few files, one layer/language | many files across layers + a new abstraction |
 | **Coupling** — state/locking, migration, hot-reload, config↔runtime parity, dual-language SSoT, IPC across process/machine | none; pure/local | one shared mechanism touched | multiple interacting subsystems / cross-boundary coordination |
 | **Risk** — money, data integrity, security, irreversible or live side effects; regression on recently-changed code | read-only / offline | reversible writes, contained blast radius | live-exec / money / data-integrity / irreversible |
-| **Uncertainty** — is the approach known? | spec'd, or a hard decision-gate over existing tooling | mechanism known, params/shape to be found | needs design; step 5a ⚠️/❌ |
+| **Uncertainty** — is the approach known? | spec'd; approach known end-to-end | mechanism known, params/shape to be found | needs design; open judgment; step 5a ⚠️/❌ |
 | **Verification** — test/repro surface to prove it | pure helper, unit-testable | several units + fixtures | integration/parity/subprocess, or hard-to-reproduce state |
 
-**Base** = sum × 5. **Risk floor (safety outranks effort):** Risk = 4 → final ≥ 60; Risk = 3 → final ≥ 45. Take `max(base, floor)`, cap 100 — irreversible/live-exec work is never low-complexity to ship correctly, however tiny the diff.
+Judgment-heavy work must raise **Uncertainty** or **Coupling** — never score a hard decision as Uncertainty 0.
 
-The axes encode the two calls a flat score botches: **bounded research** scores low even when sophisticated (the "code" is existing tooling), and a **tiny diff on a money/state path** is caught by the Risk floor. Work the axes in scratch; **report only** `N/100 — <highest axis> is the driver` with the traced edit list.
+#### Formula (canonical — every scorer/consumer must match)
+
+1. **Capability** (0–3): map `max(Risk, Uncertainty)` with `0–1 → 0`, `2 → 1`, `3 → 2`, `4 → 3`. If **Coupling ≥ 3**, set Capability = `max(Capability, 2)`. Coupling does **not** bump to band 3 by itself.
+2. **Volume** (0–24): `(Scope + Coupling + Verification) × 2`.
+3. **Final score** = `25 × Capability + Volume` (0–99; cap at 100 if needed). No Risk/Uncertainty floors and no hard ceilings — the band *is* the floor.
+
+#### Band → model / effort
+
+| Capability | Score band | Model / planning | Effort from Volume tertiles (0–7 / 8–15 / 16–24) |
+|---|---|---|---|
+| 0 | 0–24 | Cheap/fast (Sonnet-class) | high / high / xhigh |
+| 1 | 25–49 | Opus-class | high / high / xhigh (never medium on Opus) |
+| 2 | 50–74 | Opus-class **+ fableplan first** | high / high / xhigh |
+| 3 | 75–99 | Fable 5 | medium / high / xhigh (medium is Fable-only) |
+
+Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
+
+#### Golden examples (consistency checklist)
+
+| Axes (S,C,R,U,V) | Capability | Volume | Score | Band meaning |
+|---|---|---|---|---|
+| (4,0,0,0,0) | 0 | 8 | **8** | Large mechanical grind → Sonnet-class, high |
+| (0,0,0,4,0) | 3 | 0 | **75** | Hard design, tiny surface → Fable 5 |
+| (0,4,1,1,0) | 2 (Coupling bump) | 8 | **58** | Heavy coordination, low R/U → Opus + fableplan |
+| (0,0,4,0,0) | 3 | 0 | **75** | Tiny money/security path → Fable 5 |
+| (0,0,3,0,0) | 2 | 0 | **50** | Elevated blast radius → Opus + fableplan |
+
+Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); Volume <v>` with the traced edit list.
 
 ### 6.5. Scope disposition — is the issue too large to be ONE issue?
 
@@ -310,7 +337,7 @@ Verb tracks the action: `Created` for the original body, `Updated` for title/des
 
 Rules:
 - Close with the update-or-not decision, placed after the findings that justify it. That is the deliverable; the complexity score sits on the same line, after a `·` separator.
-- Always include the complexity score, even when the verdict is **No** — it tells the user how much work the fix is.
+- Always include the complexity score, even when the verdict is **No** — it is the model + effort routing signal for the fix.
 - No restatement of the issue title or body.
 - Each claim/concern fits on one line. If you need more, the claim is too broad — split it.
 - Drop the Concerns section entirely when there are none. Don't write "None."

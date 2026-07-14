@@ -56,25 +56,22 @@ Ordering-field rules:
 - **Runs after** means the issues must not overlap but the later issue does not need the earlier issue's code; for example, two otherwise-independent issues editing the same package.
 - A same-package exclusion is `Runs after`, not `Depends on`. If an edge is genuinely hard, record it only in `Depends on`; never list one predecessor in both fields.
 
-Assignment heuristics:
+Assignment — **derive from the complexity score band** (canonical formula in `validate-issue` step 6: `score = 25 × Capability + Volume`). Score each issue with that formula first, then stamp Execution from the band:
 
-| Signal | Assignment |
-|---|---|
-| Money, pricing, payments | Fable 5; xhigh if it's a pure boundary-heavy module |
-| Auth / security surface | Fable 5, high |
-| The product's core promise (e.g. sealing, privacy) | Fable 5; xhigh when atomicity/enforcement is the issue |
-| Foundational schema everything builds on | Fable 5, xhigh |
-| Irreversible deletion paths | Fable 5, high |
-| Small-but-load-bearing (privacy serializers) | Fable 5, medium — vigilance beats planning here |
-| Mechanical scaffolding, config plumbing | Opus 4.8, high |
-| CRUD flows, contained components on known APIs | Opus 4.8, high |
-| Design-heavy but routine to code | Opus 4.8 + **fableplan: Yes** — the bridge tier |
-| Design work with no correctness risk (landing pages) | Fable 5, medium; use the frontend-design skill |
+| Capability | Score band | Build model | fableplan first | Effort from Volume (0–7 / 8–15 / 16–24) |
+|---|---|---|---|---|
+| 0 | 0–24 | Sonnet (or the repo's cheap/fast builder) | No | high / high / xhigh |
+| 1 | 25–49 | Opus 4.8 | No | high / high / xhigh |
+| 2 | 50–74 | Opus 4.8 | **Yes** | high / high / xhigh |
+| 3 | 75–99 | Fable 5 | No (planning is inherent) | medium / high / xhigh |
 
-- **fableplan is for issues where the design is the hard part and the code is routine.** Never on Fable-built issues (planning is inherent) or on issues so small the plan would just be the implementation in prose.
-- **Validate effort** (the pre-build Fable validation pass): **only ever medium or high — never xhigh.** Default high; drop to medium for small contained issues.
-- Effort floor is **medium** — never low, and medium is Fable-only: **Opus 4.8 builds run at high or xhigh, never medium.** When unsure between two tiers, take the higher (best-solution rule).
+Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
+
+- **fableplan first: Yes** means Capability 2 (Opus builds against a posted Fable plan). Never on Fable-built issues (Capability 3 — planning is inherent) and never on Capability 0–1.
+- **Validate effort** (the pre-build Fable validation pass): **only ever medium or high — never xhigh.** Default high; drop to medium for Capability 0 issues with Volume ≤ 7.
+- Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium.** When unsure between two tiers, take the higher (best-solution rule).
 - PR review is always the standard `@claude` review trigger — no model routing in the review line.
+- Scores filed before the band-encoding change are **not comparable** — re-score if routing matters.
 
 ### 5. Report
 

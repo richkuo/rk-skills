@@ -9,7 +9,7 @@ Chain fableplan → work-on-issue into one autonomous run: Fable 5 plans the imp
 
 This is **validate-fableplan-loop with the validation and review-loop stages removed** — no `validate-issue` before planning, and the handoff is to `work-on-issue` (single-shot, ends at the open PR) rather than `work-on-issue-loop` (which triggers `@claude` and cycles through review). Reach for this when you already trust the issue and just want a Fable-vetted plan built and shipped as a PR, without paying for validation or driving review to convergence.
 
-**Do not skip or reorder the chain.** The plan gates implementation — that's the point of routing through fableplan. There is no complexity gate here: unlike validate-fableplan-loop, this skill has no validation step to produce a score, so fableplan always runs. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
+**Do not skip or reorder the chain.** The plan gates implementation — that's the point of routing through fableplan. There is no Capability gate here: unlike validate-fableplan-loop, this skill has no validation step to produce a score, so fableplan always runs. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
 
 ## Input
 
@@ -48,7 +48,7 @@ Relay work-on-issue's final summary (the worktree/branch, what was implemented, 
 
 | Situation | Action |
 |---|---|
-| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill; there is no complexity gate, fableplan always runs |
+| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill; there is no Capability gate, fableplan always runs |
 | Tempted to run validate-issue first | Not part of this skill — that's validate-fableplan-loop; this trimmed variant deliberately skips validation |
 | fableplan about to enter its build steps (6–7) | Don't — stop it at step 5; work-on-issue owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't hand a broken plan to work-on-issue, and don't silently re-plan |

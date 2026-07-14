@@ -1,13 +1,13 @@
 ---
 name: fable-validate-fableplan-loop
-description: Use when the user asks to validate a GitHub issue with Fable 5, always plan it with Fable 5, and autonomously drive it to a reviewed PR in one shot — "fable-validate-fableplan-loop", "fable validate, fable plan, and work on #N", "fully automate #N with fable validation and an unconditional fable plan". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan for EVERY issue (no complexity gate — unlike fable-validate-loop, which skips planning below C50), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR.
+description: Use when the user asks to validate a GitHub issue with Fable 5, always plan it with Fable 5, and autonomously drive it to a reviewed PR in one shot — "fable-validate-fableplan-loop", "fable validate, fable plan, and work on #N", "fully automate #N with fable validation and an unconditional fable plan". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan for EVERY issue (no Capability gate — unlike fable-validate-loop, which skips planning when Capability < 2 / score < 50), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR.
 ---
 
 # fable-validate-fableplan-loop
 
 Chain fable-validate → (conditional) update issue → fableplan → work-on-issue-loop into one autonomous run: Fable 5 validates the issue, the main agent fixes the issue description if needed, Fable 5 plans the implementation (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence.
 
-This is **fable-validate-loop with the complexity gate removed** — the only difference is that fableplan **always runs**, regardless of the validated complexity score; there is no "skip below C50" rule. Reach for this when even simple issues should get a posted, Fable-vetted plan before implementation (e.g. the plan comment doubles as documentation, or the repo's simple-looking issues have a history of hiding traps). If skipping the plan for trivial issues is fine, use `fable-validate-loop` instead — it's the cheaper default.
+This is **fable-validate-loop with the Capability gate removed** — the only difference is that fableplan **always runs**, regardless of the validated complexity score; there is no "skip when Capability < 2 / score < 50" rule. Reach for this when even simple issues should get a posted, Fable-vetted plan before implementation (e.g. the plan comment doubles as documentation, or the repo's simple-looking issues have a history of hiding traps). If skipping the plan for low-capability-band issues is fine, use `fable-validate-loop` instead — it's the cheaper default.
 
 **Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). There is **no sanctioned skip** in this variant — every step runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
 
@@ -50,7 +50,7 @@ If **No**, skip straight to step 4.
 
 ### 4. Run fableplan — planning phase only, always
 
-**No complexity gate:** fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score — that's the difference from fable-validate-loop. Do not skip planning for low-complexity issues.
+**No Capability gate:** fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score — that's the difference from fable-validate-loop. Do not skip planning for low-capability-band issues.
 
 Invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. Instruct fableplan to use the harness suffix `fable-validate-fableplan-loop` (not `fableplan`) in the posted comment's attribution footer, so the comment records the actual entry point. **Do NOT execute fableplan's steps 6–7 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
 
@@ -75,7 +75,7 @@ Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict),
 | Situation | Action |
 |---|---|
 | Tempted to skip validation or planning and jump to implementation | Never reorder — validate-then-plan-then-build is the point of this skill, and this variant has no sanctioned skip at all |
-| Tempted to skip fableplan because the issue scored below C50 | Don't — that gate belongs to fable-validate-loop; here fableplan always runs, that's the point of this variant |
+| Tempted to skip fableplan because the issue scored below 50 (Capability < 2) | Don't — that gate belongs to fable-validate-loop; here fableplan always runs, that's the point of this variant |
 | `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — the cases the loop can't safely auto-resolve |
 | Tempted to wait for a literal user reply to fable-validate's or fableplan's prompt | Parse the output yourself and proceed per the step rules |
 | Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, so the plan targets the corrected issue |
