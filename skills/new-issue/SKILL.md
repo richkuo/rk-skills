@@ -61,7 +61,7 @@ Title: `[C<score>] <title>` — the title is a clear, plain-language sentence un
 Body structure:
 
 ```
-**Complexity: <score>/100** — scope: <…>; risk: <…>; uncertainty: <…>
+**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band>
 
 ## Problem
 <Current behavior, grounded with file:line citations from step 2. What's wrong or missing and why it matters.>
@@ -80,7 +80,7 @@ Body structure:
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-The complexity rationale is the **first line** of the body and matches the title prefix. The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
+The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
 
 File it:
 

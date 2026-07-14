@@ -74,6 +74,8 @@ describe('complexity score band encoding', () => {
     expect(validateIssue).not.toContain('hard decision-gate over existing tooling')
 
     expect(newIssue).toContain('25 × Capability + Volume')
+    expect(newIssue).toContain('**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v>')
+    expect(newIssue).not.toContain('scope: <…>; risk:')
     expect(newIssue).not.toContain('sum ×5')
     expect(newIssue).not.toContain('risk floor')
 
