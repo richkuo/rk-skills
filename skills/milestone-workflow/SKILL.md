@@ -26,6 +26,15 @@ Show: numbered tracks with issue titles; hard `after` edges separately from orde
 
 State the GitHub writes the run performs, so the approval covers them explicitly: agents apply validation corrections to issue bodies, post each `fableplan: Yes` issue's implementation plan as a comment on that issue, open PRs, and (with review loops on) post review-trigger and disposition comments. Merging still stays with the user.
 
+Add a **Run size** line before asking for approval:
+
+- Compute the planned direct-agent baseline, assuming every issue reaches each enabled phase, as `1 prep + sum over issues of (1 validate + (fableplan ? 1 plan : 0) + 1 implement + (reviewLoop ? 1 review-loop : 0))`.
+- Also compute the retry-aware direct ceiling as `planned direct-agent count + number of issues`, because each issue's validation can dispatch one retry. Show both numbers.
+- Label them as planning bounds, not a total-agent guarantee: invalid issues or failures can reduce the count, while review loops can dispatch nested fix agents beyond the retry-aware ceiling. The warning counts all scheduled agents, so never label a plan safe merely because either direct count is below the threshold. `maxReviewCycles` changes the stopping rule after an LGTM; it is not a guaranteed cap while reviews keep returning `Needs Updates`.
+- Compare both direct counts with the effective Dynamic workflow size guideline when one is present in session context; otherwise use Claude Code's documented default threshold of more than 25 scheduled agents. Name the threshold source in the plan so the comparison is inspectable. If the baseline crosses it, mark the warning expected; if only the retry-aware ceiling crosses it, mark the run retry-sensitive; if both stay under and review loops are enabled, state that nested fixes can still trigger the warning. The [Claude Code workflow cost documentation](https://code.claude.com/docs/en/workflows#cost) is authoritative.
+- State that Claude Code can also trigger `Large workflow` when its projected token total exceeds 1.5 million. In an ultracode session, label both comparisons informational because the warning is suppressed.
+- When either risk is apparent, call it out before approval and recommend splitting the milestone into separate tracked `Workflow` invocations. Disabling `reviewLoop` reduces the direct count but forfeits automatic review readiness. Lowering `maxReviewCycles` may reduce repeat work after non-blocking LGTM reviews, but never present it as a guaranteed cap.
+
 ### 3. Preflight the repo
 
 - When review loops are enabled, `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Without a review bot, set `reviewLoop: false`; implementation then opens each PR without requesting review and becomes the readiness boundary.
