@@ -19,7 +19,7 @@ export function volumeFromAxes({ scope, coupling, verification }) {
 export function complexityScore(axes) {
   const capability = capabilityFromAxes(axes)
   const volume = volumeFromAxes(axes)
-  return { capability, volume, score: Math.min(100, 25 * capability + volume) }
+  return { capability, volume, score: 25 * capability + volume }
 }
 
 const root = new URL('../', import.meta.url)
@@ -74,6 +74,8 @@ describe('complexity score band encoding', () => {
 
   test('skills document the band formula and drop the old sum×5 / Risk floor', () => {
     expect(validateIssue).toContain('25 × Capability + Volume')
+    expect(validateIssue).toContain('0–99 under current axis bounds')
+    expect(validateIssue).not.toContain('cap at 100 if needed')
     expect(validateIssue).toContain('If **Coupling ≥ 3**')
     expect(validateIssue).toContain('#### Golden examples (consistency checklist)')
     expect(validateIssue).not.toContain('sum × 5')

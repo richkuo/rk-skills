@@ -226,7 +226,7 @@ Judgment-heavy work must raise **Uncertainty** or **Coupling** — never score a
 
 1. **Capability** (0–3): map `max(Risk, Uncertainty)` with `0–1 → 0`, `2 → 1`, `3 → 2`, `4 → 3`. If **Coupling ≥ 3**, set Capability = `max(Capability, 2)`. Coupling does **not** bump to band 3 by itself.
 2. **Volume** (0–24): `(Scope + Coupling + Verification) × 2`.
-3. **Final score** = `25 × Capability + Volume` (0–99; cap at 100 if needed). No Risk/Uncertainty floors and no hard ceilings — the band *is* the floor.
+3. **Final score** = `25 × Capability + Volume` (0–99 under current axis bounds: Capability ≤ 3, Volume ≤ 24). No Risk/Uncertainty floors and no hard ceilings — the band *is* the floor.
 
 #### Band → model / effort
 
