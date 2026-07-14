@@ -92,4 +92,19 @@ describe('complexity score band encoding', () => {
     expect(validateFableplanLoop).toContain('below 50')
     expect(readme).toContain('Capability ≥ 2 / score ≥ 50')
   })
+
+  test('verdict templates and consumers use Capability/Volume wording', async () => {
+    const [executionPlanReview, claudeMd, validateIssueLoop] = await Promise.all([
+      read('skills/execution-plan-review/SKILL.md'),
+      read('CLAUDE.md'),
+      read('skills/validate-issue-loop/SKILL.md'),
+    ])
+    expect(validateIssue).toContain('Capability <k> (<driver>); Volume <v>')
+    expect(validateIssueLoop).toContain('Capability <k> (<driver>); Volume <v>')
+    expect(fableValidateLoop).toContain('Capability <k> (<driver>); Volume <v>')
+    expect(executionPlanReview).toContain('conflicts with the score band')
+    expect(executionPlanReview).not.toContain('conflicts with the heuristics')
+    expect(claudeMd).toContain('model + effort routing signal')
+    expect(claudeMd).not.toContain('describe complexity as scope and risk')
+  })
 })

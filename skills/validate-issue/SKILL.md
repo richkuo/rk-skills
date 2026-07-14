@@ -298,7 +298,7 @@ Scope: (omit unless the issue is too large per step 6.5)
   - <part 1 — one-line scope>
   - <part 2 — one-line scope>
 
-**#<N>: Update issue description? <Yes | No>**  ·  Complexity: <0-100>/100 — <main driver>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes | No>**  ·  Complexity: <0-100>/100 — Capability <k> (<driver>); Volume <v>  ·  Scope: <OK | too large — split/umbrella/narrow>
 
 <If Yes: a short bulleted list of specific edits the author should make to the title and/or description — wrong file:line, incorrect behavior, missing repro, ambiguous scope, a title that misstates the bug or scope, etc. One line each, phrased as edits ("Change X to Y", "Add Z", "Remove claim about W", "Retitle to …").>
 

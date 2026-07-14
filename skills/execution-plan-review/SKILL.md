@@ -18,12 +18,12 @@ Fetch every issue in the milestone (`gh issue list --milestone ... --json number
 
 (Validate effort defaults to high when an issue's block omits the line — show the effective value. Display an absent ordering field as `missing`, not `none`, so legacy prose inference is not silently discarded.)
 
-Follow with 2–3 sentences on the pattern (which issues run on the top model and why, where fableplan bridges, what the review trigger is) — enough for the user to sanity-check the logic, not a lecture.
+Follow with 2–3 sentences on the pattern (which Capability bands dominate, where fableplan bridges Capability 2, what the review trigger is) — enough for the user to sanity-check against the `prd-to-issues` / `validate-issue` band table, not a lecture.
 
 ### 2. Take revisions
 
 - The user revises in shorthand ("11 should be medium", "12 depends on 8 and 9", "13 runs after 12", "clear 14's dependencies"). Resolve ambiguous references (row position vs issue number) against the table just shown; when genuinely ambiguous, confirm in half a sentence.
-- **Push back once when a revision conflicts with the heuristics** — e.g. adding a fableplan step to an issue too small to benefit, or dropping the top model from a money path. One recommendation with the reason, then the user decides. Money/security/irreversible-deletion issues dropping below the top model deserve an explicit warning.
+- **Push back once when a revision conflicts with the score band** (canonical table in `validate-issue` step 6 / `prd-to-issues`) — e.g. fableplan on Capability 0–1, or dropping below Fable/Opus on a money/security/irreversible-deletion issue (high Risk → Capability 2–3). One recommendation with the reason, then the user decides. Money/security/irreversible-deletion issues dropping below the top model deserve an explicit warning.
 - Batch multiple revisions; don't round-trip to GitHub per message.
 - Preserve the edge kind exactly: a `Depends on` revision remains a hard prerequisite, while a `Runs after` revision remains ordering-only. Never move an issue between the fields merely to simplify the graph.
 - Before writing, verify every referenced issue exists, reject self-references, deduplicate each list, and reject a predecessor present in both fields. Recursively fetch referenced issues outside the milestone until the explicit ordering graph closes so every reachable typed edge participates in validation.
@@ -41,7 +41,7 @@ Re-render the final table once after all revisions land. This table is what the 
 
 | Situation | Do this |
 |---|---|
-| An issue lacks an Execution block | Add one using the prd-to-issues heuristics, flag it in the table |
+| An issue lacks an Execution block | Add one by deriving model/effort/fableplan from the `[C..]` band per `prd-to-issues`, flag it in the table |
 | An issue lacks one or both ordering fields | Backfill from the approved prd-to-issues graph when available; otherwise infer from Approach/Problem, mark the value as inferred in the table, and confirm it before write-back |
 | User revision references a row that doesn't exist | Show the table again, ask which issue they meant |
 | A revision creates a cycle across either edge kind | Reject the batch without editing any issue and show the cycle path |
