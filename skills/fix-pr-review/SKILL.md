@@ -244,8 +244,8 @@ Terse summary: which reviews/threads you acted on, counts per disposition (fixed
 | Suggested fix would touch money/data/security/auto-protective logic | Never blind-apply; verify the remedy from first principles and implement the safest correct design |
 | Reviewer's remedy is plausible but you can't confirm it's correct here | Don't implement on faith — trace it, then implement the absolute-best solution you can stand behind from the code |
 | A collected "review" is actually your own prior disposition comment or an `@claude review` trigger | Skip it; act only on *actual* review feedback |
-| Only some feedback channels checked (e.g. formal reviews but not inline diff threads or CI) | Fetch all four sources before extracting findings — inline threads are where human reviewers usually comment, and a red check is a finding too |
-| CI check is `pending`/`in_progress`/`queued` | Skip it — take the `gh pr checks` snapshot as-is, don't wait or poll; a run that finishes later gets caught on the next pass |
+| Only some feedback channels checked (e.g. formal reviews but not inline diff threads or CI) | Fetch every review-feedback channel (step 1) and the CI snapshot (step 1.5) before extracting findings — inline threads are where human reviewers usually comment, and a red check is a finding too |
+| CI check's `bucket` is `pending` or `skipping` | Skip it — take the `gh pr checks` snapshot as-is, don't wait or poll; a run that finishes later gets caught on the next pass |
 | CI failure doesn't trace to this PR's diff (pre-existing on the base branch, or a one-off flake) | Don't fix around it — mark Refuted with the base-branch/flake evidence and flag it to the user; only fix failures this PR actually caused |
 | `git status` shows dirty files you didn't edit | Stage only your fix files; leave the rest and mention them in the report |
 | You're on `main` or a divergent branch, not the PR head | Check out the PR head first; never commit review fixes to the base branch |
@@ -261,8 +261,8 @@ Terse summary: which reviews/threads you acted on, counts per disposition (fixed
 
 - **Blind-implementing the review.** Performative agreement ships regressions. Validate first, every time.
 - **Delegating validation.** Steps 2–3 always run inline — the model-selection gate keys off *validated* verdicts, and a lighter model triaging its own workload defeats the gate. Dispatch only steps 4–8, tiered by the most complex surviving fix (open judgment/safety → inline, any non-trivial fix → Opus, all-mechanical → Sonnet), and never split one review across subagents. The subagent's footers must name the model that actually ran, not the session model.
-- **Missing inline diff comments.** Fetching only formal reviews and issue comments skips the line-level threads where human reviewers usually comment. Fetch all four channels, including CI checks.
-- **Waiting or polling on in-progress CI.** Step 1.5 is a single snapshot; skip any check that isn't `completed` rather than blocking the run on it.
+- **Missing inline diff comments or CI.** Fetching only formal reviews and issue comments skips the line-level threads where human reviewers usually comment, and skipping step 1.5 misses failing CI checks. Fetch every channel in steps 1 and 1.5.
+- **Waiting or polling on in-progress CI.** Step 1.5 is a single snapshot; skip anything whose `bucket` is `pending` or `skipping` rather than blocking the run on it.
 - **Patching around a pre-existing or flaky CI failure.** Verify the failure traces to this PR's diff before touching code — otherwise it's Refuted with evidence, not a fix target.
 - **Addressing only the latest review when several landed.** Every review newer than your last disposition and every unresolved inline thread (any age) gets addressed.
 - **Routing the re-review by the newest verdict.** A later `LGTM` from one reviewer doesn't erase another's blocking findings — route by whether any blocking finding was addressed.
