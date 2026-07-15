@@ -73,10 +73,10 @@ gh pr checks <N> --json name,state,bucket,link,startedAt,completedAt
 
 `bucket` normalizes `state` into `pass`/`fail`/`pending`/`skipping`/`cancel`:
 - `bucket: pending` or `skipping` — **skip it entirely.** Don't wait for it, don't retry the call, don't treat "not done yet" as a finding.
-- `bucket: cancel` — skip unless the run log shows it was cancelled by a real failure upstream (e.g. a required prior job failed) rather than a manual/administrative cancel.
+- `bucket: cancel` — skip unless the run log shows it was cancelled by a real failure upstream (e.g. a required prior job failed) rather than a manual/administrative cancel. When it was, don't inspect the cancelled run's own log — its steps report `cancelled`, not `failure`, so there's nothing to fetch there. Instead pull detail from the upstream check that actually failed, using the `fail`-bucket procedure below, and cite that upstream check's name (not the cancelled one) as the finding's `<check name>`.
 - For each check with `bucket: fail`, pull just the failing detail, not the whole log:
   - GitHub Actions: resolve the run ID from the check's `link`, then `gh run view <run-id> --log-failed` for the failing step(s) only.
-  - Non-Actions / external CI: `gh api repos/{owner}/{repo}/commits/{sha}/check-runs --jq '.check_runs[] | select(.conclusion=="failure") | {name, output}'` for whatever summary the provider publishes.
+  - Non-Actions / external CI: `gh api` only auto-fills `{owner}`/`{repo}`/`{branch}` — `{sha}` is not one of them, so get the head commit explicitly first: `gh pr view <N> --json headRefOid --jq .headRefOid`. Substitute that for `<sha>`: `gh api repos/{owner}/{repo}/commits/<sha>/check-runs --jq '.check_runs[] | select(.conclusion=="failure") | {name, output}'` for whatever summary the provider publishes.
 - Each failing check becomes one finding: **CI Failure — `<check name>`**.
 
 ### 2. Extract findings
