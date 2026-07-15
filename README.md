@@ -37,7 +37,7 @@ Several skills mention a **complexity score** (`C0`–`C100`): a model + effort 
 
 | Skill | What it does |
 |-------|--------------|
-| `fix-pr-review` | Reads all unaddressed feedback on a PR, re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review. |
+| `fix-pr-review` | Reads all unaddressed feedback on a PR — review comments, inline threads, and any failing CI checks — re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review. |
 | `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved, and won't stop on an approval while the PR is still unmergeable. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
 | `pr-review-format` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out). Every finding must include a plain-simple-English summary; `Requires Human Review` items must also include a recommended proposed solution. Loaded automatically before a review is written. |
 
