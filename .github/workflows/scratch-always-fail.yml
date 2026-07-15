@@ -1,0 +1,12 @@
+name: scratch always fail
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  fail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: exit 1
