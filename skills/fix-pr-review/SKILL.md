@@ -87,7 +87,7 @@ Parse all collected feedback — structured reviews, inline diff threads, and fa
 - **Recommended Optional** — non-blocking improvement.
 - **Create Follow-up Issue** — out-of-scope, track separately.
 
-For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one reviewer or thread, merge into one finding and note all sources.
+For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one source — reviewer, thread, *or* a CI Failure finding from step 1.5 (e.g. a reviewer flags "this breaks the type check" while the type-check job is already `bucket: fail`) — merge into one finding and note all sources, including the check name alongside the reviewer(s).
 
 ### 3. Re-validate each finding against the code (the core step)
 
