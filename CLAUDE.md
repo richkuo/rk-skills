@@ -65,7 +65,7 @@
 
 ## GitHub Issues
 
-- **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory `[C<score>]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
+- **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory trailing `[C<score>, model, effort]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
 
 ## This Repository
 
