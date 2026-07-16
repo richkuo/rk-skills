@@ -56,7 +56,7 @@ If the deliverables are separable — parts that each land in their own PR, pass
 
 ### 6. Compose and file
 
-Title: `<title> [C<score>, <model>, <effort>]` (append `, fableplan` when the score is in the Capability-2 band) — the title is a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — it states the bug or deliverable precisely (component + behavior) without unexplained jargon, no vague "improve X" — followed by the trailing routing-outcome bracket.
+Title: `[C<score>] <title>` — the title is a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — it states the bug or deliverable precisely (component + behavior) without unexplained jargon, no vague "improve X".
 
 Body structure:
 
@@ -80,12 +80,12 @@ Body structure:
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-The complexity rationale is the **first line** of the body and matches the title suffix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
+The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
 
 File it:
 
 ```bash
-gh issue create --title "<title> [C<score>, <model>, <effort>]" --body-file <body-file>
+gh issue create --title "[C<score>] <title>" --body-file <body-file>
 ```
 
 Add `--label`/`--assignee` only when the repo visibly uses them (`gh label list`) and the fit is unambiguous.

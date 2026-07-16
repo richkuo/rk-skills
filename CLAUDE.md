@@ -58,6 +58,7 @@
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
+- **PR title convention:** append a trailing `[C<score>, <model>, <effort>]` suffix to the PR title (append `, fableplan` inside the bracket for the Capability-2 band), e.g. `Fix double-fill race on order matching [C95, Fable 5, xhigh]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
 
 ### PR review format
 
@@ -65,7 +66,7 @@
 
 ## GitHub Issues
 
-- **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory trailing `[C<score>, model, effort]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
+- **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory `[C<score>]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
 
 ## This Repository
 

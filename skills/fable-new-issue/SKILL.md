@@ -40,7 +40,7 @@ Snapshot `git status --porcelain` before dispatching, then call the Agent tool w
   - The user's description verbatim (or the scratchpad summary path), the working directory, and the target repo if not the current checkout.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 1 through 6 exactly** — repo/duplicate check, claim grounding with `file:line` citations traced against the correct baseline, approach design, complexity score, scope check, and full body composition per the step-6 template.
   - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — including via Bash (it lacks Edit/Write but still has Bash, so state this explicitly). Read-only `gh` calls (`gh issue list`, `gh pr list`, `gh repo view`, `gh label list`) are expected and allowed.
-  - Return as its final message: (a) any duplicate found (URL + why it matches) — in which case no draft; (b) otherwise the complete issue draft — exact title with the trailing `[C<score>, <model>, <effort>]` suffix (`, fableplan` appended for Capability-2 band) and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
+  - Return as its final message: (a) any duplicate found (URL + why it matches) — in which case no draft; (b) otherwise the complete issue draft — exact title with `[C<score>]` prefix and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
 
 If the call returns null or errors, retry once; if it fails again, report the failure to the user instead of drafting yourself.
 
@@ -54,11 +54,11 @@ If the subagent reported a duplicate, stop and surface it — offer to update/co
 
 ### 4. Spot-check the draft
 
-Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title suffix, Problem/Goal/Approach/Acceptance criteria all concrete, no time/effort estimates, ELI18 title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch — tell the user what's off and let them decide.
+Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title prefix, Problem/Goal/Approach/Acceptance criteria all concrete, no time/effort estimates, ELI18 title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch — tell the user what's off and let them decide.
 
 ### 5. File it (main agent)
 
-File per new-issue step 6: `gh issue create --title "<title> [C<score>, <model>, <effort>]" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
+File per new-issue step 6: `gh issue create --title "[C<score>] <title>" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
 
 Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: Claude Code | fable-new-issue`. A repo CLAUDE.md footer format overrides.
 
