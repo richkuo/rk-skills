@@ -13,6 +13,7 @@ Turn a reviewed milestone into a running multi-agent pipeline. Static plan, depe
 
 Fetch the milestone's issues and build a typed dependency graph before grouping them into tracks.
 
+- Filter for idempotency first: list the milestone's issues with `--state all` and search for open PRs that close each one. Drop closed issues from the plan. An open issue with an existing open PR is planned as a **resume** — run `fix-pr-review-loop` on that PR instead of dispatching it through the pipeline — never a fresh build, which would open a duplicate PR. Show three buckets in the run plan: build, resume, skip (closed).
 - Read `**Depends on:**` first for hard code/product prerequisites and `**Runs after:**` for ordering-only constraints. An explicit `none` is authoritative: never infer an edge for a field that is present. For an older issue missing either field, infer only that missing edge kind from Approach/Problem prose and label every inferred edge in the plan.
 - Classify an inferred code/product prerequisite as a hard edge and an inferred same-package or no-overlap constraint as an ordering edge. If the prose does not establish the edge kind, flag it for the mandatory plan review instead of guessing.
 - Reject missing issue references and cycles across the union of both edge kinds. A hard edge means the successor needs predecessor code; an ordering edge only prevents overlapping work.
@@ -34,16 +35,22 @@ Add a **Run size** line before asking for approval:
 - Compare both direct counts with the effective Dynamic workflow size guideline when one is present in session context; otherwise use Claude Code's documented default threshold of more than 25 scheduled agents. Name the threshold source in the plan so the comparison is inspectable. If the baseline crosses it, mark the warning expected; if only the retry-aware ceiling crosses it, mark the run retry-sensitive; if both stay under and review loops are enabled, state that nested fixes can still trigger the warning. The [Claude Code workflow cost documentation](https://code.claude.com/docs/en/workflows#cost) is authoritative.
 - State that Claude Code can also trigger `Large workflow` when its projected token total exceeds 1.5 million. In an ultracode session, label both comparisons informational because the warning is suppressed.
 - When either risk is apparent, call it out before approval and recommend splitting the milestone into separate tracked `Workflow` invocations. Disabling `reviewLoop` reduces the direct count but forfeits automatic review readiness. Lowering `maxReviewCycles` may reduce repeat work after non-blocking LGTM reviews, but never present it as a guaranteed cap.
+- When the user set a token target (a "+500k"-style directive), state that the workflow enforces a floor: before each issue starts, if fewer than 80k tokens remain (override with `budgetFloor`), that issue and the rest of its track are deferred as `budget_deferred` and the run returns partial results cleanly instead of an agent dying at the hard ceiling. Without a target, no floor applies.
 
 ### 3. Preflight the repo
 
+- `gh auth status` succeeds and `gh api repos/<owner>/<repo> --jq .permissions.push` returns `true`. A bad token or read-only access must stop the run here — otherwise it surfaces as confusing per-agent failures mid-run.
 - When review loops are enabled, `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Without a review bot, set `reviewLoop: false`; implementation then opens each PR without requesting review and becomes the readiness boundary.
 - Base branch protection / merge expectations understood: agents open PRs; merging stays with the user unless they've said otherwise.
 - CLAUDE.md in the target repo covers conventions the agents must follow (package manager, test commands).
 
 ### 4. Run
 
-Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop: true, maxReviewCycles: 5}}`. Legacy issue-array tracks remain accepted, but use typed objects for new plans. The workflow validates all assignments, predecessor indices, duplicates, and cycles before prep, then:
+Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop: true, maxReviewCycles: 5}}`. Legacy issue-array tracks remain accepted, but use typed objects for new plans. `budgetFloor` (tokens, default 80000) is accepted when a token target is set.
+
+Immediately after the invocation returns, post its runId and persisted script path as a comment on the milestone's first issue (footer: `Created with LLM: <current model> | high | Harness: milestone-workflow`), so run state survives losing the conversation — `resumeFromRunId` resumes same-session; cross-session the record enables a hand-authored continuation from the persisted script.
+
+The workflow validates all assignments, predecessor indices, duplicates, and cycles before prep, then:
 
 1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan.
 2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the current dependency base, with deduplicated predecessor PRs/skips and hard base refs, at the issue's `Validate effort` (default high). `INVALID` issues are skipped and reported, never built.
@@ -58,7 +65,7 @@ Relay meaningful progress (PRs opened, review loops finishing, blockers) — not
 
 ## Context discipline
 
-The orchestrating session holds no implementation detail — issues and PRs are the memory. Between phases (or after compaction), everything needed to resume lives in: the milestone's issues, their Execution blocks, and the open PRs. Losing the conversation must never lose state.
+The orchestrating session holds no implementation detail — issues and PRs are the memory. Between phases (or after compaction), everything needed to resume lives in: the milestone's issues, their Execution blocks, the open PRs, and the runId comment posted in step 4. Losing the conversation must never lose state.
 
 ## Failure modes
 

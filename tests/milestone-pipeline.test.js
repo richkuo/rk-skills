@@ -35,9 +35,10 @@ async function waitFor(predicate) {
   throw new Error('condition was not reached')
 }
 
-async function executeWorkflow(args, handlers = {}) {
+async function executeWorkflow(args, handlers = {}, budget = null) {
   const events = []
   const logs = []
+  const budgetGlobal = budget ?? { total: null, spent: () => 0, remaining: () => Infinity }
   const agent = async (prompt, options) => {
     const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, schema: options.schema, prompt }
     events.push({ ...event, state: 'started' })
@@ -89,8 +90,8 @@ async function executeWorkflow(args, handlers = {}) {
     return result
   }
   const parallel = async (tasks) => Promise.all(tasks.map((task) => task()))
-  const run = new AsyncFunction('args', 'agent', 'parallel', 'log', workflowBody)
-  const output = await run(args, agent, parallel, (message) => logs.push(message))
+  const run = new AsyncFunction('args', 'agent', 'parallel', 'log', 'budget', workflowBody)
+  const output = await run(args, agent, parallel, (message) => logs.push(message), budgetGlobal)
   return { output, events, logs }
 }
 
@@ -531,5 +532,68 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(promptFor(events, 'implement:#9 (fable/high)')).toContain(`baseRefs: [{"pr":1002,"ref":"codex/issue-2","sha":"${headSha(2)}"},{"pr":1003,"ref":"codex/issue-3","sha":"${headSha(3)}"}]`)
     expect(output.results.find((result) => result.issue === 9)?.blocker).toContain('merge conflict')
     expect(output.results.find((result) => result.issue === 12)?.status).toBe('dependency_blocked')
+  })
+
+  test('defers every issue when the token budget is below the floor at start', async () => {
+    const { output, events, logs } = await executeWorkflow(
+      { tracks: [[2, 3]], reviewLoop: false },
+      {},
+      { total: 100_000, spent: () => 60_000, remaining: () => 40_000 },
+    )
+
+    expect(started(events, 'validate:#2')).toBeFalse()
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('budget_deferred')
+    expect(output.results.find((result) => result.issue === 3)?.status).toBe('budget_deferred')
+    expect(logs.some((message) => message.includes('token budget floor reached'))).toBeTrue()
+  })
+
+  test('runs without a floor when no token target is set', async () => {
+    const { output } = await executeWorkflow(
+      { tracks: [[2]], reviewLoop: false },
+      {},
+      { total: null, spent: () => 5_000_000, remaining: () => Infinity },
+    )
+
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+  })
+
+  test('defers remaining issues when spend crosses the floor mid-track and blocks hard successors', async () => {
+    let spent = 0
+    const { output, events } = await executeWorkflow({
+      tracks: [
+        { issues: [2, 3] },
+        { issues: [9], after: [0] },
+      ],
+      reviewLoop: false,
+    }, {
+      'implement:#2 (fable/high)': () => {
+        spent = 150_000
+        return {
+          pr_number: 1002,
+          pr_url: 'https://example.test/pr/1002',
+          head_ref: 'codex/issue-2',
+          head_sha: headSha(2),
+          summary: 'implemented',
+          tests_passed: true,
+          flags: [],
+        }
+      },
+    }, { total: 200_000, spent: () => spent, remaining: () => Math.max(0, 200_000 - spent) })
+
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+    expect(output.results.find((result) => result.issue === 3)?.status).toBe('budget_deferred')
+    expect(started(events, 'validate:#3')).toBeFalse()
+    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
+    expect(started(events, 'validate:#9')).toBeFalse()
+  })
+
+  test('honors a custom budgetFloor', async () => {
+    const { output } = await executeWorkflow(
+      { tracks: [[2]], reviewLoop: false, budgetFloor: 10_000 },
+      {},
+      { total: 100_000, spent: () => 60_000, remaining: () => 40_000 },
+    )
+
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
   })
 })

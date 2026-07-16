@@ -1,7 +1,7 @@
 export const meta = {
   name: 'milestone-pipeline',
   description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, and review each pull request to a stable readiness boundary',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, maxReviewCycles?: 5 }',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, maxReviewCycles?: 5, budgetFloor?: 80000 }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
@@ -100,8 +100,12 @@ TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
+// Only enforced when the turn has a token target (budget.total set); below the
+// floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
+const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (!Number.isInteger(MAX_REVIEW_CYCLES) || MAX_REVIEW_CYCLES <= 0) throw new Error('maxReviewCycles must be a positive integer')
+if (!Number.isInteger(BUDGET_FLOOR) || BUDGET_FLOOR <= 0) throw new Error('budgetFloor must be a positive integer')
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
@@ -397,6 +401,16 @@ async function executeTrack(trackIndex) {
 
   for (let issueIndex = 0; issueIndex < track.issues.length; issueIndex += 1) {
     const issue = track.issues[issueIndex]
+    if (budget.total && budget.remaining() < BUDGET_FLOOR) {
+      blocker = `token budget floor reached (${Math.round(budget.remaining() / 1000)}k of ${Math.round(budget.total / 1000)}k remaining, floor ${Math.round(BUDGET_FLOOR / 1000)}k)`
+      log(`#${issue}: ${blocker}; deferring the rest of track ${trackIndex + 1}`)
+      for (const deferred of track.issues.slice(issueIndex)) {
+        addResult({ issue: deferred, status: 'budget_deferred', blocker })
+        localSkipped.push({ issue: deferred, reason: `${blocker} — issue never started` })
+      }
+      status = 'blocked'
+      break
+    }
     const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
     const modelId = MODEL_IDS[ex.model] || 'fable'
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
