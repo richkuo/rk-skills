@@ -58,7 +58,7 @@
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
-- **PR title convention:** append a trailing `[C<score>, <model>, <effort>]` suffix to the PR title (append `, fableplan` inside the bracket for the Capability-2 band), e.g. `Fix double-fill race on order matching [C95, Fable 5, xhigh]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
+- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]` — Conventional Commits `type` (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`) and `scope` (`#<issue>` when the PR closes one, else a short component name, or omit the scope entirely when neither fits), followed by the lowercase imperative summary, then a trailing `[C<score>, <model>, <effort>]` bracket (append `, fableplan` for the Capability-2 band). E.g. `fix(#95): resolve double-fill race on order matching [C95, Fable 5, xhigh]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
 
 ### PR review format
 
