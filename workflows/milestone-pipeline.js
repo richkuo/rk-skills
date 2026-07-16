@@ -102,6 +102,8 @@ const REVIEW_LOOP = ARGS.reviewLoop ?? true
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Only enforced when the turn has a token target (budget.total set); below the
 // floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
+// Checked at issue start only — best-effort, not a ceiling guarantee; size the
+// floor to roughly one issue's worst-case cost (implement + full review loop).
 const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (!Number.isInteger(MAX_REVIEW_CYCLES) || MAX_REVIEW_CYCLES <= 0) throw new Error('maxReviewCycles must be a positive integer')
