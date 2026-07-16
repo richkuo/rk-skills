@@ -35,7 +35,7 @@ gh issue view <N> --json number,title,body,url
 
 For the `owner/repo#N` form (or a full URL to another repo), add `-R owner/repo` — a bare `gh issue view <N>` only resolves against the current repo. If the command fails (wrong number, no auth, no repo), stop and tell the user — never proceed against a paraphrase of an issue you couldn't fetch.
 
-Record the issue number and URL — steps 2, 4, 8, and 9 need them. If no issue is referenced, skip this and every later issue-specific step (2, 4, 9) and take the prose path at step 5.
+Record the issue number, title, and URL — steps 2, 4, 5, 8, and 9 need them: step 5's issue path derives its worktree slug `cc/issue-<N>-<slug>` from the title and needs the number for `Closes #<N>`, and work-on-issue's own title re-fetch (its step 0) is skipped on this path, so nothing downstream re-resolves it if it's dropped. If no issue is referenced, skip this and every later issue-specific step (2, 4, 9) and take the prose path at step 5.
 
 ### 2. Gate-check the issue before planning (only if one was resolved in step 1)
 
