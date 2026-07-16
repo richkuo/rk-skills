@@ -1,6 +1,6 @@
 ---
 name: fable-advisor
-description: Use when the user wants a task executed by the current session model (typically Sonnet 5) with a persistent Fable 5 advisor overseeing it. Spawns a long-lived read-only Fable 5 subagent that authors the plan, gets consulted at fixed checkpoints via SendMessage, and a separate fresh Fable 5 reviewer that issues a binding pre-commit verdict. When a GitHub issue is referenced, gate-checks it and runs work-on-issue's build-and-ship pipeline under the advisor, posting the plan and the review verdict as issue comments; issue-less prose tasks take a lighter standalone path. Trigger on "/fable-advisor", "fable-advisor <task>", or "execute this with a fable advisor".
+description: Use when the user wants a task executed by the current session model (typically Sonnet 5) with a persistent Fable 5 advisor overseeing it. Spawns a long-lived read-only Fable 5 subagent that authors the plan, gets consulted at fixed checkpoints via SendMessage, and a separate fresh Fable 5 reviewer that issues a binding pre-commit verdict. When a GitHub issue is referenced, gate-checks it and runs work-on-issue's build-and-ship pipeline under the advisor, posting the plan and the review verdict as issue comments; issue-less prose tasks take a lighter standalone path. A bare issue reference is a complete input — the task derives from the issue itself. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
 ---
 
 # fable-advisor
@@ -11,10 +11,11 @@ When the task is a **GitHub issue**, the executor runs `work-on-issue`'s build-a
 
 ## Input
 
-The user provides a task description, and optionally a GitHub issue:
-- A task in prose ("fable-advisor migrate X to Y").
-- A GitHub issue reference — full URL, `#<N>`, bare `<N>`, or `owner/repo#N`. When present, the plan and the final review verdict are also posted as issue comments.
-- If neither is obvious from the invocation or the conversation, ask what to execute before dispatching.
+The user provides one of:
+- A GitHub issue reference alone — full URL, `#<N>`, bare `<N>`, or `owner/repo#N`. **This is a complete input**: the task is the issue itself, derived from its title and body exactly as `work-on-issue` does — no accompanying prose description is needed. The plan and the final review verdict are also posted as issue comments.
+- A task in prose ("fable-advisor migrate X to Y") — the issue-less form.
+- Both — prose alongside an issue reference; the prose adds constraints, the issue defines the task.
+- If none of these is obvious from the invocation or the conversation, ask what to execute before dispatching.
 
 ## Model check
 
@@ -60,7 +61,7 @@ Do not plan the task yourself — the advisor owns the plan. Call the Agent tool
 - `model`: `fable`
 - `run_in_background`: `false` — the plan gates everything downstream
 - `description`: `Advise on <short task name>`
-- `prompt`: Brief it as a standing advisor, not a one-shot planner. Include: the full task description, the issue title/body if one was fetched in step 1, the working directory, any constraints the user stated, and its charter:
+- `prompt`: Brief it as a standing advisor, not a one-shot planner. Include: the full task description (for a bare issue reference, the issue title/body from step 1 *is* the task description), the issue title/body if one was fetched in step 1, the working directory, any constraints the user stated, and its charter:
   - First deliverable: a concrete, ordered implementation plan (files to create/modify, approach, build sequence, risks/edge cases, verification steps). Plan the absolute-best solution — cost, effort, time, and token spend never narrow the option space; only correctness and safety override "best".
   - It will be consulted again mid-task via follow-up messages. Each consult reply must be structured as: **recommendation**, **rationale**, **confidence** (high/medium/low), and a flag — **advisory** (executor may overrule with a stated reason) or **blocking** (must be resolved before commit).
   - It is read-only — it must NOT make code edits, including via Bash (no writing/modifying files, no commits). It still has Bash, so state this explicitly.
