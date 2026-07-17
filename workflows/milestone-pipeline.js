@@ -1,13 +1,13 @@
 export const meta = {
   name: 'milestone-pipeline',
   description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, and review each pull request to a stable readiness boundary',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, maxReviewCycles?: 5, budgetFloor?: 80000 }',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000 }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
-    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only when review loops are enabled' },
-    { title: 'Review Loop', detail: 'fix-pr-review cycles per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
+    { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or fix-pr-review-loop against the @claude Action in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
   ],
 }
 
@@ -99,6 +99,11 @@ function visitTrack(trackIndex, path) {
 TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
+// 'subagent' (default): reviews run as in-session subagents — a reviewer agent
+// posts a pr-review-format comment, a fixer agent resolves it, orchestrated by
+// this script; no GitHub Actions dependency (runner outages can't stall the
+// loop) and no queue latency. 'github' preserves the @claude Action flow.
+const REVIEW_MODE = ARGS.reviewMode ?? 'subagent'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Only enforced when the turn has a token target (budget.total set); below the
 // floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
@@ -106,6 +111,7 @@ const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // floor to roughly one issue's worst-case cost (implement + full review loop).
 const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
+if (REVIEW_MODE !== 'subagent' && REVIEW_MODE !== 'github') throw new Error("reviewMode must be 'subagent' or 'github'")
 if (!Number.isInteger(MAX_REVIEW_CYCLES) || MAX_REVIEW_CYCLES <= 0) throw new Error('maxReviewCycles must be a positive integer')
 if (!Number.isInteger(BUDGET_FLOOR) || BUDGET_FLOOR <= 0) throw new Error('budgetFloor must be a positive integer')
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
@@ -130,6 +136,8 @@ const PREP_SCHEMA = {
           effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:" after low→medium; runtime normalizes non-Fable medium→high' },
           validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
+          first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; opus when the line is standard or absent' },
+          first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; high when unspecified' },
           missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
         },
       },
@@ -170,6 +178,33 @@ const IMPLEMENT_SCHEMA = {
     tests_passed: { type: 'boolean' },
     blocker: { type: 'string', description: 'Only if blocked: what stopped you' },
     flags: { type: 'array', items: { type: 'string' }, description: 'Anything the operator should know (pre-existing flakes, unfiled follow-ons)' },
+  },
+}
+
+const SUBAGENT_REVIEW_SCHEMA = {
+  type: 'object',
+  required: ['verdict', 'blocking_count', 'nonblocking_count', 'head_ref', 'head_sha', 'comment_url', 'summary'],
+  properties: {
+    verdict: { type: 'string', enum: ['lgtm', 'needs_updates'], description: 'The pr-review-format verdict line of the posted review' },
+    blocking_count: { type: 'integer', description: 'Items under ### Needs Fixing plus ### Requires Human Review' },
+    nonblocking_count: { type: 'integer', description: 'Items under ### Recommended Optional plus ### Create Follow-up Issue' },
+    head_ref: { type: 'string', description: 'Exact pull request head branch that was reviewed' },
+    head_sha: { type: 'string', description: 'Exact pull request head commit that was reviewed' },
+    comment_url: { type: 'string', description: 'URL of the posted review comment' },
+    summary: { type: 'string', description: 'One-paragraph review summary' },
+  },
+}
+
+const REVIEW_FIX_SCHEMA = {
+  type: 'object',
+  required: ['fixed_count', 'refuted_count', 'head_ref', 'head_sha', 'summary'],
+  properties: {
+    fixed_count: { type: 'integer', description: 'Findings fixed (including follow-up issues filed)' },
+    refuted_count: { type: 'integer', description: 'Findings refuted on the record in the disposition comment' },
+    head_ref: { type: 'string', description: 'Exact pull request head branch after the push' },
+    head_sha: { type: 'string', description: 'Exact pull request head commit after the push' },
+    summary: { type: 'string', description: 'What was fixed, what was refuted and why' },
+    blocker: { type: 'string', description: 'Only if the fix pass could not complete: what stopped you' },
   },
 }
 
@@ -257,9 +292,11 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
   const workOnIssueArgs = baseRefs.length
     ? `{ issue: ${issue}, baseRefs: ${JSON.stringify(baseRefs)} }`
     : `{ issue: ${issue} }`
-  const reviewDirective = reviewLoop
-    ? '\n\nAfter the PR is open, trigger the review bot with its own one-line comment, no footer: `gh pr comment <num> --body "@claude review"`. (If the repo\'s .github/workflows/claude.yml uses a different trigger phrase, match it.)'
-    : '\n\nThis run has reviewLoop disabled: do not request or trigger any pull request review.'
+  const reviewDirective = !reviewLoop
+    ? '\n\nThis run has reviewLoop disabled: do not request or trigger any pull request review.'
+    : REVIEW_MODE === 'github'
+      ? '\n\nAfter the PR is open, trigger the review bot with its own one-line comment, no footer: `gh pr comment <num> --body "@claude review"`. (If the repo\'s .github/workflows/claude.yml uses a different trigger phrase, match it.)'
+      : '\n\nThis run reviews pull requests with in-session subagents: do not trigger, request, or comment any `@claude` review — the pipeline dispatches its own reviewer against the open PR.'
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
@@ -285,6 +322,93 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary, the exact head_ref and head_sha at that boundary, and any blocker.`
 }
 
+function subagentReviewPrompt(issue, prNumber, cycle) {
+  const reReview = cycle > 1
+    ? ` This is re-review cycle ${cycle}: a fix pass addressed the previous review and posted a per-finding disposition comment — verify each disposition against the actual code rather than taking it on faith, and review any new commits in full.`
+    : ''
+  return `You are an independent pull-request review agent in this repo — you did not write this code; review it cold. Load the \`pr-review-format\` skill BEFORE composing anything (mandatory): its verdict line, section structure, materiality filter, and safety carve-out are the contract.${reReview}
+
+Review PR #${prNumber}, which closes issue #${issue}:
+1. \`gh pr view ${prNumber} --json headRefName,headRefOid,baseRefName,url,state\` — record the exact head you review.
+2. \`git fetch origin\`, then read the full diff against the base AND every changed file in full at that head commit — the LGTM precondition requires inspecting every changed file, from a detached checkout or worktree of the head commit, never the main checkout's working tree.
+3. Read issue #${issue} (\`gh issue view ${issue}\`): its Acceptance criteria are the contract the PR must meet.
+4. Take one CI snapshot (\`gh pr checks ${prNumber}\`): a failed check that traces to this PR's diff is a finding; pending checks are noted in the review, never waited on.
+5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review-format structure (footer verb Validated, harness milestone-pipeline).
+
+Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` review comment.
+
+Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted verdict line), blocking_count (### Needs Fixing + ### Requires Human Review items), nonblocking_count (### Recommended Optional + ### Create Follow-up Issue items), the exact head_ref and head_sha you reviewed, comment_url, and a one-paragraph summary.`
+}
+
+function subagentFixPrompt(issue, prNumber, ex, validation, plan, commentUrl) {
+  const footerModel = MODEL_NAMES[ex.model]
+  const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
+  return `You are a PR review-resolution agent in this repo. A fresh review was just posted on PR #${prNumber} (${commentUrl}). Invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: do NOT trigger, post, or wait for any \`@claude\` re-review — this run re-reviews with an in-session subagent after you finish, so stop after pushing your fixes and posting the per-finding disposition comment.
+
+RE-VALIDATE every finding against the actual code before changing anything; fix what survives validation (including filing any ### Create Follow-up Issue items per that skill), refute on the record what doesn't, resolve any merge conflicts with the base branch, run the full test and build suites, then commit and push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`).
+
+The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
+${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
+Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
+
+After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: fixed_count, refuted_count, the exact head_ref and head_sha after your push, a summary of what was fixed and what was refuted, and blocker ONLY if the pass could not complete.`
+}
+
+// Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
+// pr-review-format comment and returns its verdict; a fixer resolves it; repeat.
+// First review runs on the issue's "PR review:" model/effort (default opus/high);
+// a re-review after a fix pass that addressed only non-blocking findings drops
+// to sonnet/high, mirroring the fix-pr-review skill's @claude-sonnet routing.
+// Returns the same shape as the github-mode review-loop agent. A needs_updates
+// verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
+// never a fix push that no reviewer would see.
+async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
+  const firstReview = { model: MODEL_IDS[ex.first_review_model] || 'opus', effort: ex.first_review_effort || 'high' }
+  const notes = []
+  let nextReview = firstReview
+  let head = { ref: '', sha: '' }
+  let cycles = 0
+  while (cycles < MAX_REVIEW_CYCLES) {
+    cycles += 1
+    const review = await agent(subagentReviewPrompt(issue, prNumber, cycles), {
+      model: nextReview.model,
+      effort: nextReview.effort,
+      schema: SUBAGENT_REVIEW_SCHEMA,
+      phase: 'Review Loop',
+      label: `review:PR#${prNumber} c${cycles} (${nextReview.model}/${nextReview.effort})`,
+    })
+    if (!review) {
+      return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: `cycle ${cycles} reviewer agent failed` }
+    }
+    head = { ref: review.head_ref, sha: review.head_sha }
+    notes.push(`cycle ${cycles} review (${nextReview.model}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
+    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
+    if (review.verdict === 'lgtm' && review.blocking_count + review.nonblocking_count === 0) {
+      return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: review.head_ref, head_sha: review.head_sha }
+    }
+    if (cycles >= MAX_REVIEW_CYCLES) {
+      if (review.verdict === 'lgtm') {
+        return { final_status: 'lgtm_with_nonblocking', cycles_run: cycles, summary: notes.join('\n'), head_ref: review.head_ref, head_sha: review.head_sha }
+      }
+      break
+    }
+    const fix = await agent(subagentFixPrompt(issue, prNumber, ex, validation, plan, review.comment_url), {
+      model: MODEL_IDS[ex.model] || 'fable',
+      effort: ex.effort,
+      schema: REVIEW_FIX_SCHEMA,
+      phase: 'Review Loop',
+      label: `fix:PR#${prNumber} c${cycles} (${ex.model}/${ex.effort})`,
+    })
+    if (!fix || fix.blocker) {
+      return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: fix?.head_ref || head.ref, head_sha: fix?.head_sha || head.sha, blocker: fix?.blocker || `cycle ${cycles} fix agent failed` }
+    }
+    notes.push(`cycle ${cycles} fix: ${fix.fixed_count} fixed, ${fix.refuted_count} refuted — ${fix.summary}`)
+    head = { ref: fix.head_ref, sha: fix.head_sha }
+    nextReview = review.blocking_count === 0 ? { model: 'sonnet', effort: 'high' } : firstReview
+  }
+  return { final_status: 'max_cycles_exhausted', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
+}
+
 // ---- Prep: one agent reads every issue's Execution block ----
 const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
@@ -293,6 +417,7 @@ const prep = await agent(
 - effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium, but preserve medium on any model so the runtime can identify stale combinations
 - validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
 - fableplan: true when "**fableplan first:**" starts with "Yes"
+- first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
@@ -502,18 +627,23 @@ async function executeTrack(trackIndex) {
       flags: impl.flags || [],
     }
     addResult(record)
-    log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${REVIEW_LOOP ? ', @claude review triggered; waiting for review readiness' : ''}`)
+    const reviewNote = REVIEW_LOOP
+      ? REVIEW_MODE === 'subagent' ? ', dispatching subagent review; waiting for review readiness' : ', @claude review triggered; waiting for review readiness'
+      : ''
+    log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${reviewNote}`)
 
     if (REVIEW_LOOP) {
       let review
       try {
-        review = await agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
-          model: modelId,
-          effort: ex.effort,
-          schema: REVIEW_LOOP_SCHEMA,
-          phase: 'Review Loop',
-          label: `review-loop:PR#${impl.pr_number}`,
-        })
+        review = REVIEW_MODE === 'subagent'
+          ? await runSubagentReviewLoop(issue, impl.pr_number, ex, validation, plan)
+          : await agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
+              model: modelId,
+              effort: ex.effort,
+              schema: REVIEW_LOOP_SCHEMA,
+              phase: 'Review Loop',
+              label: `review-loop:PR#${impl.pr_number}`,
+            })
       } catch (error) {
         review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}` }
       }

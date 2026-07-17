@@ -75,12 +75,32 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
       }
     } else if (options.phase === 'Review Loop') {
       const issue = Number(options.label.match(/PR#(\d+)/)?.[1]) - 1000
-      result = {
-        final_status: 'lgtm',
-        cycles_run: 1,
-        summary: 'approved',
-        head_ref: `codex/issue-${issue}`,
-        head_sha: headSha(issue),
+      if (options.label.startsWith('review:')) {
+        result = {
+          verdict: 'lgtm',
+          blocking_count: 0,
+          nonblocking_count: 0,
+          head_ref: `codex/issue-${issue}`,
+          head_sha: headSha(issue),
+          comment_url: `https://example.test/pr/${1000 + issue}#review`,
+          summary: 'clean',
+        }
+      } else if (options.label.startsWith('fix:')) {
+        result = {
+          fixed_count: 1,
+          refuted_count: 0,
+          head_ref: `codex/issue-${issue}`,
+          head_sha: headSha(issue),
+          summary: 'fixed',
+        }
+      } else {
+        result = {
+          final_status: 'lgtm',
+          cycles_run: 1,
+          summary: 'approved',
+          head_ref: `codex/issue-${issue}`,
+          head_sha: headSha(issue),
+        }
       }
     } else {
       throw new Error(`unexpected phase: ${options.phase}`)
@@ -212,7 +232,7 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('does not retry planning, implementation, or review-loop failures', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewLoop: true }, {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewLoop: true, reviewMode: 'github' }, {
       Prep: () => ({
         issues: [2, 3, 4].map((number) => ({
           number,
@@ -239,6 +259,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs } = await executeWorkflow({
       tracks: [[2], [3], [4], [5], [6], [7], [8]],
       reviewLoop: true,
+      reviewMode: 'github',
     }, {
       Prep: () => ({
         issues: [
@@ -294,6 +315,7 @@ describe('milestone-pipeline dependency scheduling', () => {
         { issues: [12] },
       ],
       reviewLoop: true,
+      reviewMode: 'github',
     }, {
       'review-loop:PR#1002': () => review.promise,
       'validate:#9': () => {
@@ -342,18 +364,34 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test.each([
-    ['disabled', { tracks: [[2]], reviewLoop: false }, false],
-    ['enabled', { tracks: [[2]], reviewLoop: true }, true],
-    ['enabled by default', { tracks: [[2]] }, true],
-  ])('%s review loops control the initial review request and reporting', async (_name, args, reviewEnabled) => {
+    ['disabled', { tracks: [[2]], reviewLoop: false }, 'off'],
+    ['github-mode', { tracks: [[2]], reviewLoop: true, reviewMode: 'github' }, 'github'],
+    ['enabled', { tracks: [[2]], reviewLoop: true }, 'subagent'],
+    ['enabled by default', { tracks: [[2]] }, 'subagent'],
+  ])('%s review loops control the initial review request and reporting', async (_name, args, mode) => {
     const { events, logs } = await executeWorkflow(args)
     const prompt = promptFor(events, 'implement:#2 (fable/high)')
     const pullRequestLog = logs.find((message) => message.startsWith('#2: PR #1002 open'))
 
-    expect(prompt.includes('@claude review')).toBe(reviewEnabled)
-    expect(prompt.includes('do not request or trigger any pull request review')).toBe(!reviewEnabled)
-    expect(events.some((event) => event.phase === 'Review Loop')).toBe(reviewEnabled)
-    expect(pullRequestLog.includes('@claude review triggered')).toBe(reviewEnabled)
+    expect(prompt.includes('trigger the review bot')).toBe(mode === 'github')
+    expect(prompt.includes('reviews pull requests with in-session subagents')).toBe(mode === 'subagent')
+    expect(prompt.includes('do not request or trigger any pull request review')).toBe(mode === 'off')
+    expect(events.some((event) => event.phase === 'Review Loop')).toBe(mode !== 'off')
+    expect(pullRequestLog.includes('@claude review triggered')).toBe(mode === 'github')
+    expect(pullRequestLog.includes('dispatching subagent review')).toBe(mode === 'subagent')
+  })
+
+  test('rejects an unknown reviewMode before prep', async () => {
+    let prepStarted = false
+    const running = executeWorkflow({ tracks: [[2]], reviewMode: 'actions' }, {
+      Prep: () => {
+        prepStarted = true
+        return { issues: [] }
+      },
+    })
+
+    await expect(running).rejects.toThrow(/reviewMode must be 'subagent' or 'github'/)
+    expect(prepStarted).toBeFalse()
   })
 
   test('surfaces issue-edit authorization only when validation corrections exist', async () => {
@@ -467,6 +505,7 @@ describe('milestone-pipeline dependency scheduling', () => {
         { issues: [12], runsAfter: [0] },
       ],
       reviewLoop: true,
+      reviewMode: 'github',
     }, {
       'review-loop:PR#1002': () => ({
         final_status: 'blocked',
@@ -486,6 +525,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { output, events } = await executeWorkflow({
       tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
       reviewLoop: true,
+      reviewMode: 'github',
     }, {
       'review-loop:PR#1002': () => ({ final_status: 'lgtm', cycles_run: 1, summary: 'approved' }),
     })
@@ -595,5 +635,151 @@ describe('milestone-pipeline dependency scheduling', () => {
     )
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+  })
+})
+
+describe('milestone-pipeline subagent review mode', () => {
+  const prepIssue = (overrides = {}) => ({
+    number: 2,
+    title: 'Issue 2',
+    complexity: 60,
+    model: 'fable',
+    effort: 'high',
+    validate_effort: 'high',
+    fableplan: false,
+    missing_block: false,
+    first_review_model: 'fable',
+    first_review_effort: 'high',
+    ...overrides,
+  })
+
+  test('a clean first-cycle LGTM reviews once on the issue first-review spec and dispatches no fixer', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue()] }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(events.filter((event) => event.state === 'started' && event.label.startsWith('fix:'))).toHaveLength(0)
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.final_status).toBe('lgtm')
+    expect(record?.review.cycles_run).toBe(1)
+  })
+
+  test('defaults the first review to opus/high when the PR review line is standard or absent', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue({ first_review_model: undefined, first_review_effort: undefined })] }),
+    })
+
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+  })
+
+  test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
+    let reviewCycle = 0
+    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue({ model: 'sonnet', effort: 'high', first_review_model: 'opus', first_review_effort: 'xhigh' })] }),
+      'Review Loop': (event) => {
+        if (event.label.startsWith('fix:')) {
+          return { fixed_count: 2, refuted_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), summary: 'fixed' }
+        }
+        reviewCycle += 1
+        return reviewCycle === 1
+          ? { verdict: 'needs_updates', blocking_count: 2, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking findings' }
+          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }
+      },
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'review:PR#1002 c1 (opus/xhigh)')).toBeTrue()
+    expect(started(events, 'fix:PR#1002 c1 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c2 (opus/xhigh)')).toBeTrue()
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.cycles_run).toBe(2)
+    expect(record?.head_sha).toBe(headSha(2, 'c'))
+  })
+
+  test('an LGTM with non-blocking findings fixes them and re-reviews on sonnet/high', async () => {
+    let reviewCycle = 0
+    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue()] }),
+      'Review Loop': (event) => {
+        if (event.label.startsWith('fix:')) {
+          return { fixed_count: 1, refuted_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'd'), summary: 'optional fixed' }
+        }
+        reviewCycle += 1
+        return reviewCycle === 1
+          ? { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }
+          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'd'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }
+      },
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(started(events, 'fix:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c2 (sonnet/high)')).toBeTrue()
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.final_status).toBe('lgtm')
+  })
+
+  test('an LGTM with non-blocking findings on the final cycle stops as lgtm_with_nonblocking without a fixer', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1 }, {
+      Prep: () => ({ issues: [prepIssue()] }),
+      'Review Loop': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(events.filter((event) => event.state === 'started' && event.label.startsWith('fix:'))).toHaveLength(0)
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.final_status).toBe('lgtm_with_nonblocking')
+  })
+
+  test('needs_updates on the final cycle exhausts the loop unfixed and blocks descendants', async () => {
+    const { output, events } = await executeWorkflow({
+      tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
+      maxReviewCycles: 1,
+    }, {
+      Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(events.filter((event) => event.state === 'started' && event.label.startsWith('fix:'))).toHaveLength(0)
+    expect(record?.status).toBe('review_max_cycles_exhausted')
+    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
+    expect(started(events, 'validate:#9')).toBeFalse()
+  })
+
+  test('a fixer blocker ends the loop blocked and blocks descendants', async () => {
+    const { output, events } = await executeWorkflow({
+      tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
+    }, {
+      Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
+      'fix:PR#1002 c1 (fable/high)': () => ({ fixed_count: 0, refuted_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), summary: 'could not fix', blocker: 'tests fail on the unmodified base' }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(record?.status).toBe('review_blocked')
+    expect(record?.review.blocker).toBe('tests fail on the unmodified base')
+    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
+  })
+
+  test('subagent reviewer and fixer prompts carry the review contract', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue()] }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
+      'review:PR#1002 c2 (fable/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }),
+    })
+    const reviewPrompt = promptFor(events, 'review:PR#1002 c1 (fable/high)')
+    const reReviewPrompt = promptFor(events, 'review:PR#1002 c2 (fable/high)')
+    const fixPrompt = promptFor(events, 'fix:PR#1002 c1 (fable/high)')
+
+    expect(reviewPrompt).toContain('pr-review-format')
+    expect(reviewPrompt).toContain('do NOT trigger any `@claude` review comment')
+    expect(reviewPrompt).not.toContain('re-review cycle')
+    expect(reReviewPrompt).toContain('re-review cycle 2')
+    expect(fixPrompt).toContain('fix-pr-review')
+    expect(fixPrompt).toContain('https://example.test/pr/1002#r1')
+    expect(fixPrompt).toContain('do NOT trigger, post, or wait for any `@claude` re-review')
   })
 })
