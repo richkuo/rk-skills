@@ -1,6 +1,6 @@
 ---
 name: milestone-workflow
-description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, and optional @claude review loops until LGTM. Stage 5–6 of the new-app-pipeline.
+description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, and optional review loops until LGTM — in-session subagent reviewers by default, or the @claude Action in github mode. Stage 5–6 of the new-app-pipeline.
 ---
 
 # milestone-workflow
@@ -30,7 +30,7 @@ State the GitHub writes the run performs, so the approval covers them explicitly
 
 Add a **Run size** line before asking for approval:
 
-- Compute the planned direct-agent baseline, assuming every issue reaches each enabled phase, as `1 prep + sum over issues of (1 validate + (fableplan ? 1 plan : 0) + 1 implement + (reviewLoop ? 1 review-loop : 0))`.
+- Compute the planned direct-agent baseline, assuming every issue reaches each enabled phase, as `1 prep + sum over issues of (1 validate + (fableplan ? 1 plan : 0) + 1 implement + (reviewLoop ? 1 review-loop : 0))`. In the default subagent review mode the `1 review-loop` term is the happy-path first reviewer; every additional review cycle dispatches a fixer + re-reviewer pair (up to `1 + 2×(maxReviewCycles−1) + 1` review-phase agents per issue in the worst case), where github mode instead nests that work inside one review-loop agent.
 - Also compute the retry-aware direct ceiling as `planned direct-agent count + number of issues`, because each issue's validation can dispatch one retry. Show both numbers.
 - Label them as planning bounds, not a total-agent guarantee: invalid issues or failures can reduce the count, while review loops can dispatch nested fix agents beyond the retry-aware ceiling. The warning counts all scheduled agents, so never label a plan safe merely because either direct count is below the threshold. `maxReviewCycles` changes the stopping rule after an LGTM; it is not a guaranteed cap while reviews keep returning `Needs Updates`.
 - Compare both direct counts with the effective Dynamic workflow size guideline when one is present in session context; otherwise use Claude Code's documented default threshold of more than 25 scheduled agents. Name the threshold source in the plan so the comparison is inspectable. If the baseline crosses it, mark the warning expected; if only the retry-aware ceiling crosses it, mark the run retry-sensitive; if both stay under and review loops are enabled, state that nested fixes can still trigger the warning. The [Claude Code workflow cost documentation](https://code.claude.com/docs/en/workflows#cost) is authoritative.
@@ -41,13 +41,13 @@ Add a **Run size** line before asking for approval:
 ### 3. Preflight the repo
 
 - `gh auth status` succeeds and `gh api repos/<owner>/<repo> --jq .permissions.push` returns `true`. A bad token or read-only access must stop the run here — otherwise it surfaces as confusing per-agent failures mid-run.
-- When review loops are enabled, `.github/workflows/claude.yml` exists (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing). Without a review bot, set `reviewLoop: false`; implementation then opens each PR without requesting review and becomes the readiness boundary.
+- Review-mode dependencies: the default `reviewMode: 'subagent'` reviews in-session (a reviewer agent posts a `pr-review-format` comment, a fixer agent resolves it) and needs no GitHub Actions infrastructure — Actions/runner outages cannot stall it. Only `reviewMode: 'github'` requires `.github/workflows/claude.yml` (the `@claude` review bot — copy from rk-skills `templates/claude-review.yml` and confirm the API-key secret if missing); without that bot, use subagent mode or set `reviewLoop: false` (implementation then opens each PR without requesting review and becomes the readiness boundary). Note CI checks that run on Actions are an independent dependency either way — subagent mode removes the review's Actions dependency, not CI's.
 - Base branch protection / merge expectations understood: agents open PRs; merging stays with the user unless they've said otherwise.
 - CLAUDE.md in the target repo covers conventions the agents must follow (package manager, test commands).
 
 ### 4. Run
 
-Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop: true, maxReviewCycles: 5}}`. Legacy issue-array tracks remain accepted, but use typed objects for new plans. `budgetFloor` (tokens, default 80000) is accepted when a token target is set.
+Invoke the Workflow tool with `{name: 'milestone-pipeline', args: {tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop: true, maxReviewCycles: 5}}`. Legacy issue-array tracks remain accepted, but use typed objects for new plans. `budgetFloor` (tokens, default 80000) is accepted when a token target is set. `reviewMode` defaults to `'subagent'`; pass `'github'` to route reviews through the repo's `@claude` Action instead.
 
 Immediately after the invocation returns, post its runId and persisted script path as a comment on the milestone's first issue (footer: `Created with LLM: <current model> | high | Harness: milestone-workflow`), so run state survives losing the conversation — `resumeFromRunId` resumes same-session; cross-session the record enables a hand-authored continuation from the persisted script.
 
@@ -56,8 +56,8 @@ The workflow validates all assignments, predecessor indices, duplicates, and cyc
 1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan.
 2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the current dependency base, with deduplicated predecessor PRs/skips and hard base refs, at the issue's `Validate effort` (default high). `INVALID` issues are skipped and reported, never built.
 3. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent (validation-aware) whose plan is posted to the issue; the builder implements against it.
-4. **Implement** — per-issue agent on its assigned model/effort applies validation corrections, invokes `work-on-issue` with the verified hard `baseRefs`, creates a deterministic integration base for multiple heads, opens the PR, and triggers `@claude review` when review loops are enabled.
-5. **Review readiness** — `fix-pr-review-loop` runs until LGTM before any hard or ordering successor starts, preventing review fixes from racing same-package work. Unrelated tracks and their review loops stay concurrent. With `reviewLoop: false`, implementation completion is the readiness boundary.
+4. **Implement** — per-issue agent on its assigned model/effort applies validation corrections, invokes `work-on-issue` with the verified hard `baseRefs`, creates a deterministic integration base for multiple heads, opens the PR, and (github review mode only) triggers `@claude review`.
+5. **Review readiness** — the review loop runs until LGTM before any hard or ordering successor starts, preventing review fixes from racing same-package work. In subagent mode (default) the script alternates an independent reviewer agent (first review on the issue's `PR review:` model/effort, default opus/high; posts a `pr-review-format` comment) with a `fix-pr-review` fixer agent on the build model/effort — a re-review after only non-blocking fixes drops to sonnet/high. In github mode one `fix-pr-review-loop` agent drives the `@claude` Action instead. Unrelated tracks and their review loops stay concurrent. With `reviewLoop: false`, implementation completion is the readiness boundary.
 6. **Failure propagation** — failed, blocked, or non-LGTM hard predecessors block descendants. Ordering-only skips without a PR do not; an unresolved predecessor PR does. Integration conflicts block before product changes.
 
 ### 5. Monitor and close out
@@ -73,7 +73,8 @@ The orchestrating session holds no implementation detail — issues and PRs are 
 | Situation | Do this |
 |---|---|
 | An issue lacks an Execution block at run time | Stop before running; send it through execution-plan-review |
-| No `@claude` review workflow in the repo | Install from templates first, or run with `reviewLoop: false` and say what that forfeits |
+| No `@claude` review workflow in the repo | Use the default `reviewMode: 'subagent'` (no Actions dependency); only github mode needs the template installed, and `reviewLoop: false` remains the no-review fallback |
+| GitHub Actions billing or a self-hosted runner outage stalls reviews | Switch the next invocation to `reviewMode: 'subagent'`; already-running github-mode loops stay blocked until Actions recovers |
 | A successor hard-depends on unmerged predecessor PRs | Use `after`; the workflow waits for stable heads and `work-on-issue` verifies/integrates every base before implementation |
 | A same-package predecessor is ordering-only | Use `runsAfter`; the successor waits but does not inherit code |
 | A build-bucket issue hard-depends on a resume- or skip-bucket issue | Apply the step-1 cross-bucket rules: merged PR → drop the edge; open PR → exclude the dependent (and hard descendants), blocked pending merge; closed unmerged → blocked pending decision |
