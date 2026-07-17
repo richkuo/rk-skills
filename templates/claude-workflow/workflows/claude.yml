@@ -40,7 +40,7 @@ jobs:
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
         (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
       )
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     permissions: {}
     outputs:
@@ -296,6 +296,7 @@ jobs:
       flow: ''
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
+      runs_on: self-hosted
     secrets: inherit
 
   # Implementation runs legitimately commit and push (issue workflow opens a PR;
@@ -316,6 +317,7 @@ jobs:
       flow: ${{ needs.classify.outputs.flow }}
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
+      runs_on: self-hosted
     secrets: inherit
 
   # A fix-pr run edits the pull request's own branch in place and pushes to it:
@@ -354,4 +356,5 @@ jobs:
       flow: ''
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
+      runs_on: self-hosted
     secrets: inherit

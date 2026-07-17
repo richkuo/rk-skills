@@ -48,8 +48,26 @@ rk-skills at run time by the reusable workflow. Then:
 
 ## Customization inputs
 
+The vendored `claude.yml` ships with `classify` on `runs-on: self-hosted` and
+`runs_on: self-hosted` passed to every route (`review`/`implement`/`fix-pr`).
+If your repo has no self-hosted runner registered, switch all four back to
+`ubuntu-latest` (or your own label) before installing.
+
+**These four settings are independent — changing one does NOT change the
+others.** `classify`'s `runs-on:` is a plain job field; each route's
+`runs_on:` is a separate `with:` input to the reusable workflow, defaulted to
+`ubuntu-latest` *inside claude-run.yml itself* when omitted. A repo that
+edits only `classify` (e.g. to move it onto a self-hosted runner) without
+also setting `runs_on: self-hosted` on `review`/`implement`/`fix-pr` will
+have those three routes silently fall back to `ubuntu-latest` — which is how
+a hosted-runner billing hold took down `@claude review`/`implement`/`fix-pr`
+on a consumer repo while `classify` (correctly on self-hosted) kept working.
+Grep the file for `runs-on` and `runs_on` and confirm all four agree before
+relying on a non-default runner.
+
 Each call site in `claude.yml` can pass these optional `with:` inputs to the
-reusable workflow (defaults shown):
+reusable workflow (defaults shown are `claude-run.yml`'s own, used only when
+a call site omits the input):
 
 | Input | Default | Purpose |
 |-------|---------|---------|
