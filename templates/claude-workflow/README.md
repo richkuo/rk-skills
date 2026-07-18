@@ -108,3 +108,12 @@ always stay read-only regardless of keyword.
   carry no interpreters; CI (if you have it) owns checks.
 - **Fail-closed routing:** anything ambiguous classifies as read-only review;
   untrusted PR authors never reach a push-capable route.
+
+## Contract guards
+
+`prompts/pr-review-format.md` is one of three paraphrased PR-review format
+copies (with `skills/pr-review-format/SKILL.md` and `templates/claude-review.yml`).
+Shared semantics are enforced by `tests/pr-review-format-contract.test.js` at
+the repo root (`bun test`). Prompt files must also stay free of `"`, backticks,
+and `$` (`tests/prompt-shell-safety.test.js`). Full inventory:
+[`docs/contract-inventory.md`](../../docs/contract-inventory.md).

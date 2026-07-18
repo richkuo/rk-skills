@@ -107,6 +107,19 @@ Also included:
 - `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
 - `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
 
+## Guarded contracts
+
+Duplicated rules across skills, prompts, workflows, and globals are tracked in [`docs/contract-inventory.md`](./docs/contract-inventory.md) (parent [#57](https://github.com/richkuo/rk-skills/issues/57)). Semantic Bun tests under `tests/` fail when a **required shared** contract drifts; intentional runtime differences are allowed and documented per row.
+
+| Surface | Canonical owner | Guard (`bun test`) |
+|---------|-----------------|--------------------|
+| PR review format (skill + CI prompt + minimal workflow) | Shared semantic set (three paraphrased copies) | `tests/pr-review-format-contract.test.js` |
+| Complexity score formula / phrases | `skills/validate-issue/SKILL.md` step 6 | `tests/complexity-score.test.js` |
+| Execution block `Depends on` / `Runs after` | `skills/prd-to-issues/SKILL.md` | `tests/execution-block-contract.test.js` |
+| Shared CI prompt shell safety | `templates/claude-workflow/prompts/*.md` | `tests/prompt-shell-safety.test.js` |
+
+When editing a guarded family, change every consumer in the inventory row in the same PR and keep prompt shell-safety rules.
+
 ## Install (with npx)
 
 Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
