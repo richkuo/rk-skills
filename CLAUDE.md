@@ -58,6 +58,7 @@
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
+- **PR body lead:** start with `## Plain simple English` — one short paragraph under 55 words, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary. Then `## Summary` / verification; keep those scannable. Don't restate the whole issue. (`work-on-issue` enforces this when opening PRs.)
 - **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]` — Conventional Commits `type` (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`) and `scope` (`#<issue>` when the PR closes one, else a short component name, or omit the scope entirely when neither fits), followed by the lowercase imperative summary, then a trailing `[C<score>, <model>, <effort>]` bracket (append `, fableplan` for the Capability-2 band). E.g. `fix(#95): resolve double-fill race on order matching [C95, Fable 5, xhigh]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
 
 ### PR review format
