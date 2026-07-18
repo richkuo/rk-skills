@@ -146,8 +146,7 @@ jobs:
             this PR already addresses gets fixed here (safety-class →
             `### Needs Fixing`, else `### Recommended Optional`), not
             deferred. When in doubt, do NOT create an issue — route the
-            finding to another section. Follow-up items still require
-            **Plain simple English:** after the description.
+            finding to another section.
 
             `### Requires Human Review` is the escalation of last resort —
             default to making a recommendation. Use it ONLY when you genuinely
