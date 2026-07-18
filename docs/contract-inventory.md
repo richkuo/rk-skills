@@ -10,6 +10,7 @@ This inventory records every duplicated repository contract: who owns it, who re
 2. Update every **consumer** listed for that row in the same change.
 3. Run `bun test` — semantic guards fail when required markers drift.
 4. For `templates/claude-workflow/prompts/*.md`, also satisfy shell safety: no `"`, backticks, or `$` (`tests/prompt-shell-safety.test.js`).
+5. If you rename or delete a guard test, update every inventory/README citation — `tests/inventory-guard-citations.test.js` fails on dangling `tests/*.test.js` paths.
 
 ## Inventory
 

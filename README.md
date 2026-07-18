@@ -117,6 +117,7 @@ Duplicated rules across skills, prompts, workflows, and globals are tracked in [
 | Complexity score formula / phrases | `skills/validate-issue/SKILL.md` step 6 | `tests/complexity-score.test.js` |
 | Execution block `Depends on` / `Runs after` | `skills/prd-to-issues/SKILL.md` | `tests/execution-block-contract.test.js` |
 | Shared CI prompt shell safety | `templates/claude-workflow/prompts/*.md` | `tests/prompt-shell-safety.test.js` |
+| Inventory / README guard citations | Paths named in `docs/contract-inventory.md` and READMEs | `tests/inventory-guard-citations.test.js` |
 
 When editing a guarded family, change every consumer in the inventory row in the same PR and keep prompt shell-safety rules.
 
