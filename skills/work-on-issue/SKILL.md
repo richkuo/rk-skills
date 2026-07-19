@@ -142,7 +142,7 @@ gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef
 ```
 
 - **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket if a Fable plan ran first). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
-- **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. **Lead with `## Plain simple English`** — one short paragraph under 55 words, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary. Then summarize what changed and how it was verified under `## Summary` / verification headings; keep it scannable. Don't restate the whole issue.
+- **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified under `## Summary` / verification headings first; keep it scannable, don't restate the whole issue. **End with `## Plain simple English`** — one short paragraph under 55 words, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary.
 - **Dependency base:** when `baseRefs` was supplied, list every predecessor pull request and verified head in integration order, state that they must merge first, and keep the PR base set to the repository's default branch.
 - **Footer:** same convention as the commit — **Created** verb, repo footer format (global default `Created with LLM: <current model> | <effort> | Harness: <harness>`, harness resolved per step 5: `Claude Code` interactively, the Action identifier in CI). No `Co-authored-by` trailer.
 
@@ -177,6 +177,6 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
-| Writing the PR body | Lead with `## Plain simple English` (≤55 words, no jargon); include `Closes #<N>` (without it the merge doesn't resolve the issue); end with the repo's footer convention — **Created** verb, no `Co-authored-by` |
+| Writing the PR body | `## Summary` / verification first; include `Closes #<N>` (without it the merge doesn't resolve the issue); end with `## Plain simple English` (≤55 words, no jargon), then the repo's footer convention — **Created** verb, no `Co-authored-by` |
 | Tempted to trigger an `@claude` review or wait on CI after opening the PR | Don't — the skill ends with the open PR; review requests are the caller's job |
 | Tempted to pause and ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report |
