@@ -34,6 +34,7 @@
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface — always.** Never pick the tidier design if it leaves any correctness/safety gap (money, data integrity, security, auto-protective mechanisms); weigh gaps against the realistic worst case, not the average. Derive the right solution from first principles even if it means more code.
 - **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best."
+- **Tests are a correctness floor, not an obstacle.** "Best solution" never means weakening, deleting, or skipping a test to make a change pass — fix the code, or if the test itself is wrong, say so and get explicit sign-off before touching it.
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
