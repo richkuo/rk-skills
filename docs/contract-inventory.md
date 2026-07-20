@@ -2,11 +2,11 @@
 
 Scoped to the loop/validate skill families ([#64](https://github.com/richkuo/rk-skills/issues/64)). Broader duplicated-contract tracking from superseded [#57](https://github.com/richkuo/rk-skills/issues/57) is out of scope here.
 
-This inventory records every shared pipeline rule those families restate in prose: who owns it, who restates it, what must stay aligned, what may diverge, and how CI guards it. Guards check **required shared semantics** (key thresholds and stop conditions), not exact string equality — wording may differ by harness ("Fable subagent" vs "session model") when the numbers and decisions match.
+This inventory records every shared pipeline rule those families restate in prose: who owns it, who restates it, what must stay aligned, what may diverge, and how CI guards it. Guards check **required shared semantics** (key thresholds and stop conditions), not exact string equality — wording may differ by harness ("Fable subagent" vs "session model") when the numbers and decisions match. Markers must appear in the **procedure body** (after YAML frontmatter); a `description:` line that only mentions the words is not enough. Stop rules are anchored to decision-table rows that co-locate `STOP` with the rule terms.
 
 ## How to update a guarded rule
 
-1. Edit every **consumer** listed for that row in the same change (there is no generator for `SKILL.md` prose).
+1. Edit every **consumer** listed for that row in the same change (there is no generator for `SKILL.md` prose). Keep the procedural wording in the body/decision table — do not rely on frontmatter alone.
 2. If the change is an intentional divergence, record it under **Allowed divergence** / the exception section below and update the guard's exception list.
 3. Run `bun test` — `tests/loop-validate-pipeline-contract.test.js` fails when a required marker is missing or contradicted.
 4. Keep this inventory row in sync with the guard's consumer lists.
