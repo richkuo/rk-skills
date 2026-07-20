@@ -111,7 +111,7 @@ Claude Code warns when CLAUDE.md exceeds 40k chars ("Large CLAUDE.md will impact
 wc -c CLAUDE.md
 ```
 
-If the byte count exceeds **40000**, condense in-place before finishing the sync. Target: bring the file back under 38000 chars (leaves headroom for the next sync). Do NOT split into multiple files — agents only auto-load the root CLAUDE.md.
+If the byte count exceeds **35000**, condense in-place before finishing the sync. Target: bring the file back under 30000 chars (leaves headroom for the next sync). Do NOT split into multiple files — agents only auto-load the root CLAUDE.md.
 
 **If a CHANGELOG.md exists, relocate rather than delete.** Before dropping completed-migration prose, resolved-incident narrative, or per-issue "why" detail (passes 2 and 5 below), move it into CHANGELOG.md keyed by issue/PR instead of discarding it — the history stays available without loading into agent context every turn. Only outright-delete history when the repo has no CHANGELOG.md to receive it. Never create a CHANGELOG.md solely to offload bytes during a sync; if CLAUDE.md is oversized and no CHANGELOG.md exists, surface that to the user as an option rather than introducing the file unilaterally.
 
