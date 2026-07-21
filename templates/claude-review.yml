@@ -122,18 +122,12 @@ jobs:
             Within each non-empty section use a numbered list. Each item is a
             single bold one-sentence title stating the item, then a newline,
             then a short description containing only the critical details
-            (file:line and why it matters). Every finding in every section
-            MUST then add **Plain simple English:** — plain simple English
-            under 55 words, no jargon, no unexplained acronyms — so a human
-            can understand the finding without reading the technical
-            paragraph. For `### Requires Human Review`, prefer a concrete A/B
-            decision question; for other sections, state what is wrong or what
-            should change in everyday language. For `### Needs Fixing` and
-            `### Recommended Optional` items, after **Plain simple English:**
-            add **Invariant:** (one sentence stating the general property the
-            code must satisfy, independent of the example) and **Must
-            survive:** (1-3 adversarial cases beyond the example that any fix
-            must handle: compound states, inverse scenario, boundary).
+            (file:line and why it matters). For `### Needs Fixing` and
+            `### Recommended Optional` items, add **Invariant:** (one sentence
+            stating the general property the code must satisfy, independent of
+            the example) and **Must survive:** (1-3 adversarial cases beyond
+            the example that any fix must handle: compound states, inverse
+            scenario, boundary).
 
             `### Create Follow-up Issue` is the disposition of last resort —
             strongly prefer keeping work in the current PR. Two conditions
@@ -160,8 +154,16 @@ jobs:
             `### Needs Fixing` or `### Recommended Optional` instead. Keep the
             technical description under 50 words and end it by stating
             precisely what the human must decide and why you cannot recommend.
-            After the shared **Plain simple English:** block, each
-            `### Requires Human Review` item MUST also add **Recommended
+            Each `### Requires Human Review` item MUST also add **Recommended
             proposed solution:** — one short plain-simple-English paragraph
             stating what you recommend they choose or do — the concrete
             action, not a restatement of the tradeoff.
+
+            Every finding in every section MUST end with **Plain simple
+            English:** — the item's last field, added after `Invariant`/`Must
+            survive` or `Recommended proposed solution` where those apply —
+            plain simple English under 55 words, no jargon, no unexplained
+            acronyms — so a human can understand the finding without reading
+            the technical paragraph. For `### Requires Human Review`, prefer a
+            concrete A/B decision question; for other sections, state what is
+            wrong or what should change in everyday language.
