@@ -108,7 +108,7 @@ Do all of step 8's building inside that worktree. When the build is done, follow
 
 ### 8. Build
 
-In the worktree from step 6, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
+In the worktree from step 7, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
 
 ## Notes
 
