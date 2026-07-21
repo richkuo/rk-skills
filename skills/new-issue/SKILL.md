@@ -50,6 +50,8 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Score the work to implement the fix **correctly, including tests** using the **canonical formula in `validate-issue` step 6** (load that skill or mirror it exactly): five axes 0–4 → **Capability** (0–3 from Risk/Uncertainty + Coupling≥3 bump) and **Volume** (0–24 from Scope+Coupling+Verification) → `score = 25 × Capability + Volume`. The score is a **model + effort routing signal**, not a time estimate — never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
+From the Capability band, also fix the **fableplan signal**: `fableplan: yes` only when Capability = 2 (score 50–74 — Opus-class build, planned by Fable 5 first); `no` for every other band (0–1 need no separate plan; band 3 is built by Fable 5 directly). It goes on the rationale line in step 6 — always explicit, never omitted.
+
 ### 5. Scope check — one issue or several?
 
 If the deliverables are separable — parts that each land in their own PR, pass their own tests, and deliver value alone — don't bundle: file the core issue and tell the user which parts warrant their own issues (each fully specified before filing, or tracked as a checklist in the parent until ready — never stubs).
@@ -61,7 +63,7 @@ Title: `[C<score>] <title>` — the title is a clear, plain-language sentence un
 Body structure:
 
 ```
-**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band>
+**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band> · fableplan: <yes|no>
 
 ## Problem
 <Current behavior, grounded with file:line citations from step 2. What's wrong or missing and why it matters.>
@@ -80,7 +82,7 @@ Body structure:
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
+The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`), and always ends with the explicit fableplan signal from step 4 (`· fableplan: yes` iff Capability 2). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (default `high`, never low), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
 
 File it:
 

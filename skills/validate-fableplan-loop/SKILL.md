@@ -22,7 +22,7 @@ Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 7 — and produce its verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Treat the verdict block as structured output to parse yourself, not the interactive `→ Reply "work on issue"` prompt to wait on. Don't ask the user to confirm; decide from the table in step 2. Record the resolved issue number — every later step targets exactly this issue.

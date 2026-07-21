@@ -249,7 +249,9 @@ Safety carve-outs (money, data integrity, security, auto-protective) remain abso
 | (0,0,4,0,0) | 3 | 0 | **75** | Tiny money/security path → Fable 5 |
 | (0,0,3,0,0) | 2 | 0 | **50** | Elevated blast radius → Opus + fableplan |
 
-Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); Volume <v>` with the traced edit list.
+The band also fixes the **fableplan signal**: `fableplan: yes` only when Capability = 2 (Opus-class build planned by Fable 5 first); `no` for every other band (0–1 need no separate plan; band 3 is built by Fable 5 directly, so a fableplan stage is redundant). Always state it explicitly — absence is ambiguous, not "no".
+
+Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>` with the traced edit list.
 
 ### 6.5. Scope disposition — is the issue too large to be ONE issue?
 
@@ -298,7 +300,7 @@ Scope: (omit unless the issue is too large per step 6.5)
   - <part 1 — one-line scope>
   - <part 2 — one-line scope>
 
-**#<N>: Update issue description? <Yes | No>**  ·  Complexity: <0-100>/100 — Capability <k> (<driver>); Volume <v>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes | No>**  ·  Complexity: <0-100>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 
 <If Yes: a short bulleted list of specific edits the author should make to the title and/or description — wrong file:line, incorrect behavior, missing repro, ambiguous scope, a title that misstates the bug or scope, etc. One line each, phrased as edits ("Change X to Y", "Add Z", "Remove claim about W", "Retitle to …").>
 
@@ -323,7 +325,7 @@ This can mean editing the issue title and/or editing the issue body (apply the s
 
 **MANDATORY final consistency pass — re-read the WHOLE assembled body before every `gh issue edit`, not just the section you changed.** Section-by-section edits drift: the early summary and the later detailed sections silently disagree, and since the correct fact is already *in your own document*, only an end-to-end read catches it. List every **value/distinction restated in more than one place** (zero in one section, non-zero in another; a path that writes vs skips; a benefit exists vs not) and confirm the summary says the *same thing* as the detailed buckets. Required after any edit pass touching ≥2 sections or spanning ≥2 turns.
 
-**Editing the title** (`gh issue edit <N> --title "<new title>"`): update it whenever the validated findings make the current one wrong or misleading — it misstates the bug, names the wrong component or root cause, or its scope no longer matches what you traced, or it isn't a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — precise about component and behavior, no unexplained jargon. Hold the corrected title to the same claim-verification gate as the body. If the repo follows the `[C<score>] <title>` prefix convention, set or correct it from step 6. Leave an accurate title untouched; combinable with the body edit in one call.
+**Editing the title** (`gh issue edit <N> --title "<new title>"`): update it whenever the validated findings make the current one wrong or misleading — it misstates the bug, names the wrong component or root cause, or its scope no longer matches what you traced, or it isn't a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — precise about component and behavior, no unexplained jargon. Hold the corrected title to the same claim-verification gate as the body. If the repo follows the `[C<score>] <title>` prefix convention, set or correct it from step 6 — and set or correct the body's complexity rationale line to match, including the explicit `· fableplan: <yes|no>` signal (yes iff Capability 2); a body missing the signal gets it added even when nothing else changes. Leave an accurate title untouched; combinable with the body edit in one call.
 
 **Editing the issue body** (`gh issue edit <N> --body-file <file>`): apply the edits, then end the body with the **LLM Attribution Footer** — **stack, never replace**: keep the original `Created with LLM: …` line and add an `Updated with LLM: …` line directly below it (each later edit appends another `Updated …` if model/effort/harness differ; collapse exact duplicates). Preserve provenance, don't overwrite. The footer is the final lines of the body, preceded by a `---` separator on its own line:
 
@@ -337,7 +339,7 @@ Verb tracks the action: `Created` for the original body, `Updated` for title/des
 
 Rules:
 - Close with the update-or-not decision, placed after the findings that justify it. That is the deliverable; the complexity score sits on the same line, after a `·` separator.
-- Always include the complexity score, even when the verdict is **No** — it is the model + effort routing signal for the fix.
+- Always include the complexity score **and the fableplan signal**, even when the verdict is **No** — together they are the model + effort + planning routing signal for the fix.
 - No restatement of the issue title or body.
 - Each claim/concern fits on one line. If you need more, the claim is too broad — split it.
 - Drop the Concerns section entirely when there are none. Don't write "None."

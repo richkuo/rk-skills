@@ -22,7 +22,7 @@ Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 Invoke the `fable-validate` skill for the target issue (Skill tool, `skill: fable-validate`). Let it run fully — Fable 5 subagent validation, spot-check, verdict — producing the standard verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Treat the verdict as structured output to parse yourself, not a prompt to wait on. Record the resolved issue number — every later step targets exactly this issue.
