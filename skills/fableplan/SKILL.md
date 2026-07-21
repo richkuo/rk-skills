@@ -1,6 +1,6 @@
 ---
 name: fableplan
-description: Use when the user wants a task planned by a Fable 5 planning subagent before building it. Spins up a Plan subagent running on Fable 5 to produce an implementation plan, relays the plan back to the main agent to build, and — if a GitHub issue is referenced — posts the plan as a comment on that issue. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
+description: Use when the user wants a task planned by a Fable 5 planning subagent before building it. Spins up a Plan subagent running on Fable 5 to produce an implementation plan, relays the plan back to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue and asks the user whether to continue building now before proceeding. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
 ---
 
 # fableplan
@@ -75,9 +75,13 @@ After posting, give the user the comment URL `gh` returns. Follow the repo's CLA
 
 ### 5. Relay the plan to the user
 
-Present the vetted plan to the user (the main agent). This is the plan you will build from.
+Present the vetted plan to the user (the main agent).
 
-### 6. Set up an isolated git worktree
+### 6. Ask whether to continue building (only if an issue was referenced)
+
+The plan is now safely posted to the issue regardless of what happens next — don't assume the user wants an immediate build. Ask (e.g. via `AskUserQuestion`) whether to continue building this now or stop here. If they stop, end the skill; they can resume later with `work-on-issue` on the same issue. If no issue was referenced in step 1, there's nothing posted to fall back to, so skip the question and proceed straight to building.
+
+### 7. Set up an isolated git worktree
 
 Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task, prefixed with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
 
@@ -100,9 +104,9 @@ git worktree add ../<repo>-fableplan-cursor-<short-task-name> -b cursor/fablepla
 
 (swap `cursor` for `codex` on Codex), then `cd` into it and re-verify `pwd` before later steps — shell state doesn't persist between Bash calls.
 
-Do all of step 7's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
+Do all of step 8's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
 
-### 7. Build
+### 8. Build
 
 In the worktree from step 6, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
 
