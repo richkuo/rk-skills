@@ -22,7 +22,7 @@ Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 7 — and produce its verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Treat the verdict block as structured output to parse yourself, not the interactive `→ Reply "work on issue"` prompt to wait on. Don't ask the user to confirm; decide from the table in step 2. Record the resolved issue number — every later step targets exactly this issue.
@@ -51,6 +51,8 @@ If **No**, skip straight to step 4.
 ### 4. Run fableplan — planning phase only (skip when Capability < 2)
 
 **Capability gate:** if the verdict's validated complexity score is **below 50** (Capability < 2 under the `validate-issue` band encoding), skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for low-capability-band changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score.
+
+**Capability-3 note:** this gate intentionally runs fableplan for band-3 issues (score ≥ 75) even though their verdict line reads `fableplan: no`. That signal's `no` assumes a Fable 5 build (the band table's routing); this loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a band-3 issue here — skipping it would drop Fable from the hardest issues entirely.
 
 Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. **Do NOT execute fableplan's steps 7–8 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
 
