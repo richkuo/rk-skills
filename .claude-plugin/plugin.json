@@ -1,7 +1,7 @@
 {
   "name": "rk-skills",
   "displayName": "rk-skills",
-  "version": "1.12.0",
+  "version": "1.12.1",
   "description": "Claude Code workflow skills: GitHub issue/PR/release automation and Fable-driven planning.",
   "author": {
     "name": "Richard Kuo"
