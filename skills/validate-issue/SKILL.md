@@ -304,8 +304,10 @@ Scope: (omit unless the issue is too large per step 6.5)
 
 <If Yes: a short bulleted list of specific edits the author should make to the title and/or description — wrong file:line, incorrect behavior, missing repro, ambiguous scope, a title that misstates the bug or scope, etc. One line each, phrased as edits ("Change X to Y", "Add Z", "Remove claim about W", "Retitle to …").>
 
-→ Reply "work on issue" to proceed, "update issue" to apply the edits first<, or "split issue" / "decompose" to file the proposed parts — only when step 6.5 flagged it>.
+→ Reply "work on issue" to proceed, "update issue" to apply the edits first<, "fableplan" to have Fable 5 post an implementation plan first — offer this only when the signal is fableplan: yes><, or "split issue" / "decompose" to file the proposed parts — only when step 6.5 flagged it>.
 ```
+
+**When the signal is `fableplan: yes`, the offer is mandatory, and it's the user's call:** always include the "fableplan" option in the reply line, and if the user instead replies "work on issue" directly, ask once — "Signal says fableplan: yes — post a Fable 5 plan first, or build without one?" — before handing off. Never launch fableplan unprompted, and never silently skip the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
 
 ### 7.5. When the user replies "work on issue" — hand off to the work-on-issue skill
 
