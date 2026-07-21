@@ -317,6 +317,12 @@ Pass the issue number through; the skill is idempotent about the worktree (reuse
 
 **If step 6.5 flagged the issue as too large, surface the disposition before handing off** — implementing an oversized, multi-part issue as one PR reproduces the scope problem in the diff. Recommend splitting/decomposing first; proceed to work-on-issue only on the user's say-so, or scope the implementation to the single core part if they want to start there.
 
+### 7.6. When the user replies "fableplan" — hand off to the fableplan skill
+
+**Invoke the `fableplan` skill**, passing the issue number through — not the bare word "fableplan" as a task description; the skill's own trigger phrases (`/fableplan`, "fableplan this", "plan this with fable") expect a task or issue reference, and the issue number is what makes it post the plan as an issue comment. `fableplan` owns everything from there: it dispatches the Fable 5 Plan subagent, posts the plan as a comment on the issue, and itself asks the user whether to continue building now — don't duplicate that ask here.
+
+Honor this reply whenever the user gives it, even on an issue where step 7's signal was `fableplan: no` — the signal governs whether *this* skill recommends and offers the option, not whether the user's own explicit request is honored. Don't second-guess an explicit "fableplan" reply by re-litigating the signal.
+
 ### 8. When the user replies "update issue"
 
 This can mean editing the issue title and/or editing the issue body (apply the suggested edits) — both from the current checkout, per step 0. Do both as appropriate.
