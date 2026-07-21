@@ -304,8 +304,10 @@ Scope: (omit unless the issue is too large per step 6.5)
 
 <If Yes: a short bulleted list of specific edits the author should make to the title and/or description — wrong file:line, incorrect behavior, missing repro, ambiguous scope, a title that misstates the bug or scope, etc. One line each, phrased as edits ("Change X to Y", "Add Z", "Remove claim about W", "Retitle to …").>
 
-→ Reply "work on issue" to proceed, "update issue" to apply the edits first<, or "split issue" / "decompose" to file the proposed parts — only when step 6.5 flagged it>.
+→ Reply "work on issue" to proceed, "update issue" to apply the edits first<, "fableplan" to have Fable 5 post an implementation plan first — offer this only when the signal is fableplan: yes><, or "split issue" / "decompose" to file the proposed parts — only when step 6.5 flagged it>.
 ```
+
+**When the signal is `fableplan: yes`, the offer is mandatory, and it's the user's call:** always include the "fableplan" option in the reply line, and if the user instead replies "work on issue" directly, ask once — "Signal says fableplan: yes — post a Fable 5 plan first, or build without one?" — before handing off. Never launch fableplan unprompted, and never silently skip the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
 
 ### 7.5. When the user replies "work on issue" — hand off to the work-on-issue skill
 
@@ -314,6 +316,12 @@ When the user opts to **work on** the issue (not merely validate or update it), 
 Pass the issue number through; the skill is idempotent about the worktree (reuses an existing one for this issue). Don't start editing code or creating a worktree here yourself — delegate so the implement → PR → review chain stays consistent.
 
 **If step 6.5 flagged the issue as too large, surface the disposition before handing off** — implementing an oversized, multi-part issue as one PR reproduces the scope problem in the diff. Recommend splitting/decomposing first; proceed to work-on-issue only on the user's say-so, or scope the implementation to the single core part if they want to start there.
+
+### 7.6. When the user replies "fableplan" — hand off to the fableplan skill
+
+**Invoke the `fableplan` skill**, passing the issue number through — not the bare word "fableplan" as a task description; the skill's own trigger phrases (`/fableplan`, "fableplan this", "plan this with fable") expect a task or issue reference, and the issue number is what makes it post the plan as an issue comment. `fableplan` owns everything from there: it dispatches the Fable 5 Plan subagent, posts the plan as a comment on the issue, and itself asks the user whether to continue building now — don't duplicate that ask here.
+
+Honor this reply whenever the user gives it, even on an issue where step 7's signal was `fableplan: no` — the signal governs whether *this* skill recommends and offers the option, not whether the user's own explicit request is honored. Don't second-guess an explicit "fableplan" reply by re-litigating the signal.
 
 ### 8. When the user replies "update issue"
 

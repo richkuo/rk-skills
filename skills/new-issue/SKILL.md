@@ -96,6 +96,8 @@ Add `--label`/`--assignee` only when the repo visibly uses them (`gh label list`
 
 Terse: issue URL, number, one-line summary of what it covers, complexity score, and any candidate follow-ups you did **not** file (with why). Offer "validate issue" / "work on issue" as next steps in one line.
 
+**When the issue's signal is `fableplan: yes`, also ask the user explicitly** — one line, e.g. "This issue is Capability 2 — want a Fable 5 plan posted before building? (fableplan)" — and let the user decide; don't launch fableplan unprompted, and don't silently drop the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
+
 ## Guardrails
 
 | Situation | Action |
