@@ -53,7 +53,7 @@ Several skills mention a **complexity score** (`C0`–`C100`): a model + effort 
 
 | Skill | What it does |
 |-------|--------------|
-| `fableplan` | Has a Fable 5 subagent write an implementation plan before you build; posts the plan to the related issue if there is one. |
+| `fableplan` | Has a Fable 5 subagent write an implementation plan; posts the plan to the related issue if there is one, then asks whether to build now or stop there. |
 | `fable-new-issue` | Like `new-issue`, but a read-only Fable 5 subagent researches and drafts the issue; your main session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the new issue all the way to a reviewed PR automatically. |
 | `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5 subagent; your main session presents the verdict and acts on it. |
