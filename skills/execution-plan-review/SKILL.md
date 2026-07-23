@@ -45,7 +45,7 @@ Re-render the final table once after all revisions land. This table is what the 
 | An issue lacks one or both ordering fields | Backfill from the approved prd-to-issues graph when available; otherwise infer from Approach/Problem, mark the value as inferred in the table, and confirm it before write-back |
 | User revision references a row that doesn't exist | Show the table again, ask which issue they meant |
 | A revision creates a cycle across either edge kind | Reject the batch without editing any issue and show the cycle path |
-| Revision would put effort at `low` | Set `medium` and say why (effort floor) |
-| Revision would put an Opus 4.8 build at `medium` | Set `high`, or switch the build to Fable 5 if medium was the point — Opus runs at high/xhigh only |
+| Revision would put a non-Fable build's effort at `low` or `medium` | Set `high`, or switch the build to Fable 5 if that tier was the point — Opus/Sonnet run at high/xhigh only |
+| Revision would put a Fable build's effort at `low` | Allowed — Fable-only discretionary tier below the formula floor, no pushback needed |
 | Revision would put validate effort at `xhigh` | Set `high` and say why — validate effort is only ever medium or high |
 | Edits collide with someone else's concurrent issue edits | Re-fetch, re-apply only your delta |

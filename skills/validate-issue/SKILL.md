@@ -235,7 +235,7 @@ Judgment-heavy work must raise **Uncertainty** or **Coupling** — never score a
 | 0 | 0–24 | Cheap/fast (Sonnet-class) | high / high / xhigh |
 | 1 | 25–49 | Opus-class | high / high / xhigh (never medium on Opus) |
 | 2 | 50–74 | Opus-class **+ fableplan first** | high / high / xhigh |
-| 3 | 75–99 | Fable 5 | medium / high / xhigh (medium is Fable-only) |
+| 3 | 75–99 | Fable 5 | medium / high / xhigh (medium is Fable-only; a discretionary Fable-only `low`, below the formula floor, is allowed for issues judged lighter than Volume 0–7) |
 
 Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
 
@@ -343,7 +343,7 @@ Created with LLM: <model> | <effort> | Harness: <harness>
 Updated with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-Verb tracks the action: `Created` for the original body, `Updated` for title/description edits; when the body has no footer yet, append just the `Updated …` line. Fill in `<current model>` (e.g. `Fable 5`, `Opus 4.8`) and `<effort>` (`medium` / `high` / `xhigh` — default `high`, never low). `<harness>` is whatever produced the edit — `Claude Code` for an interactive session, the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session), or the specific tool (`Cursor`, `Codex`, `OpenClaw`, `Hermes`). When the repo's `CLAUDE.md` defines its own footer format, it overrides this default.
+Verb tracks the action: `Created` for the original body, `Updated` for title/description edits; when the body has no footer yet, append just the `Updated …` line. Fill in `<current model>` (e.g. `Fable 5`, `Opus 4.8`) and `<effort>` (`medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that discretionary tier — default `high`). `<harness>` is whatever produced the edit — `Claude Code` for an interactive session, the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session), or the specific tool (`Cursor`, `Codex`, `OpenClaw`, `Hermes`). When the repo's `CLAUDE.md` defines its own footer format, it overrides this default.
 
 Rules:
 - Close with the update-or-not decision, placed after the findings that justify it. That is the deliverable; the complexity score sits on the same line, after a `·` separator.

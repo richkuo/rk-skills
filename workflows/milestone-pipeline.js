@@ -133,7 +133,7 @@ const PREP_SCHEMA = {
           title: { type: 'string' },
           complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 4.8→opus, etc.' },
-          effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:" after low→medium; runtime normalizes non-Fable medium→high' },
+          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
           validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; opus when the line is standard or absent' },
@@ -414,7 +414,7 @@ const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 4.8" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
-- effort: from "**Effort:**" — one of medium/high/xhigh; clamp "low" to medium, but preserve medium on any model so the runtime can identify stale combinations
+- effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
 - validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
@@ -425,8 +425,8 @@ Return via StructuredOutput.`,
 if (!prep) throw new Error('prep agent failed — cannot resolve Execution blocks')
 const normalizedIssues = prep.issues.map((issue) => {
   const normalized = { ...issue }
-  if (normalized.effort === 'medium' && normalized.model !== 'fable') {
-    log(`#${normalized.number}: normalized build effort medium → high for ${MODEL_NAMES[normalized.model] || normalized.model}`)
+  if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
+    log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
   }
   if (normalized.validate_effort === 'xhigh') {

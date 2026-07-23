@@ -43,7 +43,7 @@ Append to every issue body, before the footer:
 - **Depends on:** #<n>[, #<n>…] | none
 - **Runs after:** #<n>[, #<n>…] | none
 - **Build model:** <Fable 5 | Opus 4.8 | ...>
-- **Effort:** <medium (Fable-only) | high | xhigh>
+- **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh>
 - **Validate effort:** <medium | high>   (optional — omit for the default, high; never xhigh)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
 - **PR review:** standard `@claude` review trigger
@@ -63,13 +63,13 @@ Assignment — **derive from the complexity score band** (canonical formula in `
 | 0 | 0–24 | Sonnet (or the repo's cheap/fast builder) | No | high / high / xhigh |
 | 1 | 25–49 | Opus 4.8 | No | high / high / xhigh |
 | 2 | 50–74 | Opus 4.8 | **Yes** | high / high / xhigh |
-| 3 | 75–99 | Fable 5 | No (planning is inherent) | medium / high / xhigh |
+| 3 | 75–99 | Fable 5 | No (planning is inherent) | medium / high / xhigh (or discretionary low) |
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
 - **fableplan first: Yes** means Capability 2 (Opus builds against a posted Fable plan). Never on Fable-built issues (Capability 3 — planning is inherent) and never on Capability 0–1.
 - **Validate effort** (the pre-build Fable validation pass): **only ever medium or high — never xhigh.** Default high; drop to medium for Capability 0 issues with Volume ≤ 7.
-- Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium.** When unsure between two tiers, take the higher (best-solution rule).
+- Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium or low.** Fable builds may drop one tier further to **low**, a discretionary Fable-only tier below the formula's own floor, for issues judged lighter than Volume 0–7 warrants. When unsure between two tiers, take the higher (best-solution rule).
 - PR review is always the standard `@claude` review trigger — no model routing in the review line.
 - Scores filed before the band-encoding change are **not comparable** — re-score if routing matters.
 
