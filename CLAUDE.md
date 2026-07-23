@@ -40,7 +40,7 @@
 - Prefer editing existing files over creating new ones.
 - Press `#` in a session to incorporate learnings into CLAUDE.md.
 - Never proactively invoke `superpowers:*` skills — only on explicit `/` trigger.
-- **If CI runs via `act` locally** (e.g. GitHub Actions minutes are exhausted or no runner is registered) instead of a GitHub-hosted/self-hosted runner: post its output as a PR comment (`gh pr comment <n> --body-file <output>`) so the result is visible to reviewers, then read that comment before merging — fix or explain any failure first, never merge past a posted failure without a stated reason. If `act` wasn't run either, run the project's lint/typecheck/test commands locally before merging instead of merging blind.
+- **If CI runs via `act` locally** (e.g. GitHub Actions minutes are exhausted or no runner is registered) instead of a GitHub-hosted/self-hosted runner: scrub the log for secrets (tokens, keys, unmasked env values) and truncate or split if it would exceed GitHub's ~65k-char comment limit; post that sanitized output as a PR comment ending with the LLM Attribution Footer (`gh pr comment <n> --body-file <prepared-body>` — raw footer-less dumps are not exempt, whether via `--body-file` or pasted inline) so the result is visible to reviewers; then read that comment before merging — fix or explain any failure first, never merge past a posted failure without a stated reason. If `act` wasn't run either, run the project's lint/typecheck/test commands locally before merging instead of merging blind.
 
 ## LLM Attribution Footer
 
