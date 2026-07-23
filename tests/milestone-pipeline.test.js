@@ -257,7 +257,7 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6], [7], [8]],
+      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10]],
       reviewLoop: true,
       reviewMode: 'github',
     }, {
@@ -269,6 +269,8 @@ describe('milestone-pipeline dependency scheduling', () => {
           { number: 5, title: 'Haiku medium', complexity: 20, model: 'haiku', effort: 'medium', validate_effort: 'high', fableplan: false, missing_block: false },
           { number: 6, title: 'Valid defaults', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
           { number: 8, title: 'Valid xhigh', complexity: 20, model: 'opus', effort: 'xhigh', validate_effort: 'medium', fableplan: false, missing_block: false },
+          { number: 9, title: 'Fable low', complexity: 20, model: 'fable', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 10, title: 'Opus low', complexity: 20, model: 'opus', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
         ],
       }),
     })
@@ -294,13 +296,23 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#8')).toBe('medium')
     expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
     expect(effortFor('review-loop:PR#1008')).toBe('xhigh')
+    expect(effortFor('implement:#9 (fable/low)')).toBe('low')
+    expect(effortFor('review-loop:PR#1009')).toBe('low')
+    expect(effortFor('implement:#10 (opus/high)')).toBe('high')
+    expect(effortFor('review-loop:PR#1010')).toBe('high')
+
+    expect(promptFor(events, 'implement:#9 (fable/low)')).toContain('| low | Harness: milestone-pipeline')
+    expect(promptFor(events, 'review-loop:PR#1009')).toContain('| low | Harness: milestone-pipeline')
+    expect(promptFor(events, 'implement:#10 (opus/high)')).toContain('| high | Harness: milestone-pipeline')
+    expect(promptFor(events, 'implement:#10 (opus/high)')).not.toContain('| low |')
 
     const normalizations = logs.filter((message) => message.includes('normalized'))
     expect(normalizations).toEqual([
       '#2: normalized validate effort xhigh → high',
-      '#3: normalized build effort medium → high for Opus 4.8',
-      '#4: normalized build effort medium → high for Sonnet 5',
-      '#5: normalized build effort medium → high for Haiku 4.5',
+      '#3: normalized build effort medium → high for Opus 4.8 (low/medium are Fable-only)',
+      '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
+      '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
+      '#10: normalized build effort low → high for Opus 4.8 (low/medium are Fable-only)',
     ])
   })
 
