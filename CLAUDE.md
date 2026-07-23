@@ -40,6 +40,7 @@
 - Prefer editing existing files over creating new ones.
 - Press `#` in a session to incorporate learnings into CLAUDE.md.
 - Never proactively invoke `superpowers:*` skills — only on explicit `/` trigger.
+- **If CI runs via `act` locally** (e.g. GitHub Actions minutes are exhausted or no runner is registered) instead of a GitHub-hosted/self-hosted runner: post its output as a PR comment (`gh pr comment <n> --body-file <output>`) so the result is visible to reviewers, then read that comment before merging — fix or explain any failure first, never merge past a posted failure without a stated reason. If `act` wasn't run either, run the project's lint/typecheck/test commands locally before merging instead of merging blind.
 
 ## LLM Attribution Footer
 
