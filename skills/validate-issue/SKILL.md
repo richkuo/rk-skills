@@ -235,7 +235,7 @@ Judgment-heavy work must raise **Uncertainty** or **Coupling** — never score a
 | 0 | 0–24 | Cheap/fast (Sonnet-class) | high / high / xhigh |
 | 1 | 25–49 | Opus-class | high / high / xhigh (never medium on Opus) |
 | 2 | 50–74 | Opus-class **+ fableplan first** | high / high / xhigh |
-| 3 | 75–99 | Fable 5 | medium / high / xhigh (medium is Fable-only) |
+| 3 | 75–99 | Fable 5 | medium / high / xhigh (medium is Fable-only; a discretionary Fable-only `low`, below the formula floor, is allowed for issues judged lighter than Volume 0–7) |
 
 Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
 
