@@ -14,7 +14,7 @@ import unittest
 import urllib.parse
 
 SCRIPT = os.path.join(os.path.dirname(__file__), "rewrite_create_pr_link.py")
-FOOTER = "---\nLLM: Claude Opus 4.7 (1M) | high"
+FOOTER = "---\nLLM: Claude Opus 5 | high"
 
 
 def run(body_in, footer=FOOTER):
@@ -94,7 +94,7 @@ class RewriteCreatePRLinkTest(unittest.TestCase):
     def test_replaces_stale_llm_footer_in_prefilled_body(self):
         """Simulates Claude having written a wrong effort into the PR body.
         The rewriter must replace it, not append a second footer."""
-        stale_footer = "---\nLLM: Claude Opus 4.7 (1M) | medium"
+        stale_footer = "---\nLLM: Claude Opus 5 | medium"
         pr_body = f"## Summary\n- did a thing\n\n{stale_footer}"
         encoded = urllib.parse.quote(pr_body, safe="")
         comment = f"[Create PR](https://github.com/owner/repo/compare/main...feat?quick_pull=1&body={encoded})"
