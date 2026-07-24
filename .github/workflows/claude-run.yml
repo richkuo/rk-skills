@@ -81,6 +81,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: 'Claude Code OAuth token for agent authentication'
+        required: true
 
 jobs:
   run:
