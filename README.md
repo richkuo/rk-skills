@@ -49,7 +49,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 |-------|--------------|
 | `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits actually changed. |
 | `create-release` | Cuts a version tag and publishes a GitHub release with generated notes, bumping the package version first so publish workflows fire correctly. |
-| `sync-docs-release` | The two above in sequence: sync docs, commit, then cut the release. |
+| `sync-docs-release` | The two above in sequence: sync docs, land the doc changes, then cut the release. The doc changes go onto a branch and a PR by default — it never commits them to your default branch — and it asks whether to merge that PR before releasing. |
 
 ### Fable-driven skills
 
