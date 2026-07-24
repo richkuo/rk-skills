@@ -71,6 +71,7 @@
 ## GitHub Issues
 
 - **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory `[C<score>]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
+- **Every issue's complexity rationale line ends with an explicit `· fableplan: <yes|no>` signal** — `yes` only at Capability 2 (score 50–74); every other band is `no` (0–1 need no separate plan, band 3 is built by Fable 5 directly). Absence is ambiguous, not "no". When the signal is `yes`, `new-issue`/`validate-issue` must offer the fableplan step and let the user decide — never launch it unprompted, never silently drop it; autonomous loop skills apply their own documented gates instead of asking.
 
 ## This Repository
 
