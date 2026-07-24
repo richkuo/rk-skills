@@ -47,3 +47,30 @@ describe('Execution block ordering contract', () => {
     expect(readme).toContain('`Runs after`')
   })
 })
+
+describe('Execution block Plan effort contract', () => {
+  test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
+    expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high | xhigh>')
+    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*planner is always Fable 5.*every tier is legal/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*sets effort only, never a model/is)
+  })
+
+  test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
+    expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
+    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
+    expect(executionPlanReview).toMatch(/Revision names a plan model.*Only the effort is stampable/is)
+    expect(executionPlanReview).toMatch(/plan effort at `low` or `medium`.*Allowed/is)
+  })
+
+  test('milestone-workflow documents the plan stage running at the issue Plan effort', () => {
+    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
+    expect(milestoneWorkflow).toMatch(/Plan effort on every `fableplan: Yes` issue/i)
+  })
+
+  test('README publishes the plan effort field', () => {
+    expect(readme).toMatch(/the effort that plan runs at/i)
+  })
+})

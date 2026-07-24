@@ -30,6 +30,8 @@ If the command fails (wrong number, no auth, no repo), stop and tell the user �
 
 Record the issue number and URL — you'll need them in step 4. If no issue is referenced, skip this and step 4's posting.
 
+Also record the **Plan effort** if the fetched body has an `## Execution` block carrying a `- **Plan effort:**` line — step 2 dispatches at that tier. The line sets effort only; this skill always plans on Fable 5 regardless of the block's `Build model:`. When the line is absent, or no issue was referenced, the subagent inherits the session effort.
+
 ### 2. Dispatch the Fable 5 Plan subagent
 
 Do not re-plan the task yourself first — the subagent owns the plan. Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then call the Agent tool with:
@@ -37,6 +39,7 @@ Do not re-plan the task yourself first — the subagent owns the plan. Snapshot 
 - `subagent_type`: `Plan`
 - `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5)
 - `run_in_background`: `false` — every later step depends on the plan, so wait for it synchronously instead of doing other work first
+- `effort`: the issue's stamped **Plan effort** from step 1, when there is one — otherwise omit the parameter and let the subagent inherit the session effort
 - `description`: `Plan <short task name>`
 - `prompt`: Hand the subagent everything it needs to plan independently — the full task description, the issue title/body if one was fetched, the working directory, and any constraints the user stated. Tell it explicitly:
   - Produce a concrete, ordered implementation plan (files to create/modify, the approach, build sequence, risks/edge cases, and how to verify).

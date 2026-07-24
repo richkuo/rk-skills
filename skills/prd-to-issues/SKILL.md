@@ -1,6 +1,6 @@
 ---
 name: prd-to-issues
-description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, review trigger). Stage 3 of the new-app-pipeline.
+description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, plan effort, review trigger). Stage 3 of the new-app-pipeline.
 ---
 
 # prd-to-issues
@@ -46,6 +46,7 @@ Append to every issue body, before the footer:
 - **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh>
 - **Validate effort:** <medium | high>   (optional — omit for the default, high; never xhigh)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
+- **Plan effort:** <low | medium | high | xhigh>   (optional — omit for the default, high; only meaningful when fableplan first is Yes)
 - **PR review:** standard `@claude` review trigger
 ```
 
@@ -69,6 +70,7 @@ Axes already encode the old parallel heuristics (money/security → high Risk; d
 
 - **fableplan first: Yes** means Capability 2 (Opus builds against a posted Fable plan). Never on Fable-built issues (Capability 3 — planning is inherent) and never on Capability 0–1.
 - **Validate effort** (the pre-build Fable validation pass): **only ever medium or high — never xhigh.** Default high; drop to medium for Capability 0 issues with Volume ≤ 7.
+- **Plan effort** (the fableplan stage): stamp it only on `fableplan first: Yes` issues — it is ignored everywhere else. The planner is always Fable 5, so **every tier is legal, including the Fable-only low and medium** — this line sets effort only, never a model. Default high; raise to **xhigh** when the design itself is the risk (the issue's Uncertainty axis is 3–4, or it defines a contract several later issues build against); drop to **medium** when Capability 2 came from the Coupling bump rather than Risk/Uncertainty, so the plan is mostly sequencing known work. Reserve **low** for a Capability-2 issue whose approach is already settled in the issue body and only needs ordering.
 - Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium or low.** Fable builds may drop one tier further to **low**, a discretionary Fable-only tier below the formula's own floor, for issues judged lighter than Volume 0–7 warrants. When unsure between two tiers, take the higher (best-solution rule).
 - PR review is always the standard `@claude` review trigger — no model routing in the review line.
 - Scores filed before the band-encoding change are **not comparable** — re-score if routing matters.

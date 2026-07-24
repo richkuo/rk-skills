@@ -62,6 +62,8 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
       }
     } else if (options.phase === 'Validate') {
       result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
+    } else if (options.phase === 'Plan') {
+      result = { plan: `plan for #${issueFromLabel(options.label)}`, constraints: [] }
     } else if (options.phase === 'Implement') {
       const issue = issueFromLabel(options.label)
       result = {
@@ -253,6 +255,36 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'plan:#2')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'implement:#3 (fable/high)')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004')).toHaveLength(1)
+  })
+
+  test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
+          { number: 3, title: 'Stamped low', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
+          { number: 4, title: 'No stamp', complexity: 60, model: 'opus', effort: 'xhigh', validate_effort: 'high', fableplan: true, missing_block: false },
+          { number: 5, title: 'No plan stage', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+        ],
+      }),
+    })
+
+    const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
+    expect(planEvent(2).effort).toBe('xhigh')
+    expect(planEvent(2).model).toBe('fable')
+    expect(planEvent(3).effort).toBe('low')
+    expect(planEvent(3).model).toBe('fable')
+    expect(planEvent(4).effort).toBe('high')
+    expect(planEvent(5)).toBeUndefined()
+
+    // The posted-plan footer must advertise the effort the planner actually ran at.
+    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | xhigh | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
+    expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
+
+    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
+    expect(logs.filter((message) => message.includes('normalized'))).toEqual([])
   })
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {
