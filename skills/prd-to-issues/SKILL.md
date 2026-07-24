@@ -42,7 +42,7 @@ Append to every issue body, before the footer:
 ## Execution
 - **Depends on:** #<n>[, #<n>…] | none
 - **Runs after:** #<n>[, #<n>…] | none
-- **Build model:** <Fable 5 | Opus 4.8 | ...>
+- **Build model:** <Fable 5 | Opus 5 | ...>
 - **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh>
 - **Validate effort:** <medium | high>   (optional — omit for the default, high; never xhigh)
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
@@ -61,8 +61,8 @@ Assignment — **derive from the complexity score band** (canonical formula in `
 | Capability | Score band | Build model | fableplan first | Effort from Volume (0–7 / 8–15 / 16–24) |
 |---|---|---|---|---|
 | 0 | 0–24 | Sonnet (or the repo's cheap/fast builder) | No | high / high / xhigh |
-| 1 | 25–49 | Opus 4.8 | No | high / high / xhigh |
-| 2 | 50–74 | Opus 4.8 | **Yes** | high / high / xhigh |
+| 1 | 25–49 | Opus 5 | No | high / high / xhigh |
+| 2 | 50–74 | Opus 5 | **Yes** | high / high / xhigh |
 | 3 | 75–99 | Fable 5 | No (planning is inherent) | medium / high / xhigh (or discretionary low) |
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.

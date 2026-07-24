@@ -13,15 +13,15 @@ from strip_llm_footer import strip_llm_footer
 
 class StripLLMFooterTest(unittest.TestCase):
     def test_strips_footer_with_separator(self):
-        body = "## Summary\n- did a thing\n\n---\nLLM: Claude Opus 4.7 (1M) | medium"
+        body = "## Summary\n- did a thing\n\n---\nLLM: Claude Opus 5 | medium"
         self.assertEqual(strip_llm_footer(body), "## Summary\n- did a thing")
 
     def test_strips_footer_without_separator(self):
-        body = "## Summary\n- did a thing\n\nLLM: Claude Opus 4.7 (1M) | high"
+        body = "## Summary\n- did a thing\n\nLLM: Claude Opus 5 | high"
         self.assertEqual(strip_llm_footer(body), "## Summary\n- did a thing")
 
     def test_strips_footer_with_trailing_whitespace(self):
-        body = "## Summary\n\n---\nLLM: Claude Opus 4.7 (1M) | high\n\n"
+        body = "## Summary\n\n---\nLLM: Claude Opus 5 | high\n\n"
         self.assertEqual(strip_llm_footer(body), "## Summary")
 
     def test_passthrough_when_no_footer(self):
@@ -36,12 +36,12 @@ class StripLLMFooterTest(unittest.TestCase):
         self.assertEqual(strip_llm_footer(body), body)
 
     def test_idempotent(self):
-        body = "## Summary\n\n---\nLLM: Claude Opus 4.7 (1M) | high"
+        body = "## Summary\n\n---\nLLM: Claude Opus 5 | high"
         stripped = strip_llm_footer(body)
         self.assertEqual(strip_llm_footer(stripped), stripped)
 
     def test_multiple_newlines_before_footer(self):
-        body = "## Summary\n\n\n\n---\nLLM: Claude Opus 4.7 (1M) | medium"
+        body = "## Summary\n\n\n\n---\nLLM: Claude Opus 5 | medium"
         self.assertEqual(strip_llm_footer(body), "## Summary")
 
 
