@@ -117,7 +117,7 @@ if (!Number.isInteger(BUDGET_FLOOR) || BUDGET_FLOOR <= 0) throw new Error('budge
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
-const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 4.8', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
+const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
 
 const PREP_SCHEMA = {
   type: 'object',
@@ -132,7 +132,7 @@ const PREP_SCHEMA = {
           number: { type: 'integer' },
           title: { type: 'string' },
           complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
-          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 4.8→opus, etc.' },
+          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
           validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
@@ -413,7 +413,7 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
 const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
-- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 4.8" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
+- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
 - validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
 - fableplan: true when "**fableplan first:**" starts with "Yes"

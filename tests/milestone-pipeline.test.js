@@ -309,10 +309,10 @@ describe('milestone-pipeline dependency scheduling', () => {
     const normalizations = logs.filter((message) => message.includes('normalized'))
     expect(normalizations).toEqual([
       '#2: normalized validate effort xhigh → high',
-      '#3: normalized build effort medium → high for Opus 4.8 (low/medium are Fable-only)',
+      '#3: normalized build effort medium → high for Opus 5 (low/medium are Fable-only)',
       '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
       '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
-      '#10: normalized build effort low → high for Opus 4.8 (low/medium are Fable-only)',
+      '#10: normalized build effort low → high for Opus 5 (low/medium are Fable-only)',
     ])
   })
 

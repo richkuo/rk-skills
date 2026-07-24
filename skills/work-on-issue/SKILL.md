@@ -129,7 +129,7 @@ Commit message: a concise summary of the change, referencing the issue (match th
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-Fill `<current model>` (e.g. `Opus 4.8`) and `<effort>` (`high` by default). `<harness>` is whatever actually produced the change — `Claude Code` for an interactive session, or the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session). Never put time/effort estimates in the message body. No `Co-authored-by` trailer.
+Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). `<harness>` is whatever actually produced the change — `Claude Code` for an interactive session, or the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session). Never put time/effort estimates in the message body. No `Co-authored-by` trailer.
 
 ### 6. Open the PR
 

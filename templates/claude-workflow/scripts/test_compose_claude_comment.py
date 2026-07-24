@@ -16,7 +16,7 @@ HARNESS = "anthropics/claude-code-action@v1"
 
 class ModelDisplayNameTest(unittest.TestCase):
     def test_known_ids_mapped(self):
-        self.assertEqual(model_display_name("claude-opus-4-8[1m]"), "Claude Opus 4.8 (1M)")
+        self.assertEqual(model_display_name("claude-opus-5"), "Claude Opus 5")
         self.assertEqual(model_display_name("claude-sonnet-5"), "Claude Sonnet 5")
         self.assertEqual(model_display_name("claude-fable-5"), "Claude Fable 5")
 
@@ -107,7 +107,7 @@ class ComposeCLITest(unittest.TestCase):
         env = {
             **os.environ,
             "BODY_IN": "body",
-            "MODEL_ID": "claude-opus-4-8[1m]",
+            "MODEL_ID": "claude-opus-5",
             "EFFORT": "xhigh",
             "CLAUDE_HARNESS": HARNESS,
             "STATUS_NOTE": "",
@@ -116,7 +116,7 @@ class ComposeCLITest(unittest.TestCase):
             [sys.executable, script], env=env, capture_output=True, text=True, check=True
         )
         self.assertEqual(
-            result.stdout, compose("body", "claude-opus-4-8[1m]", "xhigh", HARNESS)
+            result.stdout, compose("body", "claude-opus-5", "xhigh", HARNESS)
         )
 
 

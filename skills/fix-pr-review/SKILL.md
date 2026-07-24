@@ -125,7 +125,7 @@ Otherwise, rate each surviving fix's complexity from your validation (you just t
 
 When in doubt between tiers, take the higher one — misrouting hard work down costs correctness; misrouting easy work up costs nothing that matters.
 
-When dispatching, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work (e.g. `Opus 4.8` / `Sonnet 5`), not the session model. When the subagent returns, relay its step-8 report to the user verbatim plus which model ran; don't redo its work.
+When dispatching, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work (e.g. `Opus 5` / `Sonnet 5`), not the session model. When the subagent returns, relay its step-8 report to the user verbatim plus which model ran; don't redo its work.
 
 If the Agent tool's model override is unavailable in the current harness, fall back to running inline and note the intended model in the report.
 
@@ -175,7 +175,7 @@ Commit message: a concise summary of what review findings were addressed (refere
 Updated with LLM: <current model> | <effort> | Harness: Claude Code
 ```
 
-Fill `<current model>` (e.g. `Opus 4.8`) and `<effort>` (`high` by default). Per the user's workflow, never include time/effort estimates in the message body.
+Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). Per the user's workflow, never include time/effort estimates in the message body.
 
 ### 6. Post the disposition comment back to the PR
 
