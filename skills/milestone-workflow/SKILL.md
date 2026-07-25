@@ -7,7 +7,7 @@ description: Use when the user wants a milestone of Execution-block-stamped GitH
 
 Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dependency-aware dispatch: the dependency graph is decided here with the user; execution waits for stable predecessor results and builds hard-dependent work from their reviewed code.
 
-For a read-only look at the milestone before committing to a run — what routing is stamped on each issue, and which stamps contradict their score's band — use `milestoneplan` first. It renders the per-issue table and recommendations without editing anything, then hands off here.
+For a read-only look at the milestone before committing to a run — whether it is runnable at all, what routing is stamped on each issue, which stamps contradict their score's band, what the waves and the critical path look like, and what the run would cost in agents — use `milestoneplan` first. It audits, projects, and returns a go / no-go verdict without editing anything, then hands off here.
 
 ## Steps
 
@@ -75,7 +75,7 @@ The orchestrating session holds no implementation detail — issues and PRs are 
 | Situation | Do this |
 |---|---|
 | An issue lacks an Execution block at run time | Stop before running; send it through execution-plan-review |
-| The user wants to see the per-issue routing before committing to a run | Run `milestoneplan` — the read-only table and field recommendations without touching an issue |
+| The user wants the milestone checked before committing to a run | Run `milestoneplan` — the read-only audit, waves, run-size projection and go / no-go verdict, without touching an issue |
 | No `@claude` review workflow in the repo | Use the default `reviewMode: 'subagent'` (no Actions dependency); only github mode needs the template installed, and `reviewLoop: false` remains the no-review fallback |
 | GitHub Actions billing or a self-hosted runner outage stalls reviews | Switch the next invocation to `reviewMode: 'subagent'`; already-running github-mode loops stay blocked until Actions recovers |
 | A successor hard-depends on unmerged predecessor PRs | Use `after`; the workflow waits for stable heads and `work-on-issue` verifies/integrates every base before implementation |

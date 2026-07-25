@@ -39,7 +39,7 @@ Load `github-issue-format` before editing. For each changed issue: `gh issue edi
 
 Re-render the final table once after all revisions land. This table is what the milestone workflow will execute — say so.
 
-To see the milestone's full per-issue routing table read-only before it runs — every Execution-block field plus band-derived change recommendations — that is `milestoneplan`. It reads without editing and routes any Execution-block fixes back here.
+To audit the whole milestone read-only before it runs — every Execution-block field against its score's band, the closed dependency graph, the execution waves, the projected run size, and a go / no-go verdict — that is `milestoneplan`. It reads without editing and routes any Execution-block findings back here.
 
 ## Failure modes
 

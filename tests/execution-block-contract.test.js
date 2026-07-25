@@ -29,6 +29,27 @@ function procedureBody(markdown) {
   return match ? match[1] : markdown
 }
 
+/**
+ * Pull the run-size formula out of a skill document, split into the summation
+ * scope and the agent terms. Anchored on the sole `1 prep` code span, so prose
+ * around the formula can be reworded freely while the terms stay comparable —
+ * the parity tests compare two documents' extractions instead of pinning a
+ * literal in each, which is what makes independent drift fail.
+ */
+function runSizeFormula(markdown) {
+  const spans = markdown.match(/`[^`]*1 prep[^`]*`/g)
+  if (!spans || spans.length !== 1) return null
+  const parts = spans[0].match(/^`1 prep \+ sum over (.+?) of \((.+)\)`$/)
+  if (!parts) return null
+  return { scope: parts[1].trim(), terms: parts[2].replace(/\s+/g, ' ').trim() }
+}
+
+/** The per-issue subagent-mode review worst case, extracted for the same parity comparison. */
+function reviewWorstCase(markdown) {
+  const match = markdown.match(/(2×maxReviewCycles\s*[−-]\s*1)/)
+  return match ? match[1].replace(/\s+/g, ' ') : null
+}
+
 /** The fenced code blocks of a procedure — where its actual instructions live. */
 function fencedBlocks(markdown) {
   return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map(([, code]) => code)
@@ -328,6 +349,10 @@ describe('milestoneplan pre-flight contract', () => {
     for (const read of [
       'gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq \'.[]\'',
       'gh issue list --milestone "M" --state all --limit 500 --json number',
+      'gh pr list --state open --limit 500 --json number',
+      "gh api graphql -F owner=':owner' -F repo=':repo' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
+      "gh api graphql -F owner=':owner' -F repo=':repo' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, itemTypes:[CROSS_REFERENCED_EVENT]){ nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
+      'gh pr view 42 -R owner/repo --json number,state,mergedAt',
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
       "gh api graphql -F pr=77 -f query='query($pr:Int!){ repository { pullRequest(number:$pr){ title } } }'",
@@ -336,22 +361,183 @@ describe('milestoneplan pre-flight contract', () => {
     }
   })
 
-  test('paginates the milestone lookup instead of taking the first page', () => {
-    const blocks = fencedBlocks(body)
-    expect(blocks.some((code) => /milestones\?state=all&per_page=100" --paginate/.test(code))).toBe(true)
-    expect(body).toMatch(/returns 30 per page by default/)
-    // A closed milestone must stay findable.
+  test('proves fetch completeness from the fetch, not from cross-endpoint counts', () => {
+    // Milestone counters include PRs assigned to the milestone; gh issue list does not.
+    expect(body).toMatch(/do not gate this on the milestone object's `open_issues` \/ `closed_issues`/i)
+    expect(body).toMatch(/strictly below\*\* the limit/i)
+    expect(body).toMatch(/equal to\*\* the limit is indistinguishable from truncation/i)
+    expect(body).toMatch(/blocking unknown/i)
+    // A closed milestone must stay auditable.
     expect(body).toMatch(/state=all/)
-    expect(body).toMatch(/would read as not found/)
+    // Truncation is disclosed, and a proven-complete fetch prints no caveat at all.
+    expect(body).toMatch(/never present a count equal to the limit as the complete milestone/i)
+    expect(body).toMatch(/Proceed, and print no truncation caveat/i)
+    expect(body).toMatch(/\| Fetched issue count equals `--limit` \|/)
   })
 
-  test('marks a missing field as missing rather than inferring it', () => {
-    // "missing" and "none" produce different recommendations, so the parse must
-    // carry the distinction instead of collapsing absence into a default.
-    expect(body).toMatch(/Parse, never infer, when the field is present/)
-    expect(body).toMatch(/explicit `none` is authoritative/)
-    expect(body).toMatch(/"missing" and "none" are different cells/)
-    expect(body).toMatch(/never blank, never a guessed default/)
+  test('classifies buckets in one query and never reads a failed lookup as no PR', () => {
+    // The instruction is the fenced command; the per-issue --search form may still be
+    // named in prose as the thing not to do, so assert over fenced blocks only.
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /gh pr list --state open --limit \d+/.test(code))).toBe(true)
+    expect(blocks.some((code) => /gh pr list[^\n]*--search/.test(code))).toBe(false)
+    expect(body).toMatch(/A failed lookup is not "no PR found\."/)
+  })
+
+  test("the documented closing-keyword pattern matches what GitHub itself closes on", () => {
+    // Run the pattern the document publishes rather than grepping for keyword names:
+    // a pattern that misses `Fixed #12` sends an issue that already has a PR back
+    // through a fresh build. JS has no inline (?i), so strip it and pass the flag.
+    const fenced = fencedBlocks(body).find((code) => code.includes('close[sd]?'))
+    expect(fenced, 'no closing-keyword pattern found in the procedure').toBeDefined()
+    const pattern = new RegExp(fenced.trim().replace(/^\(\?i\)/, ''), 'gi')
+    const firstIssueNumber = (text) => {
+      pattern.lastIndex = 0
+      const match = pattern.exec(text)
+      return match ? Number(match[match.length - 1]) : null
+    }
+    // All nine GitHub closing keywords must resolve to the issue they close.
+    for (const keyword of ['close', 'closes', 'closed', 'fix', 'fixes', 'fixed', 'resolve', 'resolves', 'resolved']) {
+      expect(firstIssueNumber(`${keyword} #12`), `lowercase "${keyword}" missed`).toBe(12)
+      const capitalized = keyword[0].toUpperCase() + keyword.slice(1)
+      expect(firstIssueNumber(`${capitalized} #12`), `capitalized "${capitalized}" missed`).toBe(12)
+    }
+    // The cross-repo form still resolves.
+    expect(firstIssueNumber('fixes owner/repo#12')).toBe(12)
+    // A bare mention is not a closing relationship.
+    expect(firstIssueNumber('see #12 for context')).toBeNull()
+    expect(firstIssueNumber('reverts #12')).toBeNull()
+    // #12 must never match #123 — the whole number is captured, so 123 stays 123.
+    expect(firstIssueNumber('closes #123')).toBe(123)
+  })
+
+  test('resolves closed-predecessor merge state instead of assuming it', () => {
+    // The severity table distinguishes closed-with-merged-PR from closed-without,
+    // so step 1 must actually fetch the data that decides it.
+    expect(body).toMatch(/closedByPullRequestsReferences/)
+    expect(fencedBlocks(body).some((code) => /gh pr view <n> -R <owner>\/<repo> --json number,state,mergedAt/.test(code))).toBe(true)
+    // Merge state decides, not the close reason.
+    expect(body).toMatch(/Merge state is the deciding fact, not `stateReason`/)
+    expect(body).toMatch(/NOT_PLANNED.*closing PR merged is still satisfied/is)
+    // An undecidable edge is an unknown, never silently the blocking branch.
+    expect(body).toMatch(/Never resolve an undecidable merge state to the blocking branch/i)
+    expect(body).toMatch(/\| Merge state of a closed predecessor a \*\*runnable\*\* issue hard-depends on could not be determined \| \*\*NO-GO\*\*/)
+  })
+
+  test('targets the closing PR own repository, never a same-numbered local PR', () => {
+    // `gh pr view 42` with no -R resolves THIS repo's PR 42, so a cross-repo closing
+    // PR would be decided by an unrelated PR — a confident wrong verdict either way.
+    const lookups = fencedBlocks(body).flatMap((code) => code.match(/gh pr view[^\n]*/g) ?? [])
+    expect(lookups.length, 'no PR lookup found in the procedure').toBeGreaterThan(0)
+    for (const lookup of lookups) {
+      expect(lookup, `PR lookup with no -R: ${lookup}`).toMatch(/\s-R\s/)
+    }
+    // The repo has to come from the reference itself, not be guessed.
+    expect(body).toMatch(/repository\.owner\.login.*repository\.name/is)
+    // An unreadable cross-repo PR is an unknown, not a merge verdict.
+    expect(body).toMatch(/cannot read is a \*\*blocking unknown\*\*/i)
+    expect(body).toMatch(/\| A closed predecessor's closing PR lives in another repo \|/)
+  })
+
+  test('scopes blocking severity to the buckets the run actually dispatches', () => {
+    // milestone-workflow drops closed issues and runs resume issues outside the
+    // pipeline, so neither bucket's Execution block is ever read — a finding there
+    // cannot decide the verdict, or one pre-convention closed issue blocks every re-run.
+    expect(body).toMatch(/derive severity from the bucket the finding's owning issue sits in/i)
+    expect(body).toMatch(/\| A \*\*runnable\*\* issue with no `## Execution` block \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| \*\*Any row above whose owning issue sits in the skip or resume bucket\*\*[^|]*\| \*\*Informational\*\*/)
+    // The audit itself still covers the whole milestone — buckets are not decidable otherwise.
+    expect(body).toMatch(/Audit every issue in the milestone/i)
+    expect(body).toMatch(/incomplete fetch stays NO-GO regardless of buckets/i)
+    // A resume finding is deferred, not resolved: it returns if the PR closes unmerged.
+    expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
+    // A cycle only forces NO-GO when every edge in it survives into the run.
+    expect(body).toMatch(/\| A cycle across the union of both edge kinds, every issue in it runnable \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| A cycle routed through a skip- or resume-bucket issue \| \*\*Informational\*\*/)
+    expect(body).toMatch(/A finding confined to the skip or resume bucket never produces this verdict/)
+  })
+
+  test('owns an edge finding by the endpoint the run dispatches, so demotion never claims cross-bucket edge rows', () => {
+    // The cross-bucket edge rows (hard edge into resume, hard edge to a closed-unmerged
+    // predecessor, open hard cross-milestone prerequisite) have a predecessor in skip or
+    // resume BY DEFINITION — reading the predecessor as the finding's issue would demote
+    // Blocked — excluded to Informational and dispatch the dependent against missing code.
+    expect(body).toMatch(/An edge finding has two endpoints, and its owner is the endpoint this run would dispatch/)
+    expect(body).toMatch(/never a cross-bucket edge row/)
+    // The cross-bucket edge rows keep their severity under the demotion rule.
+    expect(body).toMatch(/\| A hard edge into the resume bucket[^|]*\| \*\*Blocked — excluded\*\*/)
+    expect(body).toMatch(/\| A \*\*hard\*\* edge to a predecessor closed with \*\*no\*\* PR, or with one closed unmerged \| \*\*Blocked — excluded\*\*/)
+    expect(body).toMatch(/\| An open \*\*hard\*\* cross-milestone prerequisite \| \*\*Blocked — excluded\*\*/)
+    // A single-issue finding on a skip- or resume-bucket issue still demotes.
+    expect(body).toMatch(/A \*\*closed or resume-bucket\*\* issue has no Execution block \| Informational/)
+    // Both endpoints in the build bucket: no finding exists for the demotion to touch.
+    expect(body).toMatch(/both sit in the build bucket is ordering the waves already handle/)
+  })
+
+  test('gives each closed-predecessor edge kind exactly one severity row', () => {
+    // A hard edge needs the predecessor's code; an ordering-only edge only prevents
+    // overlapping work, and a closed issue has no work left to overlap. An unqualified
+    // duplicate row would exclude runnable issues over a constraint already met.
+    const severityRows = [...body.matchAll(/^\| ([^|\n]*closed[^|\n]*) \| ([^|\n]+) \|/gm)].map(
+      ([, finding, severity]) => ({ finding, severity: severity.trim() }),
+    )
+    const closedUnmerged = severityRows.filter((r) => /no\*\* PR|closed unmerged|without a merged PR/.test(r.finding))
+    expect(closedUnmerged.length, 'expected one row per edge kind').toBe(2)
+    expect(closedUnmerged.filter((r) => /\*\*Blocked — excluded\*\*/.test(r.severity)).length).toBe(1)
+    expect(closedUnmerged.every((r) => /\*\*hard\*\*|\*\*ordering-only\*\*/i.test(r.finding))).toBe(true)
+    expect(body).toMatch(/An ordering-only edge to a closed predecessor is satisfied whether or not its PR merged/)
+    expect(body).toMatch(/none of them falls through the rules, and none of them lands in two/)
+  })
+
+  test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
+    // milestone-workflow runs resume loops to completion BEFORE the pipeline, which
+    // is what satisfies an ordering-only edge into that bucket.
+    expect(body).toMatch(/\| An \*\*ordering-only\*\* edge into the resume bucket \| \*\*Informational\*\*/)
+    expect(body).toMatch(/ordering-only edge into resume is \*satisfied by sequencing\*, not blocked/)
+    expect(body).toMatch(/to completion before the pipeline starts|to completion \*\*before invoking the pipeline\*\*/)
+    // The reported cost must carry that sequencing, or the number reads as concurrent.
+    expect(body).toMatch(/sequenced ahead of it/)
+  })
+
+  test('the model-attribution table names a model for every row, prep included', () => {
+    // Scope to the attribution table itself — other two-column tables in this doc
+    // legitimately name skills rather than models.
+    const table = body.match(/\| Projected agent \| Model it actually runs on \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(table, 'no model-attribution table found').not.toBeNull()
+    const rows = [...table[1].matchAll(/^\| ([^|]+?) \| (.+?) \|$/gm)]
+    expect(rows.length).toBeGreaterThanOrEqual(7)
+    for (const [, agent, model] of rows) {
+      expect(model, `"${agent.trim()}" names no model`).toMatch(/Fable|Opus|Sonnet|Build model|session model/)
+    }
+    // Prep passes no model, so it inherits the session model — say so, don't call it cheap.
+    expect(body).toMatch(/\| Prep \(once for the whole run\) \| \*\*the session model\*\*/)
+    expect(body).toMatch(/the pipeline passes no `model`/)
+  })
+
+  test('attributes each projected agent to the model the pipeline dispatches it on', () => {
+    // Validate and plan are always Fable; the first review defaults to Opus. None
+    // of those come from the issue's Build model, which the mix used to assume.
+    expect(body).toMatch(/\| Validate \(every issue\) \| \*\*always Fable 5\*\*/)
+    expect(body).toMatch(/\| Plan \(`fableplan: Yes` issues\) \| \*\*always Fable 5\*\*/)
+    expect(body).toMatch(/First review, `reviewMode: 'subagent'`.*\*\*defaulting to Opus\*\*/)
+    expect(body).toMatch(/Re-review after a fix pass that cleared only non-blocking findings, subagent mode \| \*\*Sonnet\*\*/)
+    expect(body).toMatch(/\| Implement \| the issue's \*\*Build model\*\* \|/)
+    expect(body).toMatch(/reviewLoop: false.*no reviewer or fixer model enters the mix/is)
+  })
+
+  test('attributes the github-mode review loop to the Build model, not to Opus', () => {
+    // In github mode the pipeline dispatches the single review-loop agent with the
+    // issue's Build model, so a per-term attribution that names Opus for every review
+    // misreports the whole mix on that mode.
+    expect(body).toMatch(/\| The single `review-loop` agent, `reviewMode: 'github'` \| the issue's \*\*Build model\*\*/)
+    expect(body).toMatch(/`PR review:` model is \*never read\* in this mode/)
+    // The mode has to be named before the model, and the step 4 term has to carry it too.
+    expect(body).toMatch(/name the mode before naming the model/i)
+    expect(body).toMatch(/attribute that single agent to the issue's \*\*Build model\*\*, not to Opus/)
+    // The @claude Action is not a pipeline agent, so it is outside the projected counts.
+    expect(body).toMatch(/`@claude` GitHub Action, which is not a pipeline agent/)
+    // The two modes must not report the same mix.
+    expect(body).toMatch(/no Opus reviewer in the mix at all/)
   })
 
   test('derives Capability and Volume from the score rather than the rationale line', () => {
@@ -360,30 +546,59 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/never suppresses the effort check/i)
   })
 
-  test('recommends against the band table and separates overrides from slips', () => {
+  test('marks a missing field as missing rather than inferring it', () => {
+    // "missing" and "none" produce different findings, so the parse must carry the
+    // distinction instead of collapsing absence into a default.
+    expect(body).toMatch(/Parse, never infer, when the field is present/)
+    expect(body).toMatch(/explicit `none` is authoritative/)
+    expect(body).toMatch(/"missing" and "none" are different cells, and they produce different findings/)
+    expect(body).toMatch(/never blank, never a guessed default/)
+  })
+
+  test('routes each finding class to a skill whose write scope covers it', () => {
+    // execution-plan-review edits only Execution block lines, so body-content
+    // findings routed there would be handed to a skill that cannot clear them.
+    expect(body).toMatch(/Body-content findings.*`validate-issue`/s)
+    expect(body).toMatch(/`execution-plan-review` cannot clear any of these/)
+    expect(body).toMatch(/Editing issue body prose or the title's `\[C<score>\]` prefix \| `validate-issue`/)
+  })
+
+  test('audits stamps against the band table and separates overrides from slips', () => {
     expect(body).toMatch(/\| Capability \| Score \| Build model \| fableplan \|/)
     expect(body).toMatch(/deliberate override/i)
-    expect(body).toMatch(/unexplained under-band departure gets a recommendation/i)
-    // The pipeline silently raises non-Fable low/medium; the check must say the stamp lies.
+    expect(body).toMatch(/unexplained under-band departure is a finding/i)
+    // The pipeline silently raises non-Fable low/medium; the audit must say the stamp lies.
     expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
     expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
-    // Volume tertile applies to build effort only; Validate/Plan have their own rules.
+    // The Volume tertile governs build effort only — Validate and Plan have their own rules.
     expect(body).toMatch(/\*\*build\*\* effort that contradicts the Volume tertile/i)
     expect(body).toMatch(/Validate effort and Plan effort are judged by their own rules/i)
-    // Fable discretionary low is allowed — never recommend against it.
+    // A Fable build at `low` is the sanctioned discretionary tier — never a finding.
     expect(body).toMatch(/Fable build stamped `low`.*discretionary Fable-only tier/is)
-    expect(body).toMatch(/never recommend against it/i)
-    // Band is a floor: under-band recommends; over-band is observation, never a downgrade.
+    expect(body).toMatch(/never flag it/i)
+    expect(body).toMatch(/\| A Fable build is stamped `low` \| On-rule/)
+    // Over-band is the pipeline's own default for a missing Execution block.
+    expect(body).toMatch(/model fable, effort high/)
+  })
+
+  test('treats the band as a floor — under-band is a finding, over-band never a downgrade', () => {
     expect(body).toMatch(/The band is a floor, not a ceiling/i)
     expect(body).toMatch(/no hard ceilings — the band \*is\* the floor/)
-    expect(body).toMatch(/under-band build model/i)
+    expect(body).toMatch(/under-band build model.*is a finding/is)
     expect(body).toMatch(/over-band build model is an \*\*observation\*\*, never a downgrade recommendation/i)
-    expect(body).toMatch(/Over-band observations/)
-    // Safety carve-outs force the capable path — never recommend dropping the model.
-    expect(body).toMatch(/Safety carve-outs \(money, data integrity, security, auto-protective\)/)
+    // Quiet overspend still surfaces — the per-model mix is what estimates run cost.
+    expect(body).toMatch(/quiet overspend is still worth naming/i)
+    // Safety carve-outs force the capable path, so a downgrade is never recommended there.
     expect(body).toMatch(/Never recommend dropping the model on an issue whose body touches those surfaces/i)
-    // Over-band is also the pipeline's own default for a missing Execution block.
-    expect(body).toMatch(/model fable, effort high/)
+    // An observation is not a severity: it needs a report section and must own no table row.
+    expect(body).toMatch(/over-band build model is not in this table at all/i)
+    const severityTable = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(severityTable, 'no severity table found').not.toBeNull()
+    expect(severityTable[1], 'over-band must not carry a severity').not.toMatch(/over-band/i)
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template[0], 'over-band observations have nowhere to print').toMatch(/^Over-band observations/m)
+    // The failure-mode table must agree with the floor rule, not call it a defect.
+    expect(body).toMatch(/\| An issue is stamped a model above its band \| Observation, never a downgrade recommendation/)
   })
 
   test('applies the documented Validate effort rules, not only the xhigh ban', () => {
@@ -395,39 +610,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/default is high/i)
     expect(body).toMatch(/`medium` is on-rule only for Capability 0 with Volume ≤ 7/i)
     expect(body).toMatch(/`\[C90\]` at `medium` is off-rule/)
-  })
-
-  test('scopes run claims and recommendations to open issues the pipeline would dispatch', () => {
-    // Closed rows stay visible for context; only open rows are dispatch candidates.
-    expect(body).toMatch(/Only open rows are candidates for what the run will execute/i)
-    expect(body).toMatch(/drops closed issues from the plan/i)
-    expect(body).toMatch(/mark them as not dispatched/i)
-    expect(body).toMatch(/closed predecessor named in an open issue's `Depends on` must stay readable/i)
-    // Recommendations are open-only; closed contradictions are informational.
-    expect(body).toMatch(/one line per contradicting field on an open issue only/i)
-    expect(body).toMatch(/Field contradictions on closed issues are informational/i)
-    expect(body).toMatch(/Closed-issue notes.*informational, never as work to apply/is)
-    // Resume caveat is unconditional — PR lookup was removed, so relevance is undecidable.
-    expect(body).toMatch(/Always state this resume caveat/i)
-    expect(body).toMatch(/cannot tell when the caveat applies/i)
-    expect(body).toMatch(/open issue that already has an open PR is a \*\*resume\*\*/i)
-    expect(body).toMatch(/Qualify every open-issue recommendation with that uncertainty/i)
-    expect(body).toMatch(/may be a resume if an open PR already closes it/)
-    // All-closed milestone is complete, not a recommendation wall.
-    expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue recommendations/is)
-    // Missing-block / missing-prefix failure modes are open-scoped.
-    expect(body).toMatch(/An \*\*open\*\* issue has no `## Execution` block/)
-    expect(body).toMatch(/closed issue missing the block is informational only/i)
-    expect(body).toMatch(/An \*\*open\*\* issue has no `\[C<score>\]` title prefix/)
-  })
-
-  test('discloses a truncated issue fetch instead of presenting a partial table as complete', () => {
-    expect(body).toMatch(/If the issue list returns exactly `--limit` rows, the fetch may be truncated/i)
-    expect(body).toMatch(/Re-fetch with a higher `--limit`/i)
-    expect(body).toMatch(/say the table is partial/i)
-    expect(body).toMatch(/never present a count equal to the limit as the complete milestone/i)
-    expect(body).toMatch(/Under the limit, print no truncation caveat/i)
-    expect(body).toMatch(/Issue fetch returned exactly `--limit` rows/)
+    // The severity table still carries the stamp-lies class the ban belongs to.
+    expect(body).toMatch(/`Validate effort: xhigh`/)
   })
 
   test('the band table agrees with validate-issue, the canonical source it copies', () => {
@@ -435,8 +619,8 @@ describe('milestoneplan pre-flight contract', () => {
     const copy = bandTable(milestoneplan)
     expect(canonical, 'validate-issue publishes no extractable band table').not.toBeNull()
     expect(copy, 'milestoneplan publishes no extractable band table').not.toBeNull()
-    // The recommendations' entire correctness basis is this table. Compare it to its
-    // source rather than pinning a literal in each, so either copy drifting fails.
+    // The audit's entire correctness basis is this table. Compare it to its source
+    // the same way the run-size formula is compared, so either copy drifting fails.
     expect(copy).toEqual(canonical)
     // Guard the extraction itself: a silently-empty match would make the compare vacuous.
     expect(canonical).toHaveLength(4)
@@ -453,21 +637,212 @@ describe('milestoneplan pre-flight contract', () => {
     expect(validateIssue).toMatch(/no hard ceilings — the band \*is\* the floor/)
   })
 
+  test('derives waves and projects run size on the same accounting as milestone-workflow', () => {
+    const workflowFormula = runSizeFormula(milestoneWorkflow)
+    const planFormula = runSizeFormula(milestoneplan)
+    expect(workflowFormula, 'milestone-workflow publishes no extractable run-size formula').not.toBeNull()
+    expect(planFormula, 'milestoneplan publishes no extractable run-size formula').not.toBeNull()
+    // Parity, not two independent literals: adding a term to either formula fails here.
+    expect(planFormula.terms).toBe(workflowFormula.terms)
+    // milestoneplan sums the build bucket, not the milestone's full issue list.
+    expect(planFormula.scope).toMatch(/build.bucket/i)
+    expect(body).toMatch(/retry-aware ceiling.*runnable-set issue count/is)
+    expect(body).toMatch(/more than 25 scheduled agents/i)
+    expect(body).toMatch(/critical path/i)
+    expect(body).toMatch(/waves/i)
+  })
+
+  test('carries milestone-workflow\'s review worst case and states what it projected under', () => {
+    const workflowWorstCase = reviewWorstCase(milestoneWorkflow)
+    const planWorstCase = reviewWorstCase(milestoneplan)
+    expect(workflowWorstCase, 'milestone-workflow publishes no review worst case').not.toBeNull()
+    // The happy-path `1 review-loop` term alone understates a subagent-mode run.
+    expect(planWorstCase, 'milestoneplan omits the subagent review worst case').toBe(workflowWorstCase)
+    // github mode nests that work in one agent, so the worst case must not be applied there.
+    expect(body).toMatch(/reviewMode: 'github'[\s\S]*?must \*\*not\*\* be applied/)
+    expect(body).toMatch(/reviewLoop: false.*review term is zero/is)
+    // Assumptions are part of the answer — a bound without them is unreadable.
+    expect(body).toMatch(/reviewLoop: true.*reviewMode: 'subagent'.*maxReviewCycles: 5/s)
+    // Resume-bucket fix-pr-review-loop agents fall outside the build-bucket sums but still cost.
+    expect(body).toMatch(/resume-bucket[\s\S]*?fix-pr-review-loop[\s\S]*?outside the build-bucket sums/)
+    // The token trigger milestone-workflow reports, which this projection must not omit.
+    expect(body).toMatch(/1\.5 million/)
+  })
+
+  test('classifies issues into the same buckets milestone-workflow uses', () => {
+    expect(body).toMatch(/\*\*build\*\* \(open, no PR\)/)
+    expect(body).toMatch(/\*\*resume\*\* \(open with an open PR that closes it\)/)
+    expect(body).toMatch(/\*\*skip\*\* \(closed\)/)
+    // A mention is not a resume-bucket PR — only a closing relationship is.
+    expect(body).toMatch(/A bare mention with no keyword is not a resume-bucket PR/i)
+  })
+
+  test('maps every finding class to one severity matching what milestone-workflow does', () => {
+    expect(body).toMatch(/GO \| GO WITH FINDINGS \| NO-GO/)
+    expect(body).toMatch(/maps to exactly one severity/i)
+    expect(body).toMatch(/NO-GO.*Never offer the run/is)
+    // A blocked subtree is excluded and run around — milestone-workflow runs the rest.
+    expect(body).toMatch(/Blocked — excluded/)
+    expect(body).toMatch(/blocked subtree never suppresses the rest of the run/i)
+    // NO-GO survives only where nothing is runnable, or a real NO-GO class is present.
+    expect(body).toMatch(/exclusions empty the runnable set/i)
+    expect(body).toMatch(/independent cycle still forces NO-GO/i)
+    // Cross-milestone prerequisites get a named severity per edge kind, not silence.
+    expect(body).toMatch(/open \*\*hard\*\* cross-milestone prerequisite/i)
+    expect(body).toMatch(/open \*\*ordering-only\*\* cross-milestone prerequisite/i)
+    // A merged predecessor PR is a satisfied edge, not a finding.
+    expect(body).toMatch(/predecessor closed \*\*with\*\* a merged PR.*no finding/is)
+  })
+
+  test('every severity the table can assign has a section in the report template', () => {
+    // Structural, not a grep for the claim: a severity added to the table later must
+    // fail here until the template gains somewhere to print it. Without this, the
+    // Informational severity the bucket-scoping rule emits vanished from the report.
+    const table = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(table, 'no severity table found').not.toBeNull()
+    const severities = new Set(
+      [...table[1].matchAll(/^\|[^|\n]+\|([^|\n]+)\|/gm)].map(([, cell]) => cell.replace(/\*/g, '').trim()),
+    )
+    expect(severities.size, 'severity extraction is vacuous').toBeGreaterThan(2)
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template, 'no report template found').not.toBeNull()
+    const headings = [...template[0].matchAll(/^([A-Z][^\n(]*?)(?: \([^)]*\))?:$/gm)].map(([, h]) => h.trim())
+    // A NO-GO finding prints under Blocking; a *no finding* row prints nowhere.
+    const sectionFor = { 'NO-GO': 'Blocking', 'no finding': null }
+    for (const severity of severities) {
+      const expected = severity in sectionFor ? sectionFor[severity] : severity
+      if (expected === null) continue
+      // A heading may elaborate ("Blocked — excluded from the run") but must lead with the severity.
+      expect(
+        headings.some((heading) => heading.startsWith(expected)),
+        `severity "${severity}" has no section in the report template (sections: ${headings.join(' / ')})`,
+      ).toBe(true)
+    }
+    expect(body).toMatch(/A severity with no section is a finding that silently vanishes/)
+  })
+
+  test('every finding class step 2 enumerates has a severity row — derived from step 2, not restated', () => {
+    // Derive the class list from step 2's own flag lists, so a class added later is
+    // visible to this test without anyone remembering to append it here. Matching is by
+    // shared distinctive stems between a flag item and a single table row (or the
+    // documented exemption paragraph) — coarse, but a new finding class introduces new
+    // vocabulary, and a hardcoded pattern list is blind to it by construction.
+    const stepTwo = body.match(/### 2\. Audit each issue([\s\S]*?)### 3\./)
+    expect(stepTwo, 'no step 2 section found').not.toBeNull()
+    const flagLists = [
+      stepTwo[1].match(/\*\*\(a\) Completeness\.\*\* ([^\n]+)/)?.[1],
+      ...[...stepTwo[1].matchAll(/(?:Also flag|Flag): ([^\n]+)/g)].map(([, items]) => items),
+    ].filter(Boolean)
+    expect(flagLists.length, 'no flag lists found in step 2').toBeGreaterThanOrEqual(3)
+    const items = flagLists
+      .flatMap((list) => list.split(/;\s+/))
+      .map((item) => item.trim().replace(/\.$/, ''))
+      // An item that disposes of itself inline is not a class in need of a row.
+      .filter((item) => !/not a finding|informational/i.test(item))
+    expect(items.length, 'flag-list extraction is vacuous').toBeGreaterThan(10)
+    const stem = (word) => word.toLowerCase().replace(/(?:ing|ed|es|s)$/, '').replace(/e$/, '')
+    const STOP = new Set(['issu', 'that', 'with', 'whos', 'from', 'either', 'both', 'what', 'will'])
+    const tokens = (text) => [
+      ...new Set(
+        text.replace(/[`*_#]/g, ' ').split(/[^a-zA-Z]+/).map(stem).filter((t) => t.length >= 4 && !STOP.has(t)),
+      ),
+    ]
+    const tableMatch = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(tableMatch, 'no severity table found').not.toBeNull()
+    const exemption = body.match(/Two classes from step 2[^\n]+/)
+    expect(exemption, 'no exemption paragraph found').not.toBeNull()
+    const rows = [...tableMatch[1].split('\n').filter(Boolean), exemption[0]].map(tokens)
+    for (const item of items) {
+      const itemTokens = tokens(item)
+      const needed = Math.min(2, itemTokens.length)
+      const matched = rows.some((row) => itemTokens.filter((t) => row.includes(t)).length >= needed)
+      expect(matched, `no severity row shares ${needed} stems with the step-2 class: "${item}"`).toBe(true)
+    }
+    // The two classes that intentionally resolve through other rows say so.
+    expect(body).toMatch(/hard predecessors all sit in a \*\*later\*\* milestone is the open-hard-cross-milestone row/)
+    expect(body).toMatch(/reported through those dependents' own closed-predecessor edge rows/)
+    // The two rationale-line classes used to fall through with no row at all.
+    expect(body).toMatch(/\| A runnable issue with no complexity rationale line \| \*\*Non-blocking\*\*/)
+    expect(body).toMatch(/\| A rationale line whose published Volume contradicts `score mod 25` \| \*\*Non-blocking\*\*/)
+  })
+
+  test('never reads an empty closing-PR reference as proof there was no PR', () => {
+    // Absence of a record is not evidence of the negative — the same rule the rest of
+    // step 1 already applies to a failed lookup.
+    expect(body).toMatch(/An empty `closedByPullRequestsReferences` is not proof that no PR closed the issue/)
+    // The field does report merged PRs — that part was checked, so say which way it went.
+    expect(body).toMatch(/field \*does\* report merged closing PRs — verified/)
+    // Corroborate from the issue's own timeline before excluding — bounded per issue.
+    expect(fencedBlocks(body).some((code) => /CROSS_REFERENCED_EVENT/.test(code))).toBe(true)
+    expect(body).toMatch(/Nothing in a \*\*complete\*\* cross-reference sweep names a merged PR → "closed with no PR" is now \*established\*/)
+    expect(body).toMatch(/could not be paged to completion → \*\*indeterminate\*\*/)
+    expect(body).toMatch(/Never exclude a subtree on an absence you could not verify/)
+  })
+
+  test("bounds merge-state resolution by the milestone, never the repository's history", () => {
+    const blocks = fencedBlocks(body)
+    // The repo-wide merged-PR list is the thing being avoided: merged PRs accumulate
+    // monotonically, so its cost grows with the repository's total history, and a repo
+    // the limit escalation cannot cover turns "too much history" into NO-GO.
+    expect(blocks.some((code) => /gh pr list --state merged/.test(code))).toBe(false)
+    expect(body).toMatch(/No fetch in this step grows with the repository's history/)
+    expect(body).toMatch(/never declared unrunnable because the repository has too many merged pull requests/)
+    // The bounded substitute: distinct closing PRs on hard-edge closed predecessors,
+    // resolved in one batched aliased GraphQL query per ~50.
+    expect(body).toMatch(/distinct closing PR numbers\*\* across the closed predecessors that build-bucket issues hard-depend on/)
+    expect(blocks.some((code) => /pullRequest\(number:\d+\)\{ number state mergedAt \}/.test(code))).toBe(true)
+    // Cross-repo references still need their own lookup, and it still carries -R.
+    expect(body).toMatch(/cross-repo closing PR still needs its own targeted lookup/)
+    expect(body).toMatch(/bounded by the number of \*cross-repo\* closing references/)
+    // A failed or partial lookup stays an unknown — never a verdict, never a fallback
+    // to the repo-wide list.
+    expect(body).toMatch(/missing PR node in the response is an \*\*indeterminate\*\* edge/)
+    expect(body).toMatch(/never a reason to fall back to a repo-wide list/)
+  })
+
+  test("uses GitHub's own PR linkage before the keyword scan", () => {
+    // A sidebar-linked PR carries no keyword, so a keyword-only scan puts an issue that
+    // already has a PR into the build bucket and opens a duplicate.
+    expect(body).toMatch(/Use GitHub's own linkage first and the keyword scan as the fallback/)
+    expect(body).toMatch(/linked by hand through the Development sidebar with no keyword/)
+    expect(body).toMatch(/any \*\*open\*\* PR in `closedByPullRequestsReferences` is \*\*resume\*\*/)
+    // The published pattern must not re-introduce the capture-group trap.
+    expect(body).toMatch(/fix\(\?:es\|ed\)\?/)
+    expect(body).toMatch(/group 2 is always the issue number/)
+  })
+
   test('publishes the per-issue routing table with every Execution-block field', () => {
-    // The table is the deliverable: every field the pipeline reads has a column.
+    // The table is the deliverable: every field the pipeline reads has a column, and
+    // the bucket column is what keeps a non-dispatched row from reading as pending work.
     const header = fencedBlocks(body).find((code) => code.includes('1st review'))
     expect(header, 'no per-issue table header found').toBeDefined()
-    for (const column of ['State', 'Depends on', 'Runs after', 'Build', 'Effort', 'Validate', 'fableplan', 'Plan', '1st review']) {
+    for (const column of ['State', 'Bucket', 'Depends on', 'Runs after', 'Build', 'Effort', 'Validate', 'fableplan', 'Plan', '1st review']) {
       expect(header, `routing table is missing the ${column} column`).toContain(column)
     }
   })
 
-  test('routes each recommendation to a skill whose write scope covers it', () => {
-    // execution-plan-review edits only Execution block lines, so body-content
-    // recommendations routed there would be handed to a skill that cannot clear them.
-    expect(body).toMatch(/Body-content items.*`validate-issue`/s)
-    expect(body).toMatch(/`execution-plan-review` cannot clear any of these/)
-    expect(body).toMatch(/Editing issue body prose or the title's `\[C<score>\]` prefix \| `validate-issue`/)
+  test('claims execution only for the rows the run would dispatch', () => {
+    // Closed and resume rows stay visible — a closed predecessor named in a runnable
+    // issue's Depends on has to be readable — but neither is pending pipeline work.
+    expect(body).toMatch(/one row per issue in the milestone/i)
+    expect(body).toMatch(/Only the runnable build-bucket rows are what the run will execute/i)
+    expect(body).toMatch(/never present a closed or resume row as pending pipeline work/i)
+    expect(body).toMatch(/closed predecessor named in a runnable issue's `Depends on` has to stay readable/i)
+    // Recommendations are scoped the same way, and the reason is that the skills they
+    // would be routed to would edit a body this run never reads.
+    expect(body).toMatch(/on a \*\*runnable build-bucket issue only\*\*/i)
+    expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
+    expect(body).toMatch(/those skills would edit a body this run never reads/i)
+    // An all-closed milestone is complete, not a wall of findings.
+    expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue findings/is)
+  })
+
+  test('paginates the milestone lookup instead of taking the first page', () => {
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /milestones\?state=all&per_page=100" --paginate/.test(code))).toBe(true)
+    expect(body).toMatch(/returns 30 per page by default/)
+    expect(body).toMatch(/would read as not found/)
+    expect(body).toMatch(/the milestone list does not get an exemption/)
   })
 
   test('is wired into the pipeline as the stage before milestone-workflow', () => {
