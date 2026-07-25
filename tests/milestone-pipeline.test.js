@@ -285,6 +285,27 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ xhigh'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
     expect(logs.filter((message) => message.includes('normalized'))).toEqual([])
+
+    // A stamped Plan effort on a fableplan: false issue is reported once, not dropped silently.
+    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
+      '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
+    ])
+  })
+
+  test('reports an inert Plan effort only when one was actually stamped', async () => {
+    const { logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'high', missing_block: true },
+        ],
+      }),
+    })
+
+    // (b) nothing stamped → no log; (c) a missing block is reported once by the
+    // block-missing warning, not compounded by an inert-field warning for a default.
+    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([])
+    expect(logs.some((message) => message.includes('no Execution block on #3'))).toBeTrue()
   })
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {

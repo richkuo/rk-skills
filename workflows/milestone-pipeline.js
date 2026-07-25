@@ -435,6 +435,13 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized validate effort xhigh → high`)
     normalized.validate_effort = 'high'
   }
+  // A stamped Plan effort on a fableplan: false issue is never read. Say so once
+  // rather than dropping it silently — the operator set a tier that does nothing.
+  // Skipped when the block was missing entirely: the defaults we filled in are
+  // already reported by the missing-block warning below.
+  if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
+    log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
+  }
   return normalized
 })
 const EX = new Map(normalizedIssues.map((i) => [i.number, i]))

@@ -3,10 +3,11 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [prdToIssues, executionPlanReview, milestoneWorkflow, readme] = await Promise.all([
+const [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan, readme] = await Promise.all([
   read('skills/prd-to-issues/SKILL.md'),
   read('skills/execution-plan-review/SKILL.md'),
   read('skills/milestone-workflow/SKILL.md'),
+  read('skills/fableplan/SKILL.md'),
   read('README.md'),
 ])
 
@@ -72,5 +73,39 @@ describe('Execution block Plan effort contract', () => {
 
   test('README publishes the plan effort field', () => {
     expect(readme).toMatch(/the effort that plan runs at/i)
+  })
+
+  test('fableplan consumes the same field name every other document publishes', () => {
+    // A rename in one document must fail here rather than pass file-by-file.
+    const blockLine = '- **Plan effort:**'
+    expect(prdToIssues).toContain(blockLine)
+    expect(fableplan).toContain(blockLine)
+    // README describes the field in prose rather than naming the block line.
+    for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
+      expect(doc).toContain('Plan effort')
+    }
+  })
+
+  test('every document that states the plan effort default states high', () => {
+    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
+    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
+    expect(fableplan).toMatch(/Plan effort.*absent.*inherits the session effort/is)
+  })
+
+  test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
+    expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
+    // (a) re-hardcoding the posted-plan footer to a literal tier must fail here.
+    expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
+    expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
+    expect(fableplan).toMatch(/never a constant/i)
+  })
+
+  test('fableplan degrades gracefully when the harness Agent tool has no effort parameter', () => {
+    expect(fableplan).toMatch(/Not every harness's Agent tool accepts `effort`/i)
+    expect(fableplan).toMatch(/re-dispatch once without `effort`/i)
+    expect(fableplan).toMatch(/degradation, not an error/i)
+    // The footer must then name what actually ran, not the tier that was requested.
+    expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
   })
 })
