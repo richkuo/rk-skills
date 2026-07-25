@@ -466,7 +466,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
     // A cycle only forces NO-GO when every edge in it survives into the run.
     expect(body).toMatch(/\| A cycle across the union of both edge kinds, every issue in it runnable \| \*\*NO-GO\*\*/)
-    expect(body).toMatch(/\| A cycle routed through a skip-, resume-, or \*Blocked — excluded\* issue \| \*\*Informational\*\*/)
+    expect(body).toMatch(/\| A cycle that includes any node the run will not dispatch \(skip, resume, \*Blocked — excluded\*, or \*\*out-of-milestone\*\*\) \| \*\*Informational\*\*/)
     expect(body).toMatch(/finding confined to the skip bucket, the resume bucket, or a \*Blocked — excluded\* subtree never produces this verdict/)
   })
 
@@ -484,7 +484,7 @@ describe('milestoneplan pre-flight contract', () => {
     // A single-issue finding on a skip- or resume-bucket issue still demotes.
     expect(body).toMatch(/A \*\*closed or resume-bucket\*\* issue has no Execution block \| Informational/)
     // Both endpoints in the build bucket: no finding exists for the demotion to touch.
-    expect(body).toMatch(/both sit in the build bucket is ordering the waves already handle/)
+    expect(body).toMatch(/both sit in the \*\*runnable\*\* build bucket is ordering the waves already handle/)
   })
 
   test('gives each closed-predecessor edge kind exactly one severity row', () => {
@@ -542,8 +542,41 @@ describe('milestoneplan pre-flight contract', () => {
     expect(template, 'no report template found').not.toBeNull()
     expect(template[0]).toMatch(/^Concurrency:/m)
     expect(template[0]).toMatch(/token Large-workflow at 1\.5M/)
+    expect(template[0]).toMatch(/token target:/)
+    expect(template[0]).toMatch(/<worst> <worst-label>/)
     expect(body).toMatch(/widest wave, which is roughly the peak parallel agent count/)
     expect(body).toMatch(/1\.5 million/)
+  })
+
+  test('defines the template worst slot under every review mode', () => {
+    expect(body).toMatch(/labeled `subagent review worst case`/)
+    expect(body).toMatch(/labeled `github \(= planned\)`/)
+    expect(body).toMatch(/labeled `review off \(= planned\)`/)
+    expect(body).toMatch(/Never leave the third slot blank and never fill it with the subagent figure/)
+  })
+
+  test('projects the token-target deferral milestone-workflow enforces', () => {
+    expect(body).toMatch(/Token-target deferral/)
+    expect(body).toMatch(/budgetFloor/)
+    expect(body).toMatch(/budget_deferred/)
+    expect(body).toMatch(/including the token-target \/ `budgetFloor` deferral bullet/)
+    expect(milestoneWorkflow).toMatch(/budgetFloor/)
+  })
+
+  test('scopes Fable low the same way in execution-plan-review as milestoneplan', () => {
+    expect(executionPlanReview).toMatch(
+      /Revision would put a Fable build's effort at `low` \| Allowed only when Volume ≤ 7 \(`\[C75\]`–`\[C82\]`\)/,
+    )
+    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only when Volume ≤ 7/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume > 7 \| Under-tertile finding/)
+  })
+
+  test('covers cycles through out-of-milestone nodes and ordering-only edges into excluded predecessors', () => {
+    expect(body).toMatch(/out-of-milestone\*\*\) \| \*\*Informational\*\*/)
+    expect(body).toMatch(
+      /\| An \*\*ordering-only\*\* edge into a \*Blocked — excluded\* build-bucket predecessor \| \*no finding\*/,
+    )
+    expect(body).toMatch(/An ordering-only edge into a \*Blocked — excluded\* build-bucket predecessor \| Satisfied/)
   })
 
   test('marks excluded build rows distinctly from runnable ones in the table', () => {
