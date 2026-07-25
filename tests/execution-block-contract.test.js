@@ -351,7 +351,7 @@ describe('milestoneplan pre-flight contract', () => {
       'gh issue list --milestone "M" --state all --limit 500 --json number',
       'gh pr list --state open --limit 500 --json number',
       "gh api graphql -F owner=':owner' -F repo=':repo' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
-      "gh api graphql -F owner=':owner' -F repo=':repo' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, itemTypes:[CROSS_REFERENCED_EVENT]){ nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
+      "gh api graphql -F owner=':owner' -F repo=':repo' -F after=null -f query='query($owner:String!,$repo:String!,$after:String){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, after:$after, itemTypes:[CROSS_REFERENCED_EVENT]){ pageInfo{hasNextPage endCursor} nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
       'gh pr view 42 -R owner/repo --json number,state,mergedAt',
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
@@ -391,10 +391,19 @@ describe('milestoneplan pre-flight contract', () => {
     const fenced = fencedBlocks(body).find((code) => code.includes('close[sd]?'))
     expect(fenced, 'no closing-keyword pattern found in the procedure').toBeDefined()
     const pattern = new RegExp(fenced.trim().replace(/^\(\?i\)/, ''), 'gi')
-    const firstIssueNumber = (text) => {
+    const matchClosing = (text) => {
       pattern.lastIndex = 0
       const match = pattern.exec(text)
-      return match ? Number(match[match.length - 1]) : null
+      if (!match) return null
+      // Group 2 = optional owner/repo; group 3 = issue number (pattern captures prefix).
+      return { repo: match[2] ?? null, issue: Number(match[3]) }
+    }
+    const firstIssueNumber = (text, thisRepo = null) => {
+      const hit = matchClosing(text)
+      if (!hit) return null
+      // A foreign owner/repo prefix must not classify a local issue.
+      if (hit.repo && thisRepo && hit.repo !== thisRepo) return null
+      return hit.issue
     }
     // All nine GitHub closing keywords must resolve to the issue they close.
     for (const keyword of ['close', 'closes', 'closed', 'fix', 'fixes', 'fixed', 'resolve', 'resolves', 'resolved']) {
@@ -402,8 +411,10 @@ describe('milestoneplan pre-flight contract', () => {
       const capitalized = keyword[0].toUpperCase() + keyword.slice(1)
       expect(firstIssueNumber(`${capitalized} #12`), `capitalized "${capitalized}" missed`).toBe(12)
     }
-    // The cross-repo form still resolves.
-    expect(firstIssueNumber('fixes owner/repo#12')).toBe(12)
+    // Same-repo fully-qualified form resolves; a foreign prefix must not.
+    expect(firstIssueNumber('fixes richkuo/rk-skills#12', 'richkuo/rk-skills')).toBe(12)
+    expect(firstIssueNumber('closes otherorg/other#12', 'richkuo/rk-skills')).toBeNull()
+    expect(matchClosing('fixes otherorg/other#12').repo).toBe('otherorg/other')
     // A bare mention is not a closing relationship.
     expect(firstIssueNumber('see #12 for context')).toBeNull()
     expect(firstIssueNumber('reverts #12')).toBeNull()
@@ -567,11 +578,13 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/\| Capability \| Score \| Build model \| fableplan \|/)
     expect(body).toMatch(/deliberate override/i)
     expect(body).toMatch(/unexplained under-band departure is a finding/i)
-    // The pipeline silently raises non-Fable low/medium; the audit must say the stamp lies.
+    // The pipeline raises non-Fable low/medium and logs it; the audit must say the stamp lies.
     expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
+    expect(body).toMatch(/pipeline raises these to `high` and \*\*logs\*\* the normalization/i)
     expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
-    // The Volume tertile governs build effort only — Validate and Plan have their own rules.
-    expect(body).toMatch(/\*\*build\*\* effort that contradicts the Volume tertile/i)
+    // Build-effort tertile is one-sided: under = finding, over = observation.
+    expect(body).toMatch(/\*\*build\*\* effort \*below\* the Volume tertile/i)
+    expect(body).toMatch(/never above — over-tertile is an observation/i)
     expect(body).toMatch(/Validate effort and Plan effort are judged by their own rules/i)
     // A Fable build at `low` is the sanctioned discretionary tier — never a finding.
     expect(body).toMatch(/Fable build stamped `low`.*discretionary Fable-only tier/is)
@@ -585,31 +598,38 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/The band is a floor, not a ceiling/i)
     expect(body).toMatch(/no hard ceilings — the band \*is\* the floor/)
     expect(body).toMatch(/under-band build model.*is a finding/is)
-    expect(body).toMatch(/over-band build model is an \*\*observation\*\*, never a downgrade recommendation/i)
+    expect(body).toMatch(/under-tertile \*\*build\*\* effort is a finding/i)
+    expect(body).toMatch(/over-band build model or an over-tertile build effort is an \*\*observation\*\*, never a downgrade recommendation/i)
     // Quiet overspend still surfaces — the per-model mix is what estimates run cost.
     expect(body).toMatch(/quiet overspend is still worth naming/i)
     // Safety carve-outs force the capable path, so a downgrade is never recommended there.
-    expect(body).toMatch(/Never recommend dropping the model on an issue whose body touches those surfaces/i)
+    expect(body).toMatch(/Never recommend dropping the model \*\*or\*\* the build effort on an issue whose body touches those surfaces/i)
     // An observation is not a severity: it needs a report section and must own no table row.
-    expect(body).toMatch(/over-band build model is not in this table at all/i)
+    expect(body).toMatch(/over-band build model or over-tertile build effort is not in this table at all/i)
     const severityTable = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
     expect(severityTable, 'no severity table found').not.toBeNull()
     expect(severityTable[1], 'over-band must not carry a severity').not.toMatch(/over-band/i)
     const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
     expect(template[0], 'over-band observations have nowhere to print').toMatch(/^Over-band observations/m)
+    expect(template[0]).toMatch(/stamped model or build effort/)
     // The failure-mode table must agree with the floor rule, not call it a defect.
-    expect(body).toMatch(/\| An issue is stamped a model above its band \| Observation, never a downgrade recommendation/)
+    expect(body).toMatch(/\| An issue is stamped a model or build effort above its band \/ Volume tertile \| Observation, never a downgrade recommendation/)
   })
 
   test('applies the documented Validate effort rules, not only the xhigh ban', () => {
-    // Vocabulary, default, Cap-0 Volume≤7 medium, and silent low→medium coercion.
+    // Vocabulary, default, Cap-0 Volume≤7 medium, and unlogged out-of-vocab coercion.
     expect(body).toMatch(/vocabulary is only `medium \| high`/i)
     expect(body).toMatch(/never `xhigh`/i)
     expect(body).toMatch(/`low` is outside the vocabulary/i)
-    expect(body).toMatch(/prep coerces it to `medium` with no runtime log/i)
+    expect(body).toMatch(/prep schema forbids it/i)
+    expect(body).toMatch(/which allowed tier the agent then picks is undetermined/i)
+    expect(body).toMatch(/with no runtime log of that coercion/i)
     expect(body).toMatch(/default is high/i)
     expect(body).toMatch(/`medium` is on-rule only for Capability 0 with Volume ≤ 7/i)
     expect(body).toMatch(/`\[C90\]` at `medium` is off-rule/)
+    // Logged vs unlogged distinction: xhigh/non-Fable raise log; Validate low does not.
+    expect(body).toMatch(/runtime \*\*logs\*\* those two normalizations to `high`/)
+    expect(body).toMatch(/Validate-effort `low` is outside the schema enum and is coerced with no runtime log/)
     // The severity table still carries the stamp-lies class the ban belongs to.
     expect(body).toMatch(/`Validate effort: xhigh`/)
   })
@@ -805,10 +825,28 @@ describe('milestoneplan pre-flight contract', () => {
     // already has a PR into the build bucket and opens a duplicate.
     expect(body).toMatch(/Use GitHub's own linkage first and the keyword scan as the fallback/)
     expect(body).toMatch(/linked by hand through the Development sidebar with no keyword/)
-    expect(body).toMatch(/any \*\*open\*\* PR in `closedByPullRequestsReferences` is \*\*resume\*\*/)
+    // Openness is established by intersecting references with the open-PR list — the
+    // field itself carries no state.
+    expect(body).toMatch(/Establish "open" by intersecting with the open-PR list/i)
+    expect(body).toMatch(/field carries no PR state/i)
+    expect(body).toMatch(/reference numbers appears in the open-PR list/i)
+    expect(body).toMatch(/cross-repo.*blocking unknown/is)
+    expect(body).toMatch(/never assumed open and never assumed closed/i)
+    expect(body).toMatch(/\| A closing PR reference's openness cannot be established/)
+    // Closing refs must name this repo — foreign owner/repo prefixes are discarded.
+    expect(body).toMatch(/A closing reference counts only when it names this repository/i)
+    expect(body).toMatch(/foreign `otherorg\/other#12` must be discarded/i)
     // The published pattern must not re-introduce the capture-group trap.
     expect(body).toMatch(/fix\(\?:es\|ed\)\?/)
-    expect(body).toMatch(/group 2 is always the issue number/)
+    expect(body).toMatch(/group 3 is the issue number/)
+  })
+
+  test('pages the cross-reference query with an after cursor', () => {
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /timelineItems\(first:100, after:\$after/.test(code))).toBe(true)
+    expect(body).toMatch(/query\(\$owner:String!,\$repo:String!,\$after:String\)/)
+    expect(body).toMatch(/re-query \*\*that issue\*\* with `-F after="<endCursor>"`/i)
+    expect(body).toMatch(/page that issue alone with its own cursor/i)
   })
 
   test('publishes the per-issue routing table with every Execution-block field', () => {
