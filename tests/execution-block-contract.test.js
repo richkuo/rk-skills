@@ -90,7 +90,7 @@ describe('Execution block Plan effort contract', () => {
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
     expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
     expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
-    expect(fableplan).toMatch(/Plan effort.*absent.*inherits the session effort/is)
+    expect(fableplan).toMatch(/Plan effort.*absent.*dispatches at `high` — the repo attribution default/is)
   })
 
   test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
@@ -107,6 +107,32 @@ describe('Execution block Plan effort contract', () => {
     expect(fableplan).toMatch(/degradation, not an error/i)
     // The footer must then name what actually ran, not the tier that was requested.
     expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
+  })
+
+  test('fableplan tells the operator when a stamped tier could not be honored', () => {
+    // The degradation is common (Claude Code's Agent tool has no `effort` parameter),
+    // so it must reach the person who stamped the tier, not just the footer.
+    expect(fableplan).toMatch(/report it to the user in step 5/i)
+    expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
+    expect(fableplan).toMatch(/not a notice/i)
+    // …and stay silent when there is nothing to correct.
+    expect(fableplan).toMatch(/when the tier \*was\* honored \(no notice/i)
+    expect(fableplan).toMatch(/make no claim about a stamped tier in either direction/i)
+  })
+
+  test('fableplan passes an explicit tier rather than inheriting the session effort', () => {
+    // Passing `high` when nothing is stamped makes the footer's value observed
+    // rather than conventional, and floors the plan at high on a low-effort session.
+    expect(fableplan).toMatch(/otherwise `high`.*Pass it explicitly even in the unstamped case/is)
+    expect(fableplan).toMatch(/may be \*below\* `high`/i)
+    expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
+    expect(fableplan).not.toMatch(/the subagent inherits the session effort/i)
+  })
+
+  test('execution-plan-review never leaves or masks an inert Plan effort', () => {
+    expect(executionPlanReview).toMatch(/flips fableplan `Yes` → `No`.*strip that line during write-back/is)
+    expect(executionPlanReview).toMatch(/only when that band puts fableplan at `Yes`/i)
+    expect(executionPlanReview).toMatch(/show that tier marked `ignored`.*never a bare `—`/is)
   })
 
   test('fableplan falls back to the documented default, never a guessed session tier', () => {

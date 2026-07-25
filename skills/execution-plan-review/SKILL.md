@@ -16,7 +16,7 @@ Fetch every issue in the milestone (`gh issue list --milestone ... --json number
 | Issue | C | Depends on | Runs after | Build model | Effort | Validate effort | fableplan first? | Plan effort |
 |---|---|---|---|---|---|---|---|---|
 
-(Validate effort and Plan effort both default to high when an issue's block omits the line — show the effective value. Show Plan effort as `—` on issues where fableplan first is No, since no plan stage runs. Display an absent ordering field as `missing`, not `none`, so legacy prose inference is not silently discarded.)
+(Validate effort and Plan effort both default to high when an issue's block omits the line — show the effective value. Show Plan effort as `—` on a `fableplan first: No` issue only when it stamps no line at all, since no plan stage runs; when such an issue *does* carry a stamped line, show that tier marked `ignored` — e.g. `xhigh (ignored)` — never a bare `—`. A stale stamp from a hand edit or a pre-convention issue must be visible in the table that is meant to be the source of truth, not masked by it; the milestone pipeline logs it on every run. Display an absent ordering field as `missing`, not `none`, so legacy prose inference is not silently discarded.)
 
 Follow with 2–3 sentences on the pattern (which Capability bands dominate, where fableplan bridges Capability 2, what the review trigger is) — enough for the user to sanity-check against the `prd-to-issues` / `validate-issue` band table, not a lecture.
 
@@ -26,6 +26,7 @@ Follow with 2–3 sentences on the pattern (which Capability bands dominate, whe
 - **Push back once when a revision conflicts with the score band** (canonical table in `validate-issue` step 6 / `prd-to-issues`) — e.g. fableplan on Capability 0–1, or dropping below Fable/Opus on a money/security/irreversible-deletion issue (high Risk → Capability 2–3). One recommendation with the reason, then the user decides. Money/security/irreversible-deletion issues dropping below the top model deserve an explicit warning.
 - Batch multiple revisions; don't round-trip to GitHub per message.
 - **A Plan effort revision on a `fableplan first: No` issue is inert** — no plan stage runs, so the value is never read. Say so once and either drop the revision or ask whether they meant to turn fableplan on; never write a value that silently does nothing. Conversely, when a revision flips fableplan to `Yes`, the issue inherits the default high unless they also name a Plan effort.
+- **When a revision flips fableplan `Yes` → `No` on an issue that carries a `Plan effort` line, strip that line during write-back** and say you dropped it. Refusing to *write* an inert stamp is only half the rule — one left behind is read by nobody, shows as an ignored tier in the next table, and makes the milestone pipeline log it on every run. The same applies to any inert stamp you find already on an issue: offer to strip it once rather than carrying it forward silently.
 - Preserve the edge kind exactly: a `Depends on` revision remains a hard prerequisite, while a `Runs after` revision remains ordering-only. Never move an issue between the fields merely to simplify the graph.
 - Before writing, verify every referenced issue exists, reject self-references, deduplicate each list, and reject a predecessor present in both fields. Recursively fetch referenced issues outside the milestone until the explicit ordering graph closes so every reachable typed edge participates in validation.
 - **Reject the whole revision batch before write-back** if the combined graph contains a cycle; the graph is the union of every `Depends on` and `Runs after` edge, including unchanged and externally referenced issues.
@@ -42,7 +43,7 @@ Re-render the final table once after all revisions land. This table is what the 
 
 | Situation | Do this |
 |---|---|
-| An issue lacks an Execution block | Add one by deriving model/effort/fableplan/plan effort from the `[C..]` band per `prd-to-issues`, flag it in the table |
+| An issue lacks an Execution block | Add one by deriving model/effort/fableplan from the `[C..]` band per `prd-to-issues`, and derive a plan effort **only when that band puts fableplan at `Yes`** — stamping one on a Capability 0/1/3 issue writes the very inert value the rule above forbids. Flag the backfilled block in the table |
 | An issue lacks one or both ordering fields | Backfill from the approved prd-to-issues graph when available; otherwise infer from Approach/Problem, mark the value as inferred in the table, and confirm it before write-back |
 | User revision references a row that doesn't exist | Show the table again, ask which issue they meant |
 | A revision creates a cycle across either edge kind | Reject the batch without editing any issue and show the cycle path |

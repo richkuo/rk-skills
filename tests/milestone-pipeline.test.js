@@ -293,12 +293,16 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('reports an inert Plan effort only when one was actually stamped', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewLoop: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: 'No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: true },
+          // plan_effort present despite the omit contract: a prep agent that fills it in
+          // anyway is exactly what the missing_block half of the guard defends against,
+          // so this fixture fails if `&& !normalized.missing_block` is removed.
+          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
           { number: 4, title: 'Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, missing_block: false },
+          { number: 5, title: 'No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: true },
         ],
       }),
     })
@@ -306,7 +310,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     // Nothing stamped → no log; a missing block is reported once by the block-missing
     // warning, not compounded by an inert-field warning for the defaults it filled in.
     expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([])
-    expect(logs.some((message) => message.includes('no Execution block on #3'))).toBeTrue()
+    expect(logs.some((message) => message.includes('no Execution block on #3, #5'))).toBeTrue()
 
     // An unstamped fableplan issue still plans at the dispatch-side default.
     const planEvent = events.find((event) => event.state === 'started' && event.label === 'plan:#4')
