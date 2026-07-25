@@ -105,6 +105,12 @@ const WRITING_GH_API = [
 const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
 const GRAPHQL_MUTATION = /\bmutation\b/
 
+function joinContinuedLines(text) {
+  // Shell line continuations: `\\\n` joins physical lines into one logical command
+  // so a write flag on the second line cannot hide from single-line scanners.
+  return text.replace(/\\\r?\n/g, ' ')
+}
+
 /**
  * Every reason a chunk of text fails a read-only claim, as human-readable strings.
  * Returning the violations (rather than asserting inline) is what makes the guard
@@ -112,6 +118,7 @@ const GRAPHQL_MUTATION = /\bmutation\b/
  * today's commands must produce none.
  */
 function readOnlyViolations(text) {
+  text = joinContinuedLines(text)
   const violations = []
   for (const { sub, verb, whole } of ghInvocations(text)) {
     const readOnlyVerbs = READ_ONLY_GH[sub]
@@ -342,6 +349,9 @@ describe('milestoneplan pre-flight contract', () => {
       'gh api /repos/o/r/issues --raw-field=title=x',
       'gh api /repos/o/r/issues --input=body.json',
       "gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'",
+      // Line-continued writes — the guard must join `\\\n` before scanning.
+      'gh api /repos/o/r/issues/1/comments \\\n  -f body=x',
+      "gh api graphql \\\n  -f query='mutation { addComment(input: {}) { clientMutationId } }'",
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
     }
@@ -495,7 +505,13 @@ describe('milestoneplan pre-flight contract', () => {
     const severityRows = [...body.matchAll(/^\| ([^|\n]*closed[^|\n]*) \| ([^|\n]+) \|/gm)].map(
       ([, finding, severity]) => ({ finding, severity: severity.trim() }),
     )
-    const closedUnmerged = severityRows.filter((r) => /no\*\* PR|closed unmerged|without a merged PR/.test(r.finding))
+    // In-milestone closed-unmerged / no-PR rows only — cross-milestone closed rows are a
+    // separate class and must not inflate this count.
+    const closedUnmerged = severityRows.filter(
+      (r) =>
+        /no\*\* PR|closed unmerged|without a merged PR/.test(r.finding) &&
+        !/cross-milestone/i.test(r.finding),
+    )
     expect(closedUnmerged.length, 'expected one row per edge kind').toBe(2)
     expect(closedUnmerged.filter((r) => /\*\*Blocked — excluded\*\*/.test(r.severity)).length).toBe(1)
     expect(closedUnmerged.every((r) => /\*\*hard\*\*|\*\*ordering-only\*\*/i.test(r.finding))).toBe(true)
@@ -526,9 +542,9 @@ describe('milestoneplan pre-flight contract', () => {
   })
 
   test('routes stamp recommendations for excluded build-bucket issues, not only runnable ones', () => {
-    expect(body).toMatch(/build-bucket issue that is either runnable or \*Blocked — excluded\*/)
+    expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/Excluded issues re-enter the runnable set once their blocker clears/)
-    expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
+    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
   })
 
   test('prints the per-model agent mix in the report template', () => {
@@ -582,7 +598,7 @@ describe('milestoneplan pre-flight contract', () => {
 
   test('marks excluded build rows distinctly from runnable ones in the table', () => {
     expect(body).toMatch(/`build` for runnable, `build \(excluded\)` for a \*Blocked — excluded\* subtree member/)
-    expect(body).toMatch(/never present a closed, resume, or excluded row as pending pipeline work/i)
+    expect(body).toMatch(/never present a closed, resume, excluded, or external row as pending pipeline work/i)
   })
 
   test('treats a missing ordering field with no implied edge as Non-blocking, not NO-GO', () => {
@@ -599,7 +615,10 @@ describe('milestoneplan pre-flight contract', () => {
 
   test('disposes closed cross-milestone predecessors instead of treating them as satisfied', () => {
     expect(body).toMatch(
-      /\| A \*\*closed\*\* \*\*hard\*\* cross-milestone predecessor \(merged or not\) \| \*\*Blocked — excluded\*\*/,
+      /\| A \*\*closed\*\* \*\*hard\*\* cross-milestone predecessor whose PR \*\*merged\*\* \| \*\*Non-blocking\*\*/,
+    )
+    expect(body).toMatch(
+      /\| A \*\*closed\*\* \*\*hard\*\* cross-milestone predecessor with \*\*no\*\* merged PR/,
     )
     expect(body).toMatch(
       /\| A \*\*closed\*\* \*\*ordering-only\*\* cross-milestone predecessor \(merged or not\) \| \*\*Non-blocking\*\*/,
@@ -607,8 +626,25 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(
       /\| A predecessor \*\*inside this milestone\*\* closed \*\*with\*\* a merged PR[^|]*\| \*no finding\*/,
     )
-    expect(body).toMatch(/Out-of-milestone\*\* predecessors are different/)
-    expect(body).toMatch(/A hard `Depends on` names a closed issue outside this milestone/)
+    expect(body).toMatch(/Never exclude: ordinary v1\+ milestones/)
+    expect(body).toMatch(/A hard `Depends on` names a closed issue outside this milestone whose PR \*\*merged\*\*/)
+  })
+
+  test('treats ambiguous-kind edges as ordering-only until stamped', () => {
+    expect(body).toMatch(/ambiguous-kind edge[\s\S]*enters the union as \*\*ordering-only\*\*/i)
+    expect(body).toMatch(/Ambiguous-kind edges are not hard edges/)
+    expect(body).toMatch(/Until stamped, step 3 treats the edge as \*\*ordering-only\*\*/)
+  })
+
+  test('prints external predecessors in the per-issue table', () => {
+    expect(body).toMatch(/plus one context row per distinct out-of-milestone predecessor/)
+    expect(body).toMatch(/`external` for an out-of-milestone predecessor/)
+  })
+
+  test('routes resume-bucket stamp findings as recommendations, not only notes', () => {
+    expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
+    expect(body).toMatch(/resume issues return to the build bucket if their PR closes unmerged/)
+    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
   })
 
   test('labels the per-model mix with the run-size bound it covers', () => {
@@ -1045,13 +1081,11 @@ describe('milestoneplan pre-flight contract', () => {
     // issue's Depends on has to be readable — but neither is pending pipeline work.
     expect(body).toMatch(/one row per issue in the milestone/i)
     expect(body).toMatch(/Only the runnable build-bucket rows are what the run will execute/i)
-    expect(body).toMatch(/never present a closed, resume, or excluded row as pending pipeline work/i)
-    expect(body).toMatch(/closed predecessor named in a runnable issue's `Depends on` has to stay readable/i)
-    // Recommendations are scoped the same way, and the reason is that the skills they
-    // would be routed to would edit a body this run never reads.
-    expect(body).toMatch(/on a \*\*build-bucket issue that is either runnable or \*Blocked — excluded\*\*/i)
-    expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
-    expect(body).toMatch(/those skills would edit a body this run never reads/i)
+    expect(body).toMatch(/never present a closed, resume, excluded, or external row as pending pipeline work/i)
+    expect(body).toMatch(/v0 number in a v1 `Depends on` is look-up-able|closed predecessor named in a runnable issue's `Depends on`/i)
+    expect(body).toMatch(/on a \*\*build-bucket issue that is runnable, \*Blocked — excluded\*, or resume-bucket\*\*/i)
+    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
+    expect(body).toMatch(/would edit a body this run never reads/i)
     // An all-closed milestone is complete, not a wall of findings.
     expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue findings/is)
   })
