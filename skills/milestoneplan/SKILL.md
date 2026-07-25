@@ -19,7 +19,7 @@ A milestone — by title (`v1`, `v1 — Desktop core call loop`), or nothing, in
 
 ```
 gh api "repos/:owner/:repo/milestones?state=all" --jq '.[] | "\(.title) [\(.state)] — open:\(.open_issues) closed:\(.closed_issues)"'
-gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body,labels
+gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body,labels,stateReason,closedByPullRequestsReferences
 ```
 
 Pass `state=all` on the milestones call: that endpoint defaults to open milestones only, so a closed milestone would otherwise return no record and silently become unauditable.
@@ -46,9 +46,32 @@ gh pr list --state open --limit 500 --json number,title,body,headRefName
 
 A per-issue `gh pr list --search "<issue number>"` costs one search request per issue (up to 500 at the limit above) against the search endpoint, which is rate-limited far more aggressively than the plain list. Request count must not grow with the milestone's size.
 
-Match with a closing-keyword pattern anchored on word boundaries — `(closes|fixes|resolves) #<n>` where `<n>` is followed by a non-digit or end of string, so `#12` never matches `#123`. A bare mention is not a resume-bucket PR; only a closing relationship is.
+**Match every closing keyword GitHub itself recognizes** — all nine, case-insensitive: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved`. Recognizing only a subset silently drops a real closing relationship: a PR body reading `Fixed #12` would land that issue in **build**, putting an issue that already has an open PR into both the wave plan and the cost projection.
+
+Anchor the pattern so it stays precise:
+
+```
+(?i)\b(close[sd]?|fix(es|ed)?|resolve[sd]?)\s+(?:[\w.-]+/[\w.-]+)?#(\d+)\b(?!\d)
+```
+
+The optional `owner/repo` prefix catches the cross-repo `owner/repo#12` form, and the trailing boundary keeps `#12` from matching `#123`. A bare mention with no keyword is not a resume-bucket PR; only a closing relationship is.
 
 **A failed lookup is not "no PR found."** If the single query errors, is throttled, or returns a truncated page (same limit rule as above), stop and report it as a **blocking unknown** — do not fall through to classifying every issue as build. That misclassification is exactly what would send an already-open PR back through a fresh build and open a duplicate, which is the case `milestone-workflow` step 1's resume bucket exists to prevent.
+
+**Resolve the merge state of every closed predecessor — the severity table turns on it, so it has to be fetched, not assumed.** Step 2c distinguishes a predecessor closed *with* a merged PR (a satisfied edge, no finding) from one closed *without* (unsatisfiable, excluded), and neither the issue list nor the open-PR query above can tell those apart on its own. `closedByPullRequestsReferences` (fetched with the issues above) names the PRs that close each issue but **not** whether they merged, so resolve each **distinct** referenced PR once:
+
+```
+gh pr view <n> --json number,state,mergedAt
+```
+
+That is bounded by the number of distinct closing PRs on closed predecessors — not by the milestone's size. Then:
+
+- PR `state: MERGED` (non-null `mergedAt`) → the edge is **satisfied**. Drop it; no finding.
+- PR closed **unmerged** → genuinely **unsatisfiable**; the dependent and its hard descendants are excluded.
+- No `closedByPullRequestsReferences` at all → closed with no PR → also excluded.
+- **Merge state is the deciding fact, not `stateReason`.** An issue closed `NOT_PLANNED` whose closing PR merged is still satisfied; one closed `COMPLETED` with no merged PR is not. Use `stateReason` as context in the report, never as the test.
+
+**Never resolve an undecidable merge state to the blocking branch.** If a PR lookup errors or throttles, the edge is *indeterminate*: report it as a **blocking unknown** with the issue and PR numbers, rather than quietly excluding a healthy dependent. On a partially-completed milestone re-run — the case the skip bucket exists for — guessing "unsatisfiable" would exclude every merged-predecessor subtree and could return NO-GO on a milestone `milestone-workflow` would run to completion.
 
 ### 2. Audit each issue
 
@@ -73,7 +96,9 @@ Flag: a build model that departs from its band in either direction; `fableplan: 
 
 **Distinguish an override from a slip.** A body that explicitly records a deliberate departure ("deliberate override — C75 is Capability 3, where the band prescribes Fable 5") is a decision, not drift: report it under *Deliberate overrides*, never as a defect. An unexplained departure is a finding. This distinction is the point of the check — a milestone where every deviation is annotated is healthy; one where they are silent is not.
 
-**(c) Graph.** Resolve every referenced issue, including ones outside the milestone, until the graph closes. Flag: references to issues that do not exist; self-references; a predecessor listed in both fields; duplicates within a list; a cycle across the union of both edge kinds (show the path); an edge to an issue that is closed **without** a merged PR (unsatisfiable as filed); a hard edge into the resume bucket (its PR must merge first).
+**(c) Graph.** Resolve every referenced issue, including ones outside the milestone, until the graph closes. Flag: references to issues that do not exist; self-references; a predecessor listed in both fields; duplicates within a list; a cycle across the union of both edge kinds (show the path); an edge to an issue that is closed **without** a merged PR (unsatisfiable as filed); a hard edge into the resume bucket (its PR must merge first); an **ordering-only** edge into the resume bucket (a different disposition — see below, not the same as the hard one).
+
+**Both edge kinds into the resume bucket get a disposition, and they differ.** `milestone-workflow` step 1 runs a resume predecessor's `fix-pr-review-loop` to completion *before* invoking the pipeline, and says that pre-step is what satisfies **ordering-only** edges — so an ordering-only edge into resume is *satisfied by sequencing*, not blocked. Report it as informational: name the edge and the PR whose loop must finish first, so the sequencing is visible in the plan. A **hard** edge into resume still needs the predecessor's merged code and stays *Blocked — excluded*.
 
 A predecessor that is closed **with** a merged PR is a *satisfied* edge, not a finding — the base branch already carries its code, exactly as `milestone-workflow` step 1 treats it. Drop the edge and say nothing.
 
@@ -101,7 +126,7 @@ Reproduce **every** term `milestone-workflow` step 2 computes, for the review mo
   - `reviewMode: 'subagent'` (the default): every cycle past the first dispatches a fixer + re-reviewer pair as **direct** agents, so the worst case is `2×maxReviewCycles − 1` review-phase agents per issue (`maxReviewCycles` reviewers + `maxReviewCycles−1` fixers). Report the worst-case total as the planned count with the per-issue review term raised from 1 to that value, plus the retry term. At the default cap of 5 that is 9 review agents per issue, not 1 — so a 10-issue milestone projects up to 90 review agents where the happy path shows 10. Quote both bounds; never the happy path alone.
   - `reviewMode: 'github'`: that work genuinely nests inside one `fix-pr-review-loop` agent per issue, so the `1 review-loop` term holds and the subagent worst case must **not** be applied. Name the mode that produced the number.
   - `reviewLoop: false`: the review term is zero in every bound.
-- **Resume-bucket cost, reported separately.** Each resume-bucket issue runs `fix-pr-review-loop` on its existing PR (`milestone-workflow` step 1), outside the build-bucket sums entirely — but it still costs, and its agents are no more bounded by `maxReviewCycles` than the build bucket's are. Report the count and say it sits outside the totals; never fold it in silently and never omit it.
+- **Resume-bucket cost, reported separately — and it comes first.** Each resume-bucket issue runs `fix-pr-review-loop` on its existing PR, and `milestone-workflow` step 1 runs those loops **to completion before invoking the pipeline**. So this cost is not concurrent with the build bucket's; it is sequenced ahead of it, and the plan has to say so or the number reads as if it overlapped. It sits outside the build-bucket sums entirely, still costs, and its agents are no more bounded by `maxReviewCycles` than the build bucket's are. Report the count, its sequencing, and that it is outside the totals; never fold it in silently and never omit it.
 - **Thresholds.** Compare every bound against the effective Dynamic workflow size guideline when session context carries one — otherwise Claude Code's documented default of more than 25 scheduled agents. Name which threshold you used. Also state that Claude Code triggers `Large workflow` when a run's projected token total exceeds 1.5 million, so a run sitting under the agent threshold can still cross the token one. In an ultracode session, label both comparisons informational — the warning is suppressed.
 - Label all of them planning bounds, not a guarantee. `maxReviewCycles` changes the stopping rule after an LGTM; it is not a guaranteed cap while reviews keep returning `Needs Updates`. Never call a run safe merely because a direct count sits under a threshold.
 
@@ -109,7 +134,7 @@ Reproduce **every** term `milestone-workflow` step 2 computes, for the review mo
 
 | Projected agent | Model it actually runs on |
 |---|---|
-| Prep | one cheap read-only agent, once for the whole run |
+| Prep (once for the whole run) | **the session model** — the pipeline passes no `model`, only `effort: 'low'`, so prep inherits whatever model the session runs on (Opus 5 in this repo's normal usage, not a cheap tier; a Fable session makes it a Fable agent) |
 | Validate (every issue) | **always Fable 5**, regardless of the Build model |
 | Plan (`fableplan: Yes` issues) | **always Fable 5** — a second Fable agent the Build model never predicts |
 | Implement | the issue's **Build model** |
@@ -121,7 +146,7 @@ So a 10-issue Capability-0 milestone is not ~20 Sonnet agents: it is 10 Fable (v
 
 With `reviewLoop: false` no reviewer or fixer model enters the mix at all. In the subagent worst case above, the extra review-phase agents split between the first-review model (the re-reviewers) and the Build model (the fixers), with any post-non-blocking re-review at Sonnet.
 
-Report the per-model agent mix (how many agents land on Fable 5 versus Opus versus the rest), since that, not the raw count, drives what the run costs.
+Report the per-model agent mix (how many agents land on Fable 5 versus Opus versus the rest), since that, not the raw count, drives what the run costs. Every row above places into that mix, prep included — it lands under whatever model the session is on.
 
 ### 5. Present the plan and give a verdict
 
@@ -160,11 +185,14 @@ Deliberate overrides (recorded in the issue, not defects):
 | An issue with no `## Execution` block | **NO-GO** | the pipeline's prep step routes it on conservative defaults (`fable`/`high`) instead |
 | A reference that does not resolve, or an unreachable cross-repo issue | **NO-GO** | the graph never closes, so no bound is trustworthy |
 | A fetch that did not cover the whole milestone (step 1) | **NO-GO** | the verdict would be computed over a partial issue set |
+| Merge state of a closed predecessor could not be determined | **NO-GO** | the distinction the next two rows turn on is undecidable, and guessing would exclude a healthy subtree |
 | A hard edge into the resume bucket (predecessor's PR still open) | **Blocked — excluded** | step 1 excludes the dependent plus its hard descendants as *blocked pending merge of PR #X* and runs everything else |
+| An **ordering-only** edge into the resume bucket | **Informational** | step 1 runs that PR's `fix-pr-review-loop` to completion before the pipeline starts, which satisfies it — name the sequencing, do not block |
 | A hard edge to an issue closed **without** a merged PR | **Blocked — excluded** | step 1 excludes it as *blocked pending decision* |
 | An open **hard** cross-milestone prerequisite | **Blocked — excluded** | the predecessor's code does not exist yet, and step 1 rejects out-of-milestone references |
 | An open **ordering-only** cross-milestone prerequisite | **Non-blocking** | it cannot be expressed in `tracks`, so the constraint simply goes unenforced — say so, and recommend either waiting for it or dropping the edge |
-| A predecessor closed **with** a merged PR | *no finding* | the edge is satisfied; the base branch has the code |
+| A predecessor closed **with** a merged PR (resolved via `gh pr view`, step 1) | *no finding* | the edge is satisfied; the base branch has the code |
+| A predecessor closed with **no** PR, or with one closed unmerged | **Blocked — excluded** | unsatisfiable as filed — merge state decides this, not `stateReason` |
 | A stamp contradicting its band, an inert field, a stamp that lies about what will run | **Non-blocking** | the run proceeds; only the paperwork is wrong |
 
 **A blocked subtree never suppresses the rest of the run.** `milestone-workflow` excludes it and runs around it, so this skill must not answer NO-GO where the real runner would execute eleven of twelve issues. Report each blocked issue with the descendants it takes with it, drop that subtree from the waves and the projection, and give the verdict on what remains.
@@ -176,8 +204,6 @@ Deliberate overrides (recorded in the issue, not defects):
 Then the per-issue table, one row per build-bucket issue: `# | C | Depends on | Runs after | Build | Effort | Validate | fableplan | Plan | 1st review`. Mark inferred values and flag missing ones — this table is what the run will execute.
 
 ### 6. Hand off
-
-Offer exactly the next actions the verdict supports, and let the user pick:
 
 **Route each finding to a skill whose documented write scope actually covers it** — every finding class this audit emits has exactly one owner, and handing a finding to a skill that cannot clear it leaves a NO-GO that never lifts:
 
@@ -221,6 +247,9 @@ Milestone-level readiness is the whole scope. Per-issue correctness belongs to t
 | Fetched count is below the milestone's `open_issues + closed_issues` | Not a finding on its own — those counters include PRs assigned to the milestone while `gh issue list` does not. Never NO-GO on that gap |
 | Milestone is closed | Still auditable — the milestones call needs `state=all`, or a closed milestone returns no record at all |
 | The single open-PR query errors, throttles, or hits its limit | Blocking unknown — never fall through to classifying every issue as build, which would open duplicate PRs |
+| A closed predecessor's merge state can't be resolved | Blocking unknown naming the issue and PR — never assume unsatisfiable, which would exclude a healthy subtree on a re-run |
+| A closed predecessor was closed `NOT_PLANNED` but its closing PR merged | Satisfied edge — merge state decides, not the close reason |
+| An ordering-only edge points into the resume bucket | Informational, not blocked — the pre-pipeline `fix-pr-review-loop` satisfies it; report the sequencing |
 | Finding is body content (acceptance criteria, problem statement, `[C..]` prefix) | Route to `validate-issue`, not `execution-plan-review` — the latter only edits Execution block lines |
 | A build-bucket issue hard-depends on a resume- or skip-bucket issue | Not a NO-GO — exclude that issue and its hard descendants, report them under *Blocked*, and give the verdict on what still runs |
 | Every build-bucket issue ends up excluded | NO-GO — the exclusions left nothing runnable |

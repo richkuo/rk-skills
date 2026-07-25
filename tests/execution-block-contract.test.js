@@ -262,8 +262,71 @@ describe('milestoneplan pre-flight contract', () => {
     expect(blocks.some((code) => /gh pr list --state open --limit \d+/.test(code))).toBe(true)
     expect(blocks.some((code) => /gh pr list[^\n]*--search/.test(code))).toBe(false)
     expect(body).toMatch(/A failed lookup is not "no PR found\."/)
-    // #12 must not match #123.
-    expect(body).toMatch(/`#12` never matches `#123`/)
+  })
+
+  test("the documented closing-keyword pattern matches what GitHub itself closes on", () => {
+    // Run the pattern the document publishes rather than grepping for keyword names:
+    // a pattern that misses `Fixed #12` sends an issue that already has a PR back
+    // through a fresh build. JS has no inline (?i), so strip it and pass the flag.
+    const fenced = fencedBlocks(body).find((code) => code.includes('close[sd]?'))
+    expect(fenced, 'no closing-keyword pattern found in the procedure').toBeDefined()
+    const pattern = new RegExp(fenced.trim().replace(/^\(\?i\)/, ''), 'gi')
+    const firstIssueNumber = (text) => {
+      pattern.lastIndex = 0
+      const match = pattern.exec(text)
+      return match ? Number(match[match.length - 1]) : null
+    }
+    // All nine GitHub closing keywords must resolve to the issue they close.
+    for (const keyword of ['close', 'closes', 'closed', 'fix', 'fixes', 'fixed', 'resolve', 'resolves', 'resolved']) {
+      expect(firstIssueNumber(`${keyword} #12`), `lowercase "${keyword}" missed`).toBe(12)
+      const capitalized = keyword[0].toUpperCase() + keyword.slice(1)
+      expect(firstIssueNumber(`${capitalized} #12`), `capitalized "${capitalized}" missed`).toBe(12)
+    }
+    // The cross-repo form still resolves.
+    expect(firstIssueNumber('fixes owner/repo#12')).toBe(12)
+    // A bare mention is not a closing relationship.
+    expect(firstIssueNumber('see #12 for context')).toBeNull()
+    expect(firstIssueNumber('reverts #12')).toBeNull()
+    // #12 must never match #123 — the whole number is captured, so 123 stays 123.
+    expect(firstIssueNumber('closes #123')).toBe(123)
+  })
+
+  test('resolves closed-predecessor merge state instead of assuming it', () => {
+    // The severity table distinguishes closed-with-merged-PR from closed-without,
+    // so step 1 must actually fetch the data that decides it.
+    expect(body).toMatch(/closedByPullRequestsReferences/)
+    expect(fencedBlocks(body).some((code) => /gh pr view <n> --json number,state,mergedAt/.test(code))).toBe(true)
+    // Merge state decides, not the close reason.
+    expect(body).toMatch(/Merge state is the deciding fact, not `stateReason`/)
+    expect(body).toMatch(/NOT_PLANNED.*closing PR merged is still satisfied/is)
+    // An undecidable edge is an unknown, never silently the blocking branch.
+    expect(body).toMatch(/Never resolve an undecidable merge state to the blocking branch/i)
+    expect(body).toMatch(/\| Merge state of a closed predecessor could not be determined \| \*\*NO-GO\*\*/)
+  })
+
+  test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
+    // milestone-workflow runs resume loops to completion BEFORE the pipeline, which
+    // is what satisfies an ordering-only edge into that bucket.
+    expect(body).toMatch(/\| An \*\*ordering-only\*\* edge into the resume bucket \| \*\*Informational\*\*/)
+    expect(body).toMatch(/ordering-only edge into resume is \*satisfied by sequencing\*, not blocked/)
+    expect(body).toMatch(/to completion before the pipeline starts|to completion \*\*before invoking the pipeline\*\*/)
+    // The reported cost must carry that sequencing, or the number reads as concurrent.
+    expect(body).toMatch(/sequenced ahead of it/)
+  })
+
+  test('the model-attribution table names a model for every row, prep included', () => {
+    // Scope to the attribution table itself — other two-column tables in this doc
+    // legitimately name skills rather than models.
+    const table = body.match(/\| Projected agent \| Model it actually runs on \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(table, 'no model-attribution table found').not.toBeNull()
+    const rows = [...table[1].matchAll(/^\| ([^|]+?) \| (.+?) \|$/gm)]
+    expect(rows.length).toBeGreaterThanOrEqual(7)
+    for (const [, agent, model] of rows) {
+      expect(model, `"${agent.trim()}" names no model`).toMatch(/Fable|Opus|Sonnet|Build model|session model/)
+    }
+    // Prep passes no model, so it inherits the session model — say so, don't call it cheap.
+    expect(body).toMatch(/\| Prep \(once for the whole run\) \| \*\*the session model\*\*/)
+    expect(body).toMatch(/the pipeline passes no `model`/)
   })
 
   test('attributes each projected agent to the model the pipeline dispatches it on', () => {
@@ -360,7 +423,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/\*\*resume\*\* \(open with an open PR that closes it\)/)
     expect(body).toMatch(/\*\*skip\*\* \(closed\)/)
     // A mention is not a resume-bucket PR — only a closing relationship is.
-    expect(body).toMatch(/A bare mention is not a resume-bucket PR; only a closing relationship is/i)
+    expect(body).toMatch(/A bare mention with no keyword is not a resume-bucket PR/i)
   })
 
   test('maps every finding class to one severity matching what milestone-workflow does', () => {
