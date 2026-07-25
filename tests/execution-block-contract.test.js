@@ -56,12 +56,15 @@ function fencedBlocks(markdown) {
 }
 
 /**
- * Every `gh` invocation in a chunk of text as `<subcommand> <verb>` pairs. Used to
- * prove a read-only procedure contains no mutating command, rather than trusting
- * its prose to say so.
+ * Every `gh` invocation in a chunk of text as `<subcommand> <verb>` pairs. Matches
+ * ANY subcommand, not a fixed list: the read-only guarantee is open-world, so a
+ * command the guard does not recognize has to reach the allowlist check and fail
+ * there rather than slip past extraction.
  */
 function ghInvocations(text) {
-  return [...text.matchAll(/gh\s+(api|issue|pr|run|repo|auth|search)\s+([a-z-]+)?/g)].map(
+  // \b is load-bearing: without it the trailing "gh" of "through" matches and the
+  // next prose word reads as a subcommand.
+  return [...text.matchAll(/\bgh\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/g)].map(
     ([whole, sub, verb]) => ({ sub, verb: verb ?? '', whole: whole.trim() }),
   )
 }
@@ -71,13 +74,39 @@ const MUTATING_GH = /gh\s+(?:issue|pr)\s+(edit|create|comment|close|reopen|delet
 
 /** Subcommand verbs that only read. Anything outside this set mutates and must fail a read-only claim. */
 const READ_ONLY_GH = {
-  api: [''], // GET by default; a write needs -X/-f, checked separately
+  api: [], // GET by default; the verb slot is a path, so writes are caught by method/field instead
   issue: ['list', 'view', 'status'],
   pr: ['list', 'view', 'checks', 'diff', 'status'],
   run: ['list', 'view'],
   repo: ['view'],
   auth: ['status'],
   search: ['issues', 'prs', 'repos', 'code'],
+}
+
+/** `gh api` turns into a write via an explicit method or a field — in prose as well as in a fenced block. */
+const WRITING_GH_API = [
+  /gh api[^\n`]*(?:-X|--method)\s*(POST|PATCH|PUT|DELETE)/gi,
+  /gh api[^\n`]*\s(?:-f|--field)\s/g,
+]
+
+/**
+ * Every reason a chunk of text fails a read-only claim, as human-readable strings.
+ * Returning the violations (rather than asserting inline) is what makes the guard
+ * itself testable: a seeded `gh release create` must produce a violation, and
+ * today's commands must produce none.
+ */
+function readOnlyViolations(text) {
+  const violations = []
+  for (const { sub, verb, whole } of ghInvocations(text)) {
+    const readOnlyVerbs = READ_ONLY_GH[sub]
+    if (!readOnlyVerbs) violations.push(`unknown gh subcommand: ${whole}`)
+    // `gh api`'s next token is a path, not a verb — its writes are the method/field forms below.
+    else if (sub !== 'api' && !readOnlyVerbs.includes(verb)) violations.push(`mutating gh command: ${whole}`)
+  }
+  for (const form of WRITING_GH_API) {
+    for (const [whole] of text.matchAll(form)) violations.push(`writing gh api call: ${whole.trim()}`)
+  }
+  return violations
 }
 
 /**
@@ -257,18 +286,37 @@ describe('milestoneplan pre-flight contract', () => {
   test('the procedure itself contains no mutating command', () => {
     // The prose assertions above are about what the document claims; these are about
     // what it instructs. A later step running `gh issue edit` must fail here.
-    const blocks = fencedBlocks(body)
-    const invocations = blocks.flatMap(ghInvocations)
-    expect(invocations.length, 'no gh commands found — extraction is vacuous').toBeGreaterThan(0)
-    for (const { sub, verb, whole } of invocations) {
-      expect(READ_ONLY_GH[sub], `unknown gh subcommand in a read-only procedure: ${whole}`).toBeDefined()
-      expect(READ_ONLY_GH[sub], `mutating command in a read-only procedure: ${whole}`).toContain(verb)
-    }
+    expect(ghInvocations(body).length, 'no gh commands found — extraction is vacuous').toBeGreaterThan(0)
+    expect(readOnlyViolations(body), 'read-only procedure contains a writing command').toEqual([])
     // A write verb has no place even in an aside — this doc names sibling skills, not their commands.
     expect(body).not.toMatch(MUTATING_GH)
-    // `gh api` reads by default; -X with a write method or -f/--field turns it into a write.
-    expect(body).not.toMatch(/gh api[^\n`]*-X\s*(POST|PATCH|PUT|DELETE)/i)
-    expect(body).not.toMatch(/gh api[^\n`]*\s(-f|--field)\s/)
+  })
+
+  test('the read-only guard fails on gh commands it does not recognize', () => {
+    // The guarantee is open-world: a step added later that runs some gh subcommand
+    // nobody listed must fail the guard, not pass it by being unrecognized. Seed the
+    // failures here rather than trusting the guard's shape.
+    for (const written of [
+      'gh release create v1.0.0',
+      'gh workflow run ci.yml',
+      'gh label create blocked',
+      'gh secret set TOKEN',
+      'gh api --method POST /repos/o/r/issues',
+      'gh api -X PATCH /repos/o/r/issues/1',
+      'gh api /repos/o/r/issues -f title=x ',
+    ]) {
+      expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
+    }
+    // …and every command this procedure legitimately uses must still pass.
+    for (const read of [
+      'gh api "repos/:owner/:repo/milestones?state=all" --jq \'.[]\'',
+      'gh issue list --milestone "M" --state all --limit 500 --json number',
+      'gh pr list --state open --limit 500 --json number',
+      'gh pr view 42 -R owner/repo --json number,state,mergedAt',
+      'gh issue view 42 --json body',
+    ]) {
+      expect(readOnlyViolations(read), `should pass the read-only guard: ${read}`).toEqual([])
+    }
   })
 
   test('proves fetch completeness from the fetch, not from cross-endpoint counts', () => {
@@ -321,13 +369,61 @@ describe('milestoneplan pre-flight contract', () => {
     // The severity table distinguishes closed-with-merged-PR from closed-without,
     // so step 1 must actually fetch the data that decides it.
     expect(body).toMatch(/closedByPullRequestsReferences/)
-    expect(fencedBlocks(body).some((code) => /gh pr view <n> --json number,state,mergedAt/.test(code))).toBe(true)
+    expect(fencedBlocks(body).some((code) => /gh pr view <n> -R <owner>\/<repo> --json number,state,mergedAt/.test(code))).toBe(true)
     // Merge state decides, not the close reason.
     expect(body).toMatch(/Merge state is the deciding fact, not `stateReason`/)
     expect(body).toMatch(/NOT_PLANNED.*closing PR merged is still satisfied/is)
     // An undecidable edge is an unknown, never silently the blocking branch.
     expect(body).toMatch(/Never resolve an undecidable merge state to the blocking branch/i)
-    expect(body).toMatch(/\| Merge state of a closed predecessor could not be determined \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| Merge state of a closed predecessor a \*\*runnable\*\* issue hard-depends on could not be determined \| \*\*NO-GO\*\*/)
+  })
+
+  test('targets the closing PR own repository, never a same-numbered local PR', () => {
+    // `gh pr view 42` with no -R resolves THIS repo's PR 42, so a cross-repo closing
+    // PR would be decided by an unrelated PR — a confident wrong verdict either way.
+    const lookups = fencedBlocks(body).flatMap((code) => code.match(/gh pr view[^\n]*/g) ?? [])
+    expect(lookups.length, 'no PR lookup found in the procedure').toBeGreaterThan(0)
+    for (const lookup of lookups) {
+      expect(lookup, `PR lookup with no -R: ${lookup}`).toMatch(/\s-R\s/)
+    }
+    // The repo has to come from the reference itself, not be guessed.
+    expect(body).toMatch(/repository\.owner\.login.*repository\.name/is)
+    // An unreadable cross-repo PR is an unknown, not a merge verdict.
+    expect(body).toMatch(/cannot read is a \*\*blocking unknown\*\*/i)
+    expect(body).toMatch(/\| A closed predecessor's closing PR lives in another repo \|/)
+  })
+
+  test('scopes blocking severity to the buckets the run actually dispatches', () => {
+    // milestone-workflow drops closed issues and runs resume issues outside the
+    // pipeline, so neither bucket's Execution block is ever read — a finding there
+    // cannot decide the verdict, or one pre-convention closed issue blocks every re-run.
+    expect(body).toMatch(/derive severity from the bucket the finding's issue sits in/i)
+    expect(body).toMatch(/\| A \*\*runnable\*\* issue with no `## Execution` block \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| \*\*Any row above, when the finding's issue sits in the skip or resume bucket\*\*[^|]*\| \*\*Informational\*\*/)
+    // The audit itself still covers the whole milestone — buckets are not decidable otherwise.
+    expect(body).toMatch(/Audit every issue in the milestone/i)
+    expect(body).toMatch(/incomplete fetch stays NO-GO regardless of buckets/i)
+    // A resume finding is deferred, not resolved: it returns if the PR closes unmerged.
+    expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
+    // A cycle only forces NO-GO when every edge in it survives into the run.
+    expect(body).toMatch(/\| A cycle across the union of both edge kinds, every issue in it runnable \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| A cycle routed through a skip- or resume-bucket issue \| \*\*Informational\*\*/)
+    expect(body).toMatch(/A finding confined to the skip or resume bucket never produces this verdict/)
+  })
+
+  test('gives each closed-predecessor edge kind exactly one severity row', () => {
+    // A hard edge needs the predecessor's code; an ordering-only edge only prevents
+    // overlapping work, and a closed issue has no work left to overlap. An unqualified
+    // duplicate row would exclude runnable issues over a constraint already met.
+    const severityRows = [...body.matchAll(/^\| ([^|\n]*closed[^|\n]*) \| ([^|\n]+) \|/gm)].map(
+      ([, finding, severity]) => ({ finding, severity: severity.trim() }),
+    )
+    const closedUnmerged = severityRows.filter((r) => /no\*\* PR|closed unmerged|without a merged PR/.test(r.finding))
+    expect(closedUnmerged.length, 'expected one row per edge kind').toBe(2)
+    expect(closedUnmerged.filter((r) => /\*\*Blocked — excluded\*\*/.test(r.severity)).length).toBe(1)
+    expect(closedUnmerged.every((r) => /\*\*hard\*\*|\*\*ordering-only\*\*/i.test(r.finding))).toBe(true)
+    expect(body).toMatch(/An ordering-only edge to a closed predecessor is satisfied whether or not its PR merged/)
+    expect(body).toMatch(/none of them falls through the rules, and none of them lands in two/)
   })
 
   test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
@@ -360,10 +456,25 @@ describe('milestoneplan pre-flight contract', () => {
     // of those come from the issue's Build model, which the mix used to assume.
     expect(body).toMatch(/\| Validate \(every issue\) \| \*\*always Fable 5\*\*/)
     expect(body).toMatch(/\| Plan \(`fableplan: Yes` issues\) \| \*\*always Fable 5\*\*/)
-    expect(body).toMatch(/First review.*defaulting to Opus\*\*, \*\*never\*\* the Build model|First review.*\*\*defaulting to Opus\*\*/)
-    expect(body).toMatch(/Re-review after a fix pass that cleared only non-blocking findings \| \*\*Sonnet\*\*/)
+    expect(body).toMatch(/First review, `reviewMode: 'subagent'`.*\*\*defaulting to Opus\*\*/)
+    expect(body).toMatch(/Re-review after a fix pass that cleared only non-blocking findings, subagent mode \| \*\*Sonnet\*\*/)
     expect(body).toMatch(/\| Implement \| the issue's \*\*Build model\*\* \|/)
     expect(body).toMatch(/reviewLoop: false.*no reviewer or fixer model enters the mix/is)
+  })
+
+  test('attributes the github-mode review loop to the Build model, not to Opus', () => {
+    // In github mode the pipeline dispatches the single review-loop agent with the
+    // issue's Build model, so a per-term attribution that names Opus for every review
+    // misreports the whole mix on that mode.
+    expect(body).toMatch(/\| The single `review-loop` agent, `reviewMode: 'github'` \| the issue's \*\*Build model\*\*/)
+    expect(body).toMatch(/`PR review:` model is \*never read\* in this mode/)
+    // The mode has to be named before the model, and the step 4 term has to carry it too.
+    expect(body).toMatch(/name the mode before naming the model/i)
+    expect(body).toMatch(/attribute that single agent to the issue's \*\*Build model\*\*, not to Opus/)
+    // The @claude Action is not a pipeline agent, so it is outside the projected counts.
+    expect(body).toMatch(/`@claude` GitHub Action, which is not a pipeline agent/)
+    // The two modes must not report the same mix.
+    expect(body).toMatch(/no Opus reviewer in the mix at all/)
   })
 
   test('derives Capability and Volume from the score rather than the rationale line', () => {
