@@ -108,4 +108,13 @@ describe('Execution block Plan effort contract', () => {
     // The footer must then name what actually ran, not the tier that was requested.
     expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
   })
+
+  test('fableplan falls back to the documented default, never a guessed session tier', () => {
+    // An agent cannot observe its own effort tier, so the unhonored-stamp fallback
+    // must name the repo attribution default rather than invent a value.
+    expect(fableplan).toMatch(/record the repo attribution default `high`/i)
+    expect(fableplan).toMatch(/do not try to name the session's own tier/i)
+    expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
+    expect(fableplan).not.toMatch(/footer names the session effort/i)
+  })
 })

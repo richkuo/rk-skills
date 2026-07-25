@@ -54,7 +54,7 @@ If the call returns null or errors (user skip, terminal API failure), retry once
 When the result arrives:
 - Run `git status --porcelain` and compare against the pre-dispatch snapshot to confirm the subagent made no file changes despite the no-edit instruction. If it did, tell the user and ask whether to revert before continuing.
 - Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
-- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the Notes fallback substituted another, and the effort is the stamped **Plan effort** only when it was actually passed and accepted; otherwise it is the session effort this skill is running at. Step 4's footer names these two recorded values, so resolve them now rather than assuming the stamped tier took effect.
+- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the Notes fallback substituted another, and the effort is the stamped **Plan effort** only when it was actually passed and accepted. When it wasn't (no stamp, or the harness could not honor one), record the repo attribution default `high` — **do not try to name the session's own tier**, which an agent cannot observe; guessing it would put an invented value in the very slot this footer exists to keep honest. Step 4's footer names these two recorded values, so resolve them now rather than assuming the stamped tier took effect.
 
 ### 3. Sanity-check the plan against the code
 
@@ -75,7 +75,7 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: Claude Code | fableplan
 ```
 
-Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it is the session effort when no `Plan effort` was stamped or the harness could not honor it, and the substituted model name when the Notes fallback fired. A footer claiming `high` on a plan that ran at `xhigh` is a false attribution, the same defect the milestone-pipeline plan footer fixes.
+Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming `high` on a plan that ran at `xhigh` is a false attribution, the same defect the milestone-pipeline plan footer fixes.
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 
