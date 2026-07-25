@@ -363,10 +363,9 @@ describe('milestoneplan pre-flight contract', () => {
   test('recommends against the band table and separates overrides from slips', () => {
     expect(body).toMatch(/\| Capability \| Score \| Build model \| fableplan \|/)
     expect(body).toMatch(/deliberate override/i)
-    expect(body).toMatch(/unexplained departure gets a recommendation/i)
+    expect(body).toMatch(/unexplained under-band departure gets a recommendation/i)
     // The pipeline silently raises non-Fable low/medium; the check must say the stamp lies.
     expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
-    expect(body).toMatch(/`Validate effort: xhigh`/)
     expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
     // Volume tertile applies to build effort only; Validate/Plan have their own rules.
     expect(body).toMatch(/\*\*build\*\* effort that contradicts the Volume tertile/i)
@@ -374,17 +373,33 @@ describe('milestoneplan pre-flight contract', () => {
     // Fable discretionary low is allowed — never recommend against it.
     expect(body).toMatch(/Fable build stamped `low`.*discretionary Fable-only tier/is)
     expect(body).toMatch(/never recommend against it/i)
-    // Band conformance runs in both directions: quiet overspend gets flagged too.
-    expect(body).toMatch(/Band conformance is two-sided/i)
-    expect(body).toMatch(/departs from its score's band in \*either\* direction/)
-    expect(body).toMatch(/silent overspend/i)
-    // Over-band is the pipeline's own default for a missing Execution block.
+    // Band is a floor: under-band recommends; over-band is observation, never a downgrade.
+    expect(body).toMatch(/The band is a floor, not a ceiling/i)
+    expect(body).toMatch(/no hard ceilings — the band \*is\* the floor/)
+    expect(body).toMatch(/under-band build model/i)
+    expect(body).toMatch(/over-band build model is an \*\*observation\*\*, never a downgrade recommendation/i)
+    expect(body).toMatch(/Over-band observations/)
+    // Safety carve-outs force the capable path — never recommend dropping the model.
+    expect(body).toMatch(/Safety carve-outs \(money, data integrity, security, auto-protective\)/)
+    expect(body).toMatch(/Never recommend dropping the model on an issue whose body touches those surfaces/i)
+    // Over-band is also the pipeline's own default for a missing Execution block.
     expect(body).toMatch(/model fable, effort high/)
   })
 
+  test('applies the documented Validate effort rules, not only the xhigh ban', () => {
+    // Vocabulary, default, Cap-0 Volume≤7 medium, and silent low→medium coercion.
+    expect(body).toMatch(/vocabulary is only `medium \| high`/i)
+    expect(body).toMatch(/never `xhigh`/i)
+    expect(body).toMatch(/`low` is outside the vocabulary/i)
+    expect(body).toMatch(/prep coerces it to `medium` with no runtime log/i)
+    expect(body).toMatch(/default is high/i)
+    expect(body).toMatch(/`medium` is on-rule only for Capability 0 with Volume ≤ 7/i)
+    expect(body).toMatch(/`\[C90\]` at `medium` is off-rule/)
+  })
+
   test('scopes run claims and recommendations to open issues the pipeline would dispatch', () => {
-    // Closed rows stay visible for context; only open rows are "what the run will execute".
-    expect(body).toMatch(/Only open rows are what the run will execute/i)
+    // Closed rows stay visible for context; only open rows are dispatch candidates.
+    expect(body).toMatch(/Only open rows are candidates for what the run will execute/i)
     expect(body).toMatch(/drops closed issues from the plan/i)
     expect(body).toMatch(/mark them as not dispatched/i)
     expect(body).toMatch(/closed predecessor named in an open issue's `Depends on` must stay readable/i)
@@ -392,8 +407,12 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/one line per contradicting field on an open issue only/i)
     expect(body).toMatch(/Field contradictions on closed issues are informational/i)
     expect(body).toMatch(/Closed-issue notes.*informational, never as work to apply/is)
-    // Resume caveat — open issue with open PR is not decidable without the removed PR lookup.
+    // Resume caveat is unconditional — PR lookup was removed, so relevance is undecidable.
+    expect(body).toMatch(/Always state this resume caveat/i)
+    expect(body).toMatch(/cannot tell when the caveat applies/i)
     expect(body).toMatch(/open issue that already has an open PR is a \*\*resume\*\*/i)
+    expect(body).toMatch(/Qualify every open-issue recommendation with that uncertainty/i)
+    expect(body).toMatch(/may be a resume if an open PR already closes it/)
     // All-closed milestone is complete, not a recommendation wall.
     expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue recommendations/is)
     // Missing-block / missing-prefix failure modes are open-scoped.
@@ -424,6 +443,14 @@ describe('milestoneplan pre-flight contract', () => {
     expect(canonical.map((band) => band.capability)).toEqual([0, 1, 2, 3])
     expect(canonical.find((band) => band.capability === 2).fableplan).toBe(true)
     expect(canonical.find((band) => band.capability === 3).model).toBe('Fable')
+    // Floor + carve-out qualifiers must travel with the table, or a future edit to
+    // validate-issue's carve-out leaves a stale copy green.
+    const carveOut =
+      /Safety carve-outs \(money, data integrity, security, auto-protective\) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored\./
+    expect(validateIssue, 'validate-issue lost its carve-out sentence').toMatch(carveOut)
+    expect(milestoneplan, 'milestoneplan must copy the carve-out sentence verbatim').toMatch(carveOut)
+    expect(milestoneplan).toMatch(/no hard ceilings — the band \*is\* the floor/)
+    expect(validateIssue).toMatch(/no hard ceilings — the band \*is\* the floor/)
   })
 
   test('publishes the per-issue routing table with every Execution-block field', () => {
