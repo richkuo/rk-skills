@@ -296,7 +296,8 @@ jobs:
       flow: ''
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
   # Implementation runs legitimately commit and push (issue workflow opens a PR;
   # docs-sync opens a PR; create-release publishes), so they keep Claude App
@@ -316,7 +317,8 @@ jobs:
       flow: ${{ needs.classify.outputs.flow }}
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
   # A fix-pr run edits the pull request's own branch in place and pushes to it:
   # fetch all unaddressed review feedback, validate each finding against the
@@ -354,4 +356,5 @@ jobs:
       flow: ''
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
