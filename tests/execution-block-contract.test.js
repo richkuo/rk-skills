@@ -461,7 +461,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/\| \*\*Any row above whose owning issue sits in the skip or resume bucket\*\*[^|]*\| \*\*Informational\*\*/)
     // The audit itself still covers the whole milestone — buckets are not decidable otherwise.
     expect(body).toMatch(/Audit every issue in the milestone/i)
-    expect(body).toMatch(/incomplete fetch stays NO-GO regardless of buckets/i)
+    expect(body).toMatch(/every step-1 \*\*blocking unknown\*\*/)
+    expect(body).toMatch(/incomplete fetch stays NO-GO regardless of buckets|those stay NO-GO regardless of buckets/i)
     // A resume finding is deferred, not resolved: it returns if the PR closes unmerged.
     expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
     // A cycle only forces NO-GO when every edge in it survives into the run.
@@ -476,7 +477,7 @@ describe('milestoneplan pre-flight contract', () => {
     // resume BY DEFINITION — reading the predecessor as the finding's issue would demote
     // Blocked — excluded to Informational and dispatch the dependent against missing code.
     expect(body).toMatch(/An edge finding has two endpoints, and its owner is the endpoint this run would dispatch/)
-    expect(body).toMatch(/never a cross-bucket edge row/)
+    expect(body).toMatch(/[Nn]ever a cross-bucket edge row/)
     // The cross-bucket edge rows keep their severity under the demotion rule.
     expect(body).toMatch(/\| A hard edge into the resume bucket[^|]*\| \*\*Blocked — excluded\*\*/)
     expect(body).toMatch(/\| A \*\*hard\*\* edge to a predecessor closed with \*\*no\*\* PR, or with one closed unmerged \| \*\*Blocked — excluded\*\*/)
@@ -533,7 +534,7 @@ describe('milestoneplan pre-flight contract', () => {
   test('prints the per-model agent mix in the report template', () => {
     const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
     expect(template, 'no report template found').not.toBeNull()
-    expect(template[0]).toMatch(/^Per-model mix:/m)
+    expect(template[0]).toMatch(/^Per-model mix/m)
     expect(body).toMatch(/Report the per-model agent mix/)
   })
 
@@ -589,10 +590,39 @@ describe('milestoneplan pre-flight contract', () => {
       /\| `Depends on` \/ `Runs after` missing, and the prose implies \*\*no\*\* edge of that kind \| \*\*Non-blocking\*\*/,
     )
     expect(body).toMatch(
-      /\| `Depends on` \/ `Runs after` missing, and the prose gestures at a dependency but does not establish the edge \*\*kind\*\* \| \*\*NO-GO\*\*/,
+      /\| `Depends on` \/ `Runs after` missing, and the prose gestures at a dependency but does not establish the edge \*\*kind\*\* \| \*\*Non-blocking\*\*/,
     )
     expect(body).toMatch(/satisfied empty graph/)
     expect(body).toMatch(/Ordering fields missing and prose implies no edge of that kind/)
+    expect(body).toMatch(/flag for plan review the same way `milestone-workflow` step 1 does; never NO-GO/)
+  })
+
+  test('disposes closed cross-milestone predecessors instead of treating them as satisfied', () => {
+    expect(body).toMatch(
+      /\| A \*\*closed\*\* \*\*hard\*\* cross-milestone predecessor \(merged or not\) \| \*\*Blocked — excluded\*\*/,
+    )
+    expect(body).toMatch(
+      /\| A \*\*closed\*\* \*\*ordering-only\*\* cross-milestone predecessor \(merged or not\) \| \*\*Non-blocking\*\*/,
+    )
+    expect(body).toMatch(
+      /\| A predecessor \*\*inside this milestone\*\* closed \*\*with\*\* a merged PR[^|]*\| \*no finding\*/,
+    )
+    expect(body).toMatch(/Out-of-milestone\*\* predecessors are different/)
+    expect(body).toMatch(/A hard `Depends on` names a closed issue outside this milestone/)
+  })
+
+  test('labels the per-model mix with the run-size bound it covers', () => {
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template, 'no report template found').not.toBeNull()
+    expect(template[0]).toMatch(/^Per-model mix \(<bound: planned \| retry-aware \| worst>\):/m)
+    expect(body).toMatch(/Compute and label the mix over the same bound/)
+    expect(body).toMatch(/retry-aware ceiling's validate retries place under \*\*Fable 5\*\*/)
+  })
+
+  test('exempts every step-1 blocking unknown from bucket demotion', () => {
+    expect(body).toMatch(/every step-1 \*\*blocking unknown\*\*/)
+    expect(body).toMatch(/step-1 blocking unknowns excepted \(incomplete fetch, failed\/throttled\/truncated open-PR query, undecidable linked-reference openness, unfetched out-of-milestone reference\)/)
+    expect(body).toMatch(/demotion conditioned on a bucket must never apply to a finding that says the bucket cannot be known/)
   })
 
   test('gives Blocked-excluded findings a stated deferred severity', () => {
@@ -819,7 +849,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/open \*\*hard\*\* cross-milestone prerequisite/i)
     expect(body).toMatch(/open \*\*ordering-only\*\* cross-milestone prerequisite/i)
     // A merged predecessor PR is a satisfied edge, not a finding.
-    expect(body).toMatch(/predecessor closed \*\*with\*\* a merged PR.*no finding/is)
+    expect(body).toMatch(/predecessor \*\*inside this milestone\*\* closed \*\*with\*\* a merged PR.*no finding/is)
   })
 
   test('every severity the table can assign has a section in the report template', () => {
