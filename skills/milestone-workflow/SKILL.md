@@ -1,11 +1,13 @@
 ---
 name: milestone-workflow
-description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, and optional review loops until LGTM — in-session subagent reviewers by default, or the @claude Action in github mode. Stage 5–6 of the new-app-pipeline.
+description: Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow — "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds dependency tracks, presents the run plan for approval, then runs the milestone-pipeline workflow: per-issue model/effort from the Execution blocks, optional fableplan stage, PRs, and optional review loops until LGTM — in-session subagent reviewers by default, or the @claude Action in github mode. Stage 7 of the new-app-pipeline.
 ---
 
 # milestone-workflow
 
 Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dependency-aware dispatch: the dependency graph is decided here with the user; execution waits for stable predecessor results and builds hard-dependent work from their reviewed code.
+
+For a read-only look at the milestone before committing to a run — whether it is runnable at all, what routing is stamped on each issue, which stamps contradict their score's band, what the waves and the critical path look like, and what the run would cost in agents — use `milestoneplan` first. It audits, projects, and returns a go / no-go verdict without editing anything, then hands off here.
 
 ## Steps
 
@@ -73,6 +75,7 @@ The orchestrating session holds no implementation detail — issues and PRs are 
 | Situation | Do this |
 |---|---|
 | An issue lacks an Execution block at run time | Stop before running; send it through execution-plan-review |
+| The user wants the milestone checked before committing to a run | Run `milestoneplan` — the read-only audit, waves, run-size projection and go / no-go verdict, without touching an issue |
 | No `@claude` review workflow in the repo | Use the default `reviewMode: 'subagent'` (no Actions dependency); only github mode needs the template installed, and `reviewLoop: false` remains the no-review fallback |
 | GitHub Actions billing or a self-hosted runner outage stalls reviews | Switch the next invocation to `reviewMode: 'subagent'`; already-running github-mode loops stay blocked until Actions recovers |
 | A successor hard-depends on unmerged predecessor PRs | Use `after`; the workflow waits for stable heads and `work-on-issue` verifies/integrates every base before implementation |
