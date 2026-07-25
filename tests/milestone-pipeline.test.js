@@ -62,6 +62,8 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
       }
     } else if (options.phase === 'Validate') {
       result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
+    } else if (options.phase === 'Plan') {
+      result = { plan: `plan for #${issueFromLabel(options.label)}`, constraints: [] }
     } else if (options.phase === 'Implement') {
       const issue = issueFromLabel(options.label)
       result = {
@@ -253,6 +255,84 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'plan:#2')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'implement:#3 (fable/high)')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004')).toHaveLength(1)
+  })
+
+  test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
+          { number: 3, title: 'Stamped low', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
+          { number: 4, title: 'No stamp', complexity: 60, model: 'opus', effort: 'xhigh', validate_effort: 'high', fableplan: true, missing_block: false },
+          { number: 5, title: 'No plan stage', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+        ],
+      }),
+    })
+
+    const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
+    expect(planEvent(2).effort).toBe('xhigh')
+    expect(planEvent(2).model).toBe('fable')
+    expect(planEvent(3).effort).toBe('low')
+    expect(planEvent(3).model).toBe('fable')
+    expect(planEvent(4).effort).toBe('high')
+    expect(planEvent(5)).toBeUndefined()
+
+    // The posted-plan footer must advertise the effort the planner actually ran at.
+    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | xhigh | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
+    expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
+
+    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
+    expect(logs.filter((message) => message.includes('normalized'))).toEqual([])
+
+    // A stamped Plan effort on a fableplan: false issue is reported once, not dropped silently.
+    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
+      '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
+    ])
+  })
+
+  test('reports an inert Plan effort only when one was actually stamped', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
+          // plan_effort present despite the omit contract: a prep agent that fills it in
+          // anyway is exactly what the missing_block half of the guard defends against,
+          // so this fixture fails if `&& !normalized.missing_block` is removed.
+          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
+          { number: 4, title: 'Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, missing_block: false },
+          { number: 5, title: 'No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: true },
+        ],
+      }),
+    })
+
+    // Nothing stamped → no log; a missing block is reported once by the block-missing
+    // warning, not compounded by an inert-field warning for the defaults it filled in.
+    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([])
+    expect(logs.some((message) => message.includes('no Execution block on #3, #5'))).toBeTrue()
+
+    // An unstamped fableplan issue still plans at the dispatch-side default.
+    const planEvent = events.find((event) => event.state === 'started' && event.label === 'plan:#4')
+    expect(planEvent.effort).toBe('high')
+    expect(planEvent.prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
+  })
+
+  test('prep is contracted to omit Plan effort when the issue stamps none', () => {
+    // The inert-tier log reads presence as "an operator stamped a tier". That only
+    // holds while prep omits the field instead of filling in a default — a fill-in
+    // default would make every unstamped issue log a tier nobody set.
+    const source = workflowSource
+    const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
+    expect(schemaLine).toMatch(/OMIT this field entirely when the line is absent/)
+    expect(schemaLine).not.toMatch(/default high when absent/)
+
+    const promptLine = source.match(/^- plan_effort: from the optional.*$/m)[0]
+    expect(promptLine).toMatch(/OMIT the field rather than filling in a default/)
+    expect(promptLine).not.toMatch(/when the line is absent, use high/)
+
+    // The dispatch-side default is what makes omission safe.
+    expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {

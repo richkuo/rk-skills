@@ -3,10 +3,11 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [prdToIssues, executionPlanReview, milestoneWorkflow, readme] = await Promise.all([
+const [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan, readme] = await Promise.all([
   read('skills/prd-to-issues/SKILL.md'),
   read('skills/execution-plan-review/SKILL.md'),
   read('skills/milestone-workflow/SKILL.md'),
+  read('skills/fableplan/SKILL.md'),
   read('README.md'),
 ])
 
@@ -45,5 +46,101 @@ describe('Execution block ordering contract', () => {
   test('README publishes both ordering fields', () => {
     expect(readme).toContain('`Depends on`')
     expect(readme).toContain('`Runs after`')
+  })
+})
+
+describe('Execution block Plan effort contract', () => {
+  test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
+    expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high | xhigh>')
+    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*planner is always Fable 5.*every tier is legal/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*sets effort only, never a model/is)
+  })
+
+  test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
+    expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
+    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
+    expect(executionPlanReview).toMatch(/Revision names a plan model.*Only the effort is stampable/is)
+    expect(executionPlanReview).toMatch(/plan effort at `low` or `medium`.*Allowed/is)
+  })
+
+  test('milestone-workflow documents the plan stage running at the issue Plan effort', () => {
+    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
+    expect(milestoneWorkflow).toMatch(/Plan effort on every `fableplan: Yes` issue/i)
+  })
+
+  test('README publishes the plan effort field', () => {
+    expect(readme).toMatch(/the effort that plan runs at/i)
+  })
+
+  test('fableplan consumes the same field name every other document publishes', () => {
+    // A rename in one document must fail here rather than pass file-by-file.
+    const blockLine = '- **Plan effort:**'
+    expect(prdToIssues).toContain(blockLine)
+    expect(fableplan).toContain(blockLine)
+    // README describes the field in prose rather than naming the block line.
+    for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
+      expect(doc).toContain('Plan effort')
+    }
+  })
+
+  test('every document that states the plan effort default states high', () => {
+    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
+    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
+    expect(fableplan).toMatch(/Plan effort.*absent.*dispatches at `high` — the repo attribution default/is)
+  })
+
+  test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
+    expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
+    // (a) re-hardcoding the posted-plan footer to a literal tier must fail here.
+    expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
+    expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
+    expect(fableplan).toMatch(/never a constant/i)
+  })
+
+  test('fableplan degrades gracefully when the harness Agent tool has no effort parameter', () => {
+    expect(fableplan).toMatch(/Not every harness's Agent tool accepts `effort`/i)
+    expect(fableplan).toMatch(/re-dispatch once without `effort`/i)
+    expect(fableplan).toMatch(/degradation, not an error/i)
+    // The footer must then name what actually ran, not the tier that was requested.
+    expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
+  })
+
+  test('fableplan tells the operator when a stamped tier could not be honored', () => {
+    // The degradation is common (Claude Code's Agent tool has no `effort` parameter),
+    // so it must reach the person who stamped the tier, not just the footer.
+    expect(fableplan).toMatch(/report it to the user in step 5/i)
+    expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
+    expect(fableplan).toMatch(/not a notice/i)
+    // …and stay silent when there is nothing to correct.
+    expect(fableplan).toMatch(/when the tier \*was\* honored \(no notice/i)
+    expect(fableplan).toMatch(/make no claim about a stamped tier in either direction/i)
+  })
+
+  test('fableplan passes an explicit tier rather than inheriting the session effort', () => {
+    // Passing `high` when nothing is stamped makes the footer's value observed
+    // rather than conventional, and floors the plan at high on a low-effort session.
+    expect(fableplan).toMatch(/otherwise `high`.*Pass it explicitly even in the unstamped case/is)
+    expect(fableplan).toMatch(/may be \*below\* `high`/i)
+    expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
+    expect(fableplan).not.toMatch(/the subagent inherits the session effort/i)
+  })
+
+  test('execution-plan-review never leaves or masks an inert Plan effort', () => {
+    expect(executionPlanReview).toMatch(/flips fableplan `Yes` → `No`.*strip that line during write-back/is)
+    expect(executionPlanReview).toMatch(/only when that band puts fableplan at `Yes`/i)
+    expect(executionPlanReview).toMatch(/show that tier marked `ignored`.*never a bare `—`/is)
+  })
+
+  test('fableplan falls back to the documented default, never a guessed session tier', () => {
+    // An agent cannot observe its own effort tier, so the unhonored-stamp fallback
+    // must name the repo attribution default rather than invent a value.
+    expect(fableplan).toMatch(/record the repo attribution default `high`/i)
+    expect(fableplan).toMatch(/do not try to name the session's own tier/i)
+    expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
+    expect(fableplan).not.toMatch(/footer names the session effort/i)
   })
 })

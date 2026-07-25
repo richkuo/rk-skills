@@ -24,7 +24,7 @@ Fetch the milestone's issues and build a typed dependency graph before grouping 
 
 ### 2. Present the run plan — review before beginning (mandatory)
 
-Show: numbered tracks with issue titles; hard `after` edges separately from ordering-only `runsAfter` edges; which edges were inferred; each issue's model/effort/fableplan; the stable readiness boundary; and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
+Show: numbered tracks with issue titles; hard `after` edges separately from ordering-only `runsAfter` edges; which edges were inferred; each issue's model/effort/fableplan, plus the Plan effort on every `fableplan: Yes` issue; the stable readiness boundary; and merge-order expectations. **Do not invoke the Workflow tool until the user approves this plan** — the approval is both the safety checkpoint and the explicit multi-agent opt-in the Workflow tool requires.
 
 State the GitHub writes the run performs, so the approval covers them explicitly: agents apply validation corrections to issue bodies, post each `fableplan: Yes` issue's implementation plan as a comment on that issue, open PRs, and (with review loops on) post review-trigger and disposition comments. Merging still stays with the user.
 
@@ -53,9 +53,9 @@ Immediately after the invocation returns, post its runId and persisted script pa
 
 The workflow validates all assignments, predecessor indices, duplicates, and cycles before prep, then:
 
-1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan.
+1. **Prep** — one agent reads every issue's `[C..]` score and Execution block → per-issue model/effort/fableplan/plan effort.
 2. **Validate** — immediately before each issue starts, a Fable agent runs the `validate-issue` procedure against the current dependency base, with deduplicated predecessor PRs/skips and hard base refs, at the issue's `Validate effort` (default high). `INVALID` issues are skipped and reported, never built.
-3. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent (validation-aware) whose plan is posted to the issue; the builder implements against it.
+3. **Plan** — issues flagged `fableplan: Yes` get a Fable 5 planning agent (validation-aware) whose plan is posted to the issue, at the issue's `Plan effort` (default high; every tier is legal because the planner is always Fable). The builder implements against it.
 4. **Implement** — per-issue agent on its assigned model/effort applies validation corrections, invokes `work-on-issue` with the verified hard `baseRefs`, creates a deterministic integration base for multiple heads, opens the PR, and (github review mode only) triggers `@claude review`.
 5. **Review readiness** — the review loop runs until LGTM before any hard or ordering successor starts, preventing review fixes from racing same-package work. In subagent mode (default) the script alternates an independent reviewer agent (first review on the issue's `PR review:` model/effort, default opus/high; posts a `pr-review-format` comment) with a `fix-pr-review` fixer agent on the build model/effort — a re-review after only non-blocking fixes drops to sonnet/high. In github mode one `fix-pr-review-loop` agent drives the `@claude` Action instead. Unrelated tracks and their review loops stay concurrent. With `reviewLoop: false`, implementation completion is the readiness boundary.
 6. **Failure propagation** — failed, blocked, or non-LGTM hard predecessors block descendants. Ordering-only skips without a PR do not; an unresolved predecessor PR does. Integration conflicts block before product changes.

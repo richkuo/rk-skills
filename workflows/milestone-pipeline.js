@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
-    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes; plans posted to the issues', model: 'fable' },
+    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
     { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or fix-pr-review-loop against the @claude Action in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
   ],
@@ -16,7 +16,7 @@ export const meta = {
 // within every track are conservative hard dependencies because their edge kind
 // is not explicit. The full graph is validated before any agent starts.
 // Unlike issue-pipeline, there is no complexity-threshold model routing:
-// model/effort/fableplan come from each issue's ## Execution block (stamped by
+// model/effort/fableplan/plan effort come from each issue's ## Execution block (stamped by
 // prd-to-issues, revised by execution-plan-review). Prep preserves representable
 // stale combinations so the runtime can normalize and log them before dispatch.
 // Validation still runs as the first step of every issue. Predecessor PRs change
@@ -135,6 +135,7 @@ const PREP_SCHEMA = {
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
           validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
+          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; OMIT this field entirely when the line is absent — the runtime defaults it to high, and its presence is how the runtime tells a stamped tier from an unstamped one. The planner is always Fable 5, so every tier is legal and none is normalized. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; opus when the line is standard or absent' },
           first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; high when unspecified' },
@@ -263,7 +264,7 @@ async function validateWithRetry(issue, prompt, options) {
   return { validation: null, blocker }
 }
 
-function planPrompt(issue, validation) {
+function planPrompt(issue, validation, planEffort) {
   const corrections = validation.corrections.length
     ? `\nA Fable validation pass found these issue-body corrections (a later agent applies them — plan as if they were already applied):\n${validation.corrections.map((c) => `- ${c}`).join('\n')}\n`
     : ''
@@ -276,7 +277,7 @@ Validation summary: ${validation.summary}
 ${corrections}${constraints}
 Fetch the issue (\`gh issue view ${issue}\`), read the referenced PRD sections and any relevant code, and produce a concrete implementation plan: files to create/modify, data shapes, control flow, edge cases, and the test list. Plan the absolute-best solution — cost and code volume are not constraints; only correctness and safety are.
 
-Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable 5 | high | Harness: milestone-pipeline\`). The user approved this milestone run plan, which explicitly authorizes commenting the plan on this issue — the comment is the handoff artifact the builder implements against, and posting it is the whole point of this step, not an incidental side effect. Do NOT modify any files, comment anywhere else, or start implementing.
+Post the plan as a comment on issue #${issue} (footer: \`Created with LLM: Fable 5 | ${planEffort} | Harness: milestone-pipeline\`). The user approved this milestone run plan, which explicitly authorizes commenting the plan on this issue — the comment is the handoff artifact the builder implements against, and posting it is the whole point of this step, not an incidental side effect. Do NOT modify any files, comment anywhere else, or start implementing.
 
 Return via StructuredOutput: the plan text, and the distilled hard constraints the builder must honor.`
 }
@@ -416,6 +417,7 @@ const prep = await agent(
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
 - validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
+- plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers. Only the effort is stampable — never read a model from this line
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
@@ -432,6 +434,17 @@ const normalizedIssues = prep.issues.map((issue) => {
   if (normalized.validate_effort === 'xhigh') {
     log(`#${normalized.number}: normalized validate effort xhigh → high`)
     normalized.validate_effort = 'high'
+  }
+  // A stamped Plan effort on a fableplan: false issue is never read. Say so once
+  // rather than dropping it silently — the operator set a tier that does nothing.
+  // Presence is the "operator stamped a tier" signal, which only holds because
+  // prep is instructed to OMIT plan_effort when the line is absent (the default
+  // is applied at dispatch instead). Never give prep a fill-in default for this
+  // field or every unstamped issue starts logging here.
+  // Skipped when the block was missing entirely: the defaults we filled in are
+  // already reported by the missing-block warning below.
+  if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
+    log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
   }
   return normalized
 })
@@ -573,11 +586,12 @@ async function executeTrack(trackIndex) {
     }
 
     let plan = null
+    const planEffort = ex.plan_effort || 'high'
     if (ex.fableplan) {
       try {
-        plan = await agent(planPrompt(issue, validation), {
+        plan = await agent(planPrompt(issue, validation, planEffort), {
           model: 'fable',
-          effort: 'high',
+          effort: planEffort,
           schema: PLAN_SCHEMA,
           phase: 'Plan',
           label: `plan:#${issue}`,
@@ -588,7 +602,7 @@ async function executeTrack(trackIndex) {
       if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
     }
 
-    log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ' (against Fable plan)' : ''}`)
+    log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ` (against Fable plan @ ${planEffort})` : ''}`)
     let impl
     try {
       impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP), {
