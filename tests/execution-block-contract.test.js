@@ -83,11 +83,25 @@ const READ_ONLY_GH = {
   search: ['issues', 'prs', 'repos', 'code'],
 }
 
-/** `gh api` turns into a write via an explicit method or a field — in prose as well as in a fenced block. */
+/**
+ * `gh api` turns into a write via an explicit method, or via any parameter form —
+ * gh switches to POST as soon as a parameter is attached. -f/--field is not the only
+ * one: -F/--raw-field and --input POST just as surely, so all of them belong here.
+ * Checked in prose as well as in fenced blocks.
+ */
 const WRITING_GH_API = [
   /gh api[^\n`]*(?:-X|--method)\s*(POST|PATCH|PUT|DELETE)/gi,
-  /gh api[^\n`]*\s(?:-f|--field)\s/g,
+  /gh api[^\n`]*\s(?:-f|--field|-F|--raw-field)\s/g,
+  /gh api[^\n`]*\s--input\s/g,
 ]
+
+/**
+ * `gh api graphql` is always an HTTP POST and always carries -f/-F parameters, so the
+ * parameter forms above cannot distinguish a read from a write there. For GraphQL the
+ * operation keyword is what decides: a `query` reads, a `mutation` writes.
+ */
+const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
+const GRAPHQL_MUTATION = /\bmutation\b/
 
 /**
  * Every reason a chunk of text fails a read-only claim, as human-readable strings.
@@ -103,8 +117,16 @@ function readOnlyViolations(text) {
     // `gh api`'s next token is a path, not a verb — its writes are the method/field forms below.
     else if (sub !== 'api' && !readOnlyVerbs.includes(verb)) violations.push(`mutating gh command: ${whole}`)
   }
+  // A GraphQL operation reads or writes by keyword, not by parameter form, so judge those
+  // calls separately and keep them out of the parameter scans below.
+  for (const match of text.matchAll(GRAPHQL_CALL)) {
+    const rest = text.slice(match.index)
+    const statement = rest.slice(0, Math.min(...[rest.indexOf('```'), rest.indexOf('\n\n'), rest.length].filter((i) => i >= 0)))
+    if (GRAPHQL_MUTATION.test(statement)) violations.push(`graphql mutation: ${match[0].trim()}`)
+  }
+  const withoutGraphql = text.replace(GRAPHQL_CALL, 'gh api graphql')
   for (const form of WRITING_GH_API) {
-    for (const [whole] of text.matchAll(form)) violations.push(`writing gh api call: ${whole.trim()}`)
+    for (const [whole] of withoutGraphql.matchAll(form)) violations.push(`writing gh api call: ${whole.trim()}`)
   }
   return violations
 }
@@ -304,16 +326,25 @@ describe('milestoneplan pre-flight contract', () => {
       'gh api --method POST /repos/o/r/issues',
       'gh api -X PATCH /repos/o/r/issues/1',
       'gh api /repos/o/r/issues -f title=x ',
+      // gh POSTs as soon as any parameter is attached, so the raw-field and input
+      // forms write exactly as surely as -f does.
+      'gh api /repos/o/r/issues -F title=x ',
+      'gh api /repos/o/r/issues --raw-field title=x ',
+      'gh api /repos/o/r/issues --input body.json ',
+      "gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'",
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
     }
     // …and every command this procedure legitimately uses must still pass.
     for (const read of [
-      'gh api "repos/:owner/:repo/milestones?state=all" --jq \'.[]\'',
+      'gh api "repos/:owner/:repo/milestones?state=all&per_page=100" --paginate --jq \'.[]\'',
       'gh issue list --milestone "M" --state all --limit 500 --json number',
       'gh pr list --state open --limit 500 --json number',
+      'gh pr list --state merged --limit 500 --json number,mergedAt,body',
       'gh pr view 42 -R owner/repo --json number,state,mergedAt',
       'gh issue view 42 --json body',
+      // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
+      "gh api graphql -F pr=77 -f query='query($pr:Int!){ repository { pullRequest(number:$pr){ title } } }'",
     ]) {
       expect(readOnlyViolations(read), `should pass the read-only guard: ${read}`).toEqual([])
     }
@@ -578,6 +609,95 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/open \*\*ordering-only\*\* cross-milestone prerequisite/i)
     // A merged predecessor PR is a satisfied edge, not a finding.
     expect(body).toMatch(/predecessor closed \*\*with\*\* a merged PR.*no finding/is)
+  })
+
+  test('every severity the table can assign has a section in the report template', () => {
+    // Structural, not a grep for the claim: a severity added to the table later must
+    // fail here until the template gains somewhere to print it. Without this, the
+    // Informational severity the bucket-scoping rule emits vanished from the report.
+    const table = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
+    expect(table, 'no severity table found').not.toBeNull()
+    const severities = new Set(
+      [...table[1].matchAll(/^\|[^|\n]+\|([^|\n]+)\|/gm)].map(([, cell]) => cell.replace(/\*/g, '').trim()),
+    )
+    expect(severities.size, 'severity extraction is vacuous').toBeGreaterThan(2)
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template, 'no report template found').not.toBeNull()
+    const headings = [...template[0].matchAll(/^([A-Z][^\n(]*?)(?: \([^)]*\))?:$/gm)].map(([, h]) => h.trim())
+    // A NO-GO finding prints under Blocking; a *no finding* row prints nowhere.
+    const sectionFor = { 'NO-GO': 'Blocking', 'no finding': null }
+    for (const severity of severities) {
+      const expected = severity in sectionFor ? sectionFor[severity] : severity
+      if (expected === null) continue
+      // A heading may elaborate ("Blocked — excluded from the run") but must lead with the severity.
+      expect(
+        headings.some((heading) => heading.startsWith(expected)),
+        `severity "${severity}" has no section in the report template (sections: ${headings.join(' / ')})`,
+      ).toBe(true)
+    }
+    expect(body).toMatch(/A severity with no section is a finding that silently vanishes/)
+  })
+
+  test("every finding class step 2 enumerates has a severity row", () => {
+    // The doc claims nothing falls through; these are the classes that used to.
+    for (const pattern of [
+      /\| A self-reference on a runnable issue \| \*\*NO-GO\*\*/,
+      /the prose does not establish the edge \*\*kind\*\* \| \*\*NO-GO\*\*/,
+      /edges inferable from the prose \| \*\*Non-blocking\*\*/,
+      /missing acceptance criteria or a problem statement \| \*\*Non-blocking\*\*/,
+      /no `\[C<score>\]` title prefix \| \*\*Non-blocking\*\*/,
+      /listed in both `Depends on` and `Runs after` \| \*\*Non-blocking\*\*/,
+      /\| A duplicate entry within one edge list \| \*\*Non-blocking\*\*/,
+      /a stale build model name that no longer maps/,
+    ]) {
+      expect(body, `no severity row for ${pattern}`).toMatch(pattern)
+    }
+    // The two classes that intentionally resolve through other rows say so.
+    expect(body).toMatch(/hard predecessors all sit in a \*\*later\*\* milestone is the open-hard-cross-milestone row/)
+    expect(body).toMatch(/reported through those dependents' own closed-predecessor edge rows/)
+  })
+
+  test('never reads an empty closing-PR reference as proof there was no PR', () => {
+    // Absence of a record is not evidence of the negative — the same rule the rest of
+    // step 1 already applies to a failed lookup.
+    expect(body).toMatch(/An empty `closedByPullRequestsReferences` is not proof that no PR closed the issue/)
+    // The field does report merged PRs — that part was checked, so say which way it went.
+    expect(body).toMatch(/field \*does\* report merged closing PRs — verified/)
+    // Corroborate against the merged list before excluding; a truncated list is unknown.
+    expect(body).toMatch(/Nothing in a \*\*complete\*\* merged-PR list references it → "closed with no PR" is now \*established\*/)
+    expect(body).toMatch(/truncated or errored → \*\*indeterminate\*\*/)
+    expect(body).toMatch(/Never exclude a subtree on an absence you could not verify/)
+  })
+
+  test('resolves merge state with one query rather than one per predecessor', () => {
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /gh pr list --state merged --limit \d+/.test(code))).toBe(true)
+    expect(body).toMatch(/One request, whatever the milestone's size/)
+    // The per-predecessor form is the thing being avoided, for a stated reason.
+    expect(body).toMatch(/reads as bounded — "only the distinct closing PRs" — but is not/)
+    // Cross-repo references still need their own lookup, and it still carries -R.
+    expect(body).toMatch(/cross-repo closing PR still needs its own targeted lookup/)
+    expect(body).toMatch(/bounded by the number of \*cross-repo\* closing references/)
+    // Same truncation discipline as the issue fetch.
+    expect(body).toMatch(/an unresolvable truncation is a \*\*blocking unknown\*\*/)
+  })
+
+  test("uses GitHub's own PR linkage before the keyword scan", () => {
+    // A sidebar-linked PR carries no keyword, so a keyword-only scan puts an issue that
+    // already has a PR into the build bucket and opens a duplicate.
+    expect(body).toMatch(/Use GitHub's own linkage first and the keyword scan as the fallback/)
+    expect(body).toMatch(/linked by hand through the Development sidebar with no keyword/)
+    expect(body).toMatch(/any \*\*open\*\* PR in `closedByPullRequestsReferences` is \*\*resume\*\*/)
+    // The published pattern must not re-introduce the capture-group trap.
+    expect(body).toMatch(/fix\(\?:es\|ed\)\?/)
+    expect(body).toMatch(/group 2 is always the issue number/)
+  })
+
+  test('paginates the milestone lookup instead of taking the first page', () => {
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /milestones\?state=all&per_page=100" --paginate/.test(code))).toBe(true)
+    expect(body).toMatch(/returns 30 per page by default/)
+    expect(body).toMatch(/the milestone list does not get an exemption/)
   })
 
   test('is wired into the pipeline as the stage before milestone-workflow', () => {

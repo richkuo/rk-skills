@@ -18,11 +18,11 @@ A milestone — by title (`v1`, `v1 — Desktop core call loop`), or nothing, in
 ### 1. Read the milestone
 
 ```
-gh api "repos/:owner/:repo/milestones?state=all" --jq '.[] | "\(.title) [\(.state)] — open:\(.open_issues) closed:\(.closed_issues)"'
+gh api "repos/:owner/:repo/milestones?state=all&per_page=100" --paginate --jq '.[] | "\(.title) [\(.state)] — open:\(.open_issues) closed:\(.closed_issues)"'
 gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body,labels,stateReason,closedByPullRequestsReferences
 ```
 
-Pass `state=all` on the milestones call: that endpoint defaults to open milestones only, so a closed milestone would otherwise return no record and silently become unauditable.
+Pass `state=all` on the milestones call: that endpoint defaults to open milestones only, so a closed milestone would otherwise return no record and silently become unauditable. **`--paginate` with `per_page=100` is equally load-bearing** — that endpoint returns 30 per page by default, so a repo with more milestones would silently show a subset and a milestone named by the user could read as not found. (Measured on `rust-lang/rust`: the bare call returns 30, `per_page=100` returns 100, `--paginate` returns all 140.) This is the same completeness discipline the issue fetch below insists on; the milestone list does not get an exemption.
 
 **Prove the fetch was complete before auditing anything — from the fetch itself, never by comparing counts across endpoints.** `--limit` caps the page, so:
 
@@ -46,32 +46,49 @@ gh pr list --state open --limit 500 --json number,title,body,headRefName
 
 A per-issue `gh pr list --search "<issue number>"` costs one search request per issue (up to 500 at the limit above) against the search endpoint, which is rate-limited far more aggressively than the plain list. Request count must not grow with the milestone's size.
 
+**Use GitHub's own linkage first and the keyword scan as the fallback — not the other way round.** `closedByPullRequestsReferences`, already fetched with the issues above at no extra request, is the linkage GitHub itself acts on at merge time, and it covers *both* ways a PR gets attached: a closing keyword in the body, **and** a PR linked by hand through the Development sidebar with no keyword anywhere in the text. A keyword-only scan misses the second form completely, leaving an issue that already has an open PR in **build** — the duplicate-PR outcome the resume bucket exists to prevent. That form is real, not hypothetical: measured on `cli/cli`, open issue `#13968` is linked to open PR `#13969` whose body carries no closing keyword for it, so the regex alone would classify it as build. So: an issue with any **open** PR in `closedByPullRequestsReferences` is **resume**; then scan the fetched open-PR bodies with the pattern below for anything the field did not report.
+
 **Match every closing keyword GitHub itself recognizes** — all nine, case-insensitive: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved`. Recognizing only a subset silently drops a real closing relationship: a PR body reading `Fixed #12` would land that issue in **build**, putting an issue that already has an open PR into both the wave plan and the cost projection.
 
 Anchor the pattern so it stays precise:
 
 ```
-(?i)\b(close[sd]?|fix(es|ed)?|resolve[sd]?)\s+(?:[\w.-]+/[\w.-]+)?#(\d+)\b(?!\d)
+(?i)\b(close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+(?:[\w.-]+/[\w.-]+)?#(\d+)\b(?!\d)
 ```
 
-The optional `owner/repo` prefix catches the cross-repo `owner/repo#12` form, and the trailing boundary keeps `#12` from matching `#123`. A bare mention with no keyword is not a resume-bucket PR; only a closing relationship is.
+The optional `owner/repo` prefix catches the cross-repo `owner/repo#12` form, and the trailing boundary keeps `#12` from matching `#123`. The inner alternation is non-capturing on purpose, so group 2 is always the issue number. A bare mention with no keyword is not a resume-bucket PR; only a closing relationship is.
 
 **A failed lookup is not "no PR found."** If the single query errors, is throttled, or returns a truncated page (same limit rule as above), stop and report it as a **blocking unknown** — do not fall through to classifying every issue as build. That misclassification is exactly what would send an already-open PR back through a fresh build and open a duplicate, which is the case `milestone-workflow` step 1's resume bucket exists to prevent.
 
-**Resolve the merge state of every closed predecessor — the severity table turns on it, so it has to be fetched, not assumed.** Step 2c distinguishes a predecessor closed *with* a merged PR (a satisfied edge, no finding) from one closed *without* (unsatisfiable, excluded), and neither the issue list nor the open-PR query above can tell those apart on its own. `closedByPullRequestsReferences` (fetched with the issues above) names the PRs that close each issue but **not** whether they merged, so resolve each **distinct** referenced PR once:
+**Resolve the merge state of every closed predecessor — the severity table turns on it, so it has to be fetched, not assumed.** Step 2c distinguishes a predecessor closed *with* a merged PR (a satisfied edge, no finding) from one closed *without* (unsatisfiable, excluded), and neither the issue list nor the open-PR query above can tell those apart on its own. `closedByPullRequestsReferences` (fetched with the issues above) names the PRs that close each issue but **not** whether they merged. Fetch the repo's merged PRs once and match locally, exactly as bucket classification does — never one lookup per predecessor:
+
+```
+gh pr list --state merged --limit 500 --json number,mergedAt,body
+```
+
+**One request, whatever the milestone's size.** A per-predecessor `gh pr view` reads as bounded — "only the distinct closing PRs" — but is not: on the partially-completed re-run this mechanism exists for, nearly every issue is closed and most are predecessors, so the count tracks the milestone's size and reintroduces exactly the growth the open-PR query above was written to avoid. Apply step 1's limit rule to this fetch too: a returned count equal to the limit is indistinguishable from truncation, so raise it until one comes back strictly below its own limit, and an unresolvable truncation is a **blocking unknown**.
+
+**A cross-repo closing PR still needs its own targeted lookup**, because a list of *this* repo's merged PRs cannot contain it:
 
 ```
 gh pr view <n> -R <owner>/<repo> --json number,state,mergedAt
 ```
 
-**Always pass `-R`, taken from the reference's own `repository`** (`repository.owner.login` / `repository.name` — both come back with the issue list above). `gh pr view 42` with no `-R` resolves *this* repo's PR 42, so a predecessor closed by `otherorg/repo#42` would be decided by an unrelated same-numbered local PR — which is worse than an error, because it returns a confident merge verdict either way: satisfied (the dependent builds against code that does not exist) or unsatisfiable (a healthy subtree excluded). A cross-repo PR in a repository the token cannot read is a **blocking unknown** under the indeterminate rule below, never a verdict from a local PR of the same number.
+Take `<owner>/<repo>` from the reference's own `repository` (`repository.owner.login` / `repository.name`, both returned with the issue list). `gh pr view 42` with no `-R` resolves *this* repo's PR 42, so a predecessor closed by `otherorg/repo#42` would be decided by an unrelated same-numbered local PR — worse than an error, because it returns a confident merge verdict either way: satisfied (the dependent builds against code that does not exist) or unsatisfiable (a healthy subtree excluded). A cross-repo PR in a repository the token cannot read is a **blocking unknown** under the indeterminate rule below, never a verdict from a local PR of the same number. These lookups are bounded by the number of *cross-repo* closing references, which does not grow with the milestone.
 
-That is bounded by the number of distinct closing PRs on closed predecessors — not by the milestone's size. Then:
+Then, per closed predecessor:
 
-- PR `state: MERGED` (non-null `mergedAt`) → the edge is **satisfied**. Drop it; no finding.
-- PR closed **unmerged** → genuinely **unsatisfiable**; the dependent and its hard descendants are excluded.
-- No `closedByPullRequestsReferences` at all → closed with no PR → also excluded.
+- A referenced PR present in the merged list, or resolving `state: MERGED` cross-repo → the edge is **satisfied**. Drop it; no finding.
+- A referenced PR absent from the merged list but present in the open-PR list → its code is not in the base branch yet; treat it as the resume case, not as merged.
+- A referenced PR in neither list → closed **unmerged** → genuinely **unsatisfiable**; a hard dependent and its hard descendants are excluded.
 - **Merge state is the deciding fact, not `stateReason`.** An issue closed `NOT_PLANNED` whose closing PR merged is still satisfied; one closed `COMPLETED` with no merged PR is not. Use `stateReason` as context in the report, never as the test.
+
+**An empty `closedByPullRequestsReferences` is not proof that no PR closed the issue.** Every other lookup in this step refuses to read absence as evidence, and this field gets the same treatment. Two things are separately true. First, the field *does* report merged closing PRs — verified against a closed issue in this repo whose closing PR is `MERGED`, which the field returns — so an empty array is not an artifact of merged PRs being hidden from `gh`. Second, it is still not proof of the negative: an issue closed by hand after its work merged under a PR that only *mentions* it carries no reference at all. So when the array is empty, corroborate against the merged-PR list already fetched before concluding anything:
+
+- A merged PR that closes it by keyword → **satisfied**; the reference simply was never recorded.
+- A merged PR that only mentions it → **satisfied**, reported as informational with the PR named — the code is in the base branch either way, and this is the one case where a bare mention carries weight.
+- Nothing in a **complete** merged-PR list references it → "closed with no PR" is now *established* rather than inferred, so the hard-edge exclusion stands.
+- A merged-PR list that was truncated or errored → **indeterminate**, i.e. a blocking unknown. Never exclude a subtree on an absence you could not verify.
 
 **Never resolve an undecidable merge state to the blocking branch.** If a PR lookup errors or throttles, the edge is *indeterminate*: report it as a **blocking unknown** with the issue and PR numbers, rather than quietly excluding a healthy dependent. On a partially-completed milestone re-run — the case the skip bucket exists for — guessing "unsatisfiable" would exclude every merged-predecessor subtree and could return NO-GO on a milestone `milestone-workflow` would run to completion.
 
@@ -186,9 +203,14 @@ Blocked — excluded from the run (the rest still runs):
 Non-blocking (run is still valid):
 - #N — <finding> → <recommended fix>
 
+Informational (cannot affect this run):
+- #N — <finding> → <why this run never reads it | what would make it blocking>
+
 Deliberate overrides (recorded in the issue, not defects):
 - #N — <what and why>
 ```
+
+**Every severity the table below can assign has a section above, and the mapping is fixed:** a **NO-GO** row prints under *Blocking*, **Blocked — excluded** under its own heading, **Non-blocking** and **Informational** under theirs, and a *no finding* row prints nowhere by definition. A severity with no section is a finding that silently vanishes — which is exactly what would happen to every bucket-demoted finding without the *Informational* heading, against step 2's requirement that a demoted resume finding be reported rather than dropped.
 
 **Verdict rules.** Every finding class maps to exactly one severity, and that severity matches what `milestone-workflow` would actually *do* with the same milestone — never blocking a run it would happily execute, never green-lighting an edge it would reject:
 
@@ -206,9 +228,18 @@ Deliberate overrides (recorded in the issue, not defects):
 | An **ordering-only** edge to that same predecessor — closed with no PR, or with one closed unmerged | *no finding* | a closed issue is dropped from the plan, so no work is left to overlap and the constraint is already met |
 | An open **hard** cross-milestone prerequisite | **Blocked — excluded** | the predecessor's code does not exist yet, and step 1 rejects out-of-milestone references |
 | An open **ordering-only** cross-milestone prerequisite | **Non-blocking** | it cannot be expressed in `tracks`, so the constraint simply goes unenforced — say so, and recommend either waiting for it or dropping the edge |
-| A predecessor closed **with** a merged PR (resolved via `gh pr view -R`, step 1) | *no finding* | the edge is satisfied; the base branch has the code |
-| A stamp contradicting its band, an inert field, a stamp that lies about what will run | **Non-blocking** | the run proceeds; only the paperwork is wrong |
+| A predecessor closed **with** a merged PR (resolved in step 1 from the merged-PR list) | *no finding* | the edge is satisfied; the base branch has the code |
+| A self-reference on a runnable issue | **NO-GO** | a degenerate cycle — no edge from an issue to itself can be ordered, and `milestone-workflow` step 1 rejects cycles across the union |
+| `Depends on` / `Runs after` missing, but the prose does not establish the edge **kind** | **NO-GO** | step 1 refuses to guess hard-vs-ordering and sends it to plan review, and the two kinds produce different waves |
+| `Depends on` / `Runs after` missing, edges inferable from the prose | **Non-blocking** | label every inferred edge; `milestone-workflow` step 1 infers the same way and runs |
+| A runnable issue missing acceptance criteria or a problem statement | **Non-blocking** | the run proceeds, but the per-issue validate and review agents lose the contract they check against — route to `validate-issue` |
+| A runnable issue with no `[C<score>]` title prefix | **Non-blocking** | prep records complexity 0 and the band check becomes underivable for that issue; the Execution block's own stamps still drive the run |
+| A predecessor listed in both `Depends on` and `Runs after` | **Non-blocking** | the union takes the hard edge, which subsumes the ordering one — redundant, not wrong |
+| A duplicate entry within one edge list | **Non-blocking** | it dedupes to the same graph |
+| A stamp contradicting its band, an inert field, a stale build model name that no longer maps, a stamp that lies about what will run | **Non-blocking** | the run proceeds; only the paperwork is wrong. A stale model name belongs here because the pipeline falls back to `fable`, so the stamp misreports what will actually run |
 | **Any row above, when the finding's issue sits in the skip or resume bucket** — the fetch row excepted | **Informational** | neither bucket is dispatched this run, so nothing in it can decide the verdict (step 2's scoping rule). For a resume issue, name the re-entry: its finding becomes blocking if that PR closes unmerged |
+
+Two classes from step 2 deliberately have no row of their own, because they resolve through rows that are already here: an issue whose hard predecessors all sit in a **later** milestone is the open-hard-cross-milestone row, and an issue that is **closed but still carries open dependents** is reported through those dependents' own closed-predecessor edge rows — the finding lands on the issues that are actually runnable, not on the closed one.
 
 **A blocked subtree never suppresses the rest of the run.** `milestone-workflow` excludes it and runs around it, so this skill must not answer NO-GO where the real runner would execute eleven of twelve issues. Report each blocked issue with the descendants it takes with it, drop that subtree from the waves and the projection, and give the verdict on what remains.
 
@@ -265,6 +296,9 @@ Milestone-level readiness is the whole scope. Per-issue correctness belongs to t
 | Milestone is closed | Still auditable — the milestones call needs `state=all`, or a closed milestone returns no record at all |
 | The single open-PR query errors, throttles, or hits its limit | Blocking unknown — never fall through to classifying every issue as build, which would open duplicate PRs |
 | A closed predecessor's merge state can't be resolved | Blocking unknown naming the issue and PR — never assume unsatisfiable, which would exclude a healthy subtree on a re-run |
+| A closed predecessor has an empty `closedByPullRequestsReferences` | Not proof there was no PR — scan the merged-PR list for a keyword close or a bare mention first. Only a *complete* list with no reference establishes "closed with no PR"; a truncated one is a blocking unknown |
+| An open issue's PR is linked through the Development sidebar with no closing keyword | Still **resume** — `closedByPullRequestsReferences` reports it; the keyword scan is only the fallback |
+| The repo has more than 30 milestones | The bare milestones call returns only the first 30 — always `--paginate` with `per_page=100`, or a named milestone can read as not found |
 | A closed predecessor's closing PR lives in another repo | Look it up with `gh pr view <n> -R <owner>/<repo>` from the reference's own `repository`; a bare `gh pr view <n>` would decide the edge from an unrelated same-numbered local PR. Unreadable repo → blocking unknown, never a verdict |
 | A closed predecessor was closed `NOT_PLANNED` but its closing PR merged | Satisfied edge — merge state decides, not the close reason |
 | An ordering-only edge points into the resume bucket | Informational, not blocked — the pre-pipeline `fix-pr-review-loop` satisfies it; report the sequencing |
