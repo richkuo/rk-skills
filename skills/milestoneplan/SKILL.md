@@ -5,7 +5,7 @@ description: Use when the user wants a milestone's per-issue routing shown befor
 
 # milestoneplan
 
-One table before the run: read every issue in the milestone, show exactly the routing `milestone-workflow` would execute, and recommend a change wherever a stamped field contradicts what the issue's own score prescribes.
+One table before the run: read every issue in the milestone, show the routing `milestone-workflow` would execute on the issues it would dispatch, and recommend a change wherever a stamped field on a dispatchable issue contradicts what that issue's own score prescribes.
 
 **This skill never writes.** It does not edit issue bodies, post comments, open PRs, or invoke the Workflow tool. Recommendations are handed to `execution-plan-review` (Execution block lines) or `validate-issue` (body and title); the run is handed to `milestone-workflow`. Do not launch either one unprompted.
 
@@ -23,6 +23,8 @@ gh issue list --milestone "<title>" --state all --limit 500 --json number,title,
 ```
 
 Pass `state=all` and `--paginate` on the milestones call: that endpoint returns 30 per page by default and open milestones only, so a closed milestone — or one past the first page — would read as not found.
+
+**If the issue list returns exactly `--limit` rows, the fetch may be truncated.** Re-fetch with a higher `--limit` until the returned count is below the limit. If you cannot raise it further, say the table is partial — never present a count equal to the limit as the complete milestone. Under the limit, print no truncation caveat.
 
 Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each issue's `[C<score>]` title prefix, complexity rationale line, and `## Execution` block into a record: score, `Depends on`, `Runs after`, build model, effort, validate effort, fableplan, plan effort, PR review line.
 
@@ -43,13 +45,13 @@ Compare what is stamped against what the issue's own score prescribes. The canon
 
 **Band conformance is two-sided.** A build model that departs from its score's band in *either* direction gets a recommendation: below it (under-powered — the issue gets a model that cannot carry the work) and above it (silent overspend — a `[C10]` issue stamped Fable 5 reads clean while buying the most expensive model in the fleet). Over-band is common by construction, not theoretical: `workflows/milestone-pipeline.js` defaults any issue with no Execution block to `model fable, effort high`.
 
-Recommend a change for: a build model that departs from its band in either direction; `fableplan: Yes` outside Capability 2; `fableplan: No` on a Capability-2 issue; an effort that contradicts the Volume tertile derived from the score; a rationale line whose published Volume disagrees with `score mod 25`; `Validate effort: xhigh` (only ever medium or high); a non-Fable build stamped `low`/`medium` (the pipeline silently raises these to `high` — say so, since the stamp lies about what will run); a `Plan effort` on a `fableplan: No` issue (inert — never read); a `fableplan: Yes` issue with no `Plan effort` (defaults to high, which is fine — note it, no change needed).
+Recommend a change for: a build model that departs from its band in either direction; `fableplan: Yes` outside Capability 2; `fableplan: No` on a Capability-2 issue; a **build** effort that contradicts the Volume tertile derived from the score (Validate effort and Plan effort are judged by their own rules below, never this tertile — and a Fable build stamped `low` is the discretionary Fable-only tier `execution-plan-review` allows with no pushback, so never recommend against it); a rationale line whose published Volume disagrees with `score mod 25`; `Validate effort: xhigh` (only ever medium or high); a non-Fable build stamped `low`/`medium` (the pipeline silently raises these to `high` — say so, since the stamp lies about what will run); a `Plan effort` on a `fableplan: No` issue (inert — never read); a `fableplan: Yes` issue with no `Plan effort` (defaults to high, which is fine — note it, no change needed).
 
 **Distinguish an override from a slip.** A body that explicitly records a deliberate departure ("deliberate override — C75 is Capability 3, where the band prescribes Fable 5") is a decision, not drift: list it under *Deliberate overrides*, never as a recommendation. An unexplained departure gets a recommendation. This distinction is the point of the check — a milestone where every deviation is annotated is healthy; one where they are silent is not.
 
 ### 3. Present the table and the recommendations
 
-The per-issue table, one row per issue — this is what the run will execute:
+The per-issue table, one row per issue (open and closed). **Only open rows are what the run will execute** — `milestone-workflow` drops closed issues from the plan. Keep closed rows visible for context (a closed predecessor named in an open issue's `Depends on` must stay readable), but mark them as not dispatched — never present a closed row as pending work. One caveat this skill cannot decide without the PR lookup the rescope removed: an open issue that already has an open PR is a **resume** in `milestone-workflow`, not a fresh pipeline dispatch; say so in one line when relevant rather than claiming every open row will build.
 
 ```
 # | State | C | Depends on | Runs after | Build | Effort | Validate | fableplan | Plan | 1st review
@@ -57,11 +59,12 @@ The per-issue table, one row per issue — this is what the run will execute:
 
 Mark missing values as *missing* (never blank, never a guessed default) and note that the pipeline would route a missing Execution block to `model fable, effort high`.
 
-Then the recommendations, one line per contradicting field: `#N — <field>: <stamped> → <recommended> (<why, derived from the score>)`. Route each to the skill whose documented write scope actually covers it:
+Then the recommendations — **one line per contradicting field on an open issue only**: `#N — <field>: <stamped> → <recommended> (<why, derived from the score>)`. Field contradictions on closed issues are informational context, never change recommendations routed to `execution-plan-review` or `validate-issue` (those skills would edit a body no agent will read). Route each open-issue recommendation to the skill whose documented write scope actually covers it:
 
 - **Execution-block fields** (ordering fields, build model, effort, validate effort, fableplan, plan effort, a missing `## Execution` block) → `execution-plan-review`. That is its whole revision vocabulary, and it edits *only* the intended Execution block lines.
 - **Body-content items** (a missing or wrong `[C<score>]` title prefix, a missing or contradictory complexity rationale line) → `validate-issue`, which owns the issue body and title. `execution-plan-review` cannot clear any of these — it does not touch body prose.
 - **Deliberate overrides** — list separately, so annotated decisions are not re-litigated every run.
+- **Closed-issue notes** — list separately as informational, never as work to apply.
 
 Offer the next actions and let the user pick: `execution-plan-review` to apply Execution-block recommendations, `validate-issue` for body-content ones, `milestone-workflow` to run — it presents its own mandatory run plan before dispatching, so approving here is not yet approving the run.
 
@@ -82,8 +85,9 @@ The routing table and its recommendations are the whole scope. Per-issue correct
 | Situation | Do this |
 |---|---|
 | No milestone named, several open | List them with open/closed counts and ask which |
-| Milestone has no open issues | Report it as complete; there is nothing to plan |
-| An issue has no `## Execution` block | Show every field as *missing*; recommend `execution-plan-review` stamp it, and say the pipeline would otherwise default it to `model fable, effort high` |
-| An issue has no `[C<score>]` title prefix | Show the stamps as-is; the band check is underivable for that issue — recommend `validate-issue` set the prefix |
+| Milestone has no open issues | Report it as complete; there is nothing to plan — do not emit a wall of closed-issue recommendations |
+| An **open** issue has no `## Execution` block | Show every field as *missing*; recommend `execution-plan-review` stamp it, and say the pipeline would otherwise default it to `model fable, effort high`. A closed issue missing the block is informational only |
+| An **open** issue has no `[C<score>]` title prefix | Show the stamps as-is; the band check is underivable for that issue — recommend `validate-issue` set the prefix. A closed issue missing the prefix is informational only |
 | Milestone is closed | Still viewable — the milestones call needs `state=all`, or a closed milestone returns no record at all |
+| Issue fetch returned exactly `--limit` rows | Re-fetch higher, or say the table is partial — never present it as complete |
 | Findings are all deliberate overrides | Say so explicitly, so annotated decisions are not re-litigated every run |

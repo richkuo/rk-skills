@@ -69,9 +69,11 @@ const READ_ONLY_GH = {
  * Checked in prose as well as in fenced blocks.
  */
 const WRITING_GH_API = [
-  /gh api[^\n`]*(?:-X|--method)\s*(POST|PATCH|PUT|DELETE)/gi,
-  /gh api[^\n`]*\s(?:-f|--field|-F|--raw-field)\s/g,
-  /gh api[^\n`]*\s--input\s/g,
+  // Space-separated and `--flag=value` / `-X=VERB` forms — gh accepts both.
+  // Put `=` before `\s*` so `--method=POST` is not eaten by an empty `\s*` match.
+  /gh api[^\n`]*(?:-X|--method)(?:=\s*|\s*)(POST|PATCH|PUT|DELETE)/gi,
+  /gh api[^\n`]*(?:(?:\s(?:-f|--field|-F|--raw-field)\s)|(?:(?:-f|--field|-F|--raw-field)=))/g,
+  /gh api[^\n`]*(?:(?:\s--input\s)|(?:--input=))/g,
 ]
 
 /**
@@ -310,6 +312,14 @@ describe('milestoneplan pre-flight contract', () => {
       'gh api /repos/o/r/issues -F title=x ',
       'gh api /repos/o/r/issues --raw-field title=x ',
       'gh api /repos/o/r/issues --input body.json ',
+      // `--flag=value` / `-X=VERB` spellings — gh accepts these too.
+      'gh api --method=POST /repos/o/r/issues',
+      'gh api -X=PATCH /repos/o/r/issues/1',
+      'gh api /repos/o/r/issues --field=title=x',
+      'gh api /repos/o/r/issues -f=title=x',
+      'gh api /repos/o/r/issues -F=title=x',
+      'gh api /repos/o/r/issues --raw-field=title=x',
+      'gh api /repos/o/r/issues --input=body.json',
       "gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'",
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
@@ -358,12 +368,47 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
     expect(body).toMatch(/`Validate effort: xhigh`/)
     expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
+    // Volume tertile applies to build effort only; Validate/Plan have their own rules.
+    expect(body).toMatch(/\*\*build\*\* effort that contradicts the Volume tertile/i)
+    expect(body).toMatch(/Validate effort and Plan effort are judged by their own rules/i)
+    // Fable discretionary low is allowed — never recommend against it.
+    expect(body).toMatch(/Fable build stamped `low`.*discretionary Fable-only tier/is)
+    expect(body).toMatch(/never recommend against it/i)
     // Band conformance runs in both directions: quiet overspend gets flagged too.
     expect(body).toMatch(/Band conformance is two-sided/i)
     expect(body).toMatch(/departs from its score's band in \*either\* direction/)
     expect(body).toMatch(/silent overspend/i)
     // Over-band is the pipeline's own default for a missing Execution block.
     expect(body).toMatch(/model fable, effort high/)
+  })
+
+  test('scopes run claims and recommendations to open issues the pipeline would dispatch', () => {
+    // Closed rows stay visible for context; only open rows are "what the run will execute".
+    expect(body).toMatch(/Only open rows are what the run will execute/i)
+    expect(body).toMatch(/drops closed issues from the plan/i)
+    expect(body).toMatch(/mark them as not dispatched/i)
+    expect(body).toMatch(/closed predecessor named in an open issue's `Depends on` must stay readable/i)
+    // Recommendations are open-only; closed contradictions are informational.
+    expect(body).toMatch(/one line per contradicting field on an open issue only/i)
+    expect(body).toMatch(/Field contradictions on closed issues are informational/i)
+    expect(body).toMatch(/Closed-issue notes.*informational, never as work to apply/is)
+    // Resume caveat — open issue with open PR is not decidable without the removed PR lookup.
+    expect(body).toMatch(/open issue that already has an open PR is a \*\*resume\*\*/i)
+    // All-closed milestone is complete, not a recommendation wall.
+    expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue recommendations/is)
+    // Missing-block / missing-prefix failure modes are open-scoped.
+    expect(body).toMatch(/An \*\*open\*\* issue has no `## Execution` block/)
+    expect(body).toMatch(/closed issue missing the block is informational only/i)
+    expect(body).toMatch(/An \*\*open\*\* issue has no `\[C<score>\]` title prefix/)
+  })
+
+  test('discloses a truncated issue fetch instead of presenting a partial table as complete', () => {
+    expect(body).toMatch(/If the issue list returns exactly `--limit` rows, the fetch may be truncated/i)
+    expect(body).toMatch(/Re-fetch with a higher `--limit`/i)
+    expect(body).toMatch(/say the table is partial/i)
+    expect(body).toMatch(/never present a count equal to the limit as the complete milestone/i)
+    expect(body).toMatch(/Under the limit, print no truncation caveat/i)
+    expect(body).toMatch(/Issue fetch returned exactly `--limit` rows/)
   })
 
   test('the band table agrees with validate-issue, the canonical source it copies', () => {
