@@ -353,6 +353,7 @@ describe('milestoneplan pre-flight contract', () => {
       "gh api graphql -F owner='{owner}' -F repo='{repo}' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
       "gh api graphql -F owner='{owner}' -F repo='{repo}' -F after=null -f query='query($owner:String!,$repo:String!,$after:String){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, after:$after, itemTypes:[CROSS_REFERENCED_EVENT]){ pageInfo{hasNextPage endCursor} nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
       'gh pr view 42 -R owner/repo --json number,state,mergedAt',
+      'gh issue view 42 --json number,title,state,stateReason,milestone,body,closedByPullRequestsReferences',
       'gh issue view 42 --json number,state,stateReason,milestone',
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
@@ -509,11 +510,12 @@ describe('milestoneplan pre-flight contract', () => {
   test('fetches out-of-milestone referenced issues before scoring their edges', () => {
     // Absence from the milestone fetch must not be scored as "does not exist".
     expect(body).toMatch(/Fetch every referenced issue that is not already in the milestone set/)
-    expect(body).toMatch(/gh issue view <n> --json number,state,stateReason,milestone/)
+    expect(body).toMatch(/gh issue view <n> --json number,title,state,stateReason,milestone,body,closedByPullRequestsReferences/)
+    expect(body).toMatch(/repeat until no new numbers appear/)
+    expect(body).toMatch(/closed dependency closure reachable from this milestone/)
     expect(body).toMatch(/never treat absence-from-the-milestone-fetch as "does not exist"/)
     expect(body).toMatch(/\| An out-of-milestone referenced issue could not be fetched[^|]*\| \*\*NO-GO\*\*/)
     expect(body).toMatch(/never score an unfetched reference as nonexistent/)
-    expect(body).toMatch(/bounded by the distinct out-of-milestone references/)
   })
 
   test('does not flag fableplan: No on Cap-2 when the build is already Fable 5', () => {
@@ -526,6 +528,18 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/build-bucket issue that is either runnable or \*Blocked — excluded\*/)
     expect(body).toMatch(/Excluded issues re-enter the runnable set once their blocker clears/)
     expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
+  })
+
+  test('prints the per-model agent mix in the report template', () => {
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template, 'no report template found').not.toBeNull()
+    expect(template[0]).toMatch(/^Per-model mix:/m)
+    expect(body).toMatch(/Report the per-model agent mix/)
+  })
+
+  test('marks excluded build rows distinctly from runnable ones in the table', () => {
+    expect(body).toMatch(/`build` for runnable, `build \(excluded\)` for a \*Blocked — excluded\* subtree member/)
+    expect(body).toMatch(/never present a closed, resume, or excluded row as pending pipeline work/i)
   })
 
   test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
@@ -615,9 +629,11 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/never above — over-tertile is an observation/i)
     expect(body).toMatch(/Validate effort and Plan effort are judged by their own rules/i)
     // A Fable build at `low` is the sanctioned discretionary tier — never a finding.
-    expect(body).toMatch(/Fable build stamped `low`.*discretionary Fable-only tier/is)
-    expect(body).toMatch(/never flag it/i)
-    expect(body).toMatch(/\| A Fable build is stamped `low` \| On-rule/)
+    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only when Volume ≤ 7/i)
+    expect(body).toMatch(/`\[C75\]`–`\[C82\]`/)
+    expect(body).toMatch(/Fable `low` on a higher Volume is under-tertile and stays a finding/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume ≤ 7/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume > 7 \| Under-tertile finding/)
     // Over-band is the pipeline's own default for a missing Execution block.
     expect(body).toMatch(/model fable, effort high/)
   })
@@ -912,7 +928,7 @@ describe('milestoneplan pre-flight contract', () => {
     // issue's Depends on has to be readable — but neither is pending pipeline work.
     expect(body).toMatch(/one row per issue in the milestone/i)
     expect(body).toMatch(/Only the runnable build-bucket rows are what the run will execute/i)
-    expect(body).toMatch(/never present a closed or resume row as pending pipeline work/i)
+    expect(body).toMatch(/never present a closed, resume, or excluded row as pending pipeline work/i)
     expect(body).toMatch(/closed predecessor named in a runnable issue's `Depends on` has to stay readable/i)
     // Recommendations are scoped the same way, and the reason is that the skills they
     // would be routed to would edit a body this run never reads.
