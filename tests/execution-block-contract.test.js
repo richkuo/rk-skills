@@ -353,6 +353,7 @@ describe('milestoneplan pre-flight contract', () => {
       "gh api graphql -F owner='{owner}' -F repo='{repo}' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
       "gh api graphql -F owner='{owner}' -F repo='{repo}' -F after=null -f query='query($owner:String!,$repo:String!,$after:String){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, after:$after, itemTypes:[CROSS_REFERENCED_EVENT]){ pageInfo{hasNextPage endCursor} nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
       'gh pr view 42 -R owner/repo --json number,state,mergedAt',
+      'gh issue view 42 --json number,state,stateReason,milestone',
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
       "gh api graphql -F pr=77 -f query='query($pr:Int!){ repository { pullRequest(number:$pr){ title } } }'",
@@ -496,8 +497,35 @@ describe('milestoneplan pre-flight contract', () => {
     expect(closedUnmerged.length, 'expected one row per edge kind').toBe(2)
     expect(closedUnmerged.filter((r) => /\*\*Blocked — excluded\*\*/.test(r.severity)).length).toBe(1)
     expect(closedUnmerged.every((r) => /\*\*hard\*\*|\*\*ordering-only\*\*/i.test(r.finding))).toBe(true)
+    // Closed predecessor whose closing PR is still open — its own pair of rows, not
+    // routed through resume (the predecessor is skip-bucket).
+    expect(body).toMatch(/\| A \*\*hard\*\* edge to a closed predecessor whose closing PR is still \*\*open\*\* \| \*\*Blocked — excluded\*\*/)
+    expect(body).toMatch(/with a closing PR still open \| \*no finding\*/)
+    expect(body).toMatch(/do \*\*not\*\* route this through the resume-bucket rows/)
     expect(body).toMatch(/An ordering-only edge to a closed predecessor is satisfied whether or not its PR merged/)
     expect(body).toMatch(/none of them falls through the rules, and none of them lands in two/)
+  })
+
+  test('fetches out-of-milestone referenced issues before scoring their edges', () => {
+    // Absence from the milestone fetch must not be scored as "does not exist".
+    expect(body).toMatch(/Fetch every referenced issue that is not already in the milestone set/)
+    expect(body).toMatch(/gh issue view <n> --json number,state,stateReason,milestone/)
+    expect(body).toMatch(/never treat absence-from-the-milestone-fetch as "does not exist"/)
+    expect(body).toMatch(/\| An out-of-milestone referenced issue could not be fetched[^|]*\| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/never score an unfetched reference as nonexistent/)
+    expect(body).toMatch(/bounded by the distinct out-of-milestone references/)
+  })
+
+  test('does not flag fableplan: No on Cap-2 when the build is already Fable 5', () => {
+    expect(body).toMatch(/`fableplan: No` on a Capability-2 issue \*\*whose build model is not already Fable 5\*\*/)
+    expect(body).toMatch(/planning inherent — the same "No \(planning inherent\)"/)
+    expect(body).toMatch(/Cap-2 \+ Opus with `fableplan: No` stays a finding/)
+  })
+
+  test('routes stamp recommendations for excluded build-bucket issues, not only runnable ones', () => {
+    expect(body).toMatch(/build-bucket issue that is either runnable or \*Blocked — excluded\*/)
+    expect(body).toMatch(/Excluded issues re-enter the runnable set once their blocker clears/)
+    expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
   })
 
   test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
@@ -849,7 +877,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/\| A linked closing-PR reference's openness could not be established[^|]*\| \*\*NO-GO\*\*/)
     expect(body).toMatch(/\| A fetch that did not cover the whole milestone \(step 1\) \| \*\*NO-GO\*\*/)
     expect(body).toMatch(/any step-1 \*\*blocking unknown\*\*/i)
-    expect(body).toMatch(/incomplete issue fetch, failed\/throttled\/truncated open-PR query, or a linked reference whose openness could not be established/)
+    expect(body).toMatch(/incomplete issue fetch, failed\/throttled\/truncated open-PR query, a linked reference whose openness could not be established, or an out-of-milestone referenced issue that could not be fetched/)
   })
 
   test('publishes one gh api placeholder spelling — brace form throughout', () => {
@@ -888,7 +916,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/closed predecessor named in a runnable issue's `Depends on` has to stay readable/i)
     // Recommendations are scoped the same way, and the reason is that the skills they
     // would be routed to would edit a body this run never reads.
-    expect(body).toMatch(/on a \*\*runnable build-bucket issue only\*\*/i)
+    expect(body).toMatch(/on a \*\*build-bucket issue that is either runnable or \*Blocked — excluded\*\*/i)
     expect(body).toMatch(/Field contradictions on skip- or resume-bucket issues print under \*Informational\*/)
     expect(body).toMatch(/those skills would edit a body this run never reads/i)
     // An all-closed milestone is complete, not a wall of findings.
