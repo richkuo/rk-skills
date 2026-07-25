@@ -39,7 +39,7 @@ Do not re-plan the task yourself first — the subagent owns the plan. Snapshot 
 - `subagent_type`: `Plan`
 - `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5)
 - `run_in_background`: `false` — every later step depends on the plan, so wait for it synchronously instead of doing other work first
-- `effort`: the issue's stamped **Plan effort** from step 1, when there is one — otherwise omit the parameter and let the subagent inherit the session effort
+- `effort`: the issue's stamped **Plan effort** from step 1, when there is one — otherwise omit the parameter and let the subagent inherit the session effort. **Not every harness's Agent tool accepts `effort`.** Before passing it, check the Agent tool's own parameter schema in this harness: if it exposes no `effort` property, don't construct the argument — dispatch without it and note that the stamped tier could not be honored. If the schema check is inconclusive and the call fails input validation on the parameter, re-dispatch once without `effort` rather than treating it as the step-2 failure below; a plan at session effort beats no plan. Either way this is a degradation, not an error — never abort the step over it.
 - `description`: `Plan <short task name>`
 - `prompt`: Hand the subagent everything it needs to plan independently — the full task description, the issue title/body if one was fetched, the working directory, and any constraints the user stated. Tell it explicitly:
   - Produce a concrete, ordered implementation plan (files to create/modify, the approach, build sequence, risks/edge cases, and how to verify).
@@ -54,6 +54,7 @@ If the call returns null or errors (user skip, terminal API failure), retry once
 When the result arrives:
 - Run `git status --porcelain` and compare against the pre-dispatch snapshot to confirm the subagent made no file changes despite the no-edit instruction. If it did, tell the user and ask whether to revert before continuing.
 - Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
+- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the Notes fallback substituted another, and the effort is the stamped **Plan effort** only when it was actually passed and accepted. When it wasn't (no stamp, or the harness could not honor one), record the repo attribution default `high` — **do not try to name the session's own tier**, which an agent cannot observe; guessing it would put an invented value in the very slot this footer exists to keep honest. Step 4's footer names these two recorded values, so resolve them now rather than assuming the stamped tier took effect.
 
 ### 3. Sanity-check the plan against the code
 
@@ -71,8 +72,10 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 
 ```
 ---
-Created with LLM: Fable 5 | high | Harness: Claude Code | fableplan
+Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: Claude Code | fableplan
 ```
+
+Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming `high` on a plan that ran at `xhigh` is a false attribution, the same defect the milestone-pipeline plan footer fixes.
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 

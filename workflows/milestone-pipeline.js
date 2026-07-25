@@ -135,7 +135,7 @@ const PREP_SCHEMA = {
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
           validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
-          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; default high when absent. The planner is always Fable 5, so every tier is legal and none is normalized. Ignored when fableplan is false' },
+          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; OMIT this field entirely when the line is absent — the runtime defaults it to high, and its presence is how the runtime tells a stamped tier from an unstamped one. The planner is always Fable 5, so every tier is legal and none is normalized. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; opus when the line is standard or absent' },
           first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; high when unspecified' },
@@ -417,7 +417,7 @@ const prep = await agent(
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
 - validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
-- plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh; when the line is absent, use high. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers. Only the effort is stampable — never read a model from this line
+- plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers. Only the effort is stampable — never read a model from this line
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
@@ -434,6 +434,17 @@ const normalizedIssues = prep.issues.map((issue) => {
   if (normalized.validate_effort === 'xhigh') {
     log(`#${normalized.number}: normalized validate effort xhigh → high`)
     normalized.validate_effort = 'high'
+  }
+  // A stamped Plan effort on a fableplan: false issue is never read. Say so once
+  // rather than dropping it silently — the operator set a tier that does nothing.
+  // Presence is the "operator stamped a tier" signal, which only holds because
+  // prep is instructed to OMIT plan_effort when the line is absent (the default
+  // is applied at dispatch instead). Never give prep a fill-in default for this
+  // field or every unstamped issue starts logging here.
+  // Skipped when the block was missing entirely: the defaults we filled in are
+  // already reported by the missing-block warning below.
+  if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
+    log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
   }
   return normalized
 })

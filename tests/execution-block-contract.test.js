@@ -3,12 +3,23 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [prdToIssues, executionPlanReview, milestoneWorkflow, milestoneplan, newAppPipeline, readme] = await Promise.all([
+const [
+  prdToIssues,
+  executionPlanReview,
+  milestoneWorkflow,
+  milestoneplan,
+  newAppPipeline,
+  fableplan,
+  validateIssue,
+  readme,
+] = await Promise.all([
   read('skills/prd-to-issues/SKILL.md'),
   read('skills/execution-plan-review/SKILL.md'),
   read('skills/milestone-workflow/SKILL.md'),
   read('skills/milestoneplan/SKILL.md'),
   read('skills/new-app-pipeline/SKILL.md'),
+  read('skills/fableplan/SKILL.md'),
+  read('skills/validate-issue/SKILL.md'),
   read('README.md'),
 ])
 
@@ -37,6 +48,67 @@ function runSizeFormula(markdown) {
 function reviewWorstCase(markdown) {
   const match = markdown.match(/(2×maxReviewCycles\s*[−-]\s*1)/)
   return match ? match[1].replace(/\s+/g, ' ') : null
+}
+
+/** The fenced code blocks of a procedure — where its actual instructions live. */
+function fencedBlocks(markdown) {
+  return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map(([, code]) => code)
+}
+
+/**
+ * Every `gh` invocation in a chunk of text as `<subcommand> <verb>` pairs. Used to
+ * prove a read-only procedure contains no mutating command, rather than trusting
+ * its prose to say so.
+ */
+function ghInvocations(text) {
+  return [...text.matchAll(/gh\s+(api|issue|pr|run|repo|auth|search)\s+([a-z-]+)?/g)].map(
+    ([whole, sub, verb]) => ({ sub, verb: verb ?? '', whole: whole.trim() }),
+  )
+}
+
+/** gh verbs that write. Present anywhere in a read-only procedure — instruction or aside — is a failure. */
+const MUTATING_GH = /gh\s+(?:issue|pr)\s+(edit|create|comment|close|reopen|delete|merge|review|lock|transfer|develop)\b/
+
+/** Subcommand verbs that only read. Anything outside this set mutates and must fail a read-only claim. */
+const READ_ONLY_GH = {
+  api: [''], // GET by default; a write needs -X/-f, checked separately
+  issue: ['list', 'view', 'status'],
+  pr: ['list', 'view', 'checks', 'diff', 'status'],
+  run: ['list', 'view'],
+  repo: ['view'],
+  auth: ['status'],
+  search: ['issues', 'prs', 'repos', 'code'],
+}
+
+/**
+ * Normalize either document's band table into comparable per-band tuples. The two
+ * tables carry different columns (milestoneplan splits fableplan into its own
+ * column; validate-issue folds it into the model cell and appends prose
+ * parentheticals), so compare the semantic cells: capability, score band, model
+ * family, whether fableplan is prescribed, and the three effort tertiles.
+ */
+function bandTable(markdown) {
+  // Cell patterns exclude newlines: `[^|]` alone would let a row match run past its line.
+  const rows = [...markdown.matchAll(/^\|\s*([0-3])\s*\|\s*(\d+–\d+)\s*\|([^|\n]+)\|([^|\n]+)\|([^|\n]*)\|?[ \t]*$/gm)]
+  if (!rows.length) return null
+  return rows.map((row) => {
+    // milestoneplan has 5 columns (fableplan is its own); validate-issue has 4.
+    const cells = row.slice(3).map((cell) => cell.trim())
+    const fiveColumn = cells[2] !== ''
+    const model = cells[0]
+    const fableplanCell = fiveColumn ? cells[1] : model
+    const effort = fiveColumn ? cells[2] : cells[1]
+    return {
+      capability: Number(row[1]),
+      scoreBand: row[2],
+      // Model family only — "Cheap/fast (Sonnet-class)" and "Sonnet-class" agree.
+      model: (model.match(/Sonnet|Opus|Fable/) || [null])[0],
+      // validate-issue writes "+ fableplan first" in the model cell; milestoneplan uses a Yes/No column.
+      fableplan: /fableplan first|^\*\*Yes\*\*|^Yes/.test(fableplanCell),
+      // Strip trailing parentheticals, which are prose and phrased differently in each document.
+      effort: effort.replace(/\s*\(.*$/, '').replace(/\s+/g, ' ').trim(),
+    }
+  })
 }
 
 describe('Execution block ordering contract', () => {
@@ -102,6 +174,49 @@ describe('Execution block Plan effort contract', () => {
   test('README publishes the plan effort field', () => {
     expect(readme).toMatch(/the effort that plan runs at/i)
   })
+
+  test('fableplan consumes the same field name every other document publishes', () => {
+    // A rename in one document must fail here rather than pass file-by-file.
+    const blockLine = '- **Plan effort:**'
+    expect(prdToIssues).toContain(blockLine)
+    expect(fableplan).toContain(blockLine)
+    // README describes the field in prose rather than naming the block line.
+    for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
+      expect(doc).toContain('Plan effort')
+    }
+  })
+
+  test('every document that states the plan effort default states high', () => {
+    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
+    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
+    expect(fableplan).toMatch(/Plan effort.*absent.*inherits the session effort/is)
+  })
+
+  test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
+    expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
+    // (a) re-hardcoding the posted-plan footer to a literal tier must fail here.
+    expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
+    expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
+    expect(fableplan).toMatch(/never a constant/i)
+  })
+
+  test('fableplan degrades gracefully when the harness Agent tool has no effort parameter', () => {
+    expect(fableplan).toMatch(/Not every harness's Agent tool accepts `effort`/i)
+    expect(fableplan).toMatch(/re-dispatch once without `effort`/i)
+    expect(fableplan).toMatch(/degradation, not an error/i)
+    // The footer must then name what actually ran, not the tier that was requested.
+    expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
+  })
+
+  test('fableplan falls back to the documented default, never a guessed session tier', () => {
+    // An agent cannot observe its own effort tier, so the unhonored-stamp fallback
+    // must name the repo attribution default rather than invent a value.
+    expect(fableplan).toMatch(/record the repo attribution default `high`/i)
+    expect(fableplan).toMatch(/do not try to name the session's own tier/i)
+    expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
+    expect(fableplan).not.toMatch(/footer names the session effort/i)
+  })
 })
 
 describe('milestoneplan pre-flight contract', () => {
@@ -111,6 +226,69 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/never writes/i)
     expect(body).toMatch(/does not edit issue bodies.*post comments.*open PRs.*invoke the Workflow tool/is)
     expect(body).toMatch(/Do not launch either one unprompted/i)
+  })
+
+  test('the procedure itself contains no mutating command', () => {
+    // The prose assertions above are about what the document claims; these are about
+    // what it instructs. A later step running `gh issue edit` must fail here.
+    const blocks = fencedBlocks(body)
+    const invocations = blocks.flatMap(ghInvocations)
+    expect(invocations.length, 'no gh commands found — extraction is vacuous').toBeGreaterThan(0)
+    for (const { sub, verb, whole } of invocations) {
+      expect(READ_ONLY_GH[sub], `unknown gh subcommand in a read-only procedure: ${whole}`).toBeDefined()
+      expect(READ_ONLY_GH[sub], `mutating command in a read-only procedure: ${whole}`).toContain(verb)
+    }
+    // A write verb has no place even in an aside — this doc names sibling skills, not their commands.
+    expect(body).not.toMatch(MUTATING_GH)
+    // `gh api` reads by default; -X with a write method or -f/--field turns it into a write.
+    expect(body).not.toMatch(/gh api[^\n`]*-X\s*(POST|PATCH|PUT|DELETE)/i)
+    expect(body).not.toMatch(/gh api[^\n`]*\s(-f|--field)\s/)
+  })
+
+  test('proves fetch completeness from the fetch, not from cross-endpoint counts', () => {
+    // Milestone counters include PRs assigned to the milestone; gh issue list does not.
+    expect(body).toMatch(/do not gate this on the milestone object's `open_issues` \/ `closed_issues`/i)
+    expect(body).toMatch(/strictly below\*\* the limit/i)
+    expect(body).toMatch(/equal to\*\* the limit is indistinguishable from truncation/i)
+    expect(body).toMatch(/blocking unknown/i)
+    // A closed milestone must stay auditable.
+    expect(body).toMatch(/state=all/)
+  })
+
+  test('classifies buckets in one query and never reads a failed lookup as no PR', () => {
+    // The instruction is the fenced command; the per-issue --search form may still be
+    // named in prose as the thing not to do, so assert over fenced blocks only.
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /gh pr list --state open --limit \d+/.test(code))).toBe(true)
+    expect(blocks.some((code) => /gh pr list[^\n]*--search/.test(code))).toBe(false)
+    expect(body).toMatch(/A failed lookup is not "no PR found\."/)
+    // #12 must not match #123.
+    expect(body).toMatch(/`#12` never matches `#123`/)
+  })
+
+  test('attributes each projected agent to the model the pipeline dispatches it on', () => {
+    // Validate and plan are always Fable; the first review defaults to Opus. None
+    // of those come from the issue's Build model, which the mix used to assume.
+    expect(body).toMatch(/\| Validate \(every issue\) \| \*\*always Fable 5\*\*/)
+    expect(body).toMatch(/\| Plan \(`fableplan: Yes` issues\) \| \*\*always Fable 5\*\*/)
+    expect(body).toMatch(/First review.*defaulting to Opus\*\*, \*\*never\*\* the Build model|First review.*\*\*defaulting to Opus\*\*/)
+    expect(body).toMatch(/Re-review after a fix pass that cleared only non-blocking findings \| \*\*Sonnet\*\*/)
+    expect(body).toMatch(/\| Implement \| the issue's \*\*Build model\*\* \|/)
+    expect(body).toMatch(/reviewLoop: false.*no reviewer or fixer model enters the mix/is)
+  })
+
+  test('derives Capability and Volume from the score rather than the rationale line', () => {
+    expect(body).toMatch(/Capability = floor\(score \/ 25\)/)
+    expect(body).toMatch(/Volume = score mod 25/)
+    expect(body).toMatch(/never suppresses the effort check/i)
+  })
+
+  test('routes each finding class to a skill whose write scope covers it', () => {
+    // execution-plan-review edits only Execution block lines, so body-content
+    // findings routed there would be handed to a skill that cannot clear them.
+    expect(body).toMatch(/Body-content findings.*`validate-issue`/s)
+    expect(body).toMatch(/`execution-plan-review` cannot clear any of these/)
+    expect(body).toMatch(/Editing issue body prose or the title's `\[C<score>\]` prefix \| `validate-issue`/)
   })
 
   test('audits stamps against the band table and separates overrides from slips', () => {
@@ -128,6 +306,21 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/silent overspend/i)
     // Over-band is the pipeline's own default for a missing Execution block.
     expect(body).toMatch(/model fable, effort high/)
+  })
+
+  test('the band table agrees with validate-issue, the canonical source it copies', () => {
+    const canonical = bandTable(validateIssue)
+    const copy = bandTable(milestoneplan)
+    expect(canonical, 'validate-issue publishes no extractable band table').not.toBeNull()
+    expect(copy, 'milestoneplan publishes no extractable band table').not.toBeNull()
+    // The audit's entire correctness basis is this table. Compare it to its source
+    // the same way the run-size formula is compared, so either copy drifting fails.
+    expect(copy).toEqual(canonical)
+    // Guard the extraction itself: a silently-empty match would make the compare vacuous.
+    expect(canonical).toHaveLength(4)
+    expect(canonical.map((band) => band.capability)).toEqual([0, 1, 2, 3])
+    expect(canonical.find((band) => band.capability === 2).fableplan).toBe(true)
+    expect(canonical.find((band) => band.capability === 3).model).toBe('Fable')
   })
 
   test('derives waves and projects run size on the same accounting as milestone-workflow', () => {
@@ -162,17 +355,12 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/1\.5 million/)
   })
 
-  test('never emits a verdict over a truncated milestone fetch', () => {
-    expect(body).toMatch(/open_issues.*closed_issues/s)
-    expect(body).toMatch(/blocking unknown/i)
-    expect(body).toMatch(/never emit a verdict over an incomplete issue set/i)
-  })
-
   test('classifies issues into the same buckets milestone-workflow uses', () => {
     expect(body).toMatch(/\*\*build\*\* \(open, no PR\)/)
     expect(body).toMatch(/\*\*resume\*\* \(open with an open PR that closes it\)/)
     expect(body).toMatch(/\*\*skip\*\* \(closed\)/)
-    expect(body).toMatch(/confirm the PR actually closes the issue/i)
+    // A mention is not a resume-bucket PR — only a closing relationship is.
+    expect(body).toMatch(/A bare mention is not a resume-bucket PR; only a closing relationship is/i)
   })
 
   test('maps every finding class to one severity matching what milestone-workflow does', () => {

@@ -18,17 +18,37 @@ A milestone — by title (`v1`, `v1 — Desktop core call loop`), or nothing, in
 ### 1. Read the milestone
 
 ```
-gh api repos/:owner/:repo/milestones --jq '.[] | "\(.title) — open:\(.open_issues) closed:\(.closed_issues)"'
+gh api "repos/:owner/:repo/milestones?state=all" --jq '.[] | "\(.title) [\(.state)] — open:\(.open_issues) closed:\(.closed_issues)"'
 gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body,labels
 ```
 
-**Reconcile the fetched count against the milestone's true size before auditing anything.** The milestones call publishes `open_issues` and `closed_issues`; their sum is how many issues the milestone actually holds. `--limit` caps the page, so if the fetched count is short, raise the limit and re-fetch. If it is still short, the graph is missing issues and every downstream number — waves, critical path, run size, verdict — is computed over a partial milestone. Report that as a **blocking unknown** and return **NO-GO**: never emit a verdict over an incomplete issue set, and never absorb a shortfall silently on the grounds that the missing issues looked like leaves. A closed-heavy milestone is the trap — `--state all` fills the page with skip-bucket issues and pushes build-bucket ones off it, so the count reconciliation is what catches it, not a glance at the results.
+Pass `state=all` on the milestones call: that endpoint defaults to open milestones only, so a closed milestone would otherwise return no record and silently become unauditable.
+
+**Prove the fetch was complete before auditing anything — from the fetch itself, never by comparing counts across endpoints.** `--limit` caps the page, so:
+
+- A returned count **strictly below** the limit means the fetch is complete. Proceed.
+- A returned count **equal to** the limit is indistinguishable from truncation. Re-fetch at a higher limit; if the higher fetch returns more, keep raising until a fetch comes back strictly below its own limit.
+- Only when no limit yields a fetch below its own limit is the issue set an unproven unknown: report it as a **blocking unknown** and return **NO-GO**. Never emit a verdict over a possibly-partial milestone, and never absorb a shortfall on the grounds that the missing issues looked like leaves.
+
+**Do not gate this on the milestone object's `open_issues` / `closed_issues`.** Those counters and `gh issue list` do not measure the same set — GitHub counts pull requests assigned to the milestone as issues, while `gh issue list` returns issues only, so a healthy, fully-fetched milestone that carries any PR reads as short by exactly the number of PRs it holds. (Measured on `rust-lang/rust`'s `1.0 beta` milestone: counters report 80, `gh issue list` returns 79, and one PR is assigned to it.) This pipeline's resume bucket exists precisely because milestones carry open PRs, so that divergence is the normal case here, not an edge case. Report the counters as context if useful; never let them trigger a NO-GO.
 
 Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each issue's `[C<score>]` title prefix, complexity rationale line, and `## Execution` block into a record: score, `Depends on`, `Runs after`, build model, effort, validate effort, fableplan, plan effort, PR review line.
 
 **Parse, never infer, when the field is present.** An explicit `none` is authoritative. Record an absent field as *missing* and carry that distinction into every later step — "missing" and "none" produce different findings.
 
-Then classify each issue into the same three buckets `milestone-workflow` uses, so the two skills agree on what a run would actually touch: **build** (open, no PR), **resume** (open with an open PR that closes it), **skip** (closed). Search for the PRs with `gh pr list --search "<issue number>" --state open` and confirm the PR actually closes the issue rather than merely mentioning it.
+Then classify each issue into the same three buckets `milestone-workflow` uses, so the two skills agree on what a run would actually touch: **build** (open, no PR), **resume** (open with an open PR that closes it), **skip** (closed).
+
+**Fetch the repo's open PRs once, then match locally** — never one search per issue:
+
+```
+gh pr list --state open --limit 500 --json number,title,body,headRefName
+```
+
+A per-issue `gh pr list --search "<issue number>"` costs one search request per issue (up to 500 at the limit above) against the search endpoint, which is rate-limited far more aggressively than the plain list. Request count must not grow with the milestone's size.
+
+Match with a closing-keyword pattern anchored on word boundaries — `(closes|fixes|resolves) #<n>` where `<n>` is followed by a non-digit or end of string, so `#12` never matches `#123`. A bare mention is not a resume-bucket PR; only a closing relationship is.
+
+**A failed lookup is not "no PR found."** If the single query errors, is throttled, or returns a truncated page (same limit rule as above), stop and report it as a **blocking unknown** — do not fall through to classifying every issue as build. That misclassification is exactly what would send an already-open PR back through a fresh build and open a duplicate, which is the case `milestone-workflow` step 1's resume bucket exists to prevent.
 
 ### 2. Audit each issue
 
@@ -37,6 +57,8 @@ Four independent checks per issue. Collect findings; do not stop at the first on
 **(a) Completeness.** Missing `## Execution` block; missing `Depends on` / `Runs after`; missing acceptance criteria or problem statement; a `[C<score>]` prefix absent from the title; a stale model name that no longer routes (e.g. an Opus version the pipeline's prep step no longer maps).
 
 **(b) Band conformance.** Recompute the expected routing from the issue's own score and compare against what is stamped. The canonical formula lives in `validate-issue` step 6; the bands are:
+
+**Derive both axes from the score — do not wait for the rationale line to publish them.** `validate-issue` defines the score as `25 × Capability + Volume` with `Volume ≤ 24`, so the `[C<score>]` prefix already parsed in step 1 fully determines `Capability = floor(score / 25)` and `Volume = score mod 25`. Every routing field the score determines is recomputed from the score. A missing rationale line is its own completeness finding; it never suppresses the effort check, because there is nothing left to look up. When the rationale line *does* publish a Volume that disagrees with `score mod 25`, that contradiction is itself a finding — the two cannot both be right. With no `[C<score>]` prefix at all nothing is derivable, and only the completeness finding stands.
 
 | Capability | Score | Build model | fableplan | Effort from Volume (0–7 / 8–15 / 16–24) |
 |---|---|---|---|---|
@@ -47,7 +69,7 @@ Four independent checks per issue. Collect findings; do not stop at the first on
 
 **Band conformance is two-sided.** A build model that departs from its score's band in *either* direction is a finding: below it (under-powered — the issue gets a model that cannot carry the work) and above it (silent overspend — a `[C10]` issue stamped Fable 5 audits clean while buying the most expensive model in the fleet). Since this skill's per-model mix is what estimates the run's cost, quiet overspend has to surface too. Over-band is common by construction, not theoretical: `workflows/milestone-pipeline.js` defaults any issue with no Execution block to `model fable, effort high`. Report a Capability-3 issue at Fable 5 as on-band and silent, and treat an annotated over-band stamp as a *Deliberate override* rather than a defect.
 
-Flag: a build model that departs from its band in either direction; `fableplan: Yes` outside Capability 2; `fableplan: No` on a Capability-2 issue; an effort that contradicts the Volume tertile when the rationale line publishes a Volume; `Validate effort: xhigh` (only ever medium or high); a non-Fable build stamped `low`/`medium` (the pipeline silently raises these to `high` — say so, since the stamp lies about what will run); a `Plan effort` on a `fableplan: No` issue (inert — never read); a `fableplan: Yes` issue with no `Plan effort` (defaults to high, which is fine — report as informational, not a finding).
+Flag: a build model that departs from its band in either direction; `fableplan: Yes` outside Capability 2; `fableplan: No` on a Capability-2 issue; an effort that contradicts the Volume tertile derived from the score; a rationale line whose published Volume disagrees with `score mod 25`; `Validate effort: xhigh` (only ever medium or high); a non-Fable build stamped `low`/`medium` (the pipeline silently raises these to `high` — say so, since the stamp lies about what will run); a `Plan effort` on a `fableplan: No` issue (inert — never read); a `fableplan: Yes` issue with no `Plan effort` (defaults to high, which is fine — report as informational, not a finding).
 
 **Distinguish an override from a slip.** A body that explicitly records a deliberate departure ("deliberate override — C75 is Capability 3, where the band prescribes Fable 5") is a decision, not drift: report it under *Deliberate overrides*, never as a defect. An unexplained departure is a finding. This distinction is the point of the check — a milestone where every deviation is annotated is healthy; one where they are silent is not.
 
@@ -82,6 +104,22 @@ Reproduce **every** term `milestone-workflow` step 2 computes, for the review mo
 - **Resume-bucket cost, reported separately.** Each resume-bucket issue runs `fix-pr-review-loop` on its existing PR (`milestone-workflow` step 1), outside the build-bucket sums entirely — but it still costs, and its agents are no more bounded by `maxReviewCycles` than the build bucket's are. Report the count and say it sits outside the totals; never fold it in silently and never omit it.
 - **Thresholds.** Compare every bound against the effective Dynamic workflow size guideline when session context carries one — otherwise Claude Code's documented default of more than 25 scheduled agents. Name which threshold you used. Also state that Claude Code triggers `Large workflow` when a run's projected token total exceeds 1.5 million, so a run sitting under the agent threshold can still cross the token one. In an ultracode session, label both comparisons informational — the warning is suppressed.
 - Label all of them planning bounds, not a guarantee. `maxReviewCycles` changes the stopping rule after an LGTM; it is not a guaranteed cap while reviews keep returning `Needs Updates`. Never call a run safe merely because a direct count sits under a threshold.
+
+**Attribute every agent to the model the pipeline actually dispatches it on — not to the issue's Build model.** The Build model parsed in step 1 governs only two of the terms above. The rest are fixed by `workflows/milestone-pipeline.js` independently of anything stamped on the issue:
+
+| Projected agent | Model it actually runs on |
+|---|---|
+| Prep | one cheap read-only agent, once for the whole run |
+| Validate (every issue) | **always Fable 5**, regardless of the Build model |
+| Plan (`fableplan: Yes` issues) | **always Fable 5** — a second Fable agent the Build model never predicts |
+| Implement | the issue's **Build model** |
+| First review (`reviewLoop` on) | the issue's `PR review:` model, **defaulting to Opus** — never the Build model |
+| Review-loop fixer (each cycle past the first) | the issue's **Build model** |
+| Re-review after a fix pass that cleared only non-blocking findings | **Sonnet** |
+
+So a 10-issue Capability-0 milestone is not ~20 Sonnet agents: it is 10 Fable (validate) + 10 Sonnet (implement) + 10 Opus (first review), plus one prep. Report the mix from this table, and state which terms the Build model did and did not determine.
+
+With `reviewLoop: false` no reviewer or fixer model enters the mix at all. In the subagent worst case above, the extra review-phase agents split between the first-review model (the re-reviewers) and the Build model (the fixers), with any post-non-blocking re-review at Sonnet.
 
 Report the per-model agent mix (how many agents land on Fable 5 versus Opus versus the rest), since that, not the raw count, drives what the run costs.
 
@@ -141,7 +179,15 @@ Then the per-issue table, one row per build-bucket issue: `# | C | Depends on | 
 
 Offer exactly the next actions the verdict supports, and let the user pick:
 
-- **Blocking or non-blocking findings present** → `execution-plan-review` to apply the recommended fixes (it owns the write-back).
+**Route each finding to a skill whose documented write scope actually covers it** — every finding class this audit emits has exactly one owner, and handing a finding to a skill that cannot clear it leaves a NO-GO that never lifts:
+
+- **Execution-block findings** (ordering fields, build model, effort, validate effort, fableplan, plan effort, a missing `## Execution` block) → `execution-plan-review`. That is its whole revision vocabulary, and it edits *only* the intended Execution block lines.
+- **Body-content findings** (missing acceptance criteria, missing problem statement, a missing or wrong `[C<score>]` title prefix, a missing or contradictory complexity rationale line) → `validate-issue`, which owns the issue body and title: it edits both, sets or corrects the `[C<score>]` prefix and the rationale line, and stacks the attribution footer. `execution-plan-review` cannot clear any of these — it does not touch body prose.
+
+Then offer exactly the next actions the verdict supports, and let the user pick:
+
+- **Execution-block findings present** → `execution-plan-review` to apply those fixes (it owns that write-back).
+- **Body-content findings present** → `validate-issue` on each affected issue. Name the issues; do not fold these into the `execution-plan-review` offer.
 - **Verdict is GO / GO WITH FINDINGS** → `milestone-workflow` to run it. Say plainly that `milestone-workflow` presents its own mandatory run plan before dispatching, so approving here is not yet approving the run.
 - **Blocked subtrees excluded** → still offer the run, on the reduced set. Name what it leaves out and why in one line, and offer to re-run the milestone once the blocking PR merges or the decision lands — the same offer `milestone-workflow` makes for the same case.
 - **NO-GO** → name the single blocking item to resolve first. Never offer the run.
@@ -152,7 +198,8 @@ Do not launch either one unprompted. If the user says run it despite findings, r
 
 | Not this | Whose job |
 |---|---|
-| Editing Execution blocks or issue bodies | `execution-plan-review` |
+| Editing Execution block lines | `execution-plan-review` (its write scope stops there) |
+| Editing issue body prose or the title's `[C<score>]` prefix | `validate-issue` |
 | Building tracks and dispatching the pipeline | `milestone-workflow` |
 | Verifying an issue's claims against the code | `validate-issue` (the pipeline runs it per issue at dispatch time) |
 | Deciding whether an issue is well-scoped or too large | `validate-issue` step 6.5 |
@@ -170,7 +217,11 @@ Milestone-level readiness is the whole scope. Per-issue correctness belongs to t
 | Ordering fields missing but prose implies edges | Infer for the wave derivation, label every inferred edge, and recommend that `execution-plan-review` stamp them |
 | A referenced issue lives in another repo | Resolve with `-R owner/repo`; if unreachable, report it as a blocking unknown rather than dropping the edge |
 | Cycle found | NO-GO; show the full path and the edge kinds forming it |
-| Fetched issue count is short of the milestone's `open_issues + closed_issues` | Raise `--limit` and re-fetch; if still short, NO-GO as a blocking unknown — never verdict over a partial milestone |
+| Fetched issue count equals `--limit` | Indistinguishable from truncation — re-fetch at a higher limit until a fetch returns strictly below its own limit; only then is completeness proven |
+| Fetched count is below the milestone's `open_issues + closed_issues` | Not a finding on its own — those counters include PRs assigned to the milestone while `gh issue list` does not. Never NO-GO on that gap |
+| Milestone is closed | Still auditable — the milestones call needs `state=all`, or a closed milestone returns no record at all |
+| The single open-PR query errors, throttles, or hits its limit | Blocking unknown — never fall through to classifying every issue as build, which would open duplicate PRs |
+| Finding is body content (acceptance criteria, problem statement, `[C..]` prefix) | Route to `validate-issue`, not `execution-plan-review` — the latter only edits Execution block lines |
 | A build-bucket issue hard-depends on a resume- or skip-bucket issue | Not a NO-GO — exclude that issue and its hard descendants, report them under *Blocked*, and give the verdict on what still runs |
 | Every build-bucket issue ends up excluded | NO-GO — the exclusions left nothing runnable |
 | An issue is stamped a model above its band | Finding, same as below-band — unexplained is a defect, annotated is a deliberate override |
