@@ -4,7 +4,9 @@ name: Claude Code run
 #
 # Published from richkuo/rk-skills (#5): consumer repos call this workflow via
 #   uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main
-# with secrets: inherit. Prompt files and comment-patch scripts are fetched
+# passing CLAUDE_CODE_OAUTH_TOKEN explicitly under secrets: — the only secret
+# this workflow consumes, so callers need not (and should not) use
+# secrets: inherit. Prompt files and comment-patch scripts are fetched
 # from rk-skills at run time (templates/claude-workflow/), so updating
 # rk-skills updates every consumer repo on its next run with no per-repo sync.
 # A consumer repo tailors prompts two ways (both validated by the same
@@ -81,6 +83,10 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: 'Claude Code OAuth token for agent authentication'
+        required: true
 
 jobs:
   run:
