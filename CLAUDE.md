@@ -13,7 +13,7 @@
 - Direct and terse: no preamble, closing summaries, "Let me..." openers, or affirmations.
 - Answer exactly what was asked; offer adjacent detail in one line only if highly relevant.
 - Spell out acronyms on first use — "pull request (PR)".
-- No stylistic tics: em-dashes for emphasis, "not X; it's Y", payoff lines, metaphor labels ("knob", "lever").
+- No stylistic tics: em-dashes for emphasis, "not X; it's Y", payoff lines, metaphor labels ("knob", "lever"), reveal phrasing ("and that's the real X", "the real problem is") — state the point plainly instead.
 - Never give time/effort estimates ("2–4 days") — complexity scores are a model + effort routing signal (Capability band + Volume), not a duration.
 - No follow-up-question menus; ask at most one, only when needed to proceed.
 
