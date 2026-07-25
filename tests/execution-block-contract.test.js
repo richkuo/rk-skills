@@ -18,6 +18,27 @@ function procedureBody(markdown) {
   return match ? match[1] : markdown
 }
 
+/**
+ * Pull the run-size formula out of a skill document, split into the summation
+ * scope and the agent terms. Anchored on the sole `1 prep` code span, so prose
+ * around the formula can be reworded freely while the terms stay comparable —
+ * the parity tests compare two documents' extractions instead of pinning a
+ * literal in each, which is what makes independent drift fail.
+ */
+function runSizeFormula(markdown) {
+  const spans = markdown.match(/`[^`]*1 prep[^`]*`/g)
+  if (!spans || spans.length !== 1) return null
+  const parts = spans[0].match(/^`1 prep \+ sum over (.+?) of \((.+)\)`$/)
+  if (!parts) return null
+  return { scope: parts[1].trim(), terms: parts[2].replace(/\s+/g, ' ').trim() }
+}
+
+/** The per-issue subagent-mode review worst case, extracted for the same parity comparison. */
+function reviewWorstCase(markdown) {
+  const match = markdown.match(/(2×maxReviewCycles\s*[−-]\s*1)/)
+  return match ? match[1].replace(/\s+/g, ' ') : null
+}
+
 describe('Execution block ordering contract', () => {
   test('prd-to-issues stamps typed direct predecessors', () => {
     expect(prdToIssues).toContain('- **Depends on:** #<n>[, #<n>…] | none')
@@ -100,24 +121,75 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
     expect(body).toMatch(/`Validate effort: xhigh`/)
     expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
+    // Band conformance runs in both directions: quiet overspend is a finding too,
+    // since the per-model mix is what this skill uses to estimate run cost.
+    expect(body).toMatch(/Band conformance is two-sided/i)
+    expect(body).toMatch(/departs from its score's band in \*either\* direction/)
+    expect(body).toMatch(/silent overspend/i)
+    // Over-band is the pipeline's own default for a missing Execution block.
+    expect(body).toMatch(/model fable, effort high/)
   })
 
   test('derives waves and projects run size on the same accounting as milestone-workflow', () => {
-    expect(body).toMatch(/1 prep \+ sum over build-bucket issues of \(1 validate \+ \(fableplan \? 1 plan : 0\) \+ 1 implement/)
-    expect(body).toMatch(/retry-aware/i)
+    const workflowFormula = runSizeFormula(milestoneWorkflow)
+    const planFormula = runSizeFormula(milestoneplan)
+    expect(workflowFormula, 'milestone-workflow publishes no extractable run-size formula').not.toBeNull()
+    expect(planFormula, 'milestoneplan publishes no extractable run-size formula').not.toBeNull()
+    // Parity, not two independent literals: adding a term to either formula fails here.
+    expect(planFormula.terms).toBe(workflowFormula.terms)
+    // milestoneplan sums the build bucket, not the milestone's full issue list.
+    expect(planFormula.scope).toMatch(/build.bucket/i)
+    expect(body).toMatch(/retry-aware ceiling.*runnable-set issue count/is)
     expect(body).toMatch(/more than 25 scheduled agents/i)
     expect(body).toMatch(/critical path/i)
     expect(body).toMatch(/waves/i)
   })
 
-  test('classifies issues into the same buckets milestone-workflow uses', () => {
-    expect(body).toMatch(/build.*resume.*skip/is)
+  test('carries milestone-workflow\'s review worst case and states what it projected under', () => {
+    const workflowWorstCase = reviewWorstCase(milestoneWorkflow)
+    const planWorstCase = reviewWorstCase(milestoneplan)
+    expect(workflowWorstCase, 'milestone-workflow publishes no review worst case').not.toBeNull()
+    // The happy-path `1 review-loop` term alone understates a subagent-mode run.
+    expect(planWorstCase, 'milestoneplan omits the subagent review worst case').toBe(workflowWorstCase)
+    // github mode nests that work in one agent, so the worst case must not be applied there.
+    expect(body).toMatch(/reviewMode: 'github'[\s\S]*?must \*\*not\*\* be applied/)
+    expect(body).toMatch(/reviewLoop: false.*review term is zero/is)
+    // Assumptions are part of the answer — a bound without them is unreadable.
+    expect(body).toMatch(/reviewLoop: true.*reviewMode: 'subagent'.*maxReviewCycles: 5/s)
+    // Resume-bucket fix-pr-review-loop agents fall outside the build-bucket sums but still cost.
+    expect(body).toMatch(/resume-bucket[\s\S]*?fix-pr-review-loop[\s\S]*?outside the build-bucket sums/)
+    // The token trigger milestone-workflow reports, which this projection must not omit.
+    expect(body).toMatch(/1\.5 million/)
   })
 
-  test('gives a verdict with defined NO-GO conditions', () => {
+  test('never emits a verdict over a truncated milestone fetch', () => {
+    expect(body).toMatch(/open_issues.*closed_issues/s)
+    expect(body).toMatch(/blocking unknown/i)
+    expect(body).toMatch(/never emit a verdict over an incomplete issue set/i)
+  })
+
+  test('classifies issues into the same buckets milestone-workflow uses', () => {
+    expect(body).toMatch(/\*\*build\*\* \(open, no PR\)/)
+    expect(body).toMatch(/\*\*resume\*\* \(open with an open PR that closes it\)/)
+    expect(body).toMatch(/\*\*skip\*\* \(closed\)/)
+    expect(body).toMatch(/confirm the PR actually closes the issue/i)
+  })
+
+  test('maps every finding class to one severity matching what milestone-workflow does', () => {
     expect(body).toMatch(/GO \| GO WITH FINDINGS \| NO-GO/)
-    expect(body).toMatch(/NO-GO.*cycle.*missing Execution block.*unsatisfiable/is)
+    expect(body).toMatch(/maps to exactly one severity/i)
     expect(body).toMatch(/NO-GO.*Never offer the run/is)
+    // A blocked subtree is excluded and run around — milestone-workflow runs the rest.
+    expect(body).toMatch(/Blocked — excluded/)
+    expect(body).toMatch(/blocked subtree never suppresses the rest of the run/i)
+    // NO-GO survives only where nothing is runnable, or a real NO-GO class is present.
+    expect(body).toMatch(/exclusions empty the runnable set/i)
+    expect(body).toMatch(/independent cycle still forces NO-GO/i)
+    // Cross-milestone prerequisites get a named severity per edge kind, not silence.
+    expect(body).toMatch(/open \*\*hard\*\* cross-milestone prerequisite/i)
+    expect(body).toMatch(/open \*\*ordering-only\*\* cross-milestone prerequisite/i)
+    // A merged predecessor PR is a satisfied edge, not a finding.
+    expect(body).toMatch(/predecessor closed \*\*with\*\* a merged PR.*no finding/is)
   })
 
   test('is wired into the pipeline as the stage before milestone-workflow', () => {
@@ -131,5 +203,34 @@ describe('milestoneplan pre-flight contract', () => {
   test('defers per-issue correctness to validate-issue instead of duplicating it', () => {
     expect(body).toMatch(/Verifying an issue's claims against the code.*validate-issue/is)
     expect(body).toMatch(/do not duplicate it here/i)
+  })
+})
+
+describe('new-app-pipeline stage numbering contract', () => {
+  /** The stage table is the single source of truth for the pipeline's order. */
+  const stageRows = [...newAppPipeline.matchAll(/^\|\s*(\d+)\s*\|[^|]+\|\s*(?:`([a-z-]+)`|—)\s*\|/gm)].map(
+    ([, number, skill]) => ({ number: Number(number), skill: skill ?? null }),
+  )
+  const stagedSkills = stageRows.filter((row) => row.skill)
+
+  test('the table numbers its stages consecutively from 1', () => {
+    expect(stageRows.length).toBeGreaterThan(0)
+    expect(stageRows.map((row) => row.number)).toEqual(stageRows.map((_, index) => index + 1))
+  })
+
+  test("each staged skill's own description declares its table stage number", async () => {
+    expect(stagedSkills.length).toBeGreaterThan(0)
+    for (const { number, skill } of stagedSkills) {
+      const declared = (await read(`skills/${skill}/SKILL.md`)).match(/Stage ([^ ]+) of the new-app-pipeline/)
+      expect(declared, `${skill} declares no new-app-pipeline stage`).not.toBeNull()
+      expect(declared[1], `${skill} declares stage ${declared[1]}, table says ${number}`).toBe(String(number))
+    }
+  })
+
+  test('the README diagram walks the staged skills in table order', () => {
+    const diagram = readme.match(/```mermaid\nflowchart LR\n {4}A\(\[app-prd\]\)[\s\S]*?```/)
+    expect(diagram, 'README has no app-pipeline mermaid diagram').not.toBeNull()
+    const drawn = [...diagram[0].matchAll(/\(\[([a-z-]+)\]\)/g)].map(([, name]) => name)
+    expect(drawn).toEqual(stagedSkills.map((row) => row.skill))
   })
 })

@@ -73,7 +73,7 @@ The full path from a raw app idea to a running multi-agent build, with a user ch
 
 ```mermaid
 flowchart LR
-    A([app-prd]) --> B([prd-questions]) --> C([prd-to-issues]) --> D([execution-plan-review]) --> E([milestone-workflow])
+    A([app-prd]) --> B([prd-questions]) --> C([prd-to-issues]) --> D([execution-plan-review]) --> E([milestoneplan]) --> F([milestone-workflow])
 ```
 
 | Skill | What it does |
