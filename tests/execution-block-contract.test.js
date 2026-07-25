@@ -111,6 +111,13 @@ function joinContinuedLines(text) {
   return text.replace(/\\\r?\n/g, ' ')
 }
 
+/** Non-gh write forms — the read-only guarantee is open-world across binaries, not only `gh`. */
+const NON_GH_WRITES = [
+  /\bgit\s+(?:commit|push|amend|tag|rebase|merge|cherry-pick|reset|stash\s+push|branch\s+-D)\b/g,
+  /\bcurl\b[^\n`]*(?:(?:\s(?:-X|--request)\s)|(?:(?:-X|--request)=))(?:POST|PUT|PATCH|DELETE)/gi,
+  /\bcurl\b[^\n`]*(?:(?:\s(?:-d|--data|--data-raw|--data-binary)\s)|(?:(?:-d|--data|--data-raw|--data-binary)=))/g,
+]
+
 /**
  * Every reason a chunk of text fails a read-only claim, as human-readable strings.
  * Returning the violations (rather than asserting inline) is what makes the guard
@@ -136,6 +143,9 @@ function readOnlyViolations(text) {
   const withoutGraphql = text.replace(GRAPHQL_CALL, 'gh api graphql')
   for (const form of WRITING_GH_API) {
     for (const [whole] of withoutGraphql.matchAll(form)) violations.push(`writing gh api call: ${whole.trim()}`)
+  }
+  for (const form of NON_GH_WRITES) {
+    for (const [whole] of text.matchAll(form)) violations.push(`non-gh write command: ${whole.trim()}`)
   }
   return violations
 }
@@ -352,6 +362,12 @@ describe('milestoneplan pre-flight contract', () => {
       // Line-continued writes — the guard must join `\\\n` before scanning.
       'gh api /repos/o/r/issues/1/comments \\\n  -f body=x',
       "gh api graphql \\\n  -f query='mutation { addComment(input: {}) { clientMutationId } }'",
+      // Non-gh write binaries — the guard is open-world across tools, not only `gh`.
+      'git push origin HEAD',
+      'git commit -m x',
+      'curl -X POST https://api.github.com/repos/o/r/issues',
+      'curl --request PATCH https://api.github.com/repos/o/r/issues/1',
+      'curl -d body=x https://api.github.com/repos/o/r/issues/1/comments',
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
     }
@@ -368,6 +384,9 @@ describe('milestoneplan pre-flight contract', () => {
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
       "gh api graphql -F pr=77 -f query='query($pr:Int!){ repository { pullRequest(number:$pr){ title } } }'",
+      // Non-gh reads must not trip the write deny-list.
+      'git log -1 --oneline',
+      'curl https://api.github.com/repos/o/r/issues/1',
     ]) {
       expect(readOnlyViolations(read), `should pass the read-only guard: ${read}`).toEqual([])
     }
@@ -468,13 +487,14 @@ describe('milestoneplan pre-flight contract', () => {
     // cannot decide the verdict, or one pre-convention closed issue blocks every re-run.
     expect(body).toMatch(/derive severity from the bucket the finding's owning issue sits in/i)
     expect(body).toMatch(/\| A \*\*runnable\*\* issue with no `## Execution` block \| \*\*NO-GO\*\*/)
-    expect(body).toMatch(/\| \*\*Any row above whose owning issue sits in the skip or resume bucket\*\*[^|]*\| \*\*Informational\*\*/)
+    expect(body).toMatch(/\| \*\*Any row above whose owning issue sits in the skip bucket\*\*[^|]*\| \*\*Informational\*\*/)
+    expect(body).toMatch(/\| \*\*Any NO-GO-class finding whose owning issue sits in the resume bucket or a \*Blocked — excluded\* subtree\*\*/)
     // The audit itself still covers the whole milestone — buckets are not decidable otherwise.
     expect(body).toMatch(/Audit every issue in the milestone/i)
     expect(body).toMatch(/every step-1 \*\*blocking unknown\*\*/)
     expect(body).toMatch(/incomplete fetch stays NO-GO regardless of buckets|those stay NO-GO regardless of buckets/i)
     // A resume finding is deferred, not resolved: it returns if the PR closes unmerged.
-    expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
+    expect(body).toMatch(/becomes blocking if that PR closes unmerged/i)
     // A cycle only forces NO-GO when every edge in it survives into the run.
     expect(body).toMatch(/\| A cycle across the union of both edge kinds, every issue in it runnable \| \*\*NO-GO\*\*/)
     expect(body).toMatch(/\| A cycle that includes any node the run will not dispatch \(skip, resume, \*Blocked — excluded\*, or \*\*out-of-milestone\*\*\) \| \*\*Informational\*\*/)
@@ -582,10 +602,10 @@ describe('milestoneplan pre-flight contract', () => {
 
   test('scopes Fable low the same way in execution-plan-review as milestoneplan', () => {
     expect(executionPlanReview).toMatch(
-      /Revision would put a Fable build's effort at `low` \| Allowed only when Volume ≤ 7 \(`\[C75\]`–`\[C82\]`\)/,
+      /Revision would put a Fable build's effort at `low` \| Allowed only on Capability 3 with Volume ≤ 7 \(`\[C75\]`–`\[C82\]`\)/,
     )
-    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only when Volume ≤ 7/)
-    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume > 7 \| Under-tertile finding/)
+    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only on \*\*Capability 3\*\* with Volume ≤ 7/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` outside Capability 3, or at Capability 3 with Volume > 7 \| Under-tertile finding/)
   })
 
   test('covers cycles through out-of-milestone nodes and ordering-only edges into excluded predecessors', () => {
@@ -644,6 +664,9 @@ describe('milestoneplan pre-flight contract', () => {
   test('routes resume-bucket stamp findings as recommendations, not only notes', () => {
     expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/resume issues return to the build bucket if their PR closes unmerged/)
+    expect(body).toMatch(/\*\*Resume bucket\*\* → \*\*Informational\*\* for any finding that would be \*\*NO-GO\*\*/)
+    expect(body).toMatch(/Stamp\/band contradictions and other Non-blocking findings keep \*\*Non-blocking\*\* so step 6's recommendations still land — print them under \*Non-blocking\* with the re-entry named/)
+    expect(body).toMatch(/A \*\*resume-bucket\*\* stamp\/band contradiction \| Non-blocking/)
     expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
   })
 
@@ -664,7 +687,7 @@ describe('milestoneplan pre-flight contract', () => {
   test('gives Blocked-excluded findings a stated deferred severity', () => {
     expect(body).toMatch(/\*\*Blocked — excluded build-bucket issue\*\* → \*\*Informational\*\* for any finding that would be \*\*NO-GO\*\*/)
     expect(body).toMatch(
-      /\| \*\*Any NO-GO-class finding whose owning issue sits in a \*Blocked — excluded\* subtree\*\*/,
+      /\| \*\*Any NO-GO-class finding whose owning issue sits in the resume bucket or a \*Blocked — excluded\* subtree\*\*/,
     )
     expect(body).toMatch(/A \*\*Blocked — excluded\*\* issue has no Execution block/)
     expect(body).toMatch(/finding confined to the skip bucket, the resume bucket, or a \*Blocked — excluded\* subtree never produces this verdict/)
@@ -757,11 +780,11 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/never above — over-tertile is an observation/i)
     expect(body).toMatch(/Validate effort and Plan effort are judged by their own rules/i)
     // A Fable build at `low` is the sanctioned discretionary tier — never a finding.
-    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only when Volume ≤ 7/i)
+    expect(body).toMatch(/Fable build stamped `low` is the discretionary Fable-only tier only on \*\*Capability 3\*\* with Volume ≤ 7/i)
     expect(body).toMatch(/`\[C75\]`–`\[C82\]`/)
-    expect(body).toMatch(/Fable `low` on a higher Volume is under-tertile and stays a finding/)
-    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume ≤ 7/)
-    expect(body).toMatch(/\| A Fable build is stamped `low` at Volume > 7 \| Under-tertile finding/)
+    expect(body).toMatch(/Fable `low` on any other Capability band or on Capability 3 at higher Volume is under-tertile/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` at Capability 3 with Volume ≤ 7/)
+    expect(body).toMatch(/\| A Fable build is stamped `low` outside Capability 3, or at Capability 3 with Volume > 7 \| Under-tertile finding/)
     // Over-band is the pipeline's own default for a missing Execution block.
     expect(body).toMatch(/model fable, effort high/)
   })
