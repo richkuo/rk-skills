@@ -7,6 +7,8 @@ description: Use when the user wants a milestone of Execution-block-stamped GitH
 
 Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dependency-aware dispatch: the dependency graph is decided here with the user; execution waits for stable predecessor results and builds hard-dependent work from their reviewed code.
 
+For a read-only look at the milestone before committing to a run — are the Execution blocks sound, what are the waves, how many agents will this cost — use `milestoneplan` first. It audits and reports without editing anything, then hands off here.
+
 ## Steps
 
 ### 1. Build the dependency tracks
@@ -73,6 +75,7 @@ The orchestrating session holds no implementation detail — issues and PRs are 
 | Situation | Do this |
 |---|---|
 | An issue lacks an Execution block at run time | Stop before running; send it through execution-plan-review |
+| Unsure whether the milestone is runnable at all, or the user wants the cost first | Run `milestoneplan` — read-only verdict, waves, and run size without touching an issue |
 | No `@claude` review workflow in the repo | Use the default `reviewMode: 'subagent'` (no Actions dependency); only github mode needs the template installed, and `reviewLoop: false` remains the no-review fallback |
 | GitHub Actions billing or a self-hosted runner outage stalls reviews | Switch the next invocation to `reviewMode: 'subagent'`; already-running github-mode loops stay blocked until Actions recovers |
 | A successor hard-depends on unmerged predecessor PRs | Use `after`; the workflow waits for stable heads and `work-on-issue` verifies/integrates every base before implementation |

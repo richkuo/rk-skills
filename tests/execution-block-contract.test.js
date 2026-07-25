@@ -3,12 +3,20 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [prdToIssues, executionPlanReview, milestoneWorkflow, readme] = await Promise.all([
+const [prdToIssues, executionPlanReview, milestoneWorkflow, milestoneplan, newAppPipeline, readme] = await Promise.all([
   read('skills/prd-to-issues/SKILL.md'),
   read('skills/execution-plan-review/SKILL.md'),
   read('skills/milestone-workflow/SKILL.md'),
+  read('skills/milestoneplan/SKILL.md'),
+  read('skills/new-app-pipeline/SKILL.md'),
   read('README.md'),
 ])
+
+/** Strip YAML frontmatter so a description: keyword cannot satisfy a procedure rule. */
+function procedureBody(markdown) {
+  const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)
+  return match ? match[1] : markdown
+}
 
 describe('Execution block ordering contract', () => {
   test('prd-to-issues stamps typed direct predecessors', () => {
@@ -72,5 +80,56 @@ describe('Execution block Plan effort contract', () => {
 
   test('README publishes the plan effort field', () => {
     expect(readme).toMatch(/the effort that plan runs at/i)
+  })
+})
+
+describe('milestoneplan pre-flight contract', () => {
+  const body = procedureBody(milestoneplan)
+
+  test('is read-only — never edits issues or launches the run itself', () => {
+    expect(body).toMatch(/never writes/i)
+    expect(body).toMatch(/does not edit issue bodies.*post comments.*open PRs.*invoke the Workflow tool/is)
+    expect(body).toMatch(/Do not launch either one unprompted/i)
+  })
+
+  test('audits stamps against the band table and separates overrides from slips', () => {
+    expect(body).toMatch(/\| Capability \| Score \| Build model \| fableplan \|/)
+    expect(body).toMatch(/deliberate override/i)
+    expect(body).toMatch(/unexplained departure is a finding/i)
+    // The pipeline silently raises non-Fable low/medium; the audit must say the stamp lies.
+    expect(body).toMatch(/non-Fable build stamped `low`\/`medium`/i)
+    expect(body).toMatch(/`Validate effort: xhigh`/)
+    expect(body).toMatch(/`Plan effort` on a `fableplan: No` issue.*inert/is)
+  })
+
+  test('derives waves and projects run size on the same accounting as milestone-workflow', () => {
+    expect(body).toMatch(/1 prep \+ sum over build-bucket issues of \(1 validate \+ \(fableplan \? 1 plan : 0\) \+ 1 implement/)
+    expect(body).toMatch(/retry-aware/i)
+    expect(body).toMatch(/more than 25 scheduled agents/i)
+    expect(body).toMatch(/critical path/i)
+    expect(body).toMatch(/waves/i)
+  })
+
+  test('classifies issues into the same buckets milestone-workflow uses', () => {
+    expect(body).toMatch(/build.*resume.*skip/is)
+  })
+
+  test('gives a verdict with defined NO-GO conditions', () => {
+    expect(body).toMatch(/GO \| GO WITH FINDINGS \| NO-GO/)
+    expect(body).toMatch(/NO-GO.*cycle.*missing Execution block.*unsatisfiable/is)
+    expect(body).toMatch(/NO-GO.*Never offer the run/is)
+  })
+
+  test('is wired into the pipeline as the stage before milestone-workflow', () => {
+    expect(newAppPipeline).toMatch(/\| 6 \| Pre-flight a milestone \| `milestoneplan` \|/)
+    expect(newAppPipeline).toMatch(/\| 7 \| Run a milestone \| `milestone-workflow` \|/)
+    expect(readme).toMatch(/\| `milestoneplan` \|/)
+    expect(milestoneWorkflow).toMatch(/`milestoneplan`/)
+    expect(executionPlanReview).toMatch(/`milestoneplan`/)
+  })
+
+  test('defers per-issue correctness to validate-issue instead of duplicating it', () => {
+    expect(body).toMatch(/Verifying an issue's claims against the code.*validate-issue/is)
+    expect(body).toMatch(/do not duplicate it here/i)
   })
 })

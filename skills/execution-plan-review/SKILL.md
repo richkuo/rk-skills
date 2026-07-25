@@ -38,6 +38,8 @@ Load `github-issue-format` before editing. For each changed issue: `gh issue edi
 
 Re-render the final table once after all revisions land. This table is what the milestone workflow will execute — say so.
 
+To check the milestone as a whole before it runs — graph closure, execution waves, run size, a go / no-go verdict — that is `milestoneplan`. It audits read-only and routes any fixes back here.
+
 ## Failure modes
 
 | Situation | Do this |
