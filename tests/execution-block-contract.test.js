@@ -350,8 +350,8 @@ describe('milestoneplan pre-flight contract', () => {
       'gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq \'.[]\'',
       'gh issue list --milestone "M" --state all --limit 500 --json number',
       'gh pr list --state open --limit 500 --json number',
-      "gh api graphql -F owner=':owner' -F repo=':repo' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
-      "gh api graphql -F owner=':owner' -F repo=':repo' -F after=null -f query='query($owner:String!,$repo:String!,$after:String){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, after:$after, itemTypes:[CROSS_REFERENCED_EVENT]){ pageInfo{hasNextPage endCursor} nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
+      "gh api graphql -F owner='{owner}' -F repo='{repo}' -f query='query($owner:String!,$repo:String!){ repository(owner:$owner,name:$repo){ pr101: pullRequest(number:101){ number state mergedAt } } }'",
+      "gh api graphql -F owner='{owner}' -F repo='{repo}' -F after=null -f query='query($owner:String!,$repo:String!,$after:String){ repository(owner:$owner,name:$repo){ i42: issue(number:42){ timelineItems(first:100, after:$after, itemTypes:[CROSS_REFERENCED_EVENT]){ pageInfo{hasNextPage endCursor} nodes{ ... on CrossReferencedEvent { source { ... on PullRequest { number state mergedAt } } } } } } } }'",
       'gh pr view 42 -R owner/repo --json number,state,mergedAt',
       'gh issue view 42 --json body',
       // A GraphQL *query* reads, even though it POSTs and carries -f parameters.
@@ -617,19 +617,17 @@ describe('milestoneplan pre-flight contract', () => {
   })
 
   test('applies the documented Validate effort rules, not only the xhigh ban', () => {
-    // Vocabulary, default, Cap-0 Volume≤7 medium, and unlogged out-of-vocab coercion.
+    // Vocabulary, default, Cap-0 Volume≤7 medium, and unlogged low→medium coercion.
     expect(body).toMatch(/vocabulary is only `medium \| high`/i)
     expect(body).toMatch(/never `xhigh`/i)
     expect(body).toMatch(/`low` is outside the vocabulary/i)
-    expect(body).toMatch(/prep schema forbids it/i)
-    expect(body).toMatch(/which allowed tier the agent then picks is undetermined/i)
-    expect(body).toMatch(/with no runtime log of that coercion/i)
+    expect(body).toMatch(/prep schema maps `low→medium` with no runtime log/i)
     expect(body).toMatch(/default is high/i)
     expect(body).toMatch(/`medium` is on-rule only for Capability 0 with Volume ≤ 7/i)
     expect(body).toMatch(/`\[C90\]` at `medium` is off-rule/)
-    // Logged vs unlogged distinction: xhigh/non-Fable raise log; Validate low does not.
+    // Logged vs unlogged distinction: xhigh/non-Fable raise log; Validate low→medium does not.
     expect(body).toMatch(/runtime \*\*logs\*\* those two normalizations to `high`/)
-    expect(body).toMatch(/Validate-effort `low` is outside the schema enum and is coerced with no runtime log/)
+    expect(body).toMatch(/Validate-effort `low` is mapped `low→medium` by the prep schema with no runtime log/)
     // The severity table still carries the stamp-lies class the ban belongs to.
     expect(body).toMatch(/`Validate effort: xhigh`/)
   })
@@ -826,19 +824,41 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/Use GitHub's own linkage first and the keyword scan as the fallback/)
     expect(body).toMatch(/linked by hand through the Development sidebar with no keyword/)
     // Openness is established by intersecting references with the open-PR list — the
-    // field itself carries no state.
+    // field itself carries no state. Cross-repo uses the targeted -R lookup.
     expect(body).toMatch(/Establish "open" by intersecting with the open-PR list/i)
     expect(body).toMatch(/field carries no PR state/i)
-    expect(body).toMatch(/reference numbers appears in the open-PR list/i)
-    expect(body).toMatch(/cross-repo.*blocking unknown/is)
+    expect(body).toMatch(/same-repo reference numbers appears in the open-PR list/i)
+    expect(body).toMatch(/cross-repo.*targeted lookup/is)
+    expect(body).toMatch(/`state: OPEN` → \*\*resume\*\*/)
+    expect(body).toMatch(/cannot read, or a lookup that errors\/throttles, is a \*\*blocking unknown\*\*/i)
     expect(body).toMatch(/never assumed open and never assumed closed/i)
-    expect(body).toMatch(/\| A closing PR reference's openness cannot be established/)
+    expect(body).toMatch(/\| A linked closing-PR reference's openness could not be established/)
     // Closing refs must name this repo — foreign owner/repo prefixes are discarded.
     expect(body).toMatch(/A closing reference counts only when it names this repository/i)
     expect(body).toMatch(/foreign `otherorg\/other#12` must be discarded/i)
     // The published pattern must not re-introduce the capture-group trap.
     expect(body).toMatch(/fix\(\?:es\|ed\)\?/)
     expect(body).toMatch(/group 3 is the issue number/)
+  })
+
+  test('maps every step-1 blocking unknown to a NO-GO severity row', () => {
+    // Bucket-classification unknowns used to halt in prose with no verdict mapping,
+    // so a literal reader could still emit GO. Every step-1 blocking unknown must
+    // appear in the severity table and in the NO-GO trigger list.
+    expect(body).toMatch(/\| The open-PR query errored, throttled, or returned a truncated page \(step 1\) \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| A linked closing-PR reference's openness could not be established[^|]*\| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/\| A fetch that did not cover the whole milestone \(step 1\) \| \*\*NO-GO\*\*/)
+    expect(body).toMatch(/any step-1 \*\*blocking unknown\*\*/i)
+    expect(body).toMatch(/incomplete issue fetch, failed\/throttled\/truncated open-PR query, or a linked reference whose openness could not be established/)
+  })
+
+  test('publishes one gh api placeholder spelling — brace form throughout', () => {
+    // fix-pr-review documents that gh api auto-fills {owner}/{repo}; colon forms
+    // must not appear as -F values or unsubstituted literals become repo names.
+    const blocks = fencedBlocks(body)
+    expect(blocks.some((code) => /repos\/\{owner\}\/\{repo\}\//.test(code))).toBe(true)
+    expect(blocks.some((code) => /-F owner='\{owner\}' -F repo='\{repo\}'/.test(code))).toBe(true)
+    expect(blocks.some((code) => /-F owner=':owner'|-F repo=':repo'/.test(code))).toBe(false)
   })
 
   test('pages the cross-reference query with an after cursor', () => {
