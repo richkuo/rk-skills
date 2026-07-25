@@ -120,6 +120,7 @@ Four independent checks per issue. Collect findings; do not stop at the first on
 - **Runnable build-bucket issue** → severity exactly as step 5's table assigns it.
 - **Skip bucket (closed)** → **informational**, never blocking. `milestone-workflow` step 1 drops closed issues from the plan, and prep reads only the issues that appear in `tracks` (`workflows/milestone-pipeline.js` builds its issue list from the tracks it was handed), so nothing in a closed issue's Execution block is ever read. One pre-convention closed issue must not NO-GO the partially-completed re-run the skip bucket exists to make possible.
 - **Resume bucket** → **informational**, with the re-entry named. Its PR runs through `fix-pr-review-loop` *outside* the pipeline, so its Execution block is not read this run either — but if that PR closes unmerged the issue returns to the build bucket, where the same finding becomes blocking. Say that in the report rather than dropping the finding: it is deferred, not resolved.
+- **Blocked — excluded build-bucket issue** → **Informational** for any finding that would be **NO-GO** on a runnable issue (deferred — becomes blocking once the blocker clears and the issue re-enters the runnable set). Stamp/band contradictions and other Non-blocking findings keep **Non-blocking** so step 6's recommendations still land. Never NO-GO this run on a finding owned only by an excluded issue — that class reaches a row; it does not vanish and it does not block the remaining runnable set.
 
 **An edge finding has two endpoints, and its owner is the endpoint this run would dispatch.** A hard edge from a runnable issue into the resume bucket, to a closed-unmerged predecessor, or to an open cross-milestone prerequisite is a finding *about the runnable dependent* — the issue that would otherwise build against code that is not in the base branch — so it takes the dependent's bucket, never the predecessor's. Reading the predecessor as "the finding's issue" would demote exactly the *Blocked — excluded* rows that exist because the predecessor sits outside the build bucket, and release a dependent the run would then dispatch against missing code. Only a finding owned by a skip- or resume-bucket issue demotes: a single-issue finding on such an issue, or an edge whose *dependent* endpoint sits in skip or resume. A hard edge whose two endpoints both sit in the build bucket is ordering the waves already handle — no finding exists there for the demotion to touch.
 
@@ -211,8 +212,9 @@ Lead with the verdict, then the evidence. Terse — this is a decision aid, not 
 Buckets: <n> build (<n> runnable · <n> excluded) · <n> resume · <n> skip
 Waves: 1) #a #b  2) #c  3) #d
 Critical path: #a → #c → #d (gates <n> issues)
+Concurrency: <n> (widest wave — peak parallel agents)
 Run size: <planned> planned / <ceiling> retry-aware / <worst> review worst case direct agents
-  assumes reviewLoop:<v> · reviewMode:<v> · maxReviewCycles:<n> — threshold: <n>, <source>
+  assumes reviewLoop:<v> · reviewMode:<v> · maxReviewCycles:<n> — agent threshold: <n>, <source> · token Large-workflow at 1.5M
   plus <n> resume-bucket fix-pr-review-loop agents, outside those sums
 Per-model mix: Fable 5 × <n> · Opus × <n> · Sonnet × <n> · session(prep) × <n>  (from the attribution table; mode-named)
 
@@ -242,7 +244,7 @@ Deliberate overrides (recorded in the issue, not defects):
 | Finding | Severity | Because |
 |---|---|---|
 | A cycle across the union of both edge kinds, every issue in it runnable | **NO-GO** | `milestone-workflow` step 1 rejects it — no track order exists |
-| A cycle routed through a skip- or resume-bucket issue | **Informational** | that node never enters `tracks`, and its edges are disposed of by the cross-bucket rules — no cycle reaches the runner. Show the path anyway; it is a filing defect |
+| A cycle routed through a skip-, resume-, or *Blocked — excluded* issue | **Informational** | that node never enters `tracks`, and its edges are disposed of by the cross-bucket rules — no cycle reaches the runner. Show the path anyway; it is a filing defect |
 | A **runnable** issue with no `## Execution` block | **NO-GO** | the pipeline's prep step routes it on conservative defaults (`fable`/`high`) instead of what the issue intends |
 | A reference that does not resolve to an existing issue, or an unreachable cross-repo issue, on an edge a **runnable** issue holds | **NO-GO** | that edge's disposition is undecidable, so no bound is trustworthy |
 | A fetch that did not cover the whole milestone (step 1) | **NO-GO** | the verdict would be computed over a partial issue set |
@@ -259,8 +261,9 @@ Deliberate overrides (recorded in the issue, not defects):
 | An out-of-milestone referenced issue could not be fetched (errored, throttled, or incomplete) | **NO-GO** | existence/state/milestone are undecidable; never score an unfetched reference as nonexistent |
 | A predecessor closed **with** a merged PR (resolved in step 1 from the targeted closing-PR lookups) | *no finding* | the edge is satisfied; the base branch has the code |
 | A self-reference on a runnable issue | **NO-GO** | a degenerate cycle — no edge from an issue to itself can be ordered, and `milestone-workflow` step 1 rejects cycles across the union |
-| `Depends on` / `Runs after` missing, but the prose does not establish the edge **kind** | **NO-GO** | step 1 refuses to guess hard-vs-ordering and sends it to plan review, and the two kinds produce different waves |
+| `Depends on` / `Runs after` missing, and the prose gestures at a dependency but does not establish the edge **kind** | **NO-GO** | step 1 refuses to guess hard-vs-ordering and sends it to plan review, and the two kinds produce different waves — this row is only the ambiguous-kind case, never a satisfied empty graph |
 | `Depends on` / `Runs after` missing, edges inferable from the prose | **Non-blocking** | label every inferred edge; `milestone-workflow` step 1 infers the same way and runs |
+| `Depends on` / `Runs after` missing, and the prose implies **no** edge of that kind | **Non-blocking** | `milestone-workflow` step 1 infers nothing and runs — a satisfied empty graph, not an undecidable kind; recommend `execution-plan-review` stamp `none` |
 | A runnable issue missing acceptance criteria or a problem statement | **Non-blocking** | the run proceeds, but the per-issue validate and review agents lose the contract they check against — route to `validate-issue` |
 | A runnable issue with no `[C<score>]` title prefix | **Non-blocking** | prep records complexity 0 and the band check becomes underivable for that issue; the Execution block's own stamps still drive the run |
 | A runnable issue with no complexity rationale line | **Non-blocking** | every routing field is recomputed from the score prefix, so the run loses nothing but the published reasoning — body content, route to `validate-issue` |
@@ -269,6 +272,7 @@ Deliberate overrides (recorded in the issue, not defects):
 | A duplicate entry within one edge list | **Non-blocking** | it dedupes to the same graph |
 | A stamp contradicting its band (an under-band build model, a build effort *below* its Volume tertile, `fableplan` set against its Capability band, or a Validate effort off its own medium-or-high rules), an inert field (a `Plan effort` stamped on a `fableplan: No` issue), a stale build model name that no longer maps, or a stamp that lies about what will run (a non-Fable build stamped `low`/`medium`, or `Validate effort: xhigh` — the runtime **logs** those two normalizations to `high`; a Validate-effort `low` is mapped `low→medium` by the prep schema with no runtime log) | **Non-blocking** | the run proceeds; only the paperwork is wrong. A stale model name belongs here because prep's output schema forces one of the four model ids, so an unmappable name gets coerced to whichever of the four the prep agent picks — unpredictably, since the `fable` default applies only to a missing Execution block, which has its own NO-GO row — and the stamp misreports what will actually run |
 | **Any row above whose owning issue sits in the skip or resume bucket** — the fetch row excepted, and never a cross-bucket edge row: an edge finding is owned by its runnable dependent (step 2's ownership rule), which *is* dispatched | **Informational** | a finding owned by a skip- or resume-bucket issue cannot decide the verdict — neither bucket is dispatched this run (step 2's scoping rule). For a resume issue, name the re-entry: its finding becomes blocking if that PR closes unmerged |
+| **Any NO-GO-class finding whose owning issue sits in a *Blocked — excluded* subtree** — Non-blocking stamp/band findings on those issues stay Non-blocking (step 6 still recommends) | **Informational** | the issue is not dispatched this run (step 2's excluded scoping rule). Name the re-entry: the finding becomes blocking once the blocker clears and the issue re-enters the runnable set |
 
 Two classes from step 2 deliberately have no row of their own, because they resolve through rows that are already here: an issue whose hard predecessors all sit in a **later** milestone is the open-hard-cross-milestone row, and an issue that is **closed but still carries open dependents** is reported through those dependents' own closed-predecessor edge rows — the finding lands on the issues that are actually runnable, not on the closed one.
 
@@ -278,7 +282,7 @@ An **over-band build model or over-tertile build effort is not in this table at 
 
 - **GO** — the runnable set is clean and nothing is excluded.
 - **GO WITH FINDINGS** — the run proceeds, but something is excluded, contradicts its band, or is unenforceable.
-- **NO-GO** — a NO-GO row above is present *anywhere in the runnable set*, including on a subtree unrelated to the blocked one (an independent cycle still forces NO-GO alongside a merely-blocked subtree), **or** any step-1 **blocking unknown** (incomplete issue fetch, failed/throttled/truncated open-PR query, a linked reference whose openness could not be established, or an out-of-milestone referenced issue that could not be fetched), **or** the exclusions empty the runnable set so there is nothing left to run. A finding confined to the skip or resume bucket never produces this verdict.
+- **NO-GO** — a NO-GO row above is present *anywhere in the runnable set*, including on a subtree unrelated to the blocked one (an independent cycle still forces NO-GO alongside a merely-blocked subtree), **or** any step-1 **blocking unknown** (incomplete issue fetch, failed/throttled/truncated open-PR query, a linked reference whose openness could not be established, or an out-of-milestone referenced issue that could not be fetched), **or** the exclusions empty the runnable set so there is nothing left to run. A finding confined to the skip bucket, the resume bucket, or a *Blocked — excluded* subtree never produces this verdict.
 
 Then the per-issue table, **one row per issue in the milestone** — the closed and resume rows are context, not work, and a closed predecessor named in a runnable issue's `Depends on` has to stay readable:
 
@@ -328,10 +332,13 @@ Milestone-level readiness is the whole scope. Per-issue correctness belongs to t
 | Milestone has no open issues | Report it as complete; there is nothing to plan — do not emit a wall of closed-issue findings |
 | A **runnable** issue has no Execution block | Blocking finding — the pipeline's prep step would fall back to conservative defaults and silently route it wrong |
 | A **closed or resume-bucket** issue has no Execution block | Informational — prep never reads it. Never NO-GO on it, or one pre-convention issue permanently blocks the re-runs the skip bucket exists for. For a resume issue, add that the finding returns as blocking if its PR closes unmerged |
+| A **Blocked — excluded** issue has no Execution block (or any other NO-GO-class finding) | Informational — deferred until the blocker clears; never NO-GO this run on an excluded-only finding. Stamp/band contradictions on excluded issues stay Non-blocking recommendations |
 | Ordering fields missing but prose implies edges | Infer for the wave derivation, label every inferred edge, and recommend that `execution-plan-review` stamp them |
+| Ordering fields missing and prose implies no edge of that kind | Non-blocking — a satisfied empty graph; recommend `execution-plan-review` stamp `none`. Never NO-GO |
+| Ordering fields missing, prose gestures at a dependency but does not establish kind | NO-GO — refuse to guess hard vs ordering; same as `milestone-workflow` step 1's plan-review flag |
 | A referenced issue lives in another repo | Resolve with `-R owner/repo`; if unreachable, report it as a blocking unknown rather than dropping the edge |
 | Cycle found among runnable issues | NO-GO; show the full path and the edge kinds forming it |
-| Cycle found, but it routes through a closed or resume-bucket issue | Informational — that node never enters `tracks`, so the runner sees no cycle. Show the path; it is still a filing defect |
+| Cycle found, but it routes through a closed, resume-bucket, or *Blocked — excluded* issue | Informational — that node never enters `tracks`, so the runner sees no cycle. Show the path; it is still a filing defect |
 | Fetched issue count equals `--limit` | Indistinguishable from truncation — re-fetch at a higher limit until a fetch returns strictly below its own limit; only then is completeness proven, and only then does the table print with no truncation caveat |
 | Fetched count is below the milestone's `open_issues + closed_issues` | Not a finding on its own — those counters include PRs assigned to the milestone while `gh issue list` does not. Never NO-GO on that gap |
 | Milestone is closed | Still auditable — the milestones call needs `state=all`, or a closed milestone returns no record at all |

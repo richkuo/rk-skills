@@ -466,8 +466,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/returns to the build bucket, where the same finding becomes blocking/i)
     // A cycle only forces NO-GO when every edge in it survives into the run.
     expect(body).toMatch(/\| A cycle across the union of both edge kinds, every issue in it runnable \| \*\*NO-GO\*\*/)
-    expect(body).toMatch(/\| A cycle routed through a skip- or resume-bucket issue \| \*\*Informational\*\*/)
-    expect(body).toMatch(/A finding confined to the skip or resume bucket never produces this verdict/)
+    expect(body).toMatch(/\| A cycle routed through a skip-, resume-, or \*Blocked — excluded\* issue \| \*\*Informational\*\*/)
+    expect(body).toMatch(/finding confined to the skip bucket, the resume bucket, or a \*Blocked — excluded\* subtree never produces this verdict/)
   })
 
   test('owns an edge finding by the endpoint the run dispatches, so demotion never claims cross-bucket edge rows', () => {
@@ -537,9 +537,38 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/Report the per-model agent mix/)
   })
 
+  test('prints concurrency and the token threshold in the report template', () => {
+    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
+    expect(template, 'no report template found').not.toBeNull()
+    expect(template[0]).toMatch(/^Concurrency:/m)
+    expect(template[0]).toMatch(/token Large-workflow at 1\.5M/)
+    expect(body).toMatch(/widest wave, which is roughly the peak parallel agent count/)
+    expect(body).toMatch(/1\.5 million/)
+  })
+
   test('marks excluded build rows distinctly from runnable ones in the table', () => {
     expect(body).toMatch(/`build` for runnable, `build \(excluded\)` for a \*Blocked — excluded\* subtree member/)
     expect(body).toMatch(/never present a closed, resume, or excluded row as pending pipeline work/i)
+  })
+
+  test('treats a missing ordering field with no implied edge as Non-blocking, not NO-GO', () => {
+    expect(body).toMatch(
+      /\| `Depends on` \/ `Runs after` missing, and the prose implies \*\*no\*\* edge of that kind \| \*\*Non-blocking\*\*/,
+    )
+    expect(body).toMatch(
+      /\| `Depends on` \/ `Runs after` missing, and the prose gestures at a dependency but does not establish the edge \*\*kind\*\* \| \*\*NO-GO\*\*/,
+    )
+    expect(body).toMatch(/satisfied empty graph/)
+    expect(body).toMatch(/Ordering fields missing and prose implies no edge of that kind/)
+  })
+
+  test('gives Blocked-excluded findings a stated deferred severity', () => {
+    expect(body).toMatch(/\*\*Blocked — excluded build-bucket issue\*\* → \*\*Informational\*\* for any finding that would be \*\*NO-GO\*\*/)
+    expect(body).toMatch(
+      /\| \*\*Any NO-GO-class finding whose owning issue sits in a \*Blocked — excluded\* subtree\*\*/,
+    )
+    expect(body).toMatch(/A \*\*Blocked — excluded\*\* issue has no Execution block/)
+    expect(body).toMatch(/finding confined to the skip bucket, the resume bucket, or a \*Blocked — excluded\* subtree never produces this verdict/)
   })
 
   test('gives both resume-bucket edge kinds a disposition and sequences their cost', () => {
@@ -676,14 +705,18 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/`Validate effort: xhigh`/)
   })
 
-  test('the band table agrees with validate-issue, the canonical source it copies', () => {
+  test('the band table agrees with validate-issue and prd-to-issues copies', () => {
     const canonical = bandTable(validateIssue)
-    const copy = bandTable(milestoneplan)
+    const planCopy = bandTable(milestoneplan)
+    const stampCopy = bandTable(prdToIssues)
     expect(canonical, 'validate-issue publishes no extractable band table').not.toBeNull()
-    expect(copy, 'milestoneplan publishes no extractable band table').not.toBeNull()
-    // The audit's entire correctness basis is this table. Compare it to its source
-    // the same way the run-size formula is compared, so either copy drifting fails.
-    expect(copy).toEqual(canonical)
+    expect(planCopy, 'milestoneplan publishes no extractable band table').not.toBeNull()
+    expect(stampCopy, 'prd-to-issues publishes no extractable band table').not.toBeNull()
+    // The audit's entire correctness basis is this table. Compare each consumer
+    // copy to the canonical source — either drifting fails, including the copy
+    // that stamps every issue this skill later audits.
+    expect(planCopy).toEqual(canonical)
+    expect(stampCopy).toEqual(canonical)
     // Guard the extraction itself: a silently-empty match would make the compare vacuous.
     expect(canonical).toHaveLength(4)
     expect(canonical.map((band) => band.capability)).toEqual([0, 1, 2, 3])
@@ -796,12 +829,33 @@ describe('milestoneplan pre-flight contract', () => {
       ...[...stepTwo[1].matchAll(/(?:Also flag|Flag): ([^\n]+)/g)].map(([, items]) => items),
     ].filter(Boolean)
     expect(flagLists.length, 'no flag lists found in step 2').toBeGreaterThanOrEqual(3)
+    // Split on top-level semicolons only — a parenthetical may contain `;` without
+    // ending a finding class (e.g. step 2(b)'s Over-band observations clause).
+    const splitTopLevel = (list) => {
+      const items = []
+      let depth = 0
+      let start = 0
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i]
+        if (c === '(' || c === '[' || c === '{') depth++
+        else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1)
+        else if (c === ';' && depth === 0 && /^\s+\S/.test(list.slice(i + 1))) {
+          items.push(list.slice(start, i).trim())
+          const ws = list.slice(i + 1).match(/^\s+/)[0].length
+          start = i + 1 + ws
+          i = start - 1
+        }
+      }
+      items.push(list.slice(start).trim())
+      return items.filter(Boolean)
+    }
     const items = flagLists
-      .flatMap((list) => list.split(/;\s+/))
+      .flatMap(splitTopLevel)
       .map((item) => item.trim().replace(/\.$/, ''))
       // An item that disposes of itself inline is not a class in need of a row.
       .filter((item) => !/not a finding|informational/i.test(item))
-    expect(items.length, 'flag-list extraction is vacuous').toBeGreaterThan(10)
+    // Exact count pins the split: a mid-parenthetical chop or a dropped class moves it.
+    expect(items).toHaveLength(24)
     const stem = (word) => word.toLowerCase().replace(/(?:ing|ed|es|s)$/, '').replace(/e$/, '')
     const STOP = new Set(['issu', 'that', 'with', 'whos', 'from', 'either', 'both', 'what', 'will'])
     const tokens = (text) => [
