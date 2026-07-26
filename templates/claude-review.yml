@@ -156,8 +156,8 @@ jobs:
             precisely what the human must decide and why you cannot recommend.
             Each `### Requires Human Review` item MUST also add **Recommended
             proposed solution:** — one short plain-simple-English paragraph
-            stating what you recommend they choose or do — the concrete
-            action, not a restatement of the tradeoff.
+            under 55 words stating what you recommend they choose or do — the
+            concrete action, not a restatement of the tradeoff.
 
             Every finding in every section MUST end with **Plain simple
             English:** — the item's last field, added after `Invariant`/`Must

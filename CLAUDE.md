@@ -66,7 +66,7 @@
 
 ### PR review format
 
-- **Before writing any PR review comment, load the `pr-review-format` skill** — it defines the mandatory verdict line, section structure, materiality filter, and safety carve-out. Every finding must include **Plain simple English:** (under 55 words); `Requires Human Review` items must also include **Recommended proposed solution:**. Never compose a review without it.
+- **Before writing any PR review comment, load the `pr-review-format` skill** — it defines the mandatory verdict line, section structure, materiality filter, and safety carve-out. Every finding must include **Plain simple English:** (under 55 words); `Requires Human Review` items must also include **Recommended proposed solution:** (also plain simple English, under 55 words). Never compose a review without it.
 
 ## GitHub Issues
 
