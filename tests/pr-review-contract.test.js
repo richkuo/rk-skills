@@ -46,6 +46,10 @@ const VERIFICATION_INSTRUCTIONS = [
     /this predates the PR.{0,120}not reasons to drop or downgrade a finding/is,
     'pre-existing is not a dismissal reason',
   ],
+  [
+    /state what you verified and how/i,
+    'state what you verified and how',
+  ],
 ]
 
 describe('PR review contract', () => {
@@ -136,6 +140,21 @@ describe('PR review contract', () => {
     expect(prompt).toMatch(
       /skip it when classifying[\s\S]{0,120}approved with nothing to fix/i,
     )
+  })
+
+  test('terminal reports propagate Verification limitation lines to the operator', async () => {
+    for (const path of [
+      'skills/fix-pr-review/SKILL.md',
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/work-on-issue-loop/SKILL.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+    ]) {
+      const body = await read(path)
+      expect(body, path).toMatch(
+        /Verification limitation[\s\S]{0,220}(?:name each|naming every|unverified source)/i,
+      )
+      expect(body, path).toMatch(/omit (?:that |the )?field when none|omit when none/i)
+    }
   })
 
   test('contract inventory states finding-section stop semantics and both guards', async () => {
