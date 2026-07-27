@@ -11,9 +11,9 @@ The format below is worthless on top of a shallow read. Satisfy all of these fir
 
 - **The PR body is a hypothesis list, not your checklist.** Derive what to verify from the diff itself. Re-checking only the claims the author says they verified reproduces the author's blind spots — it feels thorough and finds nothing new.
 - **Read every changed file in full, then check it against itself.** Contradictions between two parts of the same file — instructions routing to conflicting outcomes, a rule stated one way and applied another — are defects, not style.
-- **Independently source every external fact the diff asserts:** spec and standard text, regulatory or vendor lists, API contracts, version and date claims. Go to the primary source and compare wording verbatim; a paraphrase that silently drops a qualifier is a finding. Never let verified code claims buy credibility for unverified domain claims.
+- **Independently source every external fact the diff asserts:** spec and standard text, regulatory or vendor lists, API contracts, version and date claims. Go to the primary source and compare wording verbatim; a paraphrase that silently drops a qualifier is a finding. Never let verified code claims buy credibility for unverified domain claims. If the primary source is unavailable after reasonable attempts, record the exact source and access limitation under `### Recommended Optional` and continue; source unavailability alone does not fail the LGTM precondition. The safety carve-out still blocks when applicable.
 - **Files that instruct an agent are executable** (`.claude/**`, prompts, skills, CI config, schemas). Review them for behavioral defects and self-consistency, not prose quality.
-- State in the review what you verified and how, so the next reader can see the boundary of the check.
+- When the review has findings, state what you verified and how inside each relevant finding's description. With no findings, the required bare `LGTM` itself asserts that this method was completed; do not add verification prose outside the format.
 
 ## Format
 
@@ -23,7 +23,7 @@ Review comments contain **nothing outside this structure** — no preamble, head
 - **Safety carve-out (overrides materiality and confidence):** anything touching money, data integrity, security, or auto-protective mechanisms is always surfaced; if unconfirmable, put it under `### Requires Human Review`.
 - **Verdict keys off blocking sections only:** `### Needs Fixing` and `### Requires Human Review` block; `### Recommended Optional` and `### Create Follow-up Issue` don't. `Needs Updates` iff ≥1 blocking item; otherwise `LGTM` (even when non-blocking findings follow the LGTM line).
 - `LGTM` means the reading agent may merge and close. With no findings at all, `LGTM` stands alone above the footer.
-- **LGTM precondition:** complete every item under "Before you write" and check CI status first. If you couldn't, emit `Needs Updates` and record the gap under `### Requires Human Review`.
+- **LGTM precondition:** complete every applicable item under "Before you write". If you couldn't, emit `Needs Updates` and record the gap under `### Requires Human Review`, except for an unavailable primary source handled non-blockingly above. Do not gate the verdict on CI status or wait for checks; CI is enforced separately.
 - Every finding goes under exactly one H3 section (omit empty ones). Sections are numbered lists; each item: **bold one-sentence title**, newline, description with critical details (`file:line` + why).
 - `### Needs Fixing` and `### Recommended Optional` items then add **Invariant:** (the general property violated) and **Must survive:** (1–3 adversarial cases any fix must handle).
 - `### Create Follow-up Issue` is the disposition of last resort — prefer keeping work in the PR. Requires **both**: genuinely separate from PR scope, **and** can't reasonably fold into this PR (substantial independent scope, own design decision, or would bloat/destabilize the diff). A different file/subsystem alone doesn't qualify; trivially-fixable instances of the same bug class get fixed here. When in doubt, route elsewhere.

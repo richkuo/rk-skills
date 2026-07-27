@@ -54,6 +54,30 @@ jobs:
             simulations, or scripts. Judge correctness by reading the diff;
             CI runs tests separately.
 
+            Before you write, complete this verification method:
+
+            - Treat the PR body as a hypothesis list, not your checklist.
+              Derive what to verify from the diff itself so the author's
+              summary cannot define the review boundary.
+            - Read every changed file in full, then check it against itself.
+              Conflicting instructions or behavior within one file are defects,
+              not style.
+            - Independently source every external fact the diff asserts,
+              including specifications, standards, regulatory or vendor lists,
+              API contracts, versions, and dates. Compare the primary source
+              wording directly. If the primary source is unavailable after
+              reasonable attempts, record the exact source and access
+              limitation under `### Recommended Optional` and continue; source
+              unavailability alone does not fail the LGTM precondition. The
+              safety carve-out still blocks when applicable.
+            - Treat files that instruct an agent (`.claude/**`, prompts, skills,
+              CI config, schemas) as executable. Review them for behavioral
+              defects and self-consistency, not prose quality.
+            - When the review has findings, state what you verified and how
+              inside each relevant finding's description. With no findings, the
+              required bare LGTM itself asserts that this method was completed;
+              do not add verification prose outside the format.
+
             Before writing the comment, sweep the FULL diff once per dimension
             and collect every finding — do not stop at the first or most
             salient issue. Dimensions: (1) correctness and logic (including
@@ -93,12 +117,13 @@ jobs:
             relevant non-blocking sections; with no findings at all, LGTM
             stands alone with no other text.
 
-            LGTM precondition: only emit LGTM after you have inspected every
-            changed file in the diff. If you could not review the full diff,
+            LGTM precondition: only emit LGTM after you have completed every
+            applicable item in the verification method above. If you could not,
             you MUST NOT emit LGTM — emit Needs Updates and record the gap
-            under `### Requires Human Review`. Do NOT gate the verdict on CI
-            status and do NOT wait for checks to finish — CI intentionally
-            runs longer than this review and is enforced separately by branch
+            under `### Requires Human Review`, except for an unavailable primary
+            source handled non-blockingly above. Do NOT gate the verdict on CI
+            status and do NOT wait for checks to finish — CI intentionally runs
+            longer than this review and is enforced separately by branch
             protection; judge the code itself.
 
             Materiality filter (apply before writing): drop only trivia —

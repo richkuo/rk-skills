@@ -2,6 +2,14 @@ PR review output format (this OVERRIDES any final-comment format the code-review
 
 Never execute the project's code in this workflow, in any mode: do NOT run test suites, builds, type checks, simulations, or scripts. Judge correctness by reading the code.
 
+Before you write, complete this verification method:
+
+- Treat the PR body as a hypothesis list, not your checklist. Derive what to verify from the diff itself so the author's summary cannot define the review boundary.
+- Read every changed file in full, then check it against itself. Conflicting instructions or behavior within one file are defects, not style.
+- Independently source every external fact the diff asserts, including specifications, standards, regulatory or vendor lists, API contracts, versions, and dates. Compare the primary source wording directly. If the primary source is unavailable after reasonable attempts, record the exact source and access limitation under ### Recommended Optional and continue; source unavailability alone does not fail the LGTM precondition. The safety carve-out still blocks when applicable.
+- Treat files that instruct an agent (.claude/**, prompts, skills, CI config, schemas) as executable. Review them for behavioral defects and self-consistency, not prose quality.
+- When the review has findings, state what you verified and how inside each relevant finding's description. With no findings, the required bare LGTM itself asserts that this method was completed; do not add verification prose outside the format.
+
 Before writing the comment, sweep the FULL diff once per dimension and collect every finding — do not stop at the first or most salient issue. Dimensions: (1) correctness and logic (including shadowed or dead code and wrong-scope declarations); (2) error paths and failure handling (swallowed errors, fail-open vs fail-closed, error states indistinguishable from empty states); (3) state and lifecycle (stale UI or cache state, residual mutations, ordering); (4) resource cost and scaling (unbounded queries or scans on polled or hot paths, missing indexes, per-call cost growing with history); (5) concurrency and locking; (6) security and input handling (injection, unescaped output, authorization). Report ALL findings that survive the materiality filter in this single comment, not one per review round.
 
 The review comment must contain nothing except the structure that follows — no preamble, summary, intro, header, emoji, or footer outside this structure. Write the entire comment as direct instructions for an agent that will read it and act on it.
@@ -14,7 +22,7 @@ Verdict rule: emit Needs Updates if and only if there is at least one item under
 
 LGTM signals the agent reading it may merge and close the PR. When the only findings are non-blocking, follow the LGTM line with the relevant ### Recommended Optional and/or ### Create Follow-up Issue sections; when there are no findings at all, LGTM stands alone with no other text.
 
-LGTM precondition: only emit LGTM after you have inspected every changed file in the diff. If you could not review the full diff, you MUST NOT emit LGTM — emit Needs Updates and record the gap as an item under ### Requires Human Review. Do NOT gate the verdict on CI status and do NOT wait for checks to finish — CI intentionally runs longer than this review and is enforced separately by branch protection; judge the code itself.
+LGTM precondition: only emit LGTM after you have completed every applicable item in the verification method above. If you could not, you MUST NOT emit LGTM — emit Needs Updates and record the gap as an item under ### Requires Human Review, except for an unavailable primary source handled non-blockingly above. Do NOT gate the verdict on CI status and do NOT wait for checks to finish — CI intentionally runs longer than this review and is enforced separately by branch protection; judge the code itself.
 
 Materiality filter (apply before writing): drop only trivia — style and naming nits, subjective preferences, micro-optimizations, and hypothetical edge cases with no realistic trigger. Anything you would prefix with 'minor' or 'nit' is trivia. Dropped trivia is not mentioned anywhere, not even as a note. Do NOT drop a substantive finding just because it is non-blocking — a real but non-merge-blocking improvement belongs under ### Recommended Optional or ### Create Follow-up Issue, never silently discarded.
 
