@@ -88,6 +88,18 @@ describe('PR review contract', () => {
     }
   })
 
+  test('keeps the same safety carve-out scope in every review contract copy', () => {
+    for (const path of CONTRACT_COPIES) {
+      const source = normalized[path]
+      expect(source, path).toMatch(/Safety carve-out/i)
+      expect(source, path).toMatch(/\bmoney\b/i)
+      expect(source, path).toMatch(/data integrity/i)
+      expect(source, path).toMatch(/\bsecurity\b/i)
+      expect(source, path).toMatch(/auto-protective mechanism/i)
+      expect(source, path).not.toMatch(/Better Auth|MMKV|SecureStore|never-persist-absolute-paths/i)
+    }
+  })
+
   test('preserves a reachable bare-LGTM clean verdict and static CI policy', () => {
     for (const path of CONTRACT_COPIES) {
       const source = normalized[path]
@@ -177,6 +189,15 @@ describe('PR review contract', () => {
       /Verification limitation[\s\S]{0,160}empty array when none/i,
     )
     expect(pipeline).toMatch(/verification limitations:/i)
+    // Both review modes must request and fold the field — subagent schema and github-loop schema.
+    expect(pipeline).toMatch(/SUBAGENT_REVIEW_SCHEMA[\s\S]{0,400}verification_limitations/)
+    expect(pipeline).toMatch(/REVIEW_LOOP_SCHEMA[\s\S]{0,400}verification_limitations/)
+    expect(pipeline).toMatch(
+      /function reviewLoopPrompt[\s\S]*?verification_limitations \(array of exact \*\*Verification limitation:\*\*/,
+    )
+    expect(pipeline).toMatch(
+      /githubLimitations\.length && !String\(review\.summary/,
+    )
   })
 
   test('contract inventory states finding-section stop semantics and both guards', async () => {

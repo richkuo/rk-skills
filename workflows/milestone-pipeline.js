@@ -216,13 +216,18 @@ const REVIEW_FIX_SCHEMA = {
 
 const REVIEW_LOOP_SCHEMA = {
   type: 'object',
-  required: ['final_status', 'cycles_run', 'summary', 'head_ref', 'head_sha'],
+  required: ['final_status', 'cycles_run', 'summary', 'head_ref', 'head_sha', 'verification_limitations'],
   properties: {
     final_status: { type: 'string', enum: ['lgtm', 'lgtm_with_nonblocking', 'max_cycles_exhausted', 'blocked'] },
     cycles_run: { type: 'integer' },
     summary: { type: 'string', description: 'Per-cycle findings fixed/rejected, and why the loop stopped' },
     head_ref: { type: 'string', description: 'Exact pull request head branch at the review readiness boundary' },
     head_sha: { type: 'string', description: 'Exact pull request head commit at the review readiness boundary' },
+    verification_limitations: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Exact **Verification limitation:** lines from the terminal review (empty array when none) — not findings, but must reach the operator report',
+    },
     blocker: { type: 'string', description: 'Only when final_status is blocked' },
   },
 }
@@ -325,7 +330,7 @@ ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
 
 Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
 
-At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary, the exact head_ref and head_sha at that boundary, and any blocker.`
+At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary, verification_limitations (array of exact **Verification limitation:** lines from the terminal review — empty array when none; these are not findings but must be returned), the exact head_ref and head_sha at that boundary, and any blocker.`
 }
 
 function subagentReviewPrompt(issue, prNumber, cycle) {
@@ -670,9 +675,15 @@ async function executeTrack(trackIndex) {
               label: `review-loop:PR#${impl.pr_number}`,
             })
       } catch (error) {
-        review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}` }
+        review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}`, verification_limitations: [] }
       }
-      review ||= { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed', head_ref: '', head_sha: '' }
+      review ||= { final_status: 'blocked', cycles_run: 0, summary: 'review-loop agent failed', head_ref: '', head_sha: '', verification_limitations: [] }
+      const githubLimitations = Array.isArray(review.verification_limitations)
+        ? review.verification_limitations.filter((line) => typeof line === 'string' && line.trim())
+        : []
+      if (githubLimitations.length && !String(review.summary || '').includes('verification limitations:')) {
+        review.summary = `${review.summary || ''} · verification limitations: ${githubLimitations.join(' | ')}`.trim()
+      }
       record.review = review
       const reviewApproved = review.final_status === 'lgtm' || review.final_status === 'lgtm_with_nonblocking'
       const reviewHead = verifiedHead(impl.pr_number, review.head_ref, review.head_sha)

@@ -103,6 +103,7 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           summary: 'approved',
           head_ref: `codex/issue-${issue}`,
           head_sha: headSha(issue),
+          verification_limitations: [],
         }
       }
     } else {
@@ -430,6 +431,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       summary: 'approved',
       head_ref: 'codex/issue-2',
       head_sha: headSha(2, 'a'),
+      verification_limitations: [],
     })
     const result = await running
     const reviewFinished = result.events.findIndex((event) => event.state === 'finished' && event.label === 'review-loop:PR#1002')
@@ -606,6 +608,7 @@ describe('milestone-pipeline dependency scheduling', () => {
         summary: 'review failed',
         head_ref: 'codex/issue-2',
         head_sha: headSha(2, 'b'),
+        verification_limitations: [],
       }),
     })
 
@@ -626,6 +629,30 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('review_invalid_head')
     expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
     expect(started(events, 'validate:#9')).toBeFalse()
+  })
+
+  test('github review mode folds Verification limitation lines into the operator summary', async () => {
+    const { output } = await executeWorkflow({
+      tracks: [{ issues: [2] }],
+      reviewLoop: true,
+      reviewMode: 'github',
+    }, {
+      'review-loop:PR#1002': () => ({
+        final_status: 'lgtm',
+        cycles_run: 1,
+        summary: 'approved',
+        head_ref: 'codex/issue-2',
+        head_sha: headSha(2),
+        verification_limitations: [
+          '**Verification limitation:** RFC 9110 unavailable — network restricted',
+        ],
+      }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.summary).toContain('verification limitations:')
+    expect(record?.review.summary).toContain('RFC 9110 unavailable')
   })
 
   test('contains thrown track failures and reports blocked descendants', async () => {
