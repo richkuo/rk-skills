@@ -65,9 +65,11 @@ jobs:
             - Independently source every external fact the diff asserts,
               including specifications, standards, regulatory or vendor lists,
               API contracts, versions, and dates. Compare the primary source
-              wording directly. If the primary source is unavailable after
-              reasonable attempts, record the exact source and access
-              limitation under `### Recommended Optional` and continue; source
+              wording directly. Never let verified code claims buy credibility
+              for unverified domain claims. If the primary source is unavailable
+              after reasonable attempts, emit a single
+              `**Verification limitation:**` line naming the exact source and
+              access reason (see format below), then continue; source
               unavailability alone does not fail the LGTM precondition. The
               safety carve-out still blocks when applicable.
             - Treat files that instruct an agent (`.claude/**`, prompts, skills,
@@ -115,7 +117,17 @@ jobs:
             LGTM signals the agent reading it may merge and close the PR. When
             the only findings are non-blocking, follow the LGTM line with the
             relevant non-blocking sections; with no findings at all, LGTM
-            stands alone with no other text.
+            stands alone with no other text, except that zero or more
+            `**Verification limitation:**` lines may appear between the verdict
+            (or last finding section) and the footer.
+
+            Verification limitation (not a finding): when a primary source is
+            unreachable, emit exactly
+            `**Verification limitation:** <source> unavailable — <access reason>.`
+            — no Invariant / Must survive / Plain simple English, never under an
+            H3 finding section, and never treated as remaining work by review
+            loops. A wrong paraphrase of a reachable source is still a real
+            finding with full fields.
 
             LGTM precondition: only emit LGTM after you have completed every
             applicable item in the verification method above. If you could not,
@@ -124,7 +136,9 @@ jobs:
             source handled non-blockingly above. Do NOT gate the verdict on CI
             status and do NOT wait for checks to finish — CI intentionally runs
             longer than this review and is enforced separately by branch
-            protection; judge the code itself.
+            protection; judge the code itself. A failed check may tip you toward
+            a code defect — report that defect from the code or logs, never the
+            check status itself as a finding.
 
             Materiality filter (apply before writing): drop only trivia —
             style and naming nits, subjective preferences, micro-optimizations,
