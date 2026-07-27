@@ -38,6 +38,14 @@ const VERIFICATION_INSTRUCTIONS = [
     'halo-effect guard',
   ],
   [/files? that instruct an agent.{0,80}executable/is, 'agent-instructing files are executable'],
+  [
+    /do not resolve ambiguity in the artifact's favor/i,
+    'no charitable reading of the artifact',
+  ],
+  [
+    /this predates the PR.{0,120}not reasons to drop or downgrade a finding/is,
+    'pre-existing is not a dismissal reason',
+  ],
 ]
 
 describe('PR review contract', () => {

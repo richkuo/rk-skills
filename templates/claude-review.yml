@@ -78,6 +78,15 @@ jobs:
             - Treat files that instruct an agent (`.claude/**`, prompts, skills,
               CI config, schemas) as executable. Review them for behavioral
               defects and self-consistency, not prose quality.
+            - Do not resolve ambiguity in the artifact's favor. "A reasonable
+              reader would understand it", "the strict wording is stricter than
+              the mechanism, so it is fail-safe", and "this predates the PR" are
+              not reasons to drop or downgrade a finding on a file the PR is
+              changing. The reader may be an agent that cannot ask for
+              clarification, and a PR that touches a file is where its ambiguity
+              gets closed. When you catch yourself constructing a charitable
+              reading to dismiss a conflict, that conflict is the finding — file
+              it and let the disposition sections decide whether it blocks.
             - When the review has findings, state what you verified and how
               inside each relevant finding's description. With no findings, the
               required bare LGTM itself asserts that this method was completed;
