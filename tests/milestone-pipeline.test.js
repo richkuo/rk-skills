@@ -86,6 +86,7 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           head_sha: headSha(issue),
           comment_url: `https://example.test/pr/${1000 + issue}#review`,
           summary: 'clean',
+          verification_limitations: [],
         }
       } else if (options.label.startsWith('fix:')) {
         result = {
@@ -619,7 +620,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewLoop: true,
       reviewMode: 'github',
     }, {
-      'review-loop:PR#1002': () => ({ final_status: 'lgtm', cycles_run: 1, summary: 'approved' }),
+      'review-loop:PR#1002': () => ({ final_status: 'lgtm', cycles_run: 1, summary: 'approved', verification_limitations: [] }),
     })
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('review_invalid_head')
@@ -758,6 +759,32 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(record?.review.cycles_run).toBe(1)
   })
 
+  test('propagates Verification limitation lines into the operator review summary', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue()] }),
+      'Review Loop': (event) => {
+        if (!event.label.startsWith('review:')) return undefined
+        return {
+          verdict: 'lgtm',
+          blocking_count: 0,
+          nonblocking_count: 0,
+          head_ref: 'codex/issue-2',
+          head_sha: headSha(2),
+          comment_url: 'https://example.test/pr/1002#r1',
+          summary: 'clean',
+          verification_limitations: [
+            '**Verification limitation:** RFC 9110 unavailable — network restricted',
+          ],
+        }
+      },
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.summary).toContain('verification limitations:')
+    expect(record?.review.summary).toContain('RFC 9110 unavailable')
+  })
+
   test('defaults the first review to opus/high when the PR review line is standard or absent', async () => {
     const { events } = await executeWorkflow({ tracks: [[2]] }, {
       Prep: () => ({ issues: [prepIssue({ first_review_model: undefined, first_review_effort: undefined })] }),
@@ -776,8 +803,8 @@ describe('milestone-pipeline subagent review mode', () => {
         }
         reviewCycle += 1
         return reviewCycle === 1
-          ? { verdict: 'needs_updates', blocking_count: 2, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking findings' }
-          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }
+          ? { verdict: 'needs_updates', blocking_count: 2, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking findings', verification_limitations: [] }
+          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean', verification_limitations: [] }
       },
     })
     const record = output.results.find((result) => result.issue === 2)
@@ -800,8 +827,8 @@ describe('milestone-pipeline subagent review mode', () => {
         }
         reviewCycle += 1
         return reviewCycle === 1
-          ? { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }
-          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'd'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }
+          ? { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional', verification_limitations: [] }
+          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'd'), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean', verification_limitations: [] }
       },
     })
     const record = output.results.find((result) => result.issue === 2)
@@ -816,7 +843,7 @@ describe('milestone-pipeline subagent review mode', () => {
   test('an LGTM with non-blocking findings on the final cycle stops as lgtm_with_nonblocking without a fixer', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1 }, {
       Prep: () => ({ issues: [prepIssue()] }),
-      'Review Loop': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }),
+      'Review Loop': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional', verification_limitations: [] }),
     })
     const record = output.results.find((result) => result.issue === 2)
 
@@ -831,7 +858,7 @@ describe('milestone-pipeline subagent review mode', () => {
       maxReviewCycles: 1,
     }, {
       Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
-      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking', verification_limitations: [] }),
     })
     const record = output.results.find((result) => result.issue === 2)
 
@@ -846,7 +873,7 @@ describe('milestone-pipeline subagent review mode', () => {
       tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
     }, {
       Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
-      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking', verification_limitations: [] }),
       'fix:PR#1002 c1 (fable/high)': () => ({ fixed_count: 0, refuted_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), summary: 'could not fix', blocker: 'tests fail on the unmodified base' }),
     })
     const record = output.results.find((result) => result.issue === 2)
@@ -859,8 +886,8 @@ describe('milestone-pipeline subagent review mode', () => {
   test('subagent reviewer and fixer prompts carry the review contract', async () => {
     const { events } = await executeWorkflow({ tracks: [[2]] }, {
       Prep: () => ({ issues: [prepIssue()] }),
-      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
-      'review:PR#1002 c2 (fable/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }),
+      'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking', verification_limitations: [] }),
+      'review:PR#1002 c2 (fable/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean', verification_limitations: [] }),
     })
     const reviewPrompt = promptFor(events, 'review:PR#1002 c1 (fable/high)')
     const reReviewPrompt = promptFor(events, 'review:PR#1002 c2 (fable/high)')

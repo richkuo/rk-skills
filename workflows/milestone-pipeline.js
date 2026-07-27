@@ -184,7 +184,7 @@ const IMPLEMENT_SCHEMA = {
 
 const SUBAGENT_REVIEW_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'blocking_count', 'nonblocking_count', 'head_ref', 'head_sha', 'comment_url', 'summary'],
+  required: ['verdict', 'blocking_count', 'nonblocking_count', 'head_ref', 'head_sha', 'comment_url', 'summary', 'verification_limitations'],
   properties: {
     verdict: { type: 'string', enum: ['lgtm', 'needs_updates'], description: 'The pr-review-format verdict line of the posted review' },
     blocking_count: { type: 'integer', description: 'Items under ### Needs Fixing plus ### Requires Human Review' },
@@ -193,6 +193,11 @@ const SUBAGENT_REVIEW_SCHEMA = {
     head_sha: { type: 'string', description: 'Exact pull request head commit that was reviewed' },
     comment_url: { type: 'string', description: 'URL of the posted review comment' },
     summary: { type: 'string', description: 'One-paragraph review summary' },
+    verification_limitations: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Exact **Verification limitation:** lines from the posted review (empty array when none) — not findings, but must reach the operator report',
+    },
   },
 }
 
@@ -338,7 +343,7 @@ Review PR #${prNumber}, which closes issue #${issue}:
 
 Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` review comment.
 
-Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted verdict line), blocking_count (### Needs Fixing + ### Requires Human Review items), nonblocking_count (### Recommended Optional + ### Create Follow-up Issue items), the exact head_ref and head_sha you reviewed, comment_url, and a one-paragraph summary.`
+Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted verdict line), blocking_count (### Needs Fixing + ### Requires Human Review items), nonblocking_count (### Recommended Optional + ### Create Follow-up Issue items), verification_limitations (array of exact **Verification limitation:** lines from the posted comment — empty array when none; these are not findings but must be returned), the exact head_ref and head_sha you reviewed, comment_url, and a one-paragraph summary.`
 }
 
 function subagentFixPrompt(issue, prNumber, ex, validation, plan, commentUrl) {
@@ -382,8 +387,14 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
       return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: `cycle ${cycles} reviewer agent failed` }
     }
     head = { ref: review.head_ref, sha: review.head_sha }
-    notes.push(`cycle ${cycles} review (${nextReview.model}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
-    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
+    const limitations = Array.isArray(review.verification_limitations)
+      ? review.verification_limitations.filter((line) => typeof line === 'string' && line.trim())
+      : []
+    const limitationNote = limitations.length
+      ? ` · verification limitations: ${limitations.join(' | ')}`
+      : ''
+    notes.push(`cycle ${cycles} review (${nextReview.model}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}${limitationNote}`)
+    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking${limitationNote}`)
     if (review.verdict === 'lgtm' && review.blocking_count + review.nonblocking_count === 0) {
       return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: review.head_ref, head_sha: review.head_sha }
     }

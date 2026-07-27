@@ -50,6 +50,14 @@ const VERIFICATION_INSTRUCTIONS = [
     /state what you verified and how/i,
     'state what you verified and how',
   ],
+  [
+    /compare wording verbatim/i,
+    'compare wording verbatim',
+  ],
+  [
+    /paraphrase that silently drops a qualifier is a finding/i,
+    'dropped qualifier is a finding',
+  ],
 ]
 
 describe('PR review contract', () => {
@@ -138,8 +146,15 @@ describe('PR review contract', () => {
 
     expect(prompt).toMatch(/Verification limitation[\s\S]{0,40}is not a finding/i)
     expect(prompt).toMatch(
-      /skip it when classifying[\s\S]{0,120}approved with nothing to fix/i,
+      /treat LGTM plus only such lines as approved with nothing to fix/i,
     )
+    expect(prompt).toMatch(
+      /LGTM plus zero or more Verification limitation[\s\S]{0,300}STOP/i,
+    )
+    expect(prompt).toMatch(
+      /do not post a disposition comment and do not trigger a re-review/i,
+    )
+    expect(prompt).toMatch(/if CONFLICTING or DIRTY go to Phase 5/i)
   })
 
   test('terminal reports propagate Verification limitation lines to the operator', async () => {
@@ -155,6 +170,13 @@ describe('PR review contract', () => {
       )
       expect(body, path).toMatch(/omit (?:that |the )?field when none|omit when none/i)
     }
+
+    const pipeline = await read('workflows/milestone-pipeline.js')
+    expect(pipeline).toMatch(/verification_limitations/)
+    expect(pipeline).toMatch(
+      /Verification limitation[\s\S]{0,160}empty array when none/i,
+    )
+    expect(pipeline).toMatch(/verification limitations:/i)
   })
 
   test('contract inventory states finding-section stop semantics and both guards', async () => {
