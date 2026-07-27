@@ -88,6 +88,12 @@ flowchart LR
 
 Every new issue records direct predecessors as `**Depends on:** #<n>[, #<n>…] | none` for required code/product results and `**Runs after:** #<n>[, #<n>…] | none` for serialization without code inheritance. The `workflows/milestone-pipeline.js` dynamic workflow validates the full dependency graph before starting. Typed tracks use `after` for hard prerequisites and `runsAfter` for ordering-only predecessors. Unrelated tracks run concurrently; both successor types wait for stable predecessor review results. Hard successors build from verified predecessor heads, including a checked integration base for multiple heads, while ordering-only successors inherit no code. Legacy array tracks remain compatible and treat serial edges as hard dependencies. Re-running a partially completed milestone is safe: closed issues are skipped and issues that already have an open PR resume through `fix-pr-review-loop` instead of opening a duplicate; when a token target is set, a best-effort budget floor (`budgetFloor`, default 80k tokens) defers the remaining issues and returns partial results instead of dying at the hard ceiling, and each run posts its `runId` to the milestone's first issue so state survives losing the conversation. Reviews run as in-session subagent reviewer/fixer cycles by default (`reviewMode: 'subagent'` — no GitHub Actions dependency), or through the repo's `@claude` Action with `reviewMode: 'github'`. Bun regression tests execute the workflow through its async harness.
 
+### Utility skills
+
+| Skill | What it does |
+|-------|--------------|
+| `tldr` | Recaps the previous answer in plain English under 55 words, written for a slightly above-average 18-year-old, one sentence per line. |
+
 ### Review bot prerequisite
 
 The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships two options:
