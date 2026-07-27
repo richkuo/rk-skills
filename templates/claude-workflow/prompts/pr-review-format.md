@@ -29,7 +29,7 @@ LGTM precondition: only emit LGTM after you have completed every applicable item
 
 Materiality filter (apply before writing): drop only trivia — style and naming nits, subjective preferences, micro-optimizations, and hypothetical edge cases with no realistic trigger. Anything you would prefix with 'minor' or 'nit' is trivia. Dropped trivia is not mentioned anywhere, not even as a note. Do NOT drop a substantive finding just because it is non-blocking — a real but non-merge-blocking improvement belongs under ### Recommended Optional or ### Create Follow-up Issue, never silently discarded.
 
-Safety carve-out (overrides the materiality filter and any confidence threshold): any finding that touches money, data integrity, security, or an auto-protective mechanism (kill switch, circuit breaker, stop-loss, reconciliation, position or fill accounting) must always be surfaced, even at low confidence or small magnitude. If you cannot confirm such a finding is real, surface it under ### Requires Human Review rather than dropping it.
+Safety carve-out (overrides the materiality filter and any confidence threshold): any finding that touches money, data integrity, security (including authentication and credentials), or an auto-protective mechanism must always be surfaced, even at low confidence or small magnitude. If you cannot confirm such a finding is real, surface it under ### Requires Human Review rather than dropping it.
 
 Within each non-empty section use a numbered list; omit any section that has no items. Each item is a single bold one-sentence title that states the item, then a newline, then a short description containing only the critical details (file:line and why it matters).
 

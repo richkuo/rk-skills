@@ -95,8 +95,11 @@ describe('PR review contract', () => {
       expect(source, path).toMatch(/\bmoney\b/i)
       expect(source, path).toMatch(/data integrity/i)
       expect(source, path).toMatch(/\bsecurity\b/i)
+      expect(source, path).toMatch(/authentication and credentials/i)
       expect(source, path).toMatch(/auto-protective mechanism/i)
-      expect(source, path).not.toMatch(/Better Auth|MMKV|SecureStore|never-persist-absolute-paths/i)
+      expect(source, path).not.toMatch(
+        /Better Auth|MMKV|SecureStore|never-persist-absolute-paths|stop-loss|position or fill/i,
+      )
     }
   })
 
@@ -161,7 +164,7 @@ describe('PR review contract', () => {
       /treat LGTM plus only such lines as approved with nothing to fix/i,
     )
     expect(prompt).toMatch(
-      /LGTM plus zero or more Verification limitation[\s\S]{0,300}STOP/i,
+      /LGTM plus zero or more Verification limitation[\s\S]{0,300}triggering comment carried no extra instructions[\s\S]{0,200}STOP/i,
     )
     expect(prompt).toMatch(
       /do not post a disposition comment and do not trigger a re-review/i,
@@ -192,8 +195,16 @@ describe('PR review contract', () => {
     // Both review modes must request and fold the field — subagent schema and github-loop schema.
     expect(pipeline).toMatch(/SUBAGENT_REVIEW_SCHEMA[\s\S]{0,400}verification_limitations/)
     expect(pipeline).toMatch(/REVIEW_LOOP_SCHEMA[\s\S]{0,400}verification_limitations/)
-    expect(pipeline).toMatch(
-      /function reviewLoopPrompt[\s\S]*?verification_limitations \(array of exact \*\*Verification limitation:\*\*/,
+    const reviewLoopStart = pipeline.indexOf('function reviewLoopPrompt')
+    expect(reviewLoopStart).toBeGreaterThan(-1)
+    const afterReviewLoop = pipeline.slice(
+      reviewLoopStart + 'function reviewLoopPrompt'.length,
+    )
+    const nextFn = afterReviewLoop.search(/\nfunction /)
+    const reviewLoopBody =
+      nextFn === -1 ? afterReviewLoop : afterReviewLoop.slice(0, nextFn)
+    expect(reviewLoopBody).toMatch(
+      /verification_limitations \(array of exact \*\*Verification limitation:\*\*/,
     )
     expect(pipeline).toMatch(
       /githubLimitations\.length && !String\(review\.summary/,

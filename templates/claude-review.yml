@@ -164,12 +164,11 @@ jobs:
 
             Safety carve-out (overrides the materiality filter and any
             confidence threshold): any finding that touches money, data
-            integrity, security, or an auto-protective mechanism (kill switch,
-            circuit breaker, stop-loss, reconciliation, position or fill
-            accounting) must always be surfaced, even at low confidence or
-            small magnitude. If you cannot confirm such a finding is real,
-            surface it under `### Requires Human Review` rather than dropping
-            it.
+            integrity, security (including authentication and credentials),
+            or an auto-protective mechanism must always be surfaced, even at
+            low confidence or small magnitude. If you cannot confirm such a
+            finding is real, surface it under `### Requires Human Review`
+            rather than dropping it.
 
             Within each non-empty section use a numbered list. Each item is a
             single bold one-sentence title stating the item, then a newline,
