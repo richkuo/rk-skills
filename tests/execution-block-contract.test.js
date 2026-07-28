@@ -983,6 +983,15 @@ describe('milestoneplan pre-flight contract', () => {
     // Every score-derived recommendation carries its derivation, so the fix is
     // checkable without recomputing the score.
     expect(body).toMatch(/followed in parentheses by the band\/tertile derivation/)
+    // The no-rows skip-line's "naming all N" count must track the live vocabulary size,
+    // not a number that can go stale when a severity is added or removed.
+    const spelledOut = { four: 4, five: 5, six: 6, seven: 7 }
+    const skipLine = body.match(/naming all (four|five|six|seven) would restate it/)
+    expect(skipLine, 'no-rows skip-line sentence not found').not.toBeNull()
+    expect(
+      spelledOut[skipLine[1]],
+      `skip-line says "all ${skipLine[1]}" but the Severity vocabulary has ${findingsSeverities(body).length} entries`,
+    ).toBe(findingsSeverities(body).length)
     for (const column of ['Severity', '#', 'Finding', 'Recommended fix', 'Route']) {
       expect(body, `findings-table column "${column}" is undefined`).toMatch(
         new RegExp(`^- \\*\\*${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\* —`, 'm'),
