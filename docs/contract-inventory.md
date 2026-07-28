@@ -26,6 +26,9 @@ This inventory records every shared pipeline rule those families restate in pros
 | `skills/validate-issue-loop/SKILL.md` | Validation stop conditions; hands off review loop |
 | `skills/validate-issue/SKILL.md` | Base validator — inventored; does **not** restate loop pipeline stop rules |
 | `skills/fable-validate/SKILL.md` | Fable wrapper for validate-issue — inventored; does **not** restate loop pipeline stop rules |
+| `skills/fix-pr-review/SKILL.md` | Fixer classifier — states the `**Verification limitation:**` not-a-finding carve-out |
+
+Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not listed here; they appear only in the rule rows below that name them.
 
 ## Shared pipeline rules
 

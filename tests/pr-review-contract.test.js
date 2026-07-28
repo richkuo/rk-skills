@@ -90,6 +90,13 @@ describe('PR review contract', () => {
       )
       expect(source, path).toMatch(/not a finding/i)
       expect(source, path).toMatch(/safety carve-out still applies/i)
+      // The blocking route is scoped to fetch-capable harnesses — a network-less
+      // route must emit only the non-blocking line, or autonomous loops livelock.
+      expect(source, path).toMatch(/reachable in principle but unavailable this run/i)
+      expect(source, path).toMatch(/fixed property of the harness/i)
+      expect(source, path).toMatch(
+        /no network or fetch tool[\s\S]{0,250}never a blocking item/i,
+      )
       expect(source, path).not.toMatch(
         /primary source is unavailable[\s\S]{0,300}Recommended Optional/i,
       )

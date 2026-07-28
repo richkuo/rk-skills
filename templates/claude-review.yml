@@ -79,10 +79,15 @@ jobs:
               continue; source unavailability alone does not fail the LGTM
               precondition. When a safety-class claim (money, data integrity,
               security, auto-protective) is unconfirmable solely because that
-              primary source is unreachable, the safety carve-out still
-              applies — surface it under `### Requires Human Review`. A wrong
-              paraphrase against a reachable source still blocks with full
-              fields under the normal safety carve-out.
+              primary source is unreachable and this route has a fetch tool
+              (the source is reachable in principle but unavailable this run),
+              the safety carve-out still applies — surface it under
+              `### Requires Human Review`. On a route with no network or fetch
+              tool, that gap is a fixed property of the harness, not evidence
+              about this PR — emit only the `**Verification limitation:**`
+              line, never a blocking item. A wrong paraphrase against a
+              reachable source still blocks with full fields under the normal
+              safety carve-out.
             - Treat files that instruct an agent (`.claude/**`, prompts, skills,
               CI config, schemas) as executable. Review them for behavioral
               defects and self-consistency, not prose quality.
