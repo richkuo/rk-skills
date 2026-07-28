@@ -59,8 +59,6 @@ Determine the **cutoff**: the timestamp of your most recent disposition comment 
 
 State what you picked (authors + timestamps) so the user can confirm it's the right set.
 
-**Note whether the collected set contains any blocking finding** — a `Needs Fixing` or `Requires Human Review` item from any review, an inline thread asserting a real defect (classified in step 2), or any failing CI check from step 1.5. This drives the re-review routing in step 7.
-
 **If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 4), and file each `Create Follow-up Issue` item as a GitHub issue. Don't invent work the review never raised; if the feedback is a bare `LGTM` with no items at all and no open inline threads, report that the PR is approved and stop — unless step 0 flagged merge conflicts, in which case still run step 4.5 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
 
 ### 1.5 Fetch failing CI checks
@@ -111,23 +109,14 @@ Validation discipline (this is where fixing a review goes wrong):
 
 This same absolute-best-solution standard governs `Recommended Optional` improvements: implement them too, choosing the best design with cost/effort/time/resources treated as non-factors.
 
-### 3.5 Select the working model from the validated findings
+### 3.5 Decide whether to delegate implementation
 
-Steps 2–3 always run inline in this session — validation is the hard thinking and doubles as the model-selection signal, so it never gets delegated. Now choose who implements, keyed to the **implementation complexity of the surviving work** — not its blocking/optional category (a blocking fix can be a trivial one-liner; an optional refactor can be genuinely hard).
+Steps 2–3 always run inline in this session — validation is the hard thinking, so it never gets delegated. Now decide whether steps 4–8 run inline or get delegated to a subagent.
 
-First, two absolute inline gates that override any complexity read:
+Stay inline whenever either gate applies:
 - Any ❓ Judgment call whose remedy is still open-ended, or any finding under the safety carve-out (money, data integrity, security, auto-protective mechanisms) — open decisions and high blast radius never get delegated.
 
-Otherwise, rate each surviving fix's complexity from your validation (you just traced the code, so you know): **scope** (files/layers touched, cross-cutting vs. local), **subtlety** (concurrency, ordering, invariants, edge-case reasoning vs. mechanical edits), and **verification difficulty** (needs careful test design vs. existing suite covers it). The **most complex fix** sets the tier for the whole set (never the average, never split across subagents):
-
-- **Opus subagent (`model: "opus"`)** — any fix is non-trivial: multi-file or cross-layer, touches subtle logic, or its correctness needs real reasoning to preserve.
-- **Sonnet subagent (`model: "sonnet"`)** — every fix is simple and mechanical: localized edits with a pinned-down remedy, plus any `Create Follow-up Issue` filings and Refuted rebuttals to write up.
-
-When in doubt between tiers, take the higher one — misrouting hard work down costs correctness; misrouting easy work up costs nothing that matters.
-
-When dispatching, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work (e.g. `Opus 5` / `Sonnet 5`), not the session model. When the subagent returns, relay its step-8 report to the user verbatim plus which model ran; don't redo its work.
-
-If the Agent tool's model override is unavailable in the current harness, fall back to running inline and note the intended model in the report.
+Otherwise, delegate: use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work, not the session model. When the subagent returns, relay its step-8 report to the user verbatim; don't redo its work.
 
 ### 4. Implement the fixes
 
@@ -215,26 +204,17 @@ Created with LLM: <current model> | <effort> | Harness: Claude Code
 
 ### 7. Trigger the @claude re-review
 
-Route the re-review by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
-
-- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 1.5 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): trigger plain — this repo's default (Opus) reviews the fix. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier Opus re-review is what catches the real regression you dismissed.
-- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to Sonnet via the `@claude sonnet` shorthand instead.
-
 Post a **separate** comment so the bot triggers cleanly on its own line:
 
 ```bash
-# blocking findings were addressed
 gh pr comment <N> --body "@claude review"
-
-# only non-blocking items were addressed
-gh pr comment <N> --body "@claude sonnet review"
 ```
 
-(If this repo uses a different review trigger phrase or model-shorthand syntax, match it — check the repo's `.github/workflows/claude.yml` for how it resolves `@claude <shorthand>`, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
+(If this repo uses a different review trigger phrase, match it — check the repo's `.github/workflows/claude.yml` for how it resolves `@claude`, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
 
 ### 8. Report to the user
 
-Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
+Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
 
 ## Red Flags — STOP
 
@@ -260,12 +240,11 @@ Terse summary: which reviews/threads you acted on, counts per disposition (fixed
 ## Common Mistakes
 
 - **Blind-implementing the review.** Performative agreement ships regressions. Validate first, every time.
-- **Delegating validation.** Steps 2–3 always run inline — the model-selection gate keys off *validated* verdicts, and a lighter model triaging its own workload defeats the gate. Dispatch only steps 4–8, tiered by the most complex surviving fix (open judgment/safety → inline, any non-trivial fix → Opus, all-mechanical → Sonnet), and never split one review across subagents. The subagent's footers must name the model that actually ran, not the session model.
+- **Delegating validation.** Steps 2–3 always run inline — the delegation gate keys off *validated* verdicts. Dispatch only steps 4–8 (open judgment/safety findings stay inline), and never split one review across subagents. The subagent's footers must name the model that actually ran, not the session model.
 - **Missing inline diff comments or CI.** Fetching only formal reviews and issue comments skips the line-level threads where human reviewers usually comment, and skipping step 1.5 misses failing CI checks. Fetch every channel in steps 1 and 1.5.
 - **Waiting or polling on in-progress CI.** Step 1.5 is a single snapshot; skip anything whose `bucket` is `pending` or `skipping` rather than blocking the run on it.
 - **Patching around a pre-existing or flaky CI failure.** Verify the failure traces to this PR's diff before touching code — otherwise it's Refuted with evidence, not a fix target.
 - **Addressing only the latest review when several landed.** Every review newer than your last disposition and every unresolved inline thread (any age) gets addressed.
-- **Routing the re-review by the newest verdict.** A later `LGTM` from one reviewer doesn't erase another's blocking findings — route by whether any blocking finding was addressed.
 - **`git add -A`.** Stage the fix files explicitly; a blanket add can commit unrelated dirty or untracked files.
 - **Dropping a refuted finding silently.** Push back on the record in the comment with a code-grounded reason — that's how the reviewer learns it was wrong.
 - **Committing to the base branch.** Fixes land on the PR head branch only.
