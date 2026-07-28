@@ -143,7 +143,7 @@ The one milestone-wide exception is every step-1 **blocking unknown** (incomplet
 
 Flag: an under-band build model; `fableplan: Yes` outside Capability 2; `fableplan: No` on a Capability-2 issue **whose build model is not already Fable 5** (a Cap-2 issue deliberately stamped Fable 5 has planning inherent — the same "No (planning inherent)" the band table records for Capability 3 — so do not recommend adding a fableplan stage in front of a Fable build, while Cap-2 + Opus with `fableplan: No` stays a finding); a **build** effort *below* the Volume tertile derived from the score (never above — over-tertile is an observation, a findings-table `Over-band` row; Validate effort and Plan effort are judged by their own rules below, never this tertile — and a Fable build stamped `low` is the discretionary Fable-only tier only on **Capability 3** with Volume ≤ 7, i.e. scores `[C75]`–`[C82]`, one tier below that band's `medium` floor: never flag those, but a Fable `low` on any other Capability band or on Capability 3 at higher Volume is under-tertile and stays a finding); a rationale line whose published Volume disagrees with `score mod 25`; Validate effort that breaks its own rules — vocabulary is only `medium | high` (never `xhigh`, and `low` is outside the vocabulary: the prep schema maps `low→medium` with no runtime log, so the stamp lies about what runs), default is high, and `medium` is on-rule only for Capability 0 with Volume ≤ 7 (so a `[C90]` at `medium` is off-rule); a non-Fable build stamped `low`/`medium` (the pipeline raises these to `high` and **logs** the normalization — say so, since the stamp lies about what will run); a `Plan effort` on a `fableplan: No` issue (inert — never read); a `fableplan: Yes` issue with no `Plan effort` (defaults to high, which is fine — report as informational, not a finding).
 
-**Distinguish an override from a slip.** A body that explicitly records a deliberate departure ("deliberate override — C75 is Capability 3, where the band prescribes Fable 5") is a decision, not drift: report it under *Deliberate overrides*, never as a defect. An unexplained under-band departure is a finding. An unexplained over-band departure — model or build effort — is an observation, not a defect and never a recommendation to downgrade. This distinction is the point of the check — a milestone where every deviation is annotated is healthy; one where they are silent is not.
+**Distinguish an override from a slip.** A body that explicitly records a deliberate departure ("deliberate override — C75 is Capability 3, where the band prescribes Fable 5") is a decision, not drift: report it as a findings-table `Override` row, never as a defect. An unexplained under-band departure is a finding. An unexplained over-band departure — model or build effort — is an observation, not a defect and never a recommendation to downgrade. This distinction is the point of the check — a milestone where every deviation is annotated is healthy; one where they are silent is not.
 
 **(c) Graph.** Resolve every referenced issue, including ones outside the milestone, until the graph closes. Flag: references to issues that do not exist; self-references; a predecessor listed in both fields; duplicates within a list; a cycle across the union of both edge kinds (show the path); a **hard** edge to an issue that is closed **without** a merged PR (unsatisfiable as filed); a hard edge into the resume bucket (its PR must merge first); an **ordering-only** edge into either the resume bucket or a closed predecessor (a different disposition in both cases — see below, not the same as the hard one).
 
@@ -205,7 +205,7 @@ Report the per-model agent mix (how many agents land on Fable 5 versus Opus vers
 
 Lead with the verdict, then the evidence. Terse — this is a decision aid, not a report.
 
-**Every report renders two markdown tables, always, with no exceptions:** the **findings table** below and the **per-issue table** at the end of this step. Never render either as prose, as bullet lists, or as a code block — a real pipe-delimited markdown table both times, so a reader scans a column instead of parsing sentences. A milestone with no findings still prints the findings table's header with a single `— | — | none | — | —` row rather than omitting it; "no table" and "an empty table" read identically as prose but differently as evidence that the audit ran. The header block above the tables stays a code block; it is a fixed-shape summary, not a row set.
+**Every report renders two markdown tables, always, with no exceptions:** the **findings table** below and the **per-issue table** at the end of this step. Never render either as prose, as bullet lists, or as a code block — a real pipe-delimited markdown table both times, so a reader scans a column instead of parsing sentences. A milestone with no findings still prints the findings table's header and separator with a single placeholder row `| — | — | none | — | — |` rather than omitting the table; "no table" and "an empty table" read identically as prose but differently as evidence that the audit ran. The header block above the tables stays a code block; it is a fixed-shape summary, not a row set.
 
 ```
 <milestone> — <GO | GO WITH FINDINGS | NO-GO>
@@ -223,19 +223,18 @@ Run size: <planned> planned / <ceiling> retry-aware / <worst> <worst-label>
 Per-model mix (<bound: planned | retry-aware | worst>): Fable 5 × <n> · Opus × <n> · Sonnet × <n> · session(prep) × <n>  (from the attribution table; mode-named; retries → Fable 5)
 ```
 
-Then the **findings table** — every finding the audit produced, one row each, most severe first:
+Then the **findings table** — every finding the audit produced, one row each, most severe first. The template below is the literal output shape: a real markdown table, copied as-is (header, separator row, then the finding rows):
 
-```
-Severity | # | Finding | Recommended fix | Route
-```
+| Severity | # | Finding | Recommended fix | Route |
+|---|---|---|---|---|
 
-- **Severity** — exactly one of `Blocking`, `Blocked — excluded`, `Non-blocking`, `Informational`, `Over-band`, `Override`, spelled that way. Order the rows in that sequence; within a severity, order by issue number.
+- **Severity** — exactly one of `Blocking`, `Blocked — excluded`, `Non-blocking`, `Informational`, `Over-band`, `Override`, spelled that way. The one exception is the no-findings placeholder row above, whose Severity cell is `—` — it asserts the absence of findings, not a severity. Order the rows in that sequence; within a severity, order by issue number.
 - **#** — the issue that owns the finding (step 2's ownership rule: an edge finding belongs to the endpoint this run would dispatch). Use `all` for a finding that holds across every issue, and name the issues in the Finding cell when it holds across several but not all.
 - **Finding** — what is wrong, in one sentence, quoting the stamped value where there is one. A `Blocked — excluded` row also names the hard descendants it takes with it and what would unblock it (`also excludes #a #b → unblocks when PR #X merges`). An `Informational` row names why this run never reads it, and what would make it blocking.
-- **Recommended fix** — the corrected value, not a description of it (`Effort: xhigh`, `Depends on: #12`). `Over-band` and `Override` rows carry `none — deliberate`; an `Informational` row on a skip-bucket issue carries `none — never re-enters`, since step 6 forbids recommending a change to a body this run will never read.
+- **Recommended fix** — the corrected value, not a description of it, followed in parentheses by the band/tertile derivation that produced it, so the reader can check the recommendation without recomputing the score (`Effort: xhigh (Volume 21 → 16–24 tertile)`, `Model: Fable 5 (C81 → Capability 3)`). A Validate-effort fix cites Validate effort's own medium-or-high rule, never the Volume tertile; a fix that does not derive from the score (an edge correction like `Depends on: #12`) cites the evidence instead (`(hard dependency stated in body)`). `Over-band` and `Override` rows carry `none — deliberate`; an `Informational` row on a skip-bucket issue carries `none — never re-enters`, since step 6 forbids recommending a change to a body this run will never read.
 - **Route** — the skill that owns the fix, per step 6: `execution-plan-review`, `validate-issue`, `milestone-workflow`, or `—` when no write clears it.
 
-Print one line under the table naming the severities that produced no rows (`No Blocking, Blocked — excluded, or Informational rows.`), so an absent severity reads as audited-and-clean rather than forgotten.
+Print one line under the table naming the severities that produced no rows (`No Blocking, Blocked — excluded, or Informational rows.`), so an absent severity reads as audited-and-clean rather than forgotten. Skip this line when the table is only the placeholder row — the placeholder already states that every severity produced nothing, and naming all six would restate it.
 
 **Every severity the verdict table below can assign has a row class in the findings table, and the mapping is fixed:** a **NO-GO** row prints as `Blocking`, **Blocked — excluded** and **Non-blocking** and **Informational** under their own names, and a *no finding* row prints nowhere by definition. A severity with no row class is a finding that silently vanishes — which is exactly what would happen to every bucket-demoted finding without the `Informational` class, against step 2's requirement that a demoted resume finding be reported rather than dropped. `Over-band` and `Override` are not severities the verdict table assigns; they are step 2(b) observations and issue-recorded decisions, and they never affect the verdict.
 
@@ -290,9 +289,10 @@ An **over-band build model or over-tertile build effort is not in this table at 
 
 Then the **per-issue table**, always, even when the findings table is empty and the verdict is a clean GO — **one row per issue in the milestone, plus one context row per distinct out-of-milestone predecessor** that a milestone issue names (so a v0 number in a v1 `Depends on` is look-up-able). Closed and resume rows are context, not work; external rows are context too. It is what the reader checks the verdict against, so a GO is never delivered without it:
 
-```
-# | State | Bucket | C | Depends on | Runs after | Build | Effort | Validate | fableplan | Plan | 1st review
-```
+The template below is the literal output shape — a real markdown table, copied as-is:
+
+| # | State | Bucket | C | Depends on | Runs after | Build | Effort | Validate | fableplan | Plan | 1st review |
+|---|---|---|---|---|---|---|---|---|---|---|---|
 
 **Only the runnable build-bucket rows are what the run will execute.** Mark every other row so the table alone distinguishes dispatched from not — never present a closed, resume, excluded, or external row as pending pipeline work. Use the `Bucket` cell: `build` for runnable, `build (excluded)` for a *Blocked — excluded* subtree member (its bucket is still build, but it is not dispatched), `resume`, `skip`, or `external` for an out-of-milestone predecessor (not in this milestone's buckets — state and merge facts still decide cross-milestone severity rows). Mark inferred values as inferred and missing ones as *missing* (never blank, never a guessed default), and note that the pipeline would route a missing Execution block to `model fable, effort high`. A milestone with no external references prints no `external` rows.
 
@@ -361,7 +361,7 @@ Milestone-level readiness is the whole scope. Per-issue correctness belongs to t
 | An ordering-only edge points into the resume bucket | Informational, not blocked — the pre-pipeline `fix-pr-review-loop` satisfies it; report the sequencing |
 | An ordering-only edge points at a closed predecessor whose PR never merged | Satisfied, not excluded — a closed issue is dropped from the plan, so there is no work left to overlap |
 | Finding is body content (acceptance criteria, problem statement, `[C..]` prefix) | Route to `validate-issue`, not `execution-plan-review` — the latter only edits Execution block lines |
-| A build-bucket issue hard-depends on a resume- or skip-bucket issue | Not a NO-GO — exclude that issue and its hard descendants, report them under *Blocked*, and give the verdict on what still runs |
+| A build-bucket issue hard-depends on a resume- or skip-bucket issue | Not a NO-GO — exclude that issue and its hard descendants, report them as findings-table `Blocked — excluded` rows, and give the verdict on what still runs |
 | Every build-bucket issue ends up excluded | NO-GO — the exclusions left nothing runnable |
 | An issue is stamped a model or build effort above its band / Volume tertile | Observation, never a downgrade recommendation — the band is a floor for both. Print it as a findings-table `Over-band` row; annotated, it is an `Override` row |
 | A closing PR reference's openness cannot be established after `gh pr view -R` (unreadable cross-repo, or the lookup errored/throttled) | Blocking unknown → **NO-GO** — never assume open (would resume a dead PR) and never assume closed (would miss a sidebar-linked open PR). A readable cross-repo reference resolves to open or not-open via that lookup; it is not undecidable |

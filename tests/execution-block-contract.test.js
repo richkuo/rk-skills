@@ -960,8 +960,24 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/A milestone with no findings still prints the findings table's header/)
     expect(body).toMatch(/Then the \*\*per-issue table\*\*, always, even when the findings table is empty/)
     // Column contracts, so a table cannot be printed with the columns silently dropped.
-    expect(body).toMatch(/^Severity \| # \| Finding \| Recommended fix \| Route$/m)
-    expect(body).toMatch(/^# \| State \| Bucket \| C \| Depends on \| Runs after \| Build \| Effort \| Validate \| fableplan \| Plan \| 1st review$/m)
+    // Each template must be a REAL markdown table (header + separator row, edge pipes),
+    // never a fenced single-line header — the example must render as what the prose mandates.
+    expect(body).toMatch(/^\| Severity \| # \| Finding \| Recommended fix \| Route \|\n\|(?:---\|){5}$/m)
+    expect(body).toMatch(/^\| # \| State \| Bucket \| C \| Depends on \| Runs after \| Build \| Effort \| Validate \| fableplan \| Plan \| 1st review \|\n\|(?:---\|){12}$/m)
+    // The no-findings placeholder is a full pipe-delimited row, carved out of the
+    // Severity vocabulary explicitly so the two rules cannot conflict.
+    expect(body).toMatch(/`\| — \| — \| none \| — \| — \|`/)
+    expect(body).toMatch(/no-findings placeholder row above, whose Severity cell is `—`/)
+    // Routing sentences must point at row classes that exist — the report has no
+    // *Deliberate overrides* or bare *Blocked* section; those live as `Override` and
+    // `Blocked — excluded` findings-table rows.
+    expect(body).not.toMatch(/Deliberate overrides/)
+    expect(body).not.toMatch(/report them under \*Blocked\*/)
+    expect(body).toMatch(/report it as a findings-table `Override` row/)
+    expect(body).toMatch(/report them as findings-table `Blocked — excluded` rows/)
+    // Every score-derived recommendation carries its derivation, so the fix is
+    // checkable without recomputing the score.
+    expect(body).toMatch(/followed in parentheses by the band\/tertile derivation/)
     for (const column of ['Severity', '#', 'Finding', 'Recommended fix', 'Route']) {
       expect(body, `findings-table column "${column}" is undefined`).toMatch(
         new RegExp(`^- \\*\\*${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\* —`, 'm'),
@@ -1123,8 +1139,10 @@ describe('milestoneplan pre-flight contract', () => {
   test('publishes the per-issue routing table with every Execution-block field', () => {
     // The table is the deliverable: every field the pipeline reads has a column, and
     // the bucket column is what keeps a non-dispatched row from reading as pending work.
-    const header = fencedBlocks(body).find((code) => code.includes('1st review'))
-    expect(header, 'no per-issue table header found').toBeDefined()
+    const header = body.match(/^\| # \| State \|.*\| 1st review \|$/m)?.[0]
+    expect(header, 'no per-issue table header row found').toBeDefined()
+    // The header is a markdown table row, never a fenced code block.
+    expect(fencedBlocks(body).some((code) => code.includes('1st review'))).toBe(false)
     for (const column of ['State', 'Bucket', 'Depends on', 'Runs after', 'Build', 'Effort', 'Validate', 'fableplan', 'Plan', '1st review']) {
       expect(header, `routing table is missing the ${column} column`).toContain(column)
     }
