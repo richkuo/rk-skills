@@ -574,7 +574,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/Excluded issues re-enter the runnable set once their blocker clears/)
     expect(body).toMatch(
-      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Route: —`/,
     )
   })
 
@@ -685,7 +685,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).not.toMatch(/keep the recommendation \(step 6\) and name the re-entry/)
     expect(body).toMatch(/A \*\*resume-bucket\*\* stamp\/band contradiction \| Non-blocking/)
     expect(body).toMatch(
-      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Route: —`/,
     )
   })
 
@@ -828,11 +828,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(findingsSeverities(body), 'override must not be a findings row class').not.toContain('Override')
     expect(body).toMatch(/Over-band observations and annotated deliberate overrides are not in this table at all/)
     expect(body).toMatch(/print nothing for it — never a finding, never a row/)
-    // The two no-stamp row classes have defined Recommended-fix values, never improvised.
-    expect(body).toMatch(/`none — unblocks when PR #X merges`/)
-    expect(body).toMatch(/`none — never re-enters`/)
-    expect(body).toMatch(/`none — satisfied by sequencing`/)
-    expect(body).toMatch(/`none — not dispatched this run` plus the re-entry condition/)
+    // The table carries no fix values at all — the routed skill derives them.
+    expect(body).toMatch(/The table never prints a corrected value/)
     // The failure-mode table must agree with the floor rule, not call it a defect.
     expect(body).toMatch(/\| An issue is stamped a model or build effort above its band \/ Volume tertile \| Observation, never a downgrade recommendation/)
   })
@@ -974,7 +971,7 @@ describe('milestoneplan pre-flight contract', () => {
     // Column contracts, so a table cannot be printed with the columns silently dropped.
     // Each template must be a REAL markdown table (header + separator row, edge pipes),
     // never a fenced single-line header — the example must render as what the prose mandates.
-    expect(body).toMatch(/^\| Severity \| # \| Finding \| Recommended fix \| Route \|\n\|(?:---\|){5}$/m)
+    expect(body).toMatch(/^\| Severity \| # \| Finding \| Route \|\n\|(?:---\|){4}$/m)
     expect(body).toMatch(/^\| # \| State \| Bucket \| C \| Depends on \| Runs after \| Build \| Effort \| Validate \| fableplan \| Plan \| 1st review \|\n\|(?:---\|){12}$/m)
     // A clean milestone prints the header and separator with NO rows beneath — never a
     // placeholder row, which would have to violate its own columns' value contracts.
@@ -988,9 +985,10 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).not.toMatch(/Deliberate overrides/)
     expect(body).not.toMatch(/report them under \*Blocked\*/)
     expect(body).toMatch(/report them as findings-table `Blocked — excluded` rows/)
-    // Every score-derived recommendation carries its derivation, so the fix is
-    // checkable without recomputing the score.
-    expect(body).toMatch(/followed in parentheses by the band\/tertile derivation/)
+    // The table is display-only: it names defects and owners, never fix values —
+    // no "Recommended fix" (or renamed equivalent) column may return.
+    expect(body).not.toMatch(/Recommended fix/)
+    expect(body).toMatch(/the routed skill derives it from the same score formula/)
     // The empty-table line's "names all N" count must track the live vocabulary size,
     // not a number that can go stale when a severity is added or removed.
     const spelledOut = { four: 4, five: 5, six: 6, seven: 7 }
@@ -1000,14 +998,10 @@ describe('milestoneplan pre-flight contract', () => {
       spelledOut[emptyLine[1]],
       `line says "all ${emptyLine[1]}" but the Severity vocabulary has ${findingsSeverities(body).length} entries`,
     ).toBe(findingsSeverities(body).length)
-    // Every no-value cell has a defined form — `add — …` or `none — …`, never improvised.
-    expect(body).toMatch(/`add — <what is missing>`/)
-    expect(body).toMatch(/`add — acceptance criteria`/)
-    expect(body).toMatch(/`none — <what disposes of the finding>`/)
     // The Route vocabulary is exactly step 6's fix owners — no third destination.
     expect(body).toMatch(/- \*\*Route\*\* — the skill that owns the fix, per step 6: `execution-plan-review`, `validate-issue`, or `—`/)
     expect(body).toMatch(/step 6's only two fix owners; never route a finding anywhere else/)
-    for (const column of ['Severity', '#', 'Finding', 'Recommended fix', 'Route']) {
+    for (const column of ['Severity', '#', 'Finding', 'Route']) {
       expect(body, `findings-table column "${column}" is undefined`).toMatch(
         new RegExp(`^- \\*\\*${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\* —`, 'm'),
       )
@@ -1186,7 +1180,7 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/v0 number in a v1 `Depends on` is look-up-able|closed predecessor named in a runnable issue's `Depends on`/i)
     expect(body).toMatch(/on a \*\*build-bucket issue that is runnable, \*Blocked — excluded\*, or resume-bucket\*\*/i)
     expect(body).toMatch(
-      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Route: —`/,
     )
     expect(body).toMatch(/would edit a body this run never reads/i)
     // An all-closed milestone is complete, not a wall of findings.
