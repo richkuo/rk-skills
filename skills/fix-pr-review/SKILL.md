@@ -111,23 +111,14 @@ Validation discipline (this is where fixing a review goes wrong):
 
 This same absolute-best-solution standard governs `Recommended Optional` improvements: implement them too, choosing the best design with cost/effort/time/resources treated as non-factors.
 
-### 3.5 Select the working model from the validated findings
+### 3.5 Decide whether to delegate implementation
 
-Steps 2–3 always run inline in this session — validation is the hard thinking and doubles as the model-selection signal, so it never gets delegated. Now choose who implements, keyed to the **implementation complexity of the surviving work** — not its blocking/optional category (a blocking fix can be a trivial one-liner; an optional refactor can be genuinely hard).
+Steps 2–3 always run inline in this session — validation is the hard thinking, so it never gets delegated. Now decide whether steps 4–8 run inline or get delegated to a subagent. Delegation never picks a model — the subagent inherits the session model; its value is a fresh context window for implementation when the session is already long. If a parent harness (a workflow or another skill) wants a specific model for implementation, it passes one down through its own dispatch — this skill doesn't choose.
 
-First, two absolute inline gates that override any complexity read:
+Stay inline when this gate applies:
 - Any ❓ Judgment call whose remedy is still open-ended, or any finding under the safety carve-out (money, data integrity, security, auto-protective mechanisms) — open decisions and high blast radius never get delegated.
 
-Otherwise, rate each surviving fix's complexity from your validation (you just traced the code, so you know): **scope** (files/layers touched, cross-cutting vs. local), **subtlety** (concurrency, ordering, invariants, edge-case reasoning vs. mechanical edits), and **verification difficulty** (needs careful test design vs. existing suite covers it). The **most complex fix** sets the tier for the whole set (never the average, never split across subagents):
-
-- **Opus subagent (`model: "opus"`)** — any fix is non-trivial: multi-file or cross-layer, touches subtle logic, or its correctness needs real reasoning to preserve.
-- **Sonnet subagent (`model: "sonnet"`)** — every fix is simple and mechanical: localized edits with a pinned-down remedy, plus any `Create Follow-up Issue` filings and Refuted rebuttals to write up.
-
-When in doubt between tiers, take the higher one — misrouting hard work down costs correctness; misrouting easy work up costs nothing that matters.
-
-When dispatching, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually doing the work (e.g. `Opus 5` / `Sonnet 5`), not the session model. When the subagent returns, relay its step-8 report to the user verbatim plus which model ran; don't redo its work.
-
-If the Agent tool's model override is unavailable in the current harness, fall back to running inline and note the intended model in the report.
+Otherwise, delegate **only when the session is already long** — enough context has been consumed that a fresh window genuinely helps implementation; on a short session, run steps 4–8 inline and skip the handoff cost. When delegating, use the Agent tool (`subagent_type: general-purpose`, synchronous — `run_in_background: false`) with a prompt that tells the subagent to: read this SKILL.md file and execute steps 4 through 8 exactly (skipping steps 0–3.5 — no re-validation, no recursive dispatch), for PR `<N>`, using the validated findings and per-finding verdicts you produced in steps 2–3 (paste them into the prompt, including the pinned-down remedies for Confirmed/Partial findings and the derived best-solution designs for any Optional items, so it implements your analysis rather than re-deciding). The subagent's **LLM Attribution Footers** (commit + disposition comment) must name the model actually running the subagent (normally the same session model; whatever a parent harness passed down otherwise). When the subagent returns, relay its step-8 report to the user verbatim; don't redo its work.
 
 ### 4. Implement the fixes
 
@@ -260,7 +251,7 @@ Terse summary: which reviews/threads you acted on, counts per disposition (fixed
 ## Common Mistakes
 
 - **Blind-implementing the review.** Performative agreement ships regressions. Validate first, every time.
-- **Delegating validation.** Steps 2–3 always run inline — the model-selection gate keys off *validated* verdicts, and a lighter model triaging its own workload defeats the gate. Dispatch only steps 4–8, tiered by the most complex surviving fix (open judgment/safety → inline, any non-trivial fix → Opus, all-mechanical → Sonnet), and never split one review across subagents. The subagent's footers must name the model that actually ran, not the session model.
+- **Delegating validation.** Steps 2–3 always run inline — the delegation gate keys off *validated* verdicts. Dispatch only steps 4–8 (open judgment/safety findings stay inline), and never split one review across subagents. The subagent's footers must name the model that actually ran (normally the same session model).
 - **Missing inline diff comments or CI.** Fetching only formal reviews and issue comments skips the line-level threads where human reviewers usually comment, and skipping step 1.5 misses failing CI checks. Fetch every channel in steps 1 and 1.5.
 - **Waiting or polling on in-progress CI.** Step 1.5 is a single snapshot; skip anything whose `bucket` is `pending` or `skipping` rather than blocking the run on it.
 - **Patching around a pre-existing or flaky CI failure.** Verify the failure traces to this PR's diff before touching code — otherwise it's Refuted with evidence, not a fix target.

@@ -64,7 +64,7 @@ Evaluate in this order:
 
 Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 7).
 
-fix-pr-review also picks its own working model dynamically (its step 3.5): it always validates the findings inline on the session model, then tiers implementation by the complexity of the most complex surviving fix — open judgment calls and safety-class findings stay inline, any non-trivial fix routes the set to an Opus subagent, and all-mechanical work goes to a Sonnet subagent. It decides from the validated findings itself, so don't override its choice — just record which model each cycle reported running on, for the step 5 report.
+fix-pr-review also decides its own delegation (its step 3.5): it always validates the findings inline, then either implements inline or hands steps 4–8 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
 
 Increment `review_count`, record the new trigger timestamp from that comment, and go back to step 2.
 
@@ -92,7 +92,7 @@ Stop the loop and report the terminal state — don't claim blanket success:
 
 There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
 
-In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's findings-based selection), any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
+In every case, give: PR URL, number of review cycles run, final verdict, any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
 
 **Cap the report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase or its internals.
 

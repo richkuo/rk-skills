@@ -14,7 +14,6 @@ Invoke the `sync-docs-runner` subagent via the Agent tool:
 - `subagent_type`: `sync-docs-runner`
 - `description`: `Sync docs to recent commits`
 - `prompt`: Pass through the user's request verbatim plus any session context (target branch, last-sync SHA, specific files, etc.). Do not paste workflow steps into the prompt.
-- `model`: Omit by default. Override only if the user explicitly names a different LLM.
 
 Wait for the agent to return. Relay its summary to the user before proceeding.
 
@@ -34,19 +33,17 @@ Otherwise pick the landing path:
 
 ### Direct-commit path
 
-Commit the doc changes using the Haiku model. Spawn an Agent with `model: haiku` and the following prompt:
+Commit the doc changes directly in the main session:
 
-> Create a git commit for the doc changes just produced by sync-docs. Steps:
-> 1. Run `git status` and `git diff` to see all changes.
-> 2. Run `git log --oneline -10` to understand the commit message style used in this repo.
-> 3. Confirm you are NOT on the repository's default branch. If you are, stop and report that instead of committing.
-> 4. Stage only documentation files changed by sync-docs (CLAUDE.md, AGENTS.md, SKILL.md, README.md, and any other .md files that were modified — never stage .env, secrets, or unrelated files).
-> 5. If there is nothing staged after step 4 (nothing changed), skip the commit and report "no doc changes to commit".
-> 6. Otherwise, draft a concise commit message focused on the "why" and create the commit: `git commit -m "$(cat <<'EOF'\n<message>\nEOF\n)"`.
-> 7. Run `git status` to verify.
-> Do not push.
+1. Run `git status` and `git diff` to see all changes.
+2. Run `git log --oneline -10` to understand the commit message style used in this repo.
+3. Confirm you are NOT on the repository's default branch. If you are, stop and report that instead of committing.
+4. Stage only documentation files changed by sync-docs (CLAUDE.md, AGENTS.md, SKILL.md, README.md, and any other .md files that were modified — never stage .env, secrets, or unrelated files).
+5. If there is nothing staged after step 4 (nothing changed), skip the commit and report "no doc changes to commit".
+6. Otherwise, draft a concise commit message focused on the "why" and create the commit: `git commit -m "$(cat <<'EOF'\n<message>\nEOF\n)"`.
+7. Run `git status` to verify.
 
-Wait for the agent to return. Relay its result (commit SHA or "no changes") to the user.
+Do not push. Report the result (commit SHA or "no changes") to the user.
 
 ### Branch + PR path
 
@@ -78,6 +75,5 @@ Then invoke the `create-release-runner` subagent via the Agent tool:
 - `subagent_type`: `create-release-runner`
 - `description`: `Cut and publish a release`
 - `prompt`: Pass through the user's original request verbatim plus any context they provided (target version or bump type, release-notes specifics, etc.), including how the doc changes landed — the PR number and merge commit, or the fact that they are still unmerged. Do not paste workflow steps.
-- `model`: Omit by default. Override only if the user explicitly names a different LLM.
 
 After the agent returns, relay its summary and the release URL to the user.
