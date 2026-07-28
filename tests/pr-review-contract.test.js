@@ -58,6 +58,10 @@ const VERIFICATION_INSTRUCTIONS = [
     /paraphrase that silently drops a qualifier is a finding/i,
     'dropped qualifier is a finding',
   ],
+  [
+    /no network or fetch tool[\s\S]{0,80}immediately/i,
+    'no-network routes emit limitation immediately',
+  ],
 ]
 
 describe('PR review contract', () => {
@@ -118,6 +122,10 @@ describe('PR review contract', () => {
   test('the GitHub Actions review route selects the guarded standalone prompt', async () => {
     const workflow = await read('.github/workflows/claude-run.yml')
     expect(workflow).toContain('PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md')
+    // Primary-source verification needs outbound fetch on this read-only route.
+    expect(workflow).toMatch(
+      /PROMPT_FILE=\$PROMPTS_DIR\/pr-review-format\.md[\s\S]{0,1200}ALLOWED='[^']*WebFetch/,
+    )
   })
 
   test('milestone-pipeline review prompt aligns with the skill CI policy', async () => {
@@ -186,15 +194,33 @@ describe('PR review contract', () => {
       expect(body, path).toMatch(/omit (?:that |the )?field when none|omit when none/i)
     }
 
+    for (const path of [
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/work-on-issue-loop/SKILL.md',
+    ]) {
+      const body = await read(path)
+      expect(body, path).toMatch(
+        /name each unverified source[\s\S]{0,160}outside the word cap/i,
+      )
+    }
+
     const pipeline = await read('workflows/milestone-pipeline.js')
     expect(pipeline).toMatch(/verification_limitations/)
     expect(pipeline).toMatch(
       /Verification limitation[\s\S]{0,160}empty array when none/i,
     )
     expect(pipeline).toMatch(/verification limitations:/i)
-    // Both review modes must request and fold the field — subagent schema and github-loop schema.
-    expect(pipeline).toMatch(/SUBAGENT_REVIEW_SCHEMA[\s\S]{0,400}verification_limitations/)
-    expect(pipeline).toMatch(/REVIEW_LOOP_SCHEMA[\s\S]{0,400}verification_limitations/)
+    // Both review modes must request and fold the field — slice each schema /
+    // function body so a later fallback object or sibling prompt cannot satisfy.
+    const sliceConst = (name) => {
+      const start = pipeline.indexOf(`const ${name}`)
+      expect(start, name).toBeGreaterThan(-1)
+      const after = pipeline.slice(start + `const ${name}`.length)
+      const next = after.search(/\nconst |\nfunction /)
+      return next === -1 ? after : after.slice(0, next)
+    }
+    expect(sliceConst('SUBAGENT_REVIEW_SCHEMA')).toMatch(/verification_limitations/)
+    expect(sliceConst('REVIEW_LOOP_SCHEMA')).toMatch(/verification_limitations/)
     const reviewLoopStart = pipeline.indexOf('function reviewLoopPrompt')
     expect(reviewLoopStart).toBeGreaterThan(-1)
     const afterReviewLoop = pipeline.slice(

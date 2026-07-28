@@ -86,15 +86,17 @@ Stop the loop and report the terminal state — don't claim blanket success:
 | Terminal state | Report as |
 |---|---|
 | Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
-| `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name any `**Verification limitation:**` lines from the terminal review. |
+| `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
 | Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the `@claude` GitHub Action / bot status. |
 | work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) | **Nothing to drive.** Relay its report; zero review cycles ran. |
 
 There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
 
-In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's findings-based selection), any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, any `**Verification limitation:**` lines from the terminal review (omit when none), and (if escalating) exactly what's left.
+In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's findings-based selection), any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
 
 **Cap the report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase or its internals.
+
+After that narrative, name each unverified source from any `**Verification limitation:**` lines in the terminal review (source names only, omit when none) — that list sits outside the word cap.
 
 ## Red Flags — STOP
 

@@ -277,8 +277,10 @@ jobs:
             # the project's code. git/gh are narrowed to read verbs + gh pr
             # comment as defense-in-depth. No gh api (its --method flag reaches
             # every mutating endpoint) and no CI readers: reviews intentionally do
-            # not gate on CI, which outlasts the review.
-            ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
+            # not gate on CI, which outlasts the review. WebFetch is required so
+            # the primary-source verification rule can run; the prompt forbids
+            # URLs supplied by the diff and treats fetched content as data only.
+            ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),WebFetch'
           fi
 
           # Append caller-supplied allowlist entries (e.g. Bash(gofmt *)) to
