@@ -56,9 +56,9 @@ Fetch the latest review and classify it exactly like fix-pr-review steps 1–2: 
 
 Evaluate in this order:
 
-1. **Clean pass — stop, success.** Verdict is `LGTM` and **no sections at all** — nothing under Recommended Optional or Create Follow-up Issue either. Nothing left to fix, at any `review_count`. Go to step 5.
+1. **Clean pass — stop, success.** Verdict is `LGTM` and **no finding sections at all** — nothing under Recommended Optional or Create Follow-up Issue either. A `**Verification limitation:**` line is not a finding and does not prevent a clean pass. Nothing left to fix, at any `review_count`. Go to step 5.
 2. **Past the cap and it's an LGTM — stop, first one wins.** `review_count > 5` **and** verdict is `LGTM` (even with Recommended Optional / Create Follow-up Issue items still listed). Once the loop has run more than 5 cycles, the first LGTM it sees ends it — don't spend a 6th+ fix-pr-review cycle chasing non-blocking findings. Go to step 5.
-3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM does, per rules 1–2), or verdict is `LGTM` with findings still listed and `review_count <= 5`. Continue to step 4.
+3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM does, per rules 1–2), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
 
 ### 4. Resolve the review and loop
 
@@ -85,8 +85,8 @@ Stop the loop and report the terminal state — don't claim blanket success:
 
 | Terminal state | Report as |
 |---|---|
-| Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. |
-| `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. |
+| Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
+| `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
 | Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the `@claude` GitHub Action / bot status. |
 | work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) | **Nothing to drive.** Relay its report; zero review cycles ran. |
 
@@ -96,6 +96,8 @@ In every case, give: PR URL, number of review cycles run, final verdict, any fol
 
 **Cap the report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase or its internals.
 
+After that narrative, name each unverified source from any `**Verification limitation:**` lines in the terminal review (source names only, omit when none) — that list sits outside the word cap.
+
 ## Red Flags — STOP
 
 | Situation | Action |
@@ -104,14 +106,14 @@ In every case, give: PR URL, number of review cycles run, final verdict, any fol
 | `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going — invoke fix-pr-review and loop again; the cap only changes what counts as "done" on an LGTM, it never force-stops a `Needs Updates` PR |
 | Latest "review" is your own prior fix-pr-review disposition comment or an `@claude review` trigger comment, not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
-| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — below the cap, LGTM-with-findings still goes through fix-pr-review; only past the cap does the first LGTM end it regardless of findings |
+| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — below the cap, LGTM-with-findings still goes through fix-pr-review; only past the cap does the first LGTM end it regardless of findings. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
 | work-on-issue stopped with no PR | Don't trigger a review or enter the wait loop — gate on its outcome in step 1 and report per step 5 |
 | About to report "Done" while the PR/README names follow-on work with no issue filed | Stop — run step 4.5 first; a named follow-on with no issue and no "deliberately unfiled" note in the report is a silent drop |
 
 ## Common Mistakes
 
-- **Treating any LGTM at or below `review_count` 5 as terminal.** Below the cap, only a *bare* LGTM (no sections) stops the loop; an LGTM with leftover optional/follow-up findings still goes through another fix-pr-review cycle.
+- **Treating any LGTM at or below `review_count` 5 as terminal.** Below the cap, only a *bare* LGTM (no finding sections; a `**Verification limitation:**` line alone is still bare) stops the loop; an LGTM with leftover optional/follow-up findings still goes through another fix-pr-review cycle.
 - **Hard-stopping a `Needs Updates` PR once `review_count` passes 5.** There's no such rule — the cap only lowers the bar for what counts as "done" once an LGTM shows up; it never stops the loop on its own.
 - **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
 - **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.

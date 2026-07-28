@@ -61,7 +61,7 @@ State what you picked (authors + timestamps) so the user can confirm it's the ri
 
 **Note whether the collected set contains any blocking finding** — a `Needs Fixing` or `Requires Human Review` item from any review, an inline thread asserting a real defect (classified in step 2), or any failing CI check from step 1.5. This drives the re-review routing in step 7.
 
-**If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 4), and file each `Create Follow-up Issue` item as a GitHub issue. Don't invent work the review never raised; if the feedback is a bare `LGTM` with no items at all and no open inline threads, report that the PR is approved and stop — unless step 0 flagged merge conflicts, in which case still run step 4.5 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
+**If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 4), and file each `Create Follow-up Issue` item as a GitHub issue. Don't invent work the review never raised; if the feedback is a bare `LGTM` with no finding items at all and no open inline threads — a `**Verification limitation:**` line is not a finding and does not count — report that the PR is approved and stop, naming every `**Verification limitation:**` line from that review in the step-8 report (omit the field when none) — unless step 0 flagged merge conflicts, in which case still run step 4.5 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
 
 ### 1.5 Fetch failing CI checks
 
@@ -87,7 +87,9 @@ Parse all collected feedback — structured reviews, inline diff threads, and fa
 - **Recommended Optional** — non-blocking improvement.
 - **Create Follow-up Issue** — out-of-scope, track separately.
 
-For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one source — reviewer, thread, *or* a CI Failure finding from step 1.5 (e.g. a reviewer flags "this breaks the type check" while the type-check job is already `bucket: fail`) — merge into one finding and note all sources, including the check name alongside the reviewer(s).
+A `**Verification limitation:**` line is **not a finding.** Skip every such line when classifying — do not bucket it, dispose it, rebut it, or treat it as remaining work. It does not block the approved-and-stop path and does not count toward "findings still listed."
+
+For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance, still excluding `**Verification limitation:**` lines. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one source — reviewer, thread, *or* a CI Failure finding from step 1.5 (e.g. a reviewer flags "this breaks the type check" while the type-check job is already `bucket: fail`) — merge into one finding and note all sources, including the check name alongside the reviewer(s).
 
 ### 3. Re-validate each finding against the code (the core step)
 
@@ -225,7 +227,7 @@ gh pr comment <N> --body "@claude sonnet review"
 
 ### 8. Report to the user
 
-Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
+Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). When the review carried any `**Verification limitation:**` lines, name each unverified source in the report even though they are not findings — omit that field when none. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
 
 ## Red Flags — STOP
 
