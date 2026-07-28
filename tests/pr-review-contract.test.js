@@ -62,6 +62,10 @@ const VERIFICATION_INSTRUCTIONS = [
     /no network or fetch tool[\s\S]{0,80}immediately/i,
     'no-network routes emit limitation immediately',
   ],
+  [
+    /LGTM-precondition gap[\s\S]{0,120}(?:Before you write|verification method)/i,
+    'LGTM-precondition gap covers the full verification method',
+  ],
 ]
 
 describe('PR review contract', () => {
@@ -118,6 +122,7 @@ describe('PR review contract', () => {
       expect(source, path).toMatch(
         /report that defect from the code(?: or logs)?[,;] never the check status itself/i,
       )
+      expect(source, path).not.toMatch(/could not review the full diff/i)
       expect(source, path).not.toMatch(/LGTM precondition:[^\n]*check CI status first/i)
     }
   })
@@ -132,11 +137,16 @@ describe('PR review contract', () => {
     expect(reviewAllowed, 'review-route ALLOWED').not.toBeNull()
     expect(reviewAllowed[1]).not.toMatch(/WebFetch/)
     expect(workflow).toMatch(/extra_allowed_tools/)
-    // This repo opts in on the review job caller.
+    // This repo opts in on the review job caller; the vendored template does not.
     const caller = await read('.github/workflows/claude.yml')
     expect(caller).toMatch(
       /mode: review[\s\S]{0,400}extra_allowed_tools:\s*WebFetch/,
     )
+    const template = await read('templates/claude-workflow/workflows/claude.yml')
+    expect(template).not.toMatch(
+      /^\s*extra_allowed_tools:\s*WebFetch\s*$/m,
+    )
+    expect(template).toMatch(/# extra_allowed_tools: WebFetch/)
   })
 
   test('milestone-pipeline review prompt aligns with the skill CI policy', async () => {
@@ -190,12 +200,14 @@ describe('PR review contract', () => {
       /LGTM plus zero or more Verification limitation[\s\S]{0,500}triggering comment carried no extra instructions[\s\S]{0,400}STOP/i,
     )
     expect(prompt).toMatch(
+      /check mergeability; if CONFLICTING or DIRTY go to Phase 5 without posting the short approval comment/i,
+    )
+    expect(prompt).toMatch(
       /already approved with nothing to fix/i,
     )
     expect(prompt).toMatch(
       /do not post a disposition comment and do not trigger a re-review/i,
     )
-    expect(prompt).toMatch(/if CONFLICTING or DIRTY go to Phase 5/i)
   })
 
   test('terminal reports propagate Verification limitation lines to the operator', async () => {

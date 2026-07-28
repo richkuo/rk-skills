@@ -210,7 +210,8 @@ jobs:
             cannot recommend: a real tradeoff with no objectively-correct
             answer only the human can resolve, you provably lack the repo
             context to judge, an unconfirmable safety-carve-out finding, or an
-            LGTM-precondition gap (could not review the full diff).
+            LGTM-precondition gap (could not complete every applicable item
+            under Before you write / the verification method).
             Uncertainty alone, or the effort of investigating further, is NOT
             a reason to escalate — if you can recommend a fix, even a
             tentative one with assumptions stated, route it to

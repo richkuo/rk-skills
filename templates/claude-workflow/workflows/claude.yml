@@ -297,8 +297,9 @@ jobs:
       model_id: ${{ needs.classify.outputs.model_id }}
       effort: ${{ needs.classify.outputs.effort }}
       runs_on: self-hosted
-      # Opt-in outbound fetch for primary-source verification (not in shared default).
-      extra_allowed_tools: WebFetch
+      # Opt-in outbound fetch for primary-source verification (not granted by
+      # default — this route reads untrusted PR content). Uncomment to enable:
+      # extra_allowed_tools: WebFetch
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
