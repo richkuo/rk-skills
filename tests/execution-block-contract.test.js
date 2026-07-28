@@ -808,8 +808,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/under-band build model.*is a finding/is)
     expect(body).toMatch(/under-tertile \*\*build\*\* effort is a finding/i)
     expect(body).toMatch(/over-band build model or an over-tertile build effort is an \*\*observation\*\*, never a downgrade recommendation/i)
-    // Quiet overspend still surfaces — the per-model mix is what estimates run cost.
-    expect(body).toMatch(/quiet overspend is still worth naming/i)
+    // Quiet overspend is deliberately NOT a finding — the per-model mix already carries the cost.
+    expect(body).toMatch(/quiet overspend on a non-safety issue already shows up in the per-model mix/i)
     // Safety carve-outs force the capable path, so a downgrade is never recommended there.
     expect(body).toMatch(/Never recommend dropping the model \*\*or\*\* the build effort on an issue whose body touches those surfaces/i)
     // An observation is not a severity: it needs a report section and must own no table row.
@@ -817,10 +817,16 @@ describe('milestoneplan pre-flight contract', () => {
     const severityTable = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
     expect(severityTable, 'no severity table found').not.toBeNull()
     expect(severityTable[1], 'over-band must not carry a severity').not.toMatch(/over-band/i)
-    // Over-band still needs somewhere to print — a findings-table row class, not a severity.
-    expect(findingsSeverities(body), 'over-band observations have nowhere to print').toContain('Over-band')
-    expect(body).toMatch(/`Over-band` and `Override` rows carry `none — deliberate`/)
-    expect(body).toMatch(/`Over-band` and `Override` are not severities the verdict table assigns/)
+    // Over-band and annotated overrides print NOTHING — not a finding, not a row class.
+    expect(findingsSeverities(body), 'over-band must not be a findings row class').not.toContain('Over-band')
+    expect(findingsSeverities(body), 'override must not be a findings row class').not.toContain('Override')
+    expect(body).toMatch(/Over-band observations and annotated deliberate overrides are not in this table at all/)
+    expect(body).toMatch(/print nothing for it — never a finding, never a row/)
+    // The two no-stamp row classes have defined Recommended-fix values, never improvised.
+    expect(body).toMatch(/`none — unblocks when PR #X merges`/)
+    expect(body).toMatch(/`none — never re-enters`/)
+    expect(body).toMatch(/`none — satisfied by sequencing`/)
+    expect(body).toMatch(/`none — not dispatched this run` plus the re-entry condition/)
     // The failure-mode table must agree with the floor rule, not call it a defect.
     expect(body).toMatch(/\| An issue is stamped a model or build effort above its band \/ Volume tertile \| Observation, never a downgrade recommendation/)
   })
@@ -968,12 +974,11 @@ describe('milestoneplan pre-flight contract', () => {
     // Severity vocabulary explicitly so the two rules cannot conflict.
     expect(body).toMatch(/`\| — \| — \| none \| — \| — \|`/)
     expect(body).toMatch(/no-findings placeholder row above, whose Severity cell is `—`/)
-    // Routing sentences must point at row classes that exist — the report has no
-    // *Deliberate overrides* or bare *Blocked* section; those live as `Override` and
-    // `Blocked — excluded` findings-table rows.
+    // Routing sentences must point at destinations that exist — the report has no
+    // *Deliberate overrides* or bare *Blocked* section; excluded subtrees route to
+    // `Blocked — excluded` rows and annotated overrides print nothing at all.
     expect(body).not.toMatch(/Deliberate overrides/)
     expect(body).not.toMatch(/report them under \*Blocked\*/)
-    expect(body).toMatch(/report it as a findings-table `Override` row/)
     expect(body).toMatch(/report them as findings-table `Blocked — excluded` rows/)
     // Every score-derived recommendation carries its derivation, so the fix is
     // checkable without recomputing the score.
