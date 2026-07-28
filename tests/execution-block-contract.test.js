@@ -676,7 +676,13 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/resume issues return to the build bucket if their PR closes unmerged/)
     expect(body).toMatch(/\*\*Resume bucket\*\* → \*\*Informational\*\* for any finding that would be \*\*NO-GO\*\*/)
-    expect(body).toMatch(/Stamp\/band contradictions and other Non-blocking findings keep \*\*Non-blocking\*\* so step 6's recommendations still land — give them findings-table severity `Non-blocking` with the re-entry named/)
+    // Non-blocking findings never escalate on re-entry, so no bullet may attach a
+    // "becomes blocking" note to them — re-entry notes belong to demoted NO-GO-class
+    // findings only (the Informational row's effect column).
+    expect(body).toMatch(/Stamp\/band contradictions and other Non-blocking findings keep \*\*Non-blocking\*\* so step 6's recommendations still land\. Its PR runs through/)
+    expect(body).not.toMatch(/`Non-blocking` with the re-entry named/)
+    expect(body).not.toMatch(/for resume, name the re-entry/)
+    expect(body).not.toMatch(/keep the recommendation \(step 6\) and name the re-entry/)
     expect(body).toMatch(/A \*\*resume-bucket\*\* stamp\/band contradiction \| Non-blocking/)
     expect(body).toMatch(
       /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
