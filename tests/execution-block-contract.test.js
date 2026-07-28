@@ -970,10 +970,12 @@ describe('milestoneplan pre-flight contract', () => {
     // never a fenced single-line header — the example must render as what the prose mandates.
     expect(body).toMatch(/^\| Severity \| # \| Finding \| Recommended fix \| Route \|\n\|(?:---\|){5}$/m)
     expect(body).toMatch(/^\| # \| State \| Bucket \| C \| Depends on \| Runs after \| Build \| Effort \| Validate \| fableplan \| Plan \| 1st review \|\n\|(?:---\|){12}$/m)
-    // The no-findings placeholder is a full pipe-delimited row, carved out of the
-    // Severity vocabulary explicitly so the two rules cannot conflict.
-    expect(body).toMatch(/`\| — \| — \| none \| — \| — \|`/)
-    expect(body).toMatch(/no-findings placeholder row above, whose Severity cell is `—`/)
+    // A clean milestone prints the header and separator with NO rows beneath — never a
+    // placeholder row, which would have to violate its own columns' value contracts.
+    expect(body).toMatch(/header and separator row with no rows beneath/)
+    expect(body, 'a placeholder row cannot satisfy the column contracts').not.toMatch(/\| — \| — \| none \| — \| — \|/)
+    // The all-clear is carried by the no-rows line instead, which is prose.
+    expect(body).toMatch(/When the table is empty, that line names all four/)
     // Routing sentences must point at destinations that exist — the report has no
     // *Deliberate overrides* or bare *Blocked* section; excluded subtrees route to
     // `Blocked — excluded` rows and annotated overrides print nothing at all.
@@ -983,15 +985,22 @@ describe('milestoneplan pre-flight contract', () => {
     // Every score-derived recommendation carries its derivation, so the fix is
     // checkable without recomputing the score.
     expect(body).toMatch(/followed in parentheses by the band\/tertile derivation/)
-    // The no-rows skip-line's "naming all N" count must track the live vocabulary size,
+    // The empty-table line's "names all N" count must track the live vocabulary size,
     // not a number that can go stale when a severity is added or removed.
     const spelledOut = { four: 4, five: 5, six: 6, seven: 7 }
-    const skipLine = body.match(/naming all (four|five|six|seven) would restate it/)
-    expect(skipLine, 'no-rows skip-line sentence not found').not.toBeNull()
+    const emptyLine = body.match(/that line names all (four|five|six|seven)/)
+    expect(emptyLine, 'empty-table no-rows sentence not found').not.toBeNull()
     expect(
-      spelledOut[skipLine[1]],
-      `skip-line says "all ${skipLine[1]}" but the Severity vocabulary has ${findingsSeverities(body).length} entries`,
+      spelledOut[emptyLine[1]],
+      `line says "all ${emptyLine[1]}" but the Severity vocabulary has ${findingsSeverities(body).length} entries`,
     ).toBe(findingsSeverities(body).length)
+    // Every no-value cell has a defined form — `add — …` or `none — …`, never improvised.
+    expect(body).toMatch(/`add — <what is missing>`/)
+    expect(body).toMatch(/`add — acceptance criteria`/)
+    expect(body).toMatch(/`none — <what disposes of the finding>`/)
+    // The Route vocabulary is exactly step 6's fix owners — no third destination.
+    expect(body).toMatch(/- \*\*Route\*\* — the skill that owns the fix, per step 6: `execution-plan-review`, `validate-issue`, or `—`/)
+    expect(body).toMatch(/step 6's only two fix owners; never route a finding anywhere else/)
     for (const column of ['Severity', '#', 'Finding', 'Recommended fix', 'Route']) {
       expect(body, `findings-table column "${column}" is undefined`).toMatch(
         new RegExp(`^- \\*\\*${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\* —`, 'm'),
