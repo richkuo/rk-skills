@@ -157,6 +157,15 @@ function readOnlyViolations(text) {
  * parentheticals), so compare the semantic cells: capability, score band, model
  * family, whether fableplan is prescribed, and the three effort tertiles.
  */
+// The findings table's Severity column vocabulary — the row classes every audited
+// severity has to land in. Extracted from the bullet that defines the column, so a
+// severity added to the verdict table fails the contract until this list gains it.
+function findingsSeverities(markdown) {
+  const bullet = markdown.match(/^- \*\*Severity\*\* — exactly one of ([^\n]+?), spelled that way\./m)
+  if (!bullet) return null
+  return [...bullet[1].matchAll(/`([^`]+)`/g)].map(([, name]) => name)
+}
+
 function bandTable(markdown) {
   // Cell patterns exclude newlines: `[^|]` alone would let a row match run past its line.
   const rows = [...markdown.matchAll(/^\|\s*([0-3])\s*\|\s*(\d+–\d+)\s*\|([^|\n]+)\|([^|\n]+)\|([^|\n]*)\|?[ \t]*$/gm)]
@@ -564,7 +573,9 @@ describe('milestoneplan pre-flight contract', () => {
   test('routes stamp recommendations for excluded build-bucket issues, not only runnable ones', () => {
     expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/Excluded issues re-enter the runnable set once their blocker clears/)
-    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
+    expect(body).toMatch(
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+    )
   })
 
   test('prints the per-model agent mix in the report template', () => {
@@ -665,9 +676,17 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/runnable, \*Blocked — excluded\*, or resume-bucket/)
     expect(body).toMatch(/resume issues return to the build bucket if their PR closes unmerged/)
     expect(body).toMatch(/\*\*Resume bucket\*\* → \*\*Informational\*\* for any finding that would be \*\*NO-GO\*\*/)
-    expect(body).toMatch(/Stamp\/band contradictions and other Non-blocking findings keep \*\*Non-blocking\*\* so step 6's recommendations still land — print them under \*Non-blocking\* with the re-entry named/)
+    // Non-blocking findings never escalate on re-entry, so no bullet may attach a
+    // "becomes blocking" note to them — re-entry notes belong to demoted NO-GO-class
+    // findings only (the Informational row's effect column).
+    expect(body).toMatch(/Stamp\/band contradictions and other Non-blocking findings keep \*\*Non-blocking\*\* so step 6's recommendations still land\. Its PR runs through/)
+    expect(body).not.toMatch(/`Non-blocking` with the re-entry named/)
+    expect(body).not.toMatch(/for resume, name the re-entry/)
+    expect(body).not.toMatch(/keep the recommendation \(step 6\) and name the re-entry/)
     expect(body).toMatch(/A \*\*resume-bucket\*\* stamp\/band contradiction \| Non-blocking/)
-    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
+    expect(body).toMatch(
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+    )
   })
 
   test('labels the per-model mix with the run-size bound it covers', () => {
@@ -795,8 +814,8 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/under-band build model.*is a finding/is)
     expect(body).toMatch(/under-tertile \*\*build\*\* effort is a finding/i)
     expect(body).toMatch(/over-band build model or an over-tertile build effort is an \*\*observation\*\*, never a downgrade recommendation/i)
-    // Quiet overspend still surfaces — the per-model mix is what estimates run cost.
-    expect(body).toMatch(/quiet overspend is still worth naming/i)
+    // Quiet overspend is deliberately NOT a finding — the per-model mix already carries the cost.
+    expect(body).toMatch(/quiet overspend on a non-safety issue already shows up in the per-model mix/i)
     // Safety carve-outs force the capable path, so a downgrade is never recommended there.
     expect(body).toMatch(/Never recommend dropping the model \*\*or\*\* the build effort on an issue whose body touches those surfaces/i)
     // An observation is not a severity: it needs a report section and must own no table row.
@@ -804,9 +823,16 @@ describe('milestoneplan pre-flight contract', () => {
     const severityTable = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
     expect(severityTable, 'no severity table found').not.toBeNull()
     expect(severityTable[1], 'over-band must not carry a severity').not.toMatch(/over-band/i)
-    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
-    expect(template[0], 'over-band observations have nowhere to print').toMatch(/^Over-band observations/m)
-    expect(template[0]).toMatch(/stamped model or build effort/)
+    // Over-band and annotated overrides print NOTHING — not a finding, not a row class.
+    expect(findingsSeverities(body), 'over-band must not be a findings row class').not.toContain('Over-band')
+    expect(findingsSeverities(body), 'override must not be a findings row class').not.toContain('Override')
+    expect(body).toMatch(/Over-band observations and annotated deliberate overrides are not in this table at all/)
+    expect(body).toMatch(/print nothing for it — never a finding, never a row/)
+    // The two no-stamp row classes have defined Recommended-fix values, never improvised.
+    expect(body).toMatch(/`none — unblocks when PR #X merges`/)
+    expect(body).toMatch(/`none — never re-enters`/)
+    expect(body).toMatch(/`none — satisfied by sequencing`/)
+    expect(body).toMatch(/`none — not dispatched this run` plus the re-entry condition/)
     // The failure-mode table must agree with the floor rule, not call it a defect.
     expect(body).toMatch(/\| An issue is stamped a model or build effort above its band \/ Volume tertile \| Observation, never a downgrade recommendation/)
   })
@@ -911,31 +937,81 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/predecessor \*\*inside this milestone\*\* closed \*\*with\*\* a merged PR.*no finding/is)
   })
 
-  test('every severity the table can assign has a section in the report template', () => {
+  test('every severity the table can assign has a row class in the findings table', () => {
     // Structural, not a grep for the claim: a severity added to the table later must
-    // fail here until the template gains somewhere to print it. Without this, the
-    // Informational severity the bucket-scoping rule emits vanished from the report.
+    // fail here until the findings table's Severity vocabulary gains somewhere to print
+    // it. Without this, the Informational severity the bucket-scoping rule emits
+    // vanished from the report.
     const table = body.match(/\| Finding \| Severity \| Because \|\n\|[-| ]+\|\n((?:\|.*\n)+)/)
     expect(table, 'no severity table found').not.toBeNull()
     const severities = new Set(
       [...table[1].matchAll(/^\|[^|\n]+\|([^|\n]+)\|/gm)].map(([, cell]) => cell.replace(/\*/g, '').trim()),
     )
     expect(severities.size, 'severity extraction is vacuous').toBeGreaterThan(2)
-    const template = body.match(/```\n<milestone> — [\s\S]*?\n```/)
-    expect(template, 'no report template found').not.toBeNull()
-    const headings = [...template[0].matchAll(/^([A-Z][^\n(]*?)(?: \([^)]*\))?:$/gm)].map(([, h]) => h.trim())
-    // A NO-GO finding prints under Blocking; a *no finding* row prints nowhere.
-    const sectionFor = { 'NO-GO': 'Blocking', 'no finding': null }
+    const rowClasses = findingsSeverities(body)
+    expect(rowClasses, 'no findings-table severity vocabulary found').not.toBeNull()
+    expect(rowClasses.length, 'row-class extraction is vacuous').toBeGreaterThan(2)
+    // A NO-GO finding prints as Blocking; a *no finding* row prints nowhere.
+    const classFor = { 'NO-GO': 'Blocking', 'no finding': null }
     for (const severity of severities) {
-      const expected = severity in sectionFor ? sectionFor[severity] : severity
+      const expected = severity in classFor ? classFor[severity] : severity
       if (expected === null) continue
-      // A heading may elaborate ("Blocked — excluded from the run") but must lead with the severity.
       expect(
-        headings.some((heading) => heading.startsWith(expected)),
-        `severity "${severity}" has no section in the report template (sections: ${headings.join(' / ')})`,
+        rowClasses.includes(expected),
+        `severity "${severity}" has no row class in the findings table (classes: ${rowClasses.join(' / ')})`,
       ).toBe(true)
     }
-    expect(body).toMatch(/A severity with no section is a finding that silently vanishes/)
+    expect(body).toMatch(/A severity with no row class is a finding that silently vanishes/)
+  })
+
+  test('mandates both tables in every report', () => {
+    // The report is a decision aid: findings and per-issue rows are scanned by column,
+    // never reconstructed from prose. A clean milestone still prints both.
+    expect(body).toMatch(/Every report renders two markdown tables, always, with no exceptions/)
+    expect(body).toMatch(/Never render either as prose, as bullet lists, or as a code block/)
+    expect(body).toMatch(/A milestone with no findings still prints the findings table's header/)
+    expect(body).toMatch(/Then the \*\*per-issue table\*\*, always, even when the findings table is empty/)
+    // Column contracts, so a table cannot be printed with the columns silently dropped.
+    // Each template must be a REAL markdown table (header + separator row, edge pipes),
+    // never a fenced single-line header — the example must render as what the prose mandates.
+    expect(body).toMatch(/^\| Severity \| # \| Finding \| Recommended fix \| Route \|\n\|(?:---\|){5}$/m)
+    expect(body).toMatch(/^\| # \| State \| Bucket \| C \| Depends on \| Runs after \| Build \| Effort \| Validate \| fableplan \| Plan \| 1st review \|\n\|(?:---\|){12}$/m)
+    // A clean milestone prints the header and separator with NO rows beneath — never a
+    // placeholder row, which would have to violate its own columns' value contracts.
+    expect(body).toMatch(/header and separator row with no rows beneath/)
+    expect(body, 'a placeholder row cannot satisfy the column contracts').not.toMatch(/\| — \| — \| none \| — \| — \|/)
+    // The all-clear is carried by the no-rows line instead, which is prose.
+    expect(body).toMatch(/When the table is empty, that line names all four/)
+    // Routing sentences must point at destinations that exist — the report has no
+    // *Deliberate overrides* or bare *Blocked* section; excluded subtrees route to
+    // `Blocked — excluded` rows and annotated overrides print nothing at all.
+    expect(body).not.toMatch(/Deliberate overrides/)
+    expect(body).not.toMatch(/report them under \*Blocked\*/)
+    expect(body).toMatch(/report them as findings-table `Blocked — excluded` rows/)
+    // Every score-derived recommendation carries its derivation, so the fix is
+    // checkable without recomputing the score.
+    expect(body).toMatch(/followed in parentheses by the band\/tertile derivation/)
+    // The empty-table line's "names all N" count must track the live vocabulary size,
+    // not a number that can go stale when a severity is added or removed.
+    const spelledOut = { four: 4, five: 5, six: 6, seven: 7 }
+    const emptyLine = body.match(/that line names all (four|five|six|seven)/)
+    expect(emptyLine, 'empty-table no-rows sentence not found').not.toBeNull()
+    expect(
+      spelledOut[emptyLine[1]],
+      `line says "all ${emptyLine[1]}" but the Severity vocabulary has ${findingsSeverities(body).length} entries`,
+    ).toBe(findingsSeverities(body).length)
+    // Every no-value cell has a defined form — `add — …` or `none — …`, never improvised.
+    expect(body).toMatch(/`add — <what is missing>`/)
+    expect(body).toMatch(/`add — acceptance criteria`/)
+    expect(body).toMatch(/`none — <what disposes of the finding>`/)
+    // The Route vocabulary is exactly step 6's fix owners — no third destination.
+    expect(body).toMatch(/- \*\*Route\*\* — the skill that owns the fix, per step 6: `execution-plan-review`, `validate-issue`, or `—`/)
+    expect(body).toMatch(/step 6's only two fix owners; never route a finding anywhere else/)
+    for (const column of ['Severity', '#', 'Finding', 'Recommended fix', 'Route']) {
+      expect(body, `findings-table column "${column}" is undefined`).toMatch(
+        new RegExp(`^- \\*\\*${column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\* —`, 'm'),
+      )
+    }
   })
 
   test('every finding class step 2 enumerates has a severity row — derived from step 2, not restated', () => {
@@ -952,7 +1028,7 @@ describe('milestoneplan pre-flight contract', () => {
     ].filter(Boolean)
     expect(flagLists.length, 'no flag lists found in step 2').toBeGreaterThanOrEqual(3)
     // Split on top-level semicolons only — a parenthetical may contain `;` without
-    // ending a finding class (e.g. step 2(b)'s Over-band observations clause).
+    // ending a finding class (e.g. step 2(b)'s over-band observation clause).
     const splitTopLevel = (list) => {
       const items = []
       let depth = 0
@@ -1092,8 +1168,10 @@ describe('milestoneplan pre-flight contract', () => {
   test('publishes the per-issue routing table with every Execution-block field', () => {
     // The table is the deliverable: every field the pipeline reads has a column, and
     // the bucket column is what keeps a non-dispatched row from reading as pending work.
-    const header = fencedBlocks(body).find((code) => code.includes('1st review'))
-    expect(header, 'no per-issue table header found').toBeDefined()
+    const header = body.match(/^\| # \| State \|.*\| 1st review \|$/m)?.[0]
+    expect(header, 'no per-issue table header row found').toBeDefined()
+    // The header is a markdown table row, never a fenced code block.
+    expect(fencedBlocks(body).some((code) => code.includes('1st review'))).toBe(false)
     for (const column of ['State', 'Bucket', 'Depends on', 'Runs after', 'Build', 'Effort', 'Validate', 'fableplan', 'Plan', '1st review']) {
       expect(header, `routing table is missing the ${column} column`).toContain(column)
     }
@@ -1107,7 +1185,9 @@ describe('milestoneplan pre-flight contract', () => {
     expect(body).toMatch(/never present a closed, resume, excluded, or external row as pending pipeline work/i)
     expect(body).toMatch(/v0 number in a v1 `Depends on` is look-up-able|closed predecessor named in a runnable issue's `Depends on`/i)
     expect(body).toMatch(/on a \*\*build-bucket issue that is runnable, \*Blocked — excluded\*, or resume-bucket\*\*/i)
-    expect(body).toMatch(/Field contradictions on \*\*skip\*\*-bucket issues print under \*Informational\* with no change recommendation/)
+    expect(body).toMatch(
+      /Field contradictions on \*\*skip\*\*-bucket issues take severity `Informational` and `Recommended fix: none — never re-enters`/,
+    )
     expect(body).toMatch(/would edit a body this run never reads/i)
     // An all-closed milestone is complete, not a wall of findings.
     expect(body).toMatch(/no open issues.*complete.*do not emit a wall of closed-issue findings/is)
