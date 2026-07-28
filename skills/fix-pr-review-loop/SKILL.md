@@ -59,7 +59,8 @@ Evaluate in this order:
 0. **Merge conflict check.** Before evaluating the verdict, check `gh pr view <N> --json mergeable,mergeStateStatus`. If the PR is `CONFLICTING`/`DIRTY`, it can't be terminal regardless of verdict — invoke fix-pr-review (step 4) so it resolves the conflict, even on a bare LGTM.
 1. **Clean pass — stop, success.** Verdict is `LGTM` and **no finding sections at all** — nothing under Recommended Optional or Create Follow-up Issue either. A `**Verification limitation:**` line is not a finding and does not prevent a clean pass. Nothing left to fix, at any `review_count`. Go to step 5.
 2. **Past the cap and it's an LGTM — stop, first one wins.** `review_count > 5` **and** verdict is `LGTM` (even with Recommended Optional / Create Follow-up Issue items still listed). Once the loop has run more than 5 cycles, the first LGTM it sees ends it — don't spend a 6th+ fix-pr-review cycle chasing non-blocking findings. Go to step 5.
-3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM does, per rules 1–2), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
+2b. **Unreachable-source human escalation — stop.** Verdict is `Needs Updates` and every blocking item is a `### Requires Human Review` item whose bold title begins with `Unreachable primary source` (no `### Needs Fixing` items). The reviewer could not confirm a safety-class claim solely because a primary source was unreachable — that is a human decision, not another fix cycle. Go to step 5 and report as escalate.
+3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM or rule 2b does), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
 
 ### 4. Resolve the review and loop
 
@@ -77,10 +78,11 @@ Stop the loop and report the terminal state — don't claim blanket success:
 |---|---|
 | Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
 | `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
+| `Needs Updates` whose only blocking items are `Unreachable primary source` Requires Human Review items | **Escalate.** Human must decide whether to accept the unverified safety-class claim; do not keep fixing. Name each unverified source. |
 | Bot never responded within the wait window | **Escalate.** Report that the PR is pushed but review never landed; the user should check the `@claude` GitHub Action / bot status. |
 | PR was already `merged`/`closed` when the skill started | **Nothing to drive.** Report the state; zero review cycles ran. |
 
-There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
+There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or rule 2b / the bot stops responding).
 
 In every case, give: PR URL, number of review cycles run, final verdict, which model each fix cycle ran on (per fix-pr-review's findings-based selection), and (if escalating) exactly what's left.
 

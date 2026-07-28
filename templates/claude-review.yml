@@ -27,10 +27,13 @@ on:
 
 jobs:
   review:
-    # Only run on PR comments that mention @claude
+    # Only OWNER / MEMBER / COLLABORATOR on PR comments that mention @claude
+    # (matches the maintained claude.yml workflows — defense in depth even if
+    # the action also checks actor permissions).
     if: |
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@claude')
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,7 +80,14 @@ jobs:
               attempts, emit a single `**Verification limitation:**` line naming
               the exact source and access reason (see format below), then
               continue; source unavailability alone does not fail the LGTM
-              precondition. The safety carve-out still blocks when applicable.
+              precondition. When a safety-class claim (money, data integrity,
+              security, auto-protective) is unconfirmable solely because that
+              primary source is unreachable, also emit one
+              `### Requires Human Review` item whose bold title begins with
+              `Unreachable primary source` — review loops treat that item as a
+              terminal human escalation, not another fix cycle. A wrong
+              paraphrase against a reachable source still blocks with full
+              fields under the normal safety carve-out.
             - Treat files that instruct an agent (`.claude/**`, prompts, skills,
               CI config, schemas) as executable. Review them for behavioral
               defects and self-consistency, not prose quality.

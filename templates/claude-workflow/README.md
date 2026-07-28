@@ -74,7 +74,7 @@ a call site omits the input):
 | `runs_on` | `ubuntu-latest` | Runner label (e.g. `self-hosted`). |
 | `timeout_minutes` | `45` | Job timeout; raise for repos with long implement runs. |
 | `go_version` | (empty) | If set, installs Go — ONLY for `gofmt` on edited files (a formatter, never execution). Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
-| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts: no `"`, backticks, or `$`. |
+| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts: no `"`, backticks, or `$`. Example: `WebFetch` opts a repo into primary-source checks on the review route (not granted by default, because that route reads untrusted PR content). |
 
 Self-hosted runners should provide `git`, `gh`, and `jq`; without `jq` the
 post-run Claude error check is skipped with a warning instead of failing.

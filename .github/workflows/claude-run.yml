@@ -79,7 +79,7 @@ on:
         type: string
         default: ''
       extra_allowed_tools:
-        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow'
+        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow (e.g. Bash(gofmt *) or WebFetch for primary-source review checks)'
         required: false
         type: string
         default: ''
@@ -277,10 +277,12 @@ jobs:
             # the project's code. git/gh are narrowed to read verbs + gh pr
             # comment as defense-in-depth. No gh api (its --method flag reaches
             # every mutating endpoint) and no CI readers: reviews intentionally do
-            # not gate on CI, which outlasts the review. WebFetch is required so
-            # the primary-source verification rule can run; the prompt forbids
-            # URLs supplied by the diff and treats fetched content as data only.
-            ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),WebFetch'
+            # not gate on CI, which outlasts the review. No default WebFetch:
+            # this route reads untrusted PR content and is consumed cross-repo at
+            # @main — outbound fetch is opt-in via extra_allowed_tools (e.g.
+            # WebFetch) so each repo widens egress knowingly; without it the
+            # primary-source rule emits a Verification limitation immediately.
+            ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
           fi
 
           # Append caller-supplied allowlist entries (e.g. Bash(gofmt *)) to

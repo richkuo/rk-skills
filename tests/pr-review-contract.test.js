@@ -84,7 +84,10 @@ describe('PR review contract', () => {
       expect(source, path).toMatch(
         /source unavailability alone does not fail the LGTM precondition/i,
       )
-      expect(source, path).toMatch(/safety carve-out still blocks/i)
+      expect(source, path).toMatch(/Unreachable primary source/i)
+      expect(source, path).toMatch(
+        /terminal human escalation|human escalation/i,
+      )
       expect(source, path).toMatch(/not a finding/i)
       expect(source, path).not.toMatch(
         /primary source is unavailable[\s\S]{0,300}Recommended Optional/i,
@@ -122,9 +125,17 @@ describe('PR review contract', () => {
   test('the GitHub Actions review route selects the guarded standalone prompt', async () => {
     const workflow = await read('.github/workflows/claude-run.yml')
     expect(workflow).toContain('PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md')
-    // Primary-source verification needs outbound fetch on this read-only route.
-    expect(workflow).toMatch(
-      /PROMPT_FILE=\$PROMPTS_DIR\/pr-review-format\.md[\s\S]{0,1200}ALLOWED='[^']*WebFetch/,
+    // Shared default must not grant WebFetch (untrusted PR content, cross-repo @main).
+    const reviewAllowed = workflow.match(
+      /PROMPT_FILE=\$PROMPTS_DIR\/pr-review-format\.md[\s\S]{0,1500}?ALLOWED='([^']+)'/,
+    )
+    expect(reviewAllowed, 'review-route ALLOWED').not.toBeNull()
+    expect(reviewAllowed[1]).not.toMatch(/WebFetch/)
+    expect(workflow).toMatch(/extra_allowed_tools/)
+    // This repo opts in on the review job caller.
+    const caller = await read('.github/workflows/claude.yml')
+    expect(caller).toMatch(
+      /mode: review[\s\S]{0,400}extra_allowed_tools:\s*WebFetch/,
     )
   })
 
@@ -152,6 +163,10 @@ describe('PR review contract', () => {
       expect(body, path).toMatch(
         /Verification limitation[\s\S]{0,160}does not (?:prevent a clean pass|count as findings still listed)/i,
       )
+      expect(body, path).toMatch(/Unreachable primary source/i)
+      expect(body, path).toMatch(
+        /Unreachable-source human escalation|terminal human escalation/i,
+      )
     }
   })
 
@@ -172,7 +187,10 @@ describe('PR review contract', () => {
       /treat LGTM plus only such lines as approved with nothing to fix/i,
     )
     expect(prompt).toMatch(
-      /LGTM plus zero or more Verification limitation[\s\S]{0,300}triggering comment carried no extra instructions[\s\S]{0,200}STOP/i,
+      /LGTM plus zero or more Verification limitation[\s\S]{0,500}triggering comment carried no extra instructions[\s\S]{0,400}STOP/i,
+    )
+    expect(prompt).toMatch(
+      /already approved with nothing to fix/i,
     )
     expect(prompt).toMatch(
       /do not post a disposition comment and do not trigger a re-review/i,
@@ -189,9 +207,11 @@ describe('PR review contract', () => {
     ]) {
       const body = await read(path)
       expect(body, path).toMatch(
-        /Verification limitation[\s\S]{0,220}(?:name each|naming every|unverified source)/i,
+        /Verification limitation[\s\S]{0,500}(?:name each|naming each|naming every|unverified source)/i,
       )
-      expect(body, path).toMatch(/omit (?:that |the )?field when none|omit when none/i)
+      expect(body, path).toMatch(
+        /omit (?:that |the )?field when none|omit when none|when present[\s\S]{0,80}when not/i,
+      )
     }
 
     for (const path of [
