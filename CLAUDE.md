@@ -13,6 +13,7 @@
 - Direct and terse: no preamble, closing summaries, "Let me..." openers, or affirmations.
 - Answer exactly what was asked; offer adjacent detail in one line only if highly relevant.
 - Spell out acronyms on first use — "pull request (PR)".
+- **ASD-STE100 for all technical information:** Explain behavior, architecture, procedures, risks, and mechanisms in ASD-STE100 (Simplified Technical English). Apply the writing rules: active voice; one idea or instruction per sentence; ≤20 words per procedural sentence and ≤25 per descriptive sentence; one approved meaning per word (no synonym shopping); ≤3 nouns in a noun cluster; simple verb forms only (imperative, infinitive, simple present/past/future; past participle as adjective only). Domain technical nouns/verbs are allowed when needed. Word caps and Plain simple English limits still apply — STE shapes wording inside them. Do not claim full dictionary certification; prefer STE-approved simple wording over variety.
 - No stylistic tics: em-dashes for emphasis, "not X; it's Y", payoff lines, metaphor labels ("knob", "lever"), reveal phrasing ("and that's the real X", "the real problem is") — state the point plainly instead.
 - Never give time/effort estimates ("2–4 days") — complexity scores are a model + effort routing signal (Capability band + Volume), not a duration.
 - No follow-up-question menus; ask at most one, only when needed to proceed.
@@ -20,7 +21,7 @@
 ## Who You're Working With
 
 - A **technical product manager** with a product-engineer streak: owns products end-to-end, sets technical/architectural direction, cares about code-level decisions, but directs and specifies while delegating code authoring to you. Assume fluency with system concepts (latency, races, migrations, API contracts); don't assume they want to read or write code unless they say so.
-- **Default altitude:** architecture, behavior, tradeoffs — what the system does, what changes for users, cost/risk. Don't assume familiarity with this codebase's internal names: lead plain-language, don't open with raw symbols or jargon; offer code-level specifics in one line ("Want the code-level specifics?") instead of including them. Exceptions: code-level tasks (specific bug fix, refactor, review) drop to identifiers and file:line; explicit asks about a symbol/file get answered directly.
+- **Default altitude:** architecture, behavior, tradeoffs — what the system does, what changes for users, cost/risk. Don't assume familiarity with this codebase's internal names: lead ASD-STE100, don't open with raw symbols or jargon; offer code-level specifics in one line ("Want the code-level specifics?") instead of including them. Exceptions: code-level tasks (specific bug fix, refactor, review) drop to identifiers and file:line; explicit asks about a symbol/file get answered directly.
 
 ## Package Manager
 
@@ -60,13 +61,13 @@
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
-- **PR body order:** `## Summary` / verification first — keep those scannable, don't restate the whole issue. End with `## Plain simple English` — one short paragraph under 55 words, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary. (`work-on-issue` enforces this when opening PRs.)
+- **PR body order:** `## Summary` / verification first — keep those scannable, don't restate the whole issue. End with `## Plain simple English` — one short paragraph under 55 words in ASD-STE100, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary. (`work-on-issue` enforces this when opening PRs.)
 - **Never use bare `#<number>` to number a list item or step in a PR or issue body/comment.** GitHub auto-links any `#<number>` to that repo's issue/PR of the same number — silently cross-referencing and notifying an unrelated issue when you only meant "item 1" or "root cause #2". Use `1.`, `(1)`, or "Item 1" for enumeration; reserve bare `#<number>` for a genuine, intentional issue/PR reference. Applies equally to issue bodies, not just PRs.
 - **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]` — Conventional Commits `type` (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`) and `scope` (`#<issue>` when the PR closes one, else a short component name, or omit the scope entirely when neither fits), followed by the lowercase imperative summary, then a trailing `[C<score>, <model>, <effort>]` bracket (append `, fableplan` for the Capability-2 band). E.g. `fix(#95): resolve double-fill race on order matching [C95, Fable 5, xhigh]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
 
 ### PR review format
 
-- **Before writing any PR review comment, load the `pr-review-format` skill** — it defines the mandatory verdict line, section structure, materiality filter, and safety carve-out. Every finding must include **Plain simple English:** (under 55 words); `Requires Human Review` items must also include **Recommended proposed solution:** (also plain simple English, under 55 words). Never compose a review without it.
+- **Before writing any PR review comment, load the `pr-review-format` skill** — it defines the mandatory verdict line, section structure, materiality filter, and safety carve-out. Every finding must include **Plain simple English:** (under 55 words, ASD-STE100); `Requires Human Review` items must also include **Recommended proposed solution:** (also ASD-STE100 plain simple English, under 55 words). Never compose a review without it.
 
 ## GitHub Issues
 
