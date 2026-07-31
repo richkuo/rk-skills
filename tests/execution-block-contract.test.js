@@ -355,7 +355,7 @@ describe('milestoneplan table contract', () => {
   })
 
   test('is wired into the pipeline as the stage before milestone-workflow', () => {
-    expect(newAppPipeline).toMatch(/\| 6 \| Pre-flight a milestone \| `milestoneplan` \|/)
+    expect(newAppPipeline).toMatch(/\| 6 \| Show the plan \| `milestoneplan` \|/)
     expect(newAppPipeline).toMatch(/\| 7 \| Run a milestone \| `milestone-workflow` \|/)
     expect(readme).toMatch(/\| `milestoneplan` \|/)
     expect(milestoneWorkflow).toMatch(/`milestoneplan`/)
