@@ -1,6 +1,6 @@
 {
   "name": "rk-skills",
-  "version": "1.17.0",
+  "version": "1.17.1",
   "description": "Installer for Claude Code workflow skills — GitHub issue/PR/release automation and Fable-driven planning.",
   "type": "module",
   "scripts": {
