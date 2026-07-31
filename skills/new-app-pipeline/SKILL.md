@@ -16,7 +16,7 @@ The end-to-end process for starting a new app: capture the idea as a PRD, refine
 | 3 | Merge the PRD PR | — | PRD on main | Explicit user go |
 | 4 | Issues + milestones | `prd-to-issues` | Milestones, 15–25 issues with Execution blocks | User reviews the breakdown table |
 | 5 | Execution plan | `execution-plan-review` | Revised Execution blocks | User settles the final table |
-| 6 | Pre-flight a milestone | `milestoneplan` | Go / no-go verdict, findings, waves, run-size projection | User clears blocking findings (recommended, not required) |
+| 6 | Show the plan | `milestoneplan` | Single per-issue plan table (complexity, dependencies, models, efforts, fableplan, first review) | User reviews the table (recommended, not required) |
 | 7 | Run a milestone | `milestone-workflow` | Workflow run → PRs → LGTMs | User approves the run plan (mandatory) |
 
 ## Rules
