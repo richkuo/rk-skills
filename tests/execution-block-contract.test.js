@@ -333,9 +333,7 @@ describe('milestoneplan table contract', () => {
 
   test('renders exactly one table with the agreed columns', () => {
     expect(body).toMatch(/exactly one markdown table/i)
-    expect(body).toContain(
-      '| # | Description | C | Depends on | Runs after | Validate model | Validate effort | Build model | Build effort | fableplan | Plan effort | 1st review |',
-    )
+    expect(body).toContain('| # | Description | C | Deps/After | Validate | Build | Plan | Review |')
     expect(body).toMatch(/No verdict, no findings list, no wave plan, no cost projection/)
   })
 
@@ -346,7 +344,8 @@ describe('milestoneplan table contract', () => {
   })
 
   test('attributes validation to Fable 5 regardless of the Build model', () => {
-    expect(body).toMatch(/Validate model\*\* — always \*\*Fable 5\*\*/)
+    expect(body).toMatch(/it is always Fable 5/)
+    expect(body).toMatch(/regardless of the Build model/)
   })
 
   test('hands off to the skills that own the writes and the run', () => {
