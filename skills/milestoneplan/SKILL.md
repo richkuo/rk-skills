@@ -26,25 +26,25 @@ Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each
 
 ### 2. Render the table
 
-Output is **exactly one markdown table** — one row per issue in the milestone, ordered by issue number. A real pipe-delimited markdown table, never prose, bullets, or a code block:
+Output is **exactly one markdown table** — one row per issue in the milestone, ordered by issue number. A real pipe-delimited markdown table, never prose, bullets, or a code block. Terminals wrap wide tables into unreadable pseudo-lists, so the table is capped at 8 columns (~100 characters) by merging related fields into compound cells:
 
-| # | Description | C | Depends on | Runs after | Validate model | Validate effort | Build model | Build effort | fableplan | Plan effort | 1st review |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| # | Description | C | Deps/After | Validate | Build | Plan | Review |
+|---|---|---|---|---|---|---|---|
 
 - **#** — the issue number.
-- **Description** — the issue title with the `[C<score>]` prefix stripped, truncated to a short phrase.
+- **Description** — the issue title with the `[C<score>]` prefix stripped, truncated to ~30 characters.
 - **C** — the score from the `[C<score>]` title prefix; *missing* when absent.
-- **Depends on / Runs after** — the stamped edge lists from the Execution block, verbatim (`none` stays `none`); *missing* when the field is absent — never infer edges from prose.
-- **Validate model** — always **Fable 5** (the pipeline dispatches every validate agent on Fable 5 regardless of the Build model).
-- **Validate effort** — the stamped `Validate effort`; *missing* when absent (the pipeline defaults to high).
-- **Build model / Build effort** — the stamped values from the Execution block.
-- **fableplan** — `Yes` / `No` as stamped.
-- **Plan effort** — the stamped `Plan effort`; `—` on a `fableplan: No` issue (never read).
-- **1st review** — the issue's `PR review:` line (reviewer model / trigger).
+- **Deps/After** — the stamped `Depends on` and `Runs after` edge lists as one cell, `<depends> / <after>`, issue numbers without the `#` prefix and `none` rendered as `—` (e.g. `12, 13 / —`); *missing* on either side when that field is absent — never infer edges from prose. When every row's `Runs after` is `none`, drop the ` / —` suffix from all cells and say so in the note line below the table.
+- **Validate** — the stamped `Validate effort`; *missing* when absent (the pipeline defaults to high). The model needs no column: it is always Fable 5 (the pipeline dispatches every validate agent on Fable 5 regardless of the Build model) — state that once in the note line below the table.
+- **Build** — the stamped build model and effort as one cell, `<model> · <effort>` (e.g. `Opus 5 · xhigh`); *missing* on either half when absent.
+- **Plan** — `Yes · <plan effort>` when fableplan is stamped `Yes` (e.g. `Yes · xhigh`; *missing* for the effort half when unstamped), plain `No` when stamped `No` (plan effort is never read), *missing* when the fableplan stamp is absent.
+- **Review** — the issue's `PR review:` line compressed to its trigger (e.g. `@claude`); append a short parenthetical only when the line carries a real caveat (e.g. `may close with no PR`).
 
-Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with a one-line note under the table that the pipeline would route it to `model fable, effort high`.
+After the table, print **one note line** stating what was factored out of the columns: validate model is always Fable 5, plus anything uniform that was dropped (e.g. `Runs after` all `none`).
 
-Print nothing else besides the table and that note. No verdict, no findings list, no wave plan, no cost projection.
+Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with an extra line in the note that the pipeline would route it to `model fable, effort high`.
+
+Print nothing else besides the table and the note. No verdict, no findings list, no wave plan, no cost projection.
 
 ### 3. Hand off
 
