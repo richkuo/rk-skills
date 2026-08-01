@@ -7,7 +7,7 @@ export const meta = {
     { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or fix-pr-review-loop against the @claude Action in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or one fresh fix agent per @claude Action cycle in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'squash-merge each PR at LGTM plus green CI on the pinned reviewed head, delete its branch, confirm its issue closed; successors then build from the updated base branch', model: 'sonnet' },
     { title: 'Release', detail: 'when every issue merged: sync docs and publish a GitHub release via the sync-docs-release skill', model: 'sonnet' },
   ],
@@ -224,16 +224,21 @@ const REVIEW_FIX_SCHEMA = {
   },
 }
 
-const REVIEW_LOOP_SCHEMA = {
+// One github-mode review cycle: the standing verdict on the PR after this
+// agent's pass, so the script — not a long-lived agent — owns the loop. A
+// single agent driving every cycle was observed exceeding 400k tokens of
+// context on hard PRs; a fresh agent per cycle stays small because all loop
+// state (reviews, dispositions, commits) lives on the PR itself.
+const GITHUB_CYCLE_SCHEMA = {
   type: 'object',
-  required: ['final_status', 'cycles_run', 'summary', 'head_ref', 'head_sha'],
+  required: ['status', 'nonblocking_remaining', 'summary', 'head_ref', 'head_sha'],
   properties: {
-    final_status: { type: 'string', enum: ['lgtm', 'lgtm_with_nonblocking', 'max_cycles_exhausted', 'blocked'] },
-    cycles_run: { type: 'integer' },
-    summary: { type: 'string', description: 'Per-cycle findings fixed/rejected, and why the loop stopped' },
-    head_ref: { type: 'string', description: 'Exact pull request head branch at the review readiness boundary' },
-    head_sha: { type: 'string', description: 'Exact pull request head commit at the review readiness boundary' },
-    blocker: { type: 'string', description: 'Only when final_status is blocked' },
+    status: { type: 'string', enum: ['lgtm', 'needs_updates', 'blocked'] },
+    nonblocking_remaining: { type: 'integer', description: 'Non-blocking findings still open on the standing review (0 when status is a bare LGTM)' },
+    summary: { type: 'string', description: 'What this cycle fixed/refuted and the standing verdict' },
+    head_ref: { type: 'string', description: 'Exact pull request head branch after this cycle' },
+    head_sha: { type: 'string', description: 'Exact pull request head commit after this cycle' },
+    blocker: { type: 'string', description: 'Only when status is blocked' },
   },
 }
 
@@ -348,20 +353,60 @@ Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRe
 Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact headRefName), head_sha (exact headRefOid), summary, tests_passed, any blocker, and flags the operator should know about. If blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
 }
 
-function reviewLoopPrompt(issue, prNumber, ex, validation, plan) {
+function githubReviewCyclePrompt(issue, prNumber, ex, validation, plan, cycle) {
   const footerModel = MODEL_NAMES[ex.model]
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
-  return `You are a PR review-resolution agent in this repo. Invoke the \`fix-pr-review-loop\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: this run's review-cycle cap is ${MAX_REVIEW_CYCLES} — everywhere the skill says 5 cycles, read ${MAX_REVIEW_CYCLES} instead:
-fetch the latest @claude review on PR #${prNumber}, RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, re-trigger per the fix-pr-review skill's step-7 routing (\`@claude review\`, or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer), wait for the re-review (find the Actions run and \`gh run watch\` it rather than sleeping), and repeat.
+  return `You are a PR review-resolution agent in this repo. This is review cycle ${cycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}; each cycle runs in a fresh agent, so read all state from the PR itself — do not assume anything a previous cycle did. Run exactly ONE cycle, then stop and report.
 
-Stop on a bare LGTM with nothing left to fix; past ${MAX_REVIEW_CYCLES} cycles stop at the first LGTM even with non-blocking findings remaining (this is the cap override above, not the skill's default). If the current review is already a clean LGTM with no actionable findings, stop immediately and say so (0 cycles).
+1. Fetch the latest @claude review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight — a triggered review with no verdict comment yet — find its Actions run and \`gh run watch\` it rather than sleeping.
+2. If that review is an LGTM with no actionable findings left on the current head (no commits after it), do nothing: return status lgtm with nonblocking_remaining 0.
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-7 routing (\`@claude review\`, or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer).
+4. Wait for that re-review's verdict (find the Actions run and \`gh run watch\` it), then STOP — do not fix anything the re-review raises; the next cycle's agent handles it.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
 ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
 
 Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
 
-At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: final_status (lgtm / lgtm_with_nonblocking / max_cycles_exhausted / blocked), cycles_run, a per-cycle summary, the exact head_ref and head_sha at that boundary, and any blocker.`
+At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: status (the verdict now standing on the PR: lgtm / needs_updates, or blocked when the cycle could not complete), nonblocking_remaining (non-blocking findings still open on that standing review), a summary of what you fixed/refuted, the exact head_ref and head_sha, and any blocker.`
+}
+
+// Script-owned github-mode loop: one fresh fix agent per @claude review cycle.
+// Mirrors the old single-agent loop's stopping rules — a bare LGTM stops
+// immediately; an LGTM with non-blocking findings keeps cycling below the cap
+// and stops as lgtm_with_nonblocking at it; needs_updates at the cap is
+// max_cycles_exhausted. Returns the same shape the merge gate consumes.
+async function runGithubReviewLoop(issue, prNumber, ex, validation, plan) {
+  const modelId = MODEL_IDS[ex.model]
+  const notes = []
+  let head = { ref: '', sha: '' }
+  let cycles = 0
+  while (cycles < MAX_REVIEW_CYCLES) {
+    cycles += 1
+    const cycleResult = await agent(githubReviewCyclePrompt(issue, prNumber, ex, validation, plan, cycles), {
+      model: modelId,
+      effort: ex.effort,
+      schema: GITHUB_CYCLE_SCHEMA,
+      phase: 'Review Loop',
+      label: `review-loop:PR#${prNumber} c${cycles}`,
+    })
+    if (!cycleResult) {
+      return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: `cycle ${cycles} fix agent failed` }
+    }
+    head = { ref: cycleResult.head_ref, sha: cycleResult.head_sha }
+    notes.push(`cycle ${cycles}: ${cycleResult.status}, ${cycleResult.nonblocking_remaining} non-blocking remaining — ${cycleResult.summary}`)
+    log(`PR #${prNumber}: cycle ${cycles} → ${cycleResult.status}, ${cycleResult.nonblocking_remaining} non-blocking remaining`)
+    if (cycleResult.status === 'blocked') {
+      return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: cycleResult.blocker || `cycle ${cycles} blocked` }
+    }
+    if (cycleResult.status === 'lgtm' && cycleResult.nonblocking_remaining === 0) {
+      return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
+    }
+    if (cycleResult.status === 'lgtm' && cycles >= MAX_REVIEW_CYCLES) {
+      return { final_status: 'lgtm_with_nonblocking', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
+    }
+  }
+  return { final_status: 'max_cycles_exhausted', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
 }
 
 function subagentReviewPrompt(issue, prNumber, cycle) {
@@ -717,13 +762,7 @@ async function executeTrack(trackIndex) {
       try {
         review = REVIEW_MODE === 'subagent'
           ? await runSubagentReviewLoop(issue, impl.pr_number, ex, validation, plan)
-          : await agent(reviewLoopPrompt(issue, impl.pr_number, ex, validation, plan), {
-              model: modelId,
-              effort: ex.effort,
-              schema: REVIEW_LOOP_SCHEMA,
-              phase: 'Review Loop',
-              label: `review-loop:PR#${impl.pr_number}`,
-            })
+          : await runGithubReviewLoop(issue, impl.pr_number, ex, validation, plan)
       } catch (error) {
         review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}` }
       }

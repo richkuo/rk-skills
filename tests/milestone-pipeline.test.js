@@ -96,9 +96,10 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           summary: 'fixed',
         }
       } else {
+        // github-mode per-cycle fix agent: the standing verdict after one cycle.
         result = {
-          final_status: 'lgtm',
-          cycles_run: 1,
+          status: 'lgtm',
+          nonblocking_remaining: 0,
           summary: 'approved',
           head_ref: `codex/issue-${issue}`,
           head_sha: headSha(issue),
@@ -254,12 +255,12 @@ describe('milestone-pipeline dependency scheduling', () => {
       }),
       'plan:#2': () => { throw new Error('planner failed') },
       'implement:#3 (fable/high)': () => { throw new Error('implementation failed') },
-      'review-loop:PR#1004': () => { throw new Error('review failed') },
+      'review-loop:PR#1004 c1': () => { throw new Error('review failed') },
     })
 
     expect(events.filter((event) => event.state === 'started' && event.label === 'plan:#2')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'implement:#3 (fable/high)')).toHaveLength(1)
-    expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004')).toHaveLength(1)
+    expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c1')).toHaveLength(1)
   })
 
   test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
@@ -363,7 +364,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
     expect(effortFor('validate:#2')).toBe('high')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
-    expect(effortFor('review-loop:PR#1002')).toBe('medium')
+    expect(effortFor('review-loop:PR#1002 c1')).toBe('medium')
     expect(effortFor('validate:#3')).toBe('medium')
     expect(effortFor('validate:#4')).toBe('high')
     expect(effortFor('validate:#5')).toBe('high')
@@ -372,22 +373,22 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
-      expect(effortFor(`review-loop:PR#${1000 + issue}`)).toBe('high')
+      expect(effortFor(`review-loop:PR#${1000 + issue} c1`)).toBe('high')
     }
     expect(effortFor('implement:#6 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1006')).toBe('high')
+    expect(effortFor('review-loop:PR#1006 c1')).toBe('high')
     expect(effortFor('implement:#7 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1007')).toBe('high')
+    expect(effortFor('review-loop:PR#1007 c1')).toBe('high')
     expect(effortFor('validate:#8')).toBe('medium')
     expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
-    expect(effortFor('review-loop:PR#1008')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1008 c1')).toBe('xhigh')
     expect(effortFor('implement:#9 (fable/low)')).toBe('low')
-    expect(effortFor('review-loop:PR#1009')).toBe('low')
+    expect(effortFor('review-loop:PR#1009 c1')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1010')).toBe('high')
+    expect(effortFor('review-loop:PR#1010 c1')).toBe('high')
 
     expect(promptFor(events, 'implement:#9 (fable/low)')).toContain('| low | Harness: milestone-pipeline')
-    expect(promptFor(events, 'review-loop:PR#1009')).toContain('| low | Harness: milestone-pipeline')
+    expect(promptFor(events, 'review-loop:PR#1009 c1')).toContain('| low | Harness: milestone-pipeline')
     expect(promptFor(events, 'implement:#10 (opus/high)')).toContain('| high | Harness: milestone-pipeline')
     expect(promptFor(events, 'implement:#10 (opus/high)')).not.toContain('| low |')
 
@@ -415,7 +416,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewMode: 'github',
       merge: false,
     }, {
-      'review-loop:PR#1002': () => review.promise,
+      'review-loop:PR#1002 c1': () => review.promise,
       'validate:#9': () => {
         dependentStarted = true
         return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
@@ -430,14 +431,14 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dependentStarted).toBeFalse()
 
     review.resolve({
-      final_status: 'lgtm',
-      cycles_run: 1,
+      status: 'lgtm',
+      nonblocking_remaining: 0,
       summary: 'approved',
       head_ref: 'codex/issue-2',
       head_sha: headSha(2, 'a'),
     })
     const result = await running
-    const reviewFinished = result.events.findIndex((event) => event.state === 'finished' && event.label === 'review-loop:PR#1002')
+    const reviewFinished = result.events.findIndex((event) => event.state === 'finished' && event.label === 'review-loop:PR#1002 c1')
     const dependentStartIndex = result.events.findIndex((event) => event.state === 'started' && event.label === 'validate:#9')
     const independentStartIndex = result.events.findIndex((event) => event.state === 'started' && event.label === 'validate:#12')
 
@@ -605,12 +606,13 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewLoop: true,
       reviewMode: 'github',
     }, {
-      'review-loop:PR#1002': () => ({
-        final_status: 'blocked',
-        cycles_run: 1,
+      'review-loop:PR#1002 c1': () => ({
+        status: 'blocked',
+        nonblocking_remaining: 0,
         summary: 'review failed',
         head_ref: 'codex/issue-2',
         head_sha: headSha(2, 'b'),
+        blocker: 'review failed',
       }),
     })
 
@@ -625,7 +627,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewLoop: true,
       reviewMode: 'github',
     }, {
-      'review-loop:PR#1002': () => ({ final_status: 'lgtm', cycles_run: 1, summary: 'approved' }),
+      'review-loop:PR#1002 c1': () => ({ status: 'lgtm', nonblocking_remaining: 0, summary: 'approved', head_ref: '', head_sha: '' }),
     })
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('review_invalid_head')
