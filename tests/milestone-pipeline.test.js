@@ -893,6 +893,8 @@ describe('milestone-pipeline merge and release', () => {
     expect(mergeEvent.phase).toBe('Merge')
     expect(mergeEvent.prompt).toContain(`--match-head-commit ${headSha(2)}`)
     expect(mergeEvent.prompt).toContain('gh pr checks 1002 --watch')
+    expect(mergeEvent.prompt).toContain('If the branch is behind the base at all')
+    expect(mergeEvent.prompt).toContain('never merge a behind branch untested')
     expect(mergeEvent.prompt).toContain('never resolve merge conflicts')
     expect(record?.status).toBe('merged')
     expect(record?.merge_sha).toBe(headSha(1002, 'e'))
