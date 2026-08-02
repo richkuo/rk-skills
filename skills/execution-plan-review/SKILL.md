@@ -51,7 +51,8 @@ To see the whole milestone's execution plan as one table — issue, complexity, 
 | A revision creates a cycle across either edge kind | Reject the batch without editing any issue and show the cycle path |
 | Revision would put a non-Fable build's effort at `low` or `medium` | Set `high`, or switch the build to Fable 5 if that tier was the point — Opus/Sonnet run at high/xhigh only |
 | Revision would put a Fable build's effort at `low` | Allowed only on Capability 3 with Volume ≤ 7 (`[C75]`–`[C82]`) — Fable-only discretionary tier below that band's `medium` floor, no pushback needed. Outside Cap-3 or at higher Volume, raise to the Volume tertile (or push back once) — same scope `milestoneplan` / `prd-to-issues` / `validate-issue` enforce |
+| Revision would put any Fable 5 stage at `xhigh` | Set `high` and say why — **Fable never runs at xhigh; high is Fable's ceiling on every stage (build, plan, validate, review, fix)** |
 | Revision would put validate effort at `xhigh` | Set `high` and say why — validate effort is only ever medium or high |
 | Revision names a plan model, not just an effort | Only the effort is stampable — the fableplan stage is Fable 5 by definition. Keep Fable 5, apply the effort if one was named, and say so |
-| Revision would put plan effort at `low` or `medium` | Allowed — the planner is always Fable, so every tier is legal; no pushback needed |
+| Revision would put plan effort at `low` or `medium` | Allowed — the planner is always Fable, so low/medium/high are all legal (xhigh is not — see the Fable-xhigh row); no pushback needed |
 | Edits collide with someone else's concurrent issue edits | Re-fetch, re-apply only your delta |

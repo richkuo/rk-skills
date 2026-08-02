@@ -120,7 +120,9 @@ describe('complexity score band encoding', () => {
     expect(claudeMd).not.toContain('describe complexity as scope and risk')
     // Money double-fill example must round-trip Risk 4 → Capability 3 → Fable 5 (not Opus).
     expect(githubIssueFormat).toContain('[C95] Orders can be filled twice')
-    expect(githubIssueFormat).toContain('Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Fable 5, xhigh')
+    expect(githubIssueFormat).toContain('Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Fable 5, high')
+    // Fable never pairs with xhigh — high is Fable's ceiling.
+    expect(githubIssueFormat).not.toContain('Fable 5, xhigh')
     expect(githubIssueFormat).not.toContain('[C70] Orders can be filled twice')
     expect(githubIssueFormat).not.toContain('Capability 2 (risk high on order-fill path)')
   })
