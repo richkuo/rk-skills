@@ -231,19 +231,19 @@ const REVIEW_FIX_SCHEMA = {
 // A bounded github-mode review batch: the standing verdict after one or two
 // cycles. The build agent handles cycle 1; every later agent handles at most
 // two cycles. All durable state lives on the PR, so rotation loses no history.
-const GITHUB_REVIEW_BATCH_SCHEMA = {
+const githubReviewBatchSchema = (cycleLimit) => ({
   type: 'object',
   required: ['status', 'nonblocking_remaining', 'cycles_run', 'summary', 'head_ref', 'head_sha'],
   properties: {
     status: { type: 'string', enum: ['lgtm', 'needs_updates', 'blocked'] },
     nonblocking_remaining: { type: 'integer', description: 'Non-blocking findings still open on the standing review (0 when status is a bare LGTM)' },
-    cycles_run: { type: 'integer', description: 'Review cycles completed by this agent; 1 or 2, never more than the assigned range' },
+    cycles_run: { type: 'integer', minimum: 1, maximum: cycleLimit, description: `Review cycles completed by this agent; ${cycleLimit === 1 ? 'exactly 1' : `1 to ${cycleLimit}`}, never more than the assigned range` },
     summary: { type: 'string', description: 'What this batch fixed or refuted and the standing verdict' },
     head_ref: { type: 'string', description: 'Exact pull request head branch after this batch' },
     head_sha: { type: 'string', description: 'Exact pull request head commit after this batch' },
     blocker: { type: 'string', description: 'Only when status is blocked' },
   },
-}
+})
 
 const MERGE_SCHEMA = {
   type: 'object',
@@ -380,7 +380,7 @@ ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
 
 Work ONLY in the PR branch's existing worktree (or add a worktree for the branch if missing) — never the main checkout.
 
-At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: status (the verdict now standing on the PR: lgtm / needs_updates, or blocked), nonblocking_remaining, cycles_run (1 or 2, never above ${cycleLimit}), a summary of what you fixed or refuted, the exact head_ref and head_sha, and any blocker.`
+At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: status (the verdict now standing on the PR: lgtm / needs_updates, or blocked), nonblocking_remaining, cycles_run (${cycleLimit === 1 ? 'exactly 1' : `1 or ${cycleLimit}`}, never above ${cycleLimit}), a summary of what you fixed or refuted, the exact head_ref and head_sha, and any blocker.`
 }
 
 // Script-owned github-mode loop: the build agent completes cycle 1, then each
@@ -412,7 +412,7 @@ async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initia
     const batchResult = await agent(githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit), {
       model: modelId,
       effort: ex.effort,
-      schema: GITHUB_REVIEW_BATCH_SCHEMA,
+      schema: githubReviewBatchSchema(cycleLimit),
       phase: 'Review Loop',
       label: `review-loop:PR#${prNumber} ${labelCycles}`,
     })

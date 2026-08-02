@@ -793,6 +793,21 @@ describe('milestone-pipeline github review mode', () => {
     expect(record?.head_sha).toBe(headSha(2, 'c'))
   })
 
+  test.each([
+    ['one-cycle batch', { maxReviewCycles: 2 }, 'review-loop:PR#1002 c2', 1, 'Run at most 1 cycle', 'cycles_run (exactly 1, never above 1)', 'exactly 1'],
+    ['two-cycle batch', {}, 'review-loop:PR#1002 c2-c3', 2, 'Run at most 2 cycles', 'cycles_run (1 or 2, never above 2)', '1 to 2'],
+  ])('bounds a %s to the cycles it owns in both the prompt and the schema', async (_name, extraArgs, label, cycleLimit, runLine, returnLine, schemaGloss) => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false, ...extraArgs })
+    const batch = events.find((event) => event.state === 'started' && event.label === label)
+
+    expect(batch.prompt).toContain(runLine)
+    expect(batch.prompt).toContain(returnLine)
+    expect(batch.prompt).not.toContain('1 or 2, never above 1')
+    expect(batch.schema.properties.cycles_run.minimum).toBe(1)
+    expect(batch.schema.properties.cycles_run.maximum).toBe(cycleLimit)
+    expect(batch.schema.properties.cycles_run.description).toContain(schemaGloss)
+  })
+
   test('starts a fresh agent after each two-cycle batch', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
       'review-loop:PR#1002 c2-c3': () => ({
