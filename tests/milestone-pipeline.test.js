@@ -38,6 +38,8 @@ async function waitFor(predicate) {
 async function executeWorkflow(args, handlers = {}, budget = null) {
   const events = []
   const logs = []
+  const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+  const githubReviewEnabled = (parsedArgs.reviewLoop ?? true) && parsedArgs.reviewMode === 'github'
   const budgetGlobal = budget ?? { total: null, spent: () => 0, remaining: () => Infinity }
   const agent = async (prompt, options) => {
     const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, schema: options.schema, prompt }
@@ -73,6 +75,9 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
         head_sha: headSha(issue),
         summary: 'implemented',
         tests_passed: true,
+        github_review_status: githubReviewEnabled ? 'needs_updates' : 'not_run',
+        github_review_nonblocking_remaining: 0,
+        github_review_summary: githubReviewEnabled ? 'cycle 1 needs updates' : '',
         flags: [],
       }
     } else if (options.phase === 'Review Loop') {
@@ -96,10 +101,11 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           summary: 'fixed',
         }
       } else {
-        // github-mode per-cycle fix agent: the standing verdict after one cycle.
+        // github-mode bounded review batch: stop early after its first clean cycle.
         result = {
           status: 'lgtm',
           nonblocking_remaining: 0,
+          cycles_run: 1,
           summary: 'approved',
           head_ref: `codex/issue-${issue}`,
           head_sha: headSha(issue),
@@ -255,12 +261,12 @@ describe('milestone-pipeline dependency scheduling', () => {
       }),
       'plan:#2': () => { throw new Error('planner failed') },
       'implement:#3 (fable/high)': () => { throw new Error('implementation failed') },
-      'review-loop:PR#1004 c1': () => { throw new Error('review failed') },
+      'review-loop:PR#1004 c2-c3': () => { throw new Error('review failed') },
     })
 
     expect(events.filter((event) => event.state === 'started' && event.label === 'plan:#2')).toHaveLength(1)
     expect(events.filter((event) => event.state === 'started' && event.label === 'implement:#3 (fable/high)')).toHaveLength(1)
-    expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c1')).toHaveLength(1)
+    expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c2-c3')).toHaveLength(1)
   })
 
   test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
@@ -364,7 +370,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
     expect(effortFor('validate:#2')).toBe('high')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
-    expect(effortFor('review-loop:PR#1002 c1')).toBe('medium')
+    expect(effortFor('review-loop:PR#1002 c2-c3')).toBe('medium')
     expect(effortFor('validate:#3')).toBe('medium')
     expect(effortFor('validate:#4')).toBe('high')
     expect(effortFor('validate:#5')).toBe('high')
@@ -373,22 +379,22 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
-      expect(effortFor(`review-loop:PR#${1000 + issue} c1`)).toBe('high')
+      expect(effortFor(`review-loop:PR#${1000 + issue} c2-c3`)).toBe('high')
     }
     expect(effortFor('implement:#6 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1006 c1')).toBe('high')
+    expect(effortFor('review-loop:PR#1006 c2-c3')).toBe('high')
     expect(effortFor('implement:#7 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1007 c1')).toBe('high')
+    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('high')
     expect(effortFor('validate:#8')).toBe('medium')
     expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
-    expect(effortFor('review-loop:PR#1008 c1')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1008 c2-c3')).toBe('xhigh')
     expect(effortFor('implement:#9 (fable/low)')).toBe('low')
-    expect(effortFor('review-loop:PR#1009 c1')).toBe('low')
+    expect(effortFor('review-loop:PR#1009 c2-c3')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1010 c1')).toBe('high')
+    expect(effortFor('review-loop:PR#1010 c2-c3')).toBe('high')
 
     expect(promptFor(events, 'implement:#9 (fable/low)')).toContain('| low | Harness: milestone-pipeline')
-    expect(promptFor(events, 'review-loop:PR#1009 c1')).toContain('| low | Harness: milestone-pipeline')
+    expect(promptFor(events, 'review-loop:PR#1009 c2-c3')).toContain('| low | Harness: milestone-pipeline')
     expect(promptFor(events, 'implement:#10 (opus/high)')).toContain('| high | Harness: milestone-pipeline')
     expect(promptFor(events, 'implement:#10 (opus/high)')).not.toContain('| low |')
 
@@ -416,7 +422,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewMode: 'github',
       merge: false,
     }, {
-      'review-loop:PR#1002 c1': () => review.promise,
+      'review-loop:PR#1002 c2-c3': () => review.promise,
       'validate:#9': () => {
         dependentStarted = true
         return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
@@ -433,12 +439,13 @@ describe('milestone-pipeline dependency scheduling', () => {
     review.resolve({
       status: 'lgtm',
       nonblocking_remaining: 0,
+      cycles_run: 1,
       summary: 'approved',
       head_ref: 'codex/issue-2',
       head_sha: headSha(2, 'a'),
     })
     const result = await running
-    const reviewFinished = result.events.findIndex((event) => event.state === 'finished' && event.label === 'review-loop:PR#1002 c1')
+    const reviewFinished = result.events.findIndex((event) => event.state === 'finished' && event.label === 'review-loop:PR#1002 c2-c3')
     const dependentStartIndex = result.events.findIndex((event) => event.state === 'started' && event.label === 'validate:#9')
     const independentStartIndex = result.events.findIndex((event) => event.state === 'started' && event.label === 'validate:#12')
 
@@ -472,7 +479,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const prompt = promptFor(events, 'implement:#2 (fable/high)')
     const pullRequestLog = logs.find((message) => message.startsWith('#2: PR #1002 open'))
 
-    expect(prompt.includes('trigger the review bot')).toBe(mode === 'github')
+    expect(prompt.toLowerCase().includes('trigger the review bot')).toBe(mode === 'github')
     expect(prompt.includes('reviews pull requests with in-session subagents')).toBe(mode === 'subagent')
     expect(prompt.includes('do not request or trigger any pull request review')).toBe(mode === 'off')
     expect(events.some((event) => event.phase === 'Review Loop')).toBe(mode !== 'off')
@@ -606,9 +613,10 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewLoop: true,
       reviewMode: 'github',
     }, {
-      'review-loop:PR#1002 c1': () => ({
+      'review-loop:PR#1002 c2-c3': () => ({
         status: 'blocked',
         nonblocking_remaining: 0,
+        cycles_run: 1,
         summary: 'review failed',
         head_ref: 'codex/issue-2',
         head_sha: headSha(2, 'b'),
@@ -627,7 +635,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       reviewLoop: true,
       reviewMode: 'github',
     }, {
-      'review-loop:PR#1002 c1': () => ({ status: 'lgtm', nonblocking_remaining: 0, summary: 'approved', head_ref: '', head_sha: '' }),
+      'review-loop:PR#1002 c2-c3': () => ({ status: 'lgtm', nonblocking_remaining: 0, cycles_run: 1, summary: 'approved', head_ref: '', head_sha: '' }),
     })
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('review_invalid_head')
@@ -735,6 +743,111 @@ describe('milestone-pipeline dependency scheduling', () => {
     )
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+  })
+})
+
+describe('milestone-pipeline github review mode', () => {
+  function implementationReview(status, nonblocking = 0, fill = '0') {
+    return {
+      pr_number: 1002,
+      pr_url: 'https://example.test/pr/1002',
+      head_ref: 'codex/issue-2',
+      head_sha: headSha(2, fill),
+      summary: 'implemented',
+      tests_passed: true,
+      github_review_status: status,
+      github_review_nonblocking_remaining: nonblocking,
+      github_review_summary: `cycle 1 ${status}`,
+      flags: [],
+    }
+  }
+
+  test('the implementation agent handles a clean first cycle without a fix agent', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      Implement: () => implementationReview('lgtm'),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(events.filter((event) => event.phase === 'Review Loop')).toHaveLength(0)
+    expect(promptFor(events, 'implement:#2 (fable/high)')).toContain('handle github review cycle 1 yourself')
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review.cycles_run).toBe(1)
+  })
+
+  test('one later agent can complete two review cycles', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      'review-loop:PR#1002 c2-c3': () => ({
+        status: 'lgtm',
+        nonblocking_remaining: 0,
+        cycles_run: 2,
+        summary: 'fixed two rounds',
+        head_ref: 'codex/issue-2',
+        head_sha: headSha(2, 'c'),
+      }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(events.filter((event) => event.state === 'started' && event.phase === 'Review Loop')).toHaveLength(1)
+    expect(promptFor(events, 'review-loop:PR#1002 c2-c3')).toContain('Run at most 2 cycles')
+    expect(record?.review.cycles_run).toBe(3)
+    expect(record?.head_sha).toBe(headSha(2, 'c'))
+  })
+
+  test('starts a fresh agent after each two-cycle batch', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      'review-loop:PR#1002 c2-c3': () => ({
+        status: 'needs_updates',
+        nonblocking_remaining: 0,
+        cycles_run: 2,
+        summary: 'more fixes needed',
+        head_ref: 'codex/issue-2',
+        head_sha: headSha(2, 'c'),
+      }),
+      'review-loop:PR#1002 c4-c5': () => ({
+        status: 'lgtm',
+        nonblocking_remaining: 0,
+        cycles_run: 2,
+        summary: 'clean',
+        head_ref: 'codex/issue-2',
+        head_sha: headSha(2, 'e'),
+      }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'review-loop:PR#1002 c2-c3')).toBeTrue()
+    expect(started(events, 'review-loop:PR#1002 c4-c5')).toBeTrue()
+    expect(record?.review.cycles_run).toBe(5)
+    expect(record?.status).toBe('lgtm')
+  })
+
+  test('rejects a batch that reports more cycles than it owns', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      'review-loop:PR#1002 c2-c3': () => ({
+        status: 'lgtm',
+        nonblocking_remaining: 0,
+        cycles_run: 3,
+        summary: 'invalid',
+        head_ref: 'codex/issue-2',
+        head_sha: headSha(2),
+      }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(record?.status).toBe('review_blocked')
+    expect(record?.review.blocker).toContain('invalid cycles_run 3')
+  })
+
+  test.each([
+    ['lgtm with non-blocking findings', 'lgtm', 1, 'lgtm_with_nonblocking'],
+    ['needs updates', 'needs_updates', 0, 'max_cycles_exhausted'],
+  ])('preserves the final-cycle boundary for %s', async (_name, status, nonblocking, finalStatus) => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', maxReviewCycles: 1, merge: false }, {
+      Implement: () => implementationReview(status, nonblocking),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(events.filter((event) => event.phase === 'Review Loop')).toHaveLength(0)
+    expect(record?.review.final_status).toBe(finalStatus)
   })
 })
 
@@ -1031,4 +1144,3 @@ describe('milestone-pipeline merge and release', () => {
     expect(logs.some((message) => message.includes('release not published'))).toBeTrue()
   })
 })
-
