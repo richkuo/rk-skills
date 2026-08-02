@@ -282,7 +282,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
-    expect(planEvent(2).effort).toBe('xhigh')
+    // A stamped xhigh Plan effort is clamped: the planner is always Fable 5, and Fable never runs at xhigh.
+    expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
     expect(planEvent(3).effort).toBe('low')
     expect(planEvent(3).model).toBe('fable')
@@ -290,17 +291,22 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(planEvent(5)).toBeUndefined()
 
     // The posted-plan footer must advertise the effort the planner actually ran at.
-    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | xhigh | Harness: milestone-pipeline')
+    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
     expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
 
-    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    expect(logs.filter((message) => message.includes('normalized'))).toEqual([])
+    // The clamp is logged for the stamped-xhigh issues (the fableplan: false one is
+    // clamped too — the log names the reason either way); no other normalization fires.
+    expect(logs.filter((message) => message.includes('normalized plan effort xhigh → high'))).toEqual([
+      '#2: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
+      '#5: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
+    ])
 
     // A stamped Plan effort on a fableplan: false issue is reported once, not dropped silently.
     expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
-      '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
+      '#5: ignoring Plan effort high — fableplan is false, so no plan stage runs',
     ])
   })
 
@@ -349,7 +355,7 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10]],
+      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11]],
       reviewLoop: true,
       reviewMode: 'github',
     }, {
@@ -363,6 +369,7 @@ describe('milestone-pipeline dependency scheduling', () => {
           { number: 8, title: 'Valid xhigh', complexity: 20, model: 'opus', effort: 'xhigh', validate_effort: 'medium', fableplan: false, missing_block: false },
           { number: 9, title: 'Fable low', complexity: 20, model: 'fable', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
           { number: 10, title: 'Opus low', complexity: 20, model: 'opus', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 11, title: 'Fable xhigh', complexity: 20, model: 'fable', effort: 'xhigh', validate_effort: 'high', fableplan: false, missing_block: false },
         ],
       }),
     })
@@ -392,6 +399,9 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('review-loop:PR#1009 c2-c3')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1010 c2-c3')).toBe('high')
+    // Fable never runs at xhigh — high is its ceiling.
+    expect(effortFor('implement:#11 (fable/high)')).toBe('high')
+    expect(effortFor('review-loop:PR#1011 c2-c3')).toBe('high')
 
     expect(promptFor(events, 'implement:#9 (fable/low)')).toContain('| low | Harness: milestone-pipeline')
     expect(promptFor(events, 'review-loop:PR#1009 c2-c3')).toContain('| low | Harness: milestone-pipeline')
@@ -405,6 +415,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
       '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
       '#10: normalized build effort low → high for Opus 5 (low/medium are Fable-only)',
+      '#11: normalized build effort xhigh → high (Fable never runs at xhigh)',
     ])
   })
 

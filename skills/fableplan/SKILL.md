@@ -75,7 +75,7 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: Claude Code | fableplan
 ```
 
-Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming `high` on a plan that ran at `xhigh` is a false attribution, the same defect the milestone-pipeline plan footer fixes.
+Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes. (A stamped `xhigh` Plan effort is itself illegal — the planner is always Fable 5, and Fable never runs at xhigh; honor it as `high` and note the clamp.)
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 

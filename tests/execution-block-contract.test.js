@@ -169,10 +169,12 @@ describe('Execution block ordering contract', () => {
 
 describe('Execution block Plan effort contract', () => {
   test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
-    expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high | xhigh>')
+    expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high>')
+    // xhigh is not a legal plan tier — the planner is always Fable 5, and Fable caps at high.
+    expect(prdToIssues).not.toContain('- **Plan effort:** <low | medium | high | xhigh>')
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
     expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*planner is always Fable 5.*every tier is legal/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*planner is always Fable 5.*never xhigh/is)
     expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*sets effort only, never a model/is)
   })
 
