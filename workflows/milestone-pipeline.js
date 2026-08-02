@@ -478,15 +478,24 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: fixed_count, refuted_count, the exact head_ref and head_sha after your push, a summary of what was fixed and what was refuted, and blocker ONLY if the pass could not complete.`
 }
 
-function mergePrompt(issue, prNumber, head) {
+function mergePrompt(issue, prNumber, head, reviewMode) {
+  const githubReviewGate = reviewMode === 'github'
+    ? `4. Independent review gate (the FINAL read before merge): re-fetch the live PR head and ALL PR issue comments after every CI wait and any branch update. The live head must still equal the reviewed readiness SHA ${head.sha}; if update-branch changed it, STOP and require a fresh review. From the full comment history, identify the newest exact one-line \`@claude [model] review [effort]\` trigger and the newest completed review output from \`github-actions[bot]\` whose body links \`/actions/runs/<run-id>\`. Resolve that linked run and require \`status == completed\` and \`conclusion == success\`. Require the output's \`created_at\` to be later than the trigger's \`created_at\`, and require its body to contain exactly one standalone verdict line that is \`LGTM\` (not \`Needs Updates\`). A newer trigger or run-linked bot comment without a completed matching output blocks the merge; never fall back to an older LGTM. Do not compare the workflow run's \`head_sha\` to the PR: an \`issue_comment\` run reports the default-branch SHA, so the live readiness-head pin above is the review binding. This gate must catch a re-review that changes or supersedes the verdict during CI. Once it succeeds, run step 5 immediately — no command may run between this final validation and the pinned merge.`
+    : ''
+  const mergeStep = reviewMode === 'github' ? 5 : 4
+  const verifyStep = mergeStep + 1
+  const issueStep = mergeStep + 2
+  const verifiedShaRule = reviewMode === 'github'
+    ? `<verified-sha> is ${head.sha}; if step 3 changed the head, step 4 blocks until a fresh review reaches readiness.`
+    : `<verified-sha> is ${head.sha} when step 3 did not update the branch, or the new head you captured after update-branch.`
   return `You are a merge agent in this repo. PR #${prNumber} (closes issue #${issue}) reached review readiness at head ${head.ref} @ ${head.sha}. The user approved this milestone run plan, which explicitly authorizes merging this PR, deleting its branch, and closing its issue.
 
 1. Verify the PR: \`gh pr view ${prNumber} --json state,headRefName,headRefOid,mergeStateStatus\` — it must be OPEN with headRefOid exactly ${head.sha}. A different head means commits landed after the review: STOP and return merged false with that as the blocker.
 2. CI gate: \`gh pr checks ${prNumber} --watch\` and wait for completion. Any failed check → do NOT merge; return merged false with the failing check as the blocker. No checks configured counts as passing.
 3. If the branch is behind the base at all — whether or not the repo requires up-to-date branches: run \`gh pr update-branch ${prNumber}\` ONLY when it merges cleanly, then capture the new head (\`gh pr view ${prNumber} --json headRefOid\`) and repeat the CI gate on that new head. The reviewed code must prove itself against the base it will actually land on — never merge a behind branch untested. If update-branch reports conflicts, do NOT resolve them — return merged false, blocker "merge conflict with the base branch".
-4. Merge: \`gh pr merge ${prNumber} --squash --delete-branch --match-head-commit <verified-sha>\` — ALWAYS pin: <verified-sha> is ${head.sha} when step 3 did not update the branch, or the new head you captured after update-branch. Never run the merge unpinned. If the merge is rejected because the head no longer matches, a commit landed after your CI gate: do NOT retry with a fresh SHA — return merged false with that as the blocker.
-5. Verify: \`gh pr view ${prNumber} --json state,mergeCommit\` — state must be MERGED; record the merge commit SHA.
-6. Confirm issue #${issue} auto-closed (\`gh issue view ${issue} --json state\`). If still open, close it: \`gh issue close ${issue} --comment "Closed by PR #${prNumber}.\n\n---\nUpdated with LLM: Sonnet 5 | low | Harness: milestone-pipeline"\`.
+${githubReviewGate ? `${githubReviewGate}\n` : ''}${mergeStep}. Merge: \`gh pr merge ${prNumber} --squash --delete-branch --match-head-commit <verified-sha>\` — ALWAYS pin: ${verifiedShaRule} Never run the merge unpinned. If the merge is rejected because the head no longer matches, a commit landed after your CI gate: do NOT retry with a fresh SHA — return merged false with that as the blocker.
+${verifyStep}. Verify: \`gh pr view ${prNumber} --json state,mergeCommit\` — state must be MERGED; record the merge commit SHA.
+${issueStep}. Confirm issue #${issue} auto-closed (\`gh issue view ${issue} --json state\`). If still open, close it: \`gh issue close ${issue} --comment "Closed by PR #${prNumber}.\n\n---\nUpdated with LLM: Sonnet 5 | low | Harness: milestone-pipeline"\`.
 
 Never push commits, never edit files, never resolve merge conflicts. Return via StructuredOutput: merged, merge_sha, issue_state, branch_deleted, summary, and blocker only when merged is false.`
 }
@@ -837,7 +846,7 @@ async function executeTrack(trackIndex) {
     if (MERGE) {
       let merge
       try {
-        merge = await agent(mergePrompt(issue, impl.pr_number, head), {
+        merge = await agent(mergePrompt(issue, impl.pr_number, head, REVIEW_MODE), {
           model: 'sonnet',
           effort: 'low',
           schema: MERGE_SCHEMA,

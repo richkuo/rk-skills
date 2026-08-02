@@ -1014,10 +1014,29 @@ describe('milestone-pipeline merge and release', () => {
     expect(mergeEvent.prompt).toContain('If the branch is behind the base at all')
     expect(mergeEvent.prompt).toContain('never merge a behind branch untested')
     expect(mergeEvent.prompt).toContain('never resolve merge conflicts')
+    expect(mergeEvent.prompt).not.toContain('github-actions[bot]')
     expect(record?.status).toBe('merged')
     expect(record?.merge_sha).toBe(headSha(1002, 'e'))
     expect(record?.issue_state).toBe('closed')
     expect(logs.some((message) => message.includes('PR #1002: merged; issue #2 closed'))).toBeTrue()
+  })
+
+  test('github mode independently verifies the standing review on the final head', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github' })
+    const mergePrompt = promptFor(events, 'merge:PR#1002')
+
+    expect(mergePrompt).toContain('Independent review gate (the FINAL read before merge)')
+    expect(mergePrompt).toContain(`live head must still equal the reviewed readiness SHA ${headSha(2)}`)
+    expect(mergePrompt).toContain('newest exact one-line `@claude [model] review [effort]` trigger')
+    expect(mergePrompt).toContain('newest completed review output from `github-actions[bot]`')
+    expect(mergePrompt).toContain('`status == completed` and `conclusion == success`')
+    expect(mergePrompt).toContain("output's `created_at` to be later than the trigger's `created_at`")
+    expect(mergePrompt).toContain('exactly one standalone verdict line that is `LGTM`')
+    expect(mergePrompt).toContain('without a completed matching output blocks the merge')
+    expect(mergePrompt).toContain('`Needs Updates`')
+    expect(mergePrompt).toContain('an `issue_comment` run reports the default-branch SHA')
+    expect(mergePrompt).toContain('if step 3 changed the head, step 4 blocks until a fresh review reaches readiness')
+    expect(mergePrompt).toContain('no command may run between this final validation and the pinned merge')
   })
 
   test('merge and release default off when review loops are off', async () => {
