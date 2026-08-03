@@ -13,10 +13,10 @@ Present the per-issue ordering and execution assignments as one table, absorb th
 
 Fetch every issue in the milestone (`gh issue list --milestone ... --json number,title,body`) and parse the `## Execution` blocks. The table:
 
-| Issue | C | Depends on | Runs after | Build model | Effort | Validate effort | fableplan first? | Plan effort |
+| Issue | C | Depends on | Runs after | Build model | Effort | Validate | fableplan first? | Plan effort |
 |---|---|---|---|---|---|---|---|---|
 
-(Validate effort and Plan effort both default to high when an issue's block omits the line — show the effective value. Show Plan effort as `—` on a `fableplan first: No` issue only when it stamps no line at all, since no plan stage runs; when such an issue *does* carry a stamped line, show that tier marked `ignored` — e.g. `xhigh (ignored)` — never a bare `—`. A stale stamp from a hand edit or a pre-convention issue must be visible in the table that is meant to be the source of truth, not masked by it; the milestone pipeline logs it on every run. Display an absent ordering field as `missing`, not `none`, so legacy prose inference is not silently discarded.)
+(Show **Validate** as the effective `<model> · <effort>` the pipeline will dispatch: `Opus 5 · medium` below `[C20]`, otherwise `Fable 5` at the stamped `Validate effort`. That model is derived from the score and is never stampable — reject any request to stamp a `Validate model:` line. When a sub-C20 issue carries a stamped `Validate effort`, show it marked `ignored` — e.g. `Opus 5 · medium (stamped high ignored)` — for the same reason an inert Plan effort stays visible. Validate effort and Plan effort both default to high when an issue's block omits the line — show the effective value. Show Plan effort as `—` on a `fableplan first: No` issue only when it stamps no line at all, since no plan stage runs; when such an issue *does* carry a stamped line, show that tier marked `ignored` — e.g. `xhigh (ignored)` — never a bare `—`. A stale stamp from a hand edit or a pre-convention issue must be visible in the table that is meant to be the source of truth, not masked by it; the milestone pipeline logs it on every run. Display an absent ordering field as `missing`, not `none`, so legacy prose inference is not silently discarded.)
 
 Follow with 2–3 sentences on the pattern (which Capability bands dominate, where fableplan bridges Capability 2, what the review trigger is) — enough for the user to sanity-check against the `prd-to-issues` / `validate-issue` band table, not a lecture.
 
@@ -53,6 +53,7 @@ To see the whole milestone's execution plan as one table — issue, complexity, 
 | Revision would put a Fable build's effort at `low` | Allowed only on Capability 3 with Volume ≤ 7 (`[C75]`–`[C82]`) — Fable-only discretionary tier below that band's `medium` floor, no pushback needed. Outside Cap-3 or at higher Volume, raise to the Volume tertile (or push back once) — same scope `milestoneplan` / `prd-to-issues` / `validate-issue` enforce |
 | Revision would put any Fable 5 stage at `xhigh` | Set `high` and say why — **Fable never runs at xhigh; high is Fable's ceiling on every stage (build, plan, validate, review, fix)** |
 | Revision would put validate effort at `xhigh` | Set `high` and say why — validate effort is only ever medium or high |
+| Revision names a validate model, or sets validate effort on a sub-`[C20]` issue | Neither is stampable — validation routes off the `[C<score>]` prefix (Opus 5 at medium below `[C20]`, else Fable 5). Say so and drop the revision; if they want the heavier pass, the score is what to revisit |
 | Revision names a plan model, not just an effort | Only the effort is stampable — the fableplan stage is Fable 5 by definition. Keep Fable 5, apply the effort if one was named, and say so |
 | Revision would put plan effort at `low` or `medium` | Allowed — the planner is always Fable, so low/medium/high are all legal (xhigh is not — see the Fable-xhigh row); no pushback needed |
 | Edits collide with someone else's concurrent issue edits | Re-fetch, re-apply only your delta |

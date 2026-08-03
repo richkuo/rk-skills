@@ -353,6 +353,39 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
 
+  test('routes validation off the score: Opus at medium below C20, else Fable', async () => {
+    const { events, logs } = await executeWorkflow({
+      tracks: [[2], [3], [4], [5], [6]],
+      reviewLoop: false,
+    }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Light, unstamped', complexity: 2, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          { number: 3, title: 'Light, stamped high', complexity: 19, model: 'sonnet', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'At the boundary', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'medium', fableplan: false, missing_block: false },
+          { number: 5, title: 'Heavy', complexity: 68, model: 'opus', effort: 'xhigh', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 6, title: 'No [C..] prefix', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+        ],
+      }),
+    })
+
+    const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
+    // Below C20 the score alone decides — the Build model never leaks in.
+    expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
+    // A stamped Validate effort does not survive the light route.
+    expect(dispatch('validate:#3')).toMatchObject({ model: 'opus', effort: 'medium' })
+    // C20 itself is not light — the boundary is exclusive.
+    expect(dispatch('validate:#4')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#5')).toMatchObject({ model: 'fable', effort: 'high' })
+    // complexity 0 means "no prefix" — unknown, not small.
+    expect(dispatch('validate:#6')).toMatchObject({ model: 'fable', effort: 'high' })
+
+    expect(logs.filter((message) => message.includes('validating on Opus 5 at medium'))).toEqual([
+      '#2: C2 < 20 — validating on Opus 5 at medium',
+      '#3: C19 < 20 — validating on Opus 5 at medium (stamped Validate effort high not read)',
+    ])
+  })
+
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
       tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11]],
