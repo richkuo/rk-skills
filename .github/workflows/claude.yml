@@ -251,7 +251,7 @@ jobs:
                 # optional model shorthand.
                 KEYWORD=$(printf '%s' "$STRIPPED" | tr -d '\r' \
                   | sed -n 's/^[[:space:]]*@claude[[:space:]]\{1,\}//p' | head -n 1 \
-                  | awk '{ if ($1 ~ /^(opus|opus5|sonnet|sonnet5|fable|fable5)$/) { print $2 } else { print $1 } }' \
+                  | awk '{ if (tolower($1) ~ /^(opus|opus5|sonnet|sonnet5|fable|fable5)$/) { print $2 } else { print $1 } }' \
                   | tr '[:upper:]' '[:lower:]')
 
                 PR_AUTHOR_TRUSTED=false

@@ -30,6 +30,7 @@ CLAUDE_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "claude.yml")
 
 VERIFY_STEP = "Verify @claude is an actual invocation (not in a code block or example)"
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
+RESOLVE_MODEL_STEP = "Resolve model from @claude invocation"
 
 
 def _read(path):
@@ -131,6 +132,41 @@ def run_classify_mode(
     )
 
 
+def _run_block_all_outputs(script, env_overrides):
+    """Execute an extracted run block with injected env; return every key it
+    wrote to GITHUB_OUTPUT as a dict (last-wins per key, same rule as
+    _run_block)."""
+    with tempfile.TemporaryDirectory() as d:
+        out_path = os.path.join(d, "github_output")
+        open(out_path, "w").close()
+        env = dict(os.environ)
+        env.update(env_overrides)
+        env["GITHUB_OUTPUT"] = out_path
+        r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+        values = {}
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if "=" in line:
+                    key, _, val = line.partition("=")
+                    values[key] = val
+        if not values:
+            raise AssertionError(f"run block wrote no GITHUB_OUTPUT; stderr:\n{r.stderr}")
+        return values
+
+
+def run_resolve_model(event_name, stripped, docs_release_enabled=""):
+    script = extract_step_run_block(_read(CLAUDE_YML), RESOLVE_MODEL_STEP)
+    return _run_block_all_outputs(
+        script,
+        {
+            "EVENT_NAME": event_name,
+            "STRIPPED": stripped,
+            "DOCS_RELEASE_ENABLED": docs_release_enabled,
+        },
+    )
+
+
 def run_verify_invocation(event_name, body, trigger_actor="someuser"):
     script = extract_step_run_block(_read(CLAUDE_YML), VERIFY_STEP)
     return _run_block(
@@ -207,6 +243,24 @@ class ClassifyModeRoutingTest(unittest.TestCase):
             run_classify_mode("issue_comment", "@claude sonnet review",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
             "review",
+        )
+
+    def test_review_keyword_after_uppercase_model_shorthand_is_review(self):
+        # Must survive: a capitalized shorthand ("Opus") must be skipped
+        # identically to its lowercase form, or the real "review" keyword
+        # gets discarded and a trusted-author PR misroutes to push-capable
+        # fix-pr instead of staying read-only.
+        self.assertEqual(
+            run_classify_mode("issue_comment", "@claude Opus review",
+                              pr_url=PR_URL, pr_author_assoc="MEMBER"),
+            "review",
+        )
+
+    def test_fix_pr_keyword_after_uppercase_model_shorthand_routes_to_fix_pr(self):
+        self.assertEqual(
+            run_classify_mode("issue_comment", "@claude SONNET5 fix this",
+                              pr_url=PR_URL, pr_author_assoc="OWNER"),
+            "fix-pr",
         )
 
     def test_review_and_fix_loses_push_on_purpose(self):
@@ -320,6 +374,65 @@ class ClassifyModeRoutingTest(unittest.TestCase):
                               pr_url=PR_URL, flow="create-release",
                               pr_author_assoc="MEMBER"),
             "implement",
+        )
+
+
+class ResolveModelTest(unittest.TestCase):
+    """Pin the model-shorthand → MODEL_ID resolution and the docs/release FLOW
+    matcher, extracted straight from the live YAML so a change to the
+    shorthand regex or the model-id case statement is what the test runs
+    against."""
+
+    def test_no_shorthand_defaults_to_opus_4_8(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude fix this")["model_id"],
+            "claude-opus-4-8[1m]",
+        )
+
+    def test_opus_shorthand_selects_opus_5(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude opus review")["model_id"],
+            "claude-opus-5",
+        )
+
+    def test_opus5_shorthand_selects_opus_5(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude opus5 review")["model_id"],
+            "claude-opus-5",
+        )
+
+    def test_sonnet5_shorthand_selects_sonnet_5(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude sonnet5 fix this")["model_id"],
+            "claude-sonnet-5",
+        )
+
+    def test_fable5_shorthand_selects_fable_5(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude fable5 review")["model_id"],
+            "claude-fable-5",
+        )
+
+    def test_flow_matches_create_release_with_model_shorthand(self):
+        self.assertEqual(
+            run_resolve_model(
+                "issue_comment", "@claude opus5 create-release", docs_release_enabled="true"
+            )["flow"],
+            "create-release",
+        )
+
+    def test_flow_matches_sync_docs_without_shorthand(self):
+        self.assertEqual(
+            run_resolve_model(
+                "issue_comment", "@claude sync-docs", docs_release_enabled="true"
+            )["flow"],
+            "sync-docs",
+        )
+
+    def test_flow_empty_when_docs_release_disabled(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude create-release")["flow"],
+            "",
         )
 
 
