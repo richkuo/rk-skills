@@ -17,6 +17,7 @@ HARNESS = "anthropics/claude-code-action@v1"
 class ModelDisplayNameTest(unittest.TestCase):
     def test_known_ids_mapped(self):
         self.assertEqual(model_display_name("claude-opus-4-8[1m]"), "Claude Opus 4.8 (1M)")
+        self.assertEqual(model_display_name("claude-opus-5"), "Claude Opus 5")
         self.assertEqual(model_display_name("claude-sonnet-5"), "Claude Sonnet 5")
         self.assertEqual(model_display_name("claude-fable-5"), "Claude Fable 5")
 
