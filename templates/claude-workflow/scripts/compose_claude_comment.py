@@ -22,6 +22,7 @@ from strip_llm_footer import strip_llm_footer
 
 MODEL_DISPLAY_NAMES = {
     "claude-opus-4-8[1m]": "Claude Opus 4.8 (1M)",
+    "claude-opus-5": "Claude Opus 5",
     "claude-sonnet-5": "Claude Sonnet 5",
     "claude-fable-5": "Claude Fable 5",
 }
