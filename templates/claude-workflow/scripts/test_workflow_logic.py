@@ -401,9 +401,24 @@ class ResolveModelTest(unittest.TestCase):
             "claude-opus-5",
         )
 
+    def test_capitalized_opus5_shorthand_selects_opus_5(self):
+        # Must survive: a shorthand token that routing recognizes and skips
+        # for every case variant must resolve to the same model for every
+        # case variant — never silently drop to the Opus 4.8 default.
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude Opus5 review")["model_id"],
+            "claude-opus-5",
+        )
+
     def test_sonnet5_shorthand_selects_sonnet_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude sonnet5 fix this")["model_id"],
+            "claude-sonnet-5",
+        )
+
+    def test_uppercase_sonnet5_shorthand_selects_sonnet_5(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude SONNET5 fix this")["model_id"],
             "claude-sonnet-5",
         )
 

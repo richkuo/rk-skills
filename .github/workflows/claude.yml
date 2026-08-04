@@ -134,9 +134,10 @@ jobs:
           DOCS_RELEASE_ENABLED: ${{ vars.DOCS_RELEASE_ENABLED }}
         run: |
           # Extract optional model shorthand after @claude on a line boundary,
-          # including an optional version digit.
-          # e.g. "@claude sonnet fix this" → "sonnet", "@claude opus5 …" → "opus5"
-          MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -oE '(^|(\r?\n))[[:space:]]*@claude[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' || true)
+          # including an optional version digit. Case-insensitive match (-i),
+          # then lowercased, so "Opus"/"OPUS5" resolve the same as "opus5".
+          # e.g. "@claude sonnet fix this" → "sonnet", "@claude Opus5 …" → "opus5"
+          MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -ioE '(^|(\r?\n))[[:space:]]*@claude[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' || true)
 
           # Each family accepts a bare name and a "5" suffix — "opus"/"opus5" both
           # select Opus 5. Only the no-shorthand default stays on Opus 4.8.
