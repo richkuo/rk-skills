@@ -61,6 +61,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 | `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5 subagent; your main session presents the verdict and acts on it. |
 | `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only when Capability ≥ 2 / score ≥ 50, or touching safety-critical code), then drives to a reviewed PR. |
 | `fable-validate-fableplan-loop` | Same as above, but the Fable plan is unconditional — every issue gets a posted plan before implementation, no matter how simple. |
+| `fable-validate-fableplan` | The same chain without the build: Fable validates the issue, issue fixes are applied, and a Fable plan is always posted. It stops there — no worktree, no PR, no review loop. |
 | `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when Capability ≥ 2 / score ≥ 50 or safety-flagged, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | The trimmed chain: Fable 5 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
 | `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
