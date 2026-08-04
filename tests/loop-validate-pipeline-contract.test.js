@@ -21,6 +21,7 @@ const CAPABILITY_GATE = [
 ]
 const ALWAYS_PLAN = [
   'skills/fable-validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
   'skills/fableplan-loop/SKILL.md',
 ]
 
@@ -34,6 +35,7 @@ const VALIDATION_STOP = [
   'skills/fable-validate-loop/SKILL.md',
   'skills/validate-fableplan-loop/SKILL.md',
   'skills/fable-validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
 ]
 
 const INVENTORY = 'docs/contract-inventory.md'
@@ -128,7 +130,7 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('validate→implement loops stop on too-large, infeasible, or existing PR', () => {
+  test('validate→plan/implement chains stop on too-large, infeasible, or existing PR', () => {
     for (const path of VALIDATION_STOP) {
       const body = procedureBody(texts[path])
       expect(hasStopTableRow(body, /too large/i), `${path}: STOP+too large row`).toBe(true)
