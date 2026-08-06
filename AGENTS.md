@@ -57,7 +57,7 @@
 
 - **Verb:** `Created` (new work), `Updated` (edits/revisions), `Validated` (review/verification).
 - `<current model>`: the model actually in use (e.g. `Opus 5`).
-- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that discretionary tier; default `high`.
+- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that discretionary tier; default `high`. Fable 5 never uses `xhigh` — `high` is its ceiling on every stage.
 - `<harness>`: what produced the change — `Codex` for an interactive session, or the specific skill/agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). Named values identify the skill/harness. They do **not** identify the git operations. A hand-done commit/push/PR in a session is `Codex`. Never write `commit-push-pr` for it.
 - **Project precedence:** a repo AGENTS.md footer format overrides this default.
 
