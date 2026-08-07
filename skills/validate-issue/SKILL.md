@@ -114,7 +114,7 @@ Mark **every** claim. A path you couldn't locate is ❓, never silently dropped 
 
 Only after all factual claims are marked, evaluate the proposed fix. Split into **architecture** (right shape for *this* codebase?) and **general** (conflicts, safety, regressions).
 
-First, write a one-shot **Goal** summary — what the issue is ultimately trying to accomplish (the outcome, not the mechanism), in plain language anyone could follow (ELI23), **≤55 words**. It is the lead line of the **Proposal** section in the output (step 7), shown even when the rest of that section is omitted, and independent of whether the proposal is sound.
+First, write a one-shot **Goal** summary — what the issue is ultimately trying to accomplish (the outcome, not the mechanism), in plain simple English in ASD-STE100, no litotes or litotes-adjacent hedging, **≤55 words**. It is the lead line of the **Proposal** section in the output (step 7), shown even when the rest of that section is omitted, and independent of whether the proposal is sound.
 
 #### 5a. Architectural feasibility & optimization (REQUIRED for non-trivial proposals)
 
@@ -292,7 +292,7 @@ Concerns: (omit section if none)
 - <concern> (<file:line>)
 
 Proposal:
-- Goal (ELI23, ≤55 words): <plain-language summary of what the issue is trying to accomplish — outcome, not mechanism>
+- Goal (plain simple English in ASD-STE100, ≤55 words): <plain-simple-English summary of what the issue is trying to accomplish — outcome, not mechanism>
 - <✅|⚠️|❌> <lifetime/population/benefit/consumer/failure — one line each only when not ✅> (omit this verdict line if no step 5c / trivial fix)
 
 Scope: (omit unless the issue is too large per step 6.5)
