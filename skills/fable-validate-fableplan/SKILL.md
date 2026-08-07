@@ -64,7 +64,7 @@ If fableplan's sanity-check finds the plan structurally wrong, or fableplan fail
 
 Report, in order: scope gate passed, issue updated or not, plan posted (comment URL), and one line on what the plan proposes. Then name the follow-on options in one line — `work-on-issue` to build the plan and stop at the PR, `work-on-issue-loop` to build it and drive review to convergence, or `fable-validate-fableplan-loop` for the same chain end-to-end next time. **Do not start any of them.**
 
-**Cap the whole report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase.
+**Cap the whole report at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 

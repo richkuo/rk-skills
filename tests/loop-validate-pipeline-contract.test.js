@@ -194,10 +194,12 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('every autonomous chain caps its final report at 55 words ELI18', () => {
+  test('every autonomous chain caps its final report at 55 words plain simple English in ASD-STE100', () => {
     for (const path of REPORT_CAP) {
       const body = procedureBody(texts[path])
-      expect(body, path).toMatch(/\*\*Cap the whole report[^\n]*55 words, ELI18\*\*/)
+      expect(body, path).toMatch(
+        /\*\*Cap the whole report[^\n]*55 words, plain simple English in ASD-STE100\*\*[^\n]*no litotes or litotes-adjacent hedging/,
+      )
     }
   })
 

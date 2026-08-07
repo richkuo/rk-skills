@@ -42,7 +42,7 @@ It runs its full loop: work-on-issue implements in a fresh worktree and opens th
 
 Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final verdict, which model each fix cycle ran on, any follow-on issues it filed), prefixed with one line covering the head of the chain: plan posted (comment URL). If the run stopped at one of its gates instead of converging, report why it stopped.
 
-**Cap the whole report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase.
+**Cap the whole report at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 
