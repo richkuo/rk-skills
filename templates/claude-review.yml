@@ -227,8 +227,8 @@ jobs:
             English:** — the item's last field, added after `Invariant`/`Must
             survive` or `Recommended proposed solution` where those apply —
             ASD-STE100 (Simplified Technical English) under 55 words, no
-            jargon, no unexplained acronyms, no litotes or litotes-adjacent
-            hedging — so a human can understand the finding without reading
+            jargon, no unexplained acronyms, no domain assumptions, no litotes
+            or litotes-adjacent hedging — so a human can understand the finding without reading
             the technical paragraph. For `### Requires Human Review`, prefer a
             concrete A/B decision question; for other sections, state what is
             wrong or what should change in everyday language.
