@@ -21,7 +21,7 @@ flowchart LR
 
 Several skills mention a **complexity score** (`C0`–`C100`): a model + effort routing signal in the issue title. **Capability** (which LLM / whether a Fable plan runs first) lives in the score band; **Volume** (how hard to push) lives in the depth inside the band — see `validate-issue` step 6. "Fable" skills hand part of the work to a subagent running on the Fable 5 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
 
-Every issue's first line also carries an explicit **`fableplan: yes|no`** signal, so later steps read the planning decision instead of re-deriving it from the score. It's `yes` only in the Capability 2 band (scores 50–74), where an Opus-class build is worth planning by Fable first. Effort runs `high`/`xhigh` for Opus and Sonnet builds; Fable builds may also run at `medium` or, at the planner's discretion, `low` for issues lighter than the formula's own floor. Fable 5 never runs at `xhigh` — `high` is its ceiling on every stage (build, plan, validate, review, fix).
+Every issue's first line also carries an explicit **`fableplan: yes|no`** signal, so later steps read the planning decision instead of re-deriving it from the score. It's `yes` at Capability ≥ 2 / score ≥ 50 — a Fable 5 plan is posted before the build, whether Opus 5 builds (band 2) or Fable 5 builds (band 3). Effort runs `high`/`xhigh` for Opus and Sonnet builds; Fable builds may also run at `medium` or, at the planner's discretion, `low` for issues lighter than the formula's own floor. Fable 5 never runs at `xhigh` — `high` is its ceiling on every stage (build, plan, validate, review, fix).
 
 ### Issue skills
 

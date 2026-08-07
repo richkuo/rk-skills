@@ -22,7 +22,7 @@ gh issue list --milestone "<title>" --state all --limit 500 --json number,title,
 
 Pass `state=all` on the milestones call (it defaults to open only) and `--paginate` with `per_page=100` (it returns 30 per page by default). If the issue fetch returns a count equal to `--limit`, re-fetch at a higher limit until a fetch returns strictly below its own limit — never render the table over a possibly-partial milestone.
 
-Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each issue's `[C<score>]` title prefix and `## Execution` block: `Depends on`, `Runs after`, build model, build effort, validate effort, fableplan, plan effort, PR review line.
+Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each issue's `[C<score>]` title prefix and `## Execution` block: `Depends on`, `Runs after`, build model, build effort, fableplan, plan effort, PR review line — plus any legacy `Validate effort:` line, which is read only to flag it as ignored.
 
 ### 2. Render the table
 
@@ -35,12 +35,12 @@ Output is **exactly one markdown table** — one row per issue in the milestone,
 - **Description** — the issue title with the `[C<score>]` prefix stripped, truncated to ~30 characters.
 - **C** — the score from the `[C<score>]` title prefix; *missing* when absent.
 - **Deps/After** — the stamped `Depends on` and `Runs after` edge lists as one cell, `<depends> / <after>`, issue numbers without the `#` prefix and `none` rendered as `—` (e.g. `12, 13 / —`); *missing* on either side when that field is absent — never infer edges from prose. When every row's `Runs after` is `none`, drop the ` / —` suffix from all cells and say so in the note line below the table.
-- **Validate** — the effective validation routing, `<model> · <effort>`. The model is derived from the `[C<score>]` prefix, never from the Build model and never stamped: below `[C20]` it is `Opus 5 · medium` regardless of any stamped `Validate effort` (say so in the note line when the row's stamp disagrees); at `[C20]` and above it is `Fable 5` at the stamped `Validate effort`, or *missing* on the effort half when that line is absent (the pipeline defaults to high). A missing `[C..]` prefix keeps Fable.
+- **Validate** — the effective validation routing, `<model> · <effort>`, derived entirely from the `[C<score>]` prefix, never from the Build model and never stamped: `Opus 5 · medium` at `[C0]`–`[C24]`, `Opus 5 · high` at `[C25]`–`[C49]`, `Fable 5 · high` at `[C50]` and above. A missing `[C..]` prefix keeps Fable at high. When a row carries a legacy stamped `Validate effort`, say so in the note line — the stamp is never read.
 - **Build** — the stamped build model and effort as one cell, `<model> · <effort>` (e.g. `Opus 5 · xhigh`); *missing* on either half when absent.
 - **Plan** — `Yes · <plan effort>` when fableplan is stamped `Yes` (e.g. `Yes · high`; *missing* for the effort half when unstamped; a stamped `xhigh` renders as `xhigh (illegal — Fable caps at high)` since the planner is always Fable 5), plain `No` when stamped `No` (plan effort is never read), *missing* when the fableplan stamp is absent.
-- **Review** — the issue's `PR review:` line compressed to its trigger (e.g. `@claude`); append a short parenthetical only when the line carries a real caveat (e.g. `may close with no PR`).
+- **Review** — the effective first-review routing: the band default derived from the score (`Sonnet 5 · high` at 0–24, `Opus 5 · high` at 25–74, `Fable 5 · high` at 75+ or no prefix), unless the `PR review:` line stamps an explicit `@claude <model> review effort:<tier>` trigger, which overrides it; append a short parenthetical only when the line carries a real caveat (e.g. `may close with no PR`).
 
-After the table, print **one note line** stating what was factored out of the columns: that validation routes off the score (Opus 5 at medium below `[C20]`, otherwise Fable 5), which rows' stamped `Validate effort` therefore goes unread, plus anything uniform that was dropped (e.g. `Runs after` all `none`).
+After the table, print **one note line** stating what was factored out of the columns: that validation routes off the score band (Opus 5 · medium at 0–24, Opus 5 · high at 25–49, Fable 5 · high at 50+ or no prefix), which rows carry a legacy stamped `Validate effort` that therefore goes unread, plus anything uniform that was dropped (e.g. `Runs after` all `none`).
 
 Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with an extra line in the note that the pipeline would route it to `model fable, effort high`.
 

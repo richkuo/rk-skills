@@ -204,7 +204,7 @@ Any **❌** or material **⚠️** → **Update issue description? Yes** (same a
 
 ### 6. Score complexity
 
-Rate the work to implement the fix **correctly, including tests** — not the happy-path diff, not the author's estimate. The `[C0]`–`[C100]` score is a **model + effort routing signal**: the **band** selects which LLM (and whether fableplan runs first); **depth inside the band** selects effort. Do **not** sum the axes into one mushy difficulty number.
+Rate the work to implement the fix **correctly, including tests** — not the happy-path diff, not the author's estimate. The `[C0]`–`[C100]` score is a **model + effort routing signal**: the **band** selects which LLM validates and builds, at what effort, and whether fableplan runs first; **depth inside the band** (Volume) records how much surface the work drags and can justify revising effort on Fable builds. Do **not** sum the axes into one mushy difficulty number.
 
 **Derive the axes from the change surface you traced, not the issue's prose.** List the concrete edits steps 3–5 imply — files/functions, configs/migrations, tests to add or rewrite — and size the axes from that list; a score not backed by it is a vibe. If a path is unresolved (5a/5c ⚠️/❌), raise **Uncertainty**, give a Capability-band range (e.g. 50–74) not a point, and name the single unknown driving the spread.
 
@@ -228,14 +228,18 @@ Judgment-heavy work must raise **Uncertainty** or **Coupling** — never score a
 2. **Volume** (0–24): `(Scope + Coupling + Verification) × 2`.
 3. **Final score** = `25 × Capability + Volume` (0–99 under current axis bounds: Capability ≤ 3, Volume ≤ 24). No Risk/Uncertainty floors and no hard ceilings — the band *is* the floor.
 
-#### Band → model / effort
+#### Band → routing (canonical matrix)
 
-| Capability | Score band | Model / planning | Effort from Volume tertiles (0–7 / 8–15 / 16–24) |
-|---|---|---|---|
-| 0 | 0–24 | Cheap/fast (Sonnet-class) | high / high / xhigh |
-| 1 | 25–49 | Opus-class | high / high / xhigh (never medium on Opus) |
-| 2 | 50–74 | Opus-class **+ fableplan first** | high / high / xhigh |
-| 3 | 75–99 | Fable 5 | medium / high / high (**Fable never runs at xhigh — high is its ceiling on every stage**; medium is Fable-only; a discretionary Fable-only `low`, below the formula floor, is allowed for issues judged lighter than Volume 0–7) |
+The band fixes every routing default — validation, planning, build, and first review:
+
+| Capability | Score band | Validate | fableplan first | Build | First review |
+|---|---|---|---|---|---|
+| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh | Sonnet 5 · high |
+| 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |
+| 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |
+| 3 | 75–99 | Fable 5 · high | **Yes** | Fable 5 · high | Fable 5 · high |
+
+**Fable never runs at xhigh — high is its ceiling on every stage.** A Fable build may be revised down to `medium`, or to a discretionary Fable-only `low` for a Capability-3 issue judged lighter than Volume 0–7 warrants. A missing `[C..]` prefix is unknown, and unknown is not small: it routes as band 3.
 
 Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
 
@@ -243,13 +247,13 @@ Safety carve-outs (money, data integrity, security, auto-protective) remain abso
 
 | Axes (S,C,R,U,V) | Capability | Volume | Score | Band meaning |
 |---|---|---|---|---|
-| (4,0,0,0,0) | 0 | 8 | **8** | Large mechanical grind → Sonnet-class, high |
-| (0,0,0,4,0) | 3 | 0 | **75** | Hard design, tiny surface → Fable 5 |
-| (0,4,1,1,0) | 2 (Coupling bump) | 8 | **58** | Heavy coordination, low R/U → Opus + fableplan |
-| (0,0,4,0,0) | 3 | 0 | **75** | Tiny money/security path → Fable 5 |
-| (0,0,3,0,0) | 2 | 0 | **50** | Elevated blast radius → Opus + fableplan |
+| (4,0,0,0,0) | 0 | 8 | **8** | Large mechanical grind → Sonnet 5, xhigh |
+| (0,0,0,4,0) | 3 | 0 | **75** | Hard design, tiny surface → fableplan + Fable 5 build |
+| (0,4,1,1,0) | 2 (Coupling bump) | 8 | **58** | Heavy coordination, low R/U → fableplan + Opus 5 build |
+| (0,0,4,0,0) | 3 | 0 | **75** | Tiny money/security path → fableplan + Fable 5 build |
+| (0,0,3,0,0) | 2 | 0 | **50** | Elevated blast radius → fableplan + Opus 5 build |
 
-The band also fixes the **fableplan signal**: `fableplan: yes` only when Capability = 2 (Opus-class build planned by Fable 5 first); `no` for every other band (0–1 need no separate plan; band 3 is built by Fable 5 directly, so a fableplan stage is redundant). Always state it explicitly — absence is ambiguous, not "no".
+The band also fixes the **fableplan signal**: `fableplan: yes` when Capability ≥ 2 (score ≥ 50) — a Fable 5 plan is posted before the build, whether the builder is Opus 5 (band 2) or Fable 5 (band 3); `no` for bands 0–1, which need no separate plan. Always state it explicitly — absence is ambiguous, not "no".
 
 Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>` with the traced edit list.
 
@@ -333,7 +337,7 @@ This can mean editing the issue title and/or editing the issue body (apply the s
 
 **MANDATORY final consistency pass — re-read the WHOLE assembled body before every `gh issue edit`, not just the section you changed.** Section-by-section edits drift: the early summary and the later detailed sections silently disagree, and since the correct fact is already *in your own document*, only an end-to-end read catches it. List every **value/distinction restated in more than one place** (zero in one section, non-zero in another; a path that writes vs skips; a benefit exists vs not) and confirm the summary says the *same thing* as the detailed buckets. Required after any edit pass touching ≥2 sections or spanning ≥2 turns.
 
-**Editing the title** (`gh issue edit <N> --title "<new title>"`): update it whenever the validated findings make the current one wrong or misleading — it misstates the bug, names the wrong component or root cause, or its scope no longer matches what you traced, or it isn't a clear plain-simple-English sentence in ASD-STE100 — precise about component and behavior, no unexplained jargon. Hold the corrected title to the same claim-verification gate as the body. If the repo follows the `[C<score>] <title>` prefix convention, set or correct it from step 6 — and set or correct the body's complexity rationale line to match, including the explicit `· fableplan: <yes|no>` signal (yes iff Capability 2); a body missing the signal gets it added even when nothing else changes. Leave an accurate title untouched; combinable with the body edit in one call.
+**Editing the title** (`gh issue edit <N> --title "<new title>"`): update it whenever the validated findings make the current one wrong or misleading — it misstates the bug, names the wrong component or root cause, or its scope no longer matches what you traced, or it isn't a clear plain-simple-English sentence in ASD-STE100 — precise about component and behavior, no unexplained jargon. Hold the corrected title to the same claim-verification gate as the body. If the repo follows the `[C<score>] <title>` prefix convention, set or correct it from step 6 — and set or correct the body's complexity rationale line to match, including the explicit `· fableplan: <yes|no>` signal (yes iff Capability ≥ 2); a body missing the signal gets it added even when nothing else changes. Leave an accurate title untouched; combinable with the body edit in one call.
 
 **Editing the issue body** (`gh issue edit <N> --body-file <file>`): apply the edits, then end the body with the **LLM Attribution Footer** — **stack, never replace**: keep the original `Created with LLM: …` line and add an `Updated with LLM: …` line directly below it (each later edit appends another `Updated …` if model/effort/harness differ; collapse exact duplicates). Preserve provenance, don't overwrite. The footer is the final lines of the body, preceded by a `---` separator on its own line:
 

@@ -180,7 +180,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
     expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
-    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
     expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
     expect(executionPlanReview).toMatch(/Revision names a plan model.*Only the effort is stampable/is)
     expect(executionPlanReview).toMatch(/plan effort at `low` or `medium`.*Allowed/is)
@@ -208,7 +208,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('every document that states the plan effort default states high', () => {
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
-    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
     expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
     expect(fableplan).toMatch(/Plan effort.*absent.*dispatches at `high` — the repo attribution default/is)
   })
@@ -347,8 +347,9 @@ describe('milestoneplan table contract', () => {
 
   test('routes validation off the score, never off the Build model or a stamp', () => {
     expect(body).toMatch(/never from the Build model and never stamped/)
-    expect(body).toMatch(/below `\[C20\]` it is `Opus 5 · medium`/)
-    expect(body).toMatch(/at `\[C20\]` and above it is `Fable 5`/)
+    expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C24\]`/)
+    expect(body).toMatch(/`Opus 5 · high` at `\[C25\]`–`\[C49\]`/)
+    expect(body).toMatch(/`Fable 5 · high` at `\[C50\]` and above/)
     expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
   })
 

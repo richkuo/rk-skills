@@ -11,6 +11,6 @@ description: Required format for creating or editing any GitHub issue — [C<sco
 - First line of the body is a one-line rationale matching the title prefix, ending with an explicit **fableplan signal**:
   `**Complexity: 95/100** — Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Fable 5, high · fableplan: no`
   (Fable 5 never pairs with `xhigh` — high is Fable's ceiling; xhigh is legal only on Opus/Sonnet-class builds.)
-- **fableplan signal:** `· fableplan: yes` **only when Capability = 2** (score 50–74 — Opus-class build planned by Fable first); every other band is `· fableplan: no` (bands 0–1 don't need a separate plan; band 3 is built by Fable 5 directly, so a fableplan stage is redundant). Always write it explicitly — absence is ambiguous, not "no".
+- **fableplan signal:** `· fableplan: yes` **when Capability ≥ 2** (score ≥ 50 — a Fable 5 plan is posted before the build, whether Opus 5 builds at band 2 or Fable 5 builds at band 3); bands 0–1 are `· fableplan: no` (they don't need a separate plan). Always write it explicitly — absence is ambiguous, not "no".
 - End the body with the **LLM Attribution Footer** — `Created` (or `Updated` when editing).
 - **Project precedence:** a repo CLAUDE.md issue/footer format overrides this default.
