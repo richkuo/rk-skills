@@ -292,7 +292,7 @@ Concerns: (omit section if none)
 - <concern> (<file:line>)
 
 Proposal:
-- Goal (plain simple English in ASD-STE100, ≤55 words): <plain-simple-English summary of what the issue is trying to accomplish — outcome, not mechanism>
+- Goal (plain simple English in ASD-STE100, no litotes or litotes-adjacent hedging, ≤55 words): <plain-simple-English summary of what the issue is trying to accomplish — outcome, not mechanism>
 - <✅|⚠️|❌> <lifetime/population/benefit/consumer/failure — one line each only when not ✅> (omit this verdict line if no step 5c / trivial fix)
 
 Scope: (omit unless the issue is too large per step 6.5)
