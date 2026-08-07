@@ -42,7 +42,7 @@ work-on-issue runs its full process: it implements in a fresh worktree, verifies
 
 Relay work-on-issue's final summary (the worktree/branch, what was implemented, the verification result, the commit SHA, the PR URL, and that it closes the issue), prefixed with one line covering the head of the chain: plan posted (comment URL). If work-on-issue stopped at one of its own gates instead of opening a PR, report why it stopped — never imply a PR exists when it doesn't.
 
-**Cap the whole report at 55 words, ELI18** — plain language, no jargon, as if explaining the outcome to a smart 18-year-old with no context on this codebase.
+**Cap the whole report at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 

@@ -58,7 +58,7 @@ If the deliverables are separable — parts that each land in their own PR, pass
 
 ### 6. Compose and file
 
-Title: `[C<score>] <title>` — the title is a clear, plain-language sentence understandable to an average 18-year-old (ELI18) — it states the bug or deliverable precisely (component + behavior) without unexplained jargon, no vague "improve X".
+Title: `[C<score>] <title>` — the title is a clear plain-simple-English sentence in ASD-STE100 — it states the bug or deliverable precisely (component + behavior) without unexplained jargon, no vague "improve X".
 
 Body structure:
 
