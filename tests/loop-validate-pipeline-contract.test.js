@@ -38,6 +38,31 @@ const VALIDATION_STOP = [
   'skills/fable-validate-fableplan/SKILL.md',
 ]
 
+// Loop skills that quote validate-issue's verdict block so they can parse it
+// without waiting on the interactive reply. validate-issue owns the canonical
+// format (placeholder spelling may differ: `<0-100>` vs `<score>`).
+const VERDICT_TEMPLATE_OWNER = 'skills/validate-issue/SKILL.md'
+const VERDICT_TEMPLATE_CONSUMERS = [
+  'skills/validate-issue-loop/SKILL.md',
+  'skills/fable-validate-loop/SKILL.md',
+  'skills/validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
+]
+
+// Final-report presentation rule every autonomous chain ends with.
+const REPORT_CAP = [
+  'skills/validate-issue-loop/SKILL.md',
+  'skills/fable-validate-loop/SKILL.md',
+  'skills/validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
+  'skills/fableplan-loop/SKILL.md',
+  'skills/fableplan-work-on-issue/SKILL.md',
+  'skills/new-issue-loop/SKILL.md',
+  'skills/fable-new-issue-loop/SKILL.md',
+]
+
 const INVENTORY = 'docs/contract-inventory.md'
 
 /** Strip YAML frontmatter so description: keywords cannot satisfy procedure rules. */
@@ -70,6 +95,9 @@ const texts = Object.fromEntries(
         ...ALWAYS_PLAN,
         ...DUPLICATE_CONVERGENCE,
         ...VALIDATION_STOP,
+        VERDICT_TEMPLATE_OWNER,
+        ...VERDICT_TEMPLATE_CONSUMERS,
+        ...REPORT_CAP,
         INVENTORY,
       ]),
     ].map(async (path) => [path, await read(path)]),
@@ -139,6 +167,37 @@ describe('loop/validate pipeline contract', () => {
         hasStopTableRow(body, /existing PR|already addressing|already implements/i),
         `${path}: STOP+existing-PR row`,
       ).toBe(true)
+    }
+  })
+
+  test('verdict-block template stays parseable in every loop that quotes it', () => {
+    // One template line must co-locate every field the loops parse. Placeholder
+    // spelling may vary (`<score>` vs `<0-100>`, `<Yes|No>` vs `<Yes | No>`);
+    // a missing or renamed field breaks the loops' verdict parsing.
+    const fieldPatterns = [
+      /Update issue description\? <Yes ?\| ?No>/,
+      /Complexity: <[^>]+>\/100/,
+      /Capability <k>/,
+      /Volume <v>/,
+      /fableplan: <yes\|no>/,
+      /Scope: <OK \| too large — split\/umbrella\/narrow>/,
+    ]
+    for (const path of [VERDICT_TEMPLATE_OWNER, ...VERDICT_TEMPLATE_CONSUMERS]) {
+      const body = procedureBody(texts[path])
+      const templateLine = body
+        .split('\n')
+        .find((line) => /Update issue description\?/.test(line) && /Complexity:/.test(line))
+      expect(templateLine, `${path}: verdict template line`).toBeDefined()
+      for (const pattern of fieldPatterns) {
+        expect(templateLine, `${path}: ${pattern}`).toMatch(pattern)
+      }
+    }
+  })
+
+  test('every autonomous chain caps its final report at 55 words ELI18', () => {
+    for (const path of REPORT_CAP) {
+      const body = procedureBody(texts[path])
+      expect(body, path).toMatch(/\*\*Cap the whole report[^\n]*55 words, ELI18\*\*/)
     }
   })
 
