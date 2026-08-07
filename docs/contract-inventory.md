@@ -40,6 +40,8 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not
 | Always-plan (no Capability gate) | Intentional exception set | `fable-validate-fableplan-loop`, `fable-validate-fableplan`, `fableplan-loop` | Must document that there is **no** Capability gate / fableplan **always** runs; must not install the skip-below-50 gate as this skill's own rule | Why the gate is absent (no validation score vs unconditional plan product) | same — exception path |
 | Duplicate / convergence stop | Shared semantic in new-issue chains | `new-issue-loop`, `fable-new-issue-loop` | Stop when a duplicate open issue/PR already covers the work, or when the discussion has not converged on one issue to file | Front skill is `new-issue` vs `fable-new-issue` | same |
 | Validation scope / feasibility / existing-PR stop | Shared semantic in validate→plan/implement chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` | Stop instead of continuing the chain when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing open PR | Whether a Fable plan step sits between update and implement; whether the chain ends at the posted plan (`fable-validate-fableplan`) or at a reviewed PR | same |
+| Verdict-block template | `validate-issue` step 7 output format | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` (each quotes the template it parses) | One template line co-locates every parsed field: `Update issue description?`, `Complexity: <…>/100`, `Capability <k>`, `Volume <v>`, `fableplan: <yes\|no>`, `Scope: <OK \| too large — split/umbrella/narrow>` | Placeholder spelling (`<score>` vs `<0-100>`, `<Yes\|No>` vs `<Yes \| No>`) | same |
+| Final-report 55-word ELI18 cap | Shared presentation rule of the autonomous chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan`, `fableplan-loop`, `fableplan-work-on-issue`, `new-issue-loop`, `fable-new-issue-loop` | Bold "Cap the whole report … 55 words, ELI18" instruction in the report step | Parenthetical scope notes ("prefix + relayed summary") and trailing phrasing | same |
 
 ## Intentional exceptions
 
@@ -67,3 +69,4 @@ If the skill review-cycle threshold and the workflow default must stay locked to
 
 ---
 Updated with LLM: Opus 5 | high | Harness: Claude Code
+Updated with LLM: Fable 5 | medium | Harness: Claude Code
