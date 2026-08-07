@@ -27,11 +27,14 @@ const texts = Object.fromEntries(
     [CI_PROMPT, SYNC_RUNNER, RELEASE_RUNNER].map(async (path) => [path, await read(path)]),
   ),
 )
+const normalized = Object.fromEntries(
+  Object.entries(texts).map(([path, source]) => [path, source.replace(/\s+/g, ' ')]),
+)
 
 describe('sync-docs / release contract', () => {
   test('docs-sync copies find a docs-sync baseline and range from it', () => {
     for (const path of SYNC_COPIES) {
-      const text = texts[path]
+      const text = normalized[path]
       expect(text, path).toMatch(/baseline/i)
       expect(text, path).toMatch(/baseline.?\.\.\.?HEAD|<last-sync-sha>\.\.HEAD/i)
     }
@@ -39,7 +42,7 @@ describe('sync-docs / release contract', () => {
 
   test('docs-sync copies state the bidirectional rule and its verification gate', () => {
     for (const path of SYNC_COPIES) {
-      const text = texts[path]
+      const text = normalized[path]
       expect(text, path).toMatch(/bidirectional/i)
       expect(text, path).toMatch(/delete or correct|remove or correct/i)
       expect(text, path).toMatch(/never remove a claim you.{0,20}(have not|haven't) (confirmed|verified)/i)
@@ -48,7 +51,7 @@ describe('sync-docs / release contract', () => {
 
   test('docs-sync copies forbid creating new top-level docs during a sync', () => {
     for (const path of SYNC_COPIES) {
-      expect(texts[path], path).toMatch(
+      expect(normalized[path], path).toMatch(
         /(must not create|never create) (either|one|a new top-level doc)/i,
       )
     }
@@ -56,13 +59,13 @@ describe('sync-docs / release contract', () => {
 
   test('release copies never force-overwrite an existing tag', () => {
     for (const path of RELEASE_COPIES) {
-      expect(texts[path], path).toMatch(/(never|do not) force-overwrite/i)
+      expect(normalized[path], path).toMatch(/(never|do not) force-overwrite/i)
     }
   })
 
   test('release copies use generated release notes and real tag inspection', () => {
     for (const path of RELEASE_COPIES) {
-      const text = texts[path]
+      const text = normalized[path]
       expect(text, path).toMatch(/--generate-notes/)
       expect(text, path).toMatch(/git tag.{0,30}-v:refname/)
       expect(text, path).toMatch(/never rely on memory/i)
@@ -71,7 +74,7 @@ describe('sync-docs / release contract', () => {
 
   test('CI prompt completes history and tags before any range analysis', () => {
     // CI checkouts are shallow; the local runners never need this.
-    const text = texts[CI_PROMPT]
+    const text = normalized[CI_PROMPT]
     expect(text).toMatch(/--unshallow/)
     expect(text).toMatch(/--tags/)
   })
