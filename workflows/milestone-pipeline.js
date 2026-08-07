@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
-    { title: 'Validate', detail: 'Fable validates each issue against its exact dependency base right before it starts', model: 'fable' },
+    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — Fable at the stamped Validate effort, or Opus at medium below C20' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
     { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or build-agent first cycle plus fresh two-cycle fix agents against @claude in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
@@ -133,6 +133,20 @@ const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
+
+// Validation routes off the [C..] score, not off the Build model. Below this
+// score an issue is Capability 0 with small Volume — a whole-issue Fable pass
+// buys nothing a cheaper reviewer misses — so it validates on Opus at medium.
+// A score of 0 means "no [C..] prefix", which is unknown, not small: it keeps
+// the Fable default. Derived, never stamped, so no issue can carry a stale
+// validate-model line that nothing reads.
+const LIGHT_VALIDATE_MAX_COMPLEXITY = 20
+
+function validateRouting(ex) {
+  const light = ex.complexity > 0 && ex.complexity < LIGHT_VALIDATE_MAX_COMPLEXITY
+  if (light) return { model: 'opus', effort: 'medium', light: true }
+  return { model: 'fable', effort: ex.validate_effort || 'high', light: false }
+}
 
 const PREP_SCHEMA = {
   type: 'object',
@@ -315,7 +329,7 @@ async function validateWithRetry(issue, prompt, options) {
 
 function planPrompt(issue, validation, planEffort) {
   const corrections = validation.corrections.length
-    ? `\nA Fable validation pass found these issue-body corrections (a later agent applies them — plan as if they were already applied):\n${validation.corrections.map((c) => `- ${c}`).join('\n')}\n`
+    ? `\nA validation pass found these issue-body corrections (a later agent applies them — plan as if they were already applied):\n${validation.corrections.map((c) => `- ${c}`).join('\n')}\n`
     : ''
   const constraints = (validation.implementation_constraints || []).length
     ? `\nHard constraints from validation:\n${validation.implementation_constraints.map((c) => `- ${c}`).join('\n')}\n`
@@ -571,7 +585,7 @@ const prep = await agent(
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
-- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it
+- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it. Report it verbatim even on a low-score issue: the runtime, not you, decides that a sub-C20 issue validates on Opus at medium and that this stamped tier goes unread
 - plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers; preserve a stamped xhigh verbatim so the runtime can clamp and log it (Fable never runs at xhigh). Only the effort is stampable — never read a model from this line
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
@@ -728,9 +742,13 @@ async function executeTrack(trackIndex) {
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
     const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
+    const validateRoute = validateRouting(ex)
+    if (validateRoute.light) {
+      log(`#${issue}: C${ex.complexity} < ${LIGHT_VALIDATE_MAX_COMPLEXITY} — validating on Opus 5 at medium${ex.validate_effort ? ` (stamped Validate effort ${ex.validate_effort} not read)` : ''}`)
+    }
     const validationOptions = {
-      model: 'fable',
-      effort: ex.validate_effort || 'high',
+      model: validateRoute.model,
+      effort: validateRoute.effort,
       schema: VALIDATION_SCHEMA,
       phase: 'Validate',
       label: `validate:#${issue}`,

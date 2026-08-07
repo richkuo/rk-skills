@@ -345,9 +345,11 @@ describe('milestoneplan table contract', () => {
     expect(body).toMatch(/never infer edges from prose/i)
   })
 
-  test('attributes validation to Fable 5 regardless of the Build model', () => {
-    expect(body).toMatch(/it is always Fable 5/)
-    expect(body).toMatch(/regardless of the Build model/)
+  test('routes validation off the score, never off the Build model or a stamp', () => {
+    expect(body).toMatch(/never from the Build model and never stamped/)
+    expect(body).toMatch(/below `\[C20\]` it is `Opus 5 · medium`/)
+    expect(body).toMatch(/at `\[C20\]` and above it is `Fable 5`/)
+    expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
   })
 
   test('hands off to the skills that own the writes and the run', () => {
