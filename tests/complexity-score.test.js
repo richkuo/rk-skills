@@ -125,10 +125,17 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '50–74', min: 50, max: 74, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '75+', min: 75, max: Infinity, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } }")
 
-    // fableplan is yes at Capability ≥ 2 everywhere the signal is defined.
+    // fableplan is yes at Capability ≥ 2 everywhere the signal is defined,
+    // and the worked example round-trips its own band through the rule.
     for (const doc of [validateIssue, newIssue, githubIssueFormat]) {
       expect(doc).toMatch(/Capability ≥ 2/)
       expect(doc).not.toMatch(/only when Capability = 2|only at Capability 2/)
+    }
+    expect(githubIssueFormat).toContain('Volume 20 — Fable 5, high · fableplan: yes')
+    // No document may keep describing the superseded band-3 = "no" convention.
+    for (const doc of [validateIssue, newIssue, githubIssueFormat, prdToIssues, fableValidateLoop, validateFableplanLoop]) {
+      expect(doc).not.toMatch(/verdict line reads `fableplan: no`/)
+      expect(doc).not.toMatch(/band 3 is built by Fable 5 directly/)
     }
   })
 
