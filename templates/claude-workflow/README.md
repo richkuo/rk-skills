@@ -94,9 +94,11 @@ parses the `docs-release/*` branch name.
 | `@claude <anything>` on an issue | implement: validate → implement → PR via the issue-workflow prompt | Yes |
 | `@claude sync docs` / `create release` / `sync release` | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
 
-Model shorthand (`@claude opus …`, `sonnet`, `fable`) and `effort:low|medium|high|xhigh`
-are parsed from the comment; review events (formal reviews, inline comments)
-always stay read-only regardless of keyword.
+Model shorthand (`@claude opus …`, `sonnet`, `fable` — each also accepted with a
+`5` suffix, e.g. `opus5`) and `effort:low|medium|high|xhigh` are parsed from the
+comment. `opus`/`opus5` selects Opus 5; a comment with no shorthand keeps the
+Opus 4.8 default. Review events (formal reviews, inline comments) always stay
+read-only regardless of keyword.
 
 ## Security model
 
