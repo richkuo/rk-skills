@@ -974,11 +974,11 @@ describe('milestone-pipeline subagent review mode', () => {
       }),
     })
 
-    // Cross-model where a stronger tier exists: Opus reviews Sonnet builds,
-    // Fable reviews Opus builds; band 3 has nothing above Fable.
-    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+    // The reviewer is a fresh agent on the band's review model — it may share
+    // the builder's model; the fresh context is the isolation that matters.
+    expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
     expect(started(events, 'review:PR#1003 c1 (opus/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1004 c1 (fable/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1004 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1005 c1 (fable/high)')).toBeTrue()
     // No [C..] prefix is unknown, not small — the first review keeps the top band.
     expect(started(events, 'review:PR#1006 c1 (fable/high)')).toBeTrue()
@@ -1002,7 +1002,7 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C60 (band 50–74) — re-validating on Fable 5 @ high'))).toBeTrue()
     // The stamped build survives; the review default follows the escalated band.
     expect(started(events, 'implement:#2 (sonnet/xhigh)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
   })
 
   test('derives build routing from the validated score when the Execution block is missing', async () => {

@@ -141,14 +141,12 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // so no issue can carry a stale validate line that nothing reads. A score of 0
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
-// The first-review default is cross-model wherever a stronger tier exists —
-// a sibling of the builder shares its blind spots (band 3 has nothing above
-// Fable, so fable/fable is forced; band 1's opus/opus is the accepted gap
-// since the only stronger tier is Fable and band 2 already pays for it).
+// The reviewer is always a fresh agent — sharing the builder's model family
+// is accepted; the fresh context is the isolation that matters.
 const BANDS = [
-  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'sonnet', effort: 'high' } },
   { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
-  { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
+  { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
 ]
 
