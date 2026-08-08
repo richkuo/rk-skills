@@ -50,7 +50,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Score the work to implement the fix **correctly, including tests** using the **canonical formula in `validate-issue` step 6** (load that skill or mirror it exactly): five axes 0–4 → **Capability** (0–3 from Risk/Uncertainty + Coupling≥3 bump) and **Volume** (0–24 from Scope+Coupling+Verification) → `score = 25 × Capability + Volume`. The score is a **model + effort routing signal**, not a time estimate — never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
-From the Capability band, also fix the **fableplan signal**: `fableplan: yes` when Capability ≥ 2 (score ≥ 50 — a Fable 5 plan is posted before the build, whether Opus 5 builds at band 2 or Fable 5 builds at band 3); `no` for bands 0–1, which need no separate plan. It goes on the rationale line in step 6 — always explicit, never omitted.
+From the Capability band, also fix the **fableplan signal**: `fableplan: yes` when Capability ≥ 2 (score ≥ 50 — a Fable 5 plan is posted before the build; the builder is Opus 5 at both bands: high at band 2, xhigh at band 3); `no` for bands 0–1, which need no separate plan. It goes on the rationale line in step 6 — always explicit, never omitted.
 
 ### 5. Scope check — one issue or several?
 

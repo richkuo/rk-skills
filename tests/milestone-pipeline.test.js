@@ -441,6 +441,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#6')).toBe('medium')
     // #7 has no prep entry — the fallback has complexity 0, which routes as the top band.
     expect(effortFor('validate:#7')).toBe('high')
+    expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
@@ -448,8 +450,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     }
     expect(effortFor('implement:#6 (fable/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1006 c2-c3')).toBe('high')
-    expect(effortFor('implement:#7 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('high')
     expect(effortFor('validate:#8')).toBe('medium')
     expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
     expect(effortFor('review-loop:PR#1008 c2-c3')).toBe('xhigh')
@@ -1072,13 +1072,13 @@ describe('milestone-pipeline subagent review mode', () => {
     })
 
     // Both validate on the top band (no prefix), then build from the validated score:
-    // C6 is a trivial band-0 issue (score ≤ 7 → high, not xhigh); C80 keeps Fable and plans first.
+    // C6 is a trivial band-0 issue (score ≤ 7 → high, not xhigh); C80 builds Opus 5 xhigh with a plan first.
     expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
-    expect(started(events, 'implement:#3 (fable/high)')).toBeTrue()
+    expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
     expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–24'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Fable 5 @ high with fableplan from band 75+'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 75+'))).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {

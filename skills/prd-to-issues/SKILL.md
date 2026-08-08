@@ -63,11 +63,11 @@ Assignment — **derive from the complexity score band** (canonical formula in `
 | 0 | 0–24 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh (high when score ≤ 7 — trivial surface) |
 | 1 | 25–49 | Opus 5 | No | xhigh |
 | 2 | 50–74 | Opus 5 | **Yes** | high |
-| 3 | 75–99 | Fable 5 | **Yes** | high (or discretionary medium/low — **Fable never runs at xhigh**) |
+| 3 | 75–99 | Opus 5 | **Yes** | xhigh |
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
-- **fableplan first: Yes** means Capability ≥ 2 (score ≥ 50): a Fable 5 plan is posted before the build, whether Opus 5 builds (band 2) or Fable 5 builds (band 3). Never on Capability 0–1.
+- **fableplan first: Yes** means Capability ≥ 2 (score ≥ 50): a Fable 5 plan is posted before the build; the builder is Opus 5 at both bands: high at band 2, xhigh at band 3. Never on Capability 0–1.
 - **Validation is fully derived from the score — model and effort, never stamped**: bands 0–1 validate on **Opus 5** (medium at 0–24, high at 25–49); bands 2–3 validate on **Fable 5 at high**. A missing `[C..]` prefix is unknown, not small, so it routes as band 3. Never add a `Validate model:` or `Validate effort:` line to an Execution block — nothing reads either; a legacy `Validate effort:` line on an older issue is ignored.
 - **Plan effort** (the fableplan stage): stamp it only on `fableplan first: Yes` issues — it is ignored everywhere else. The planner is always Fable 5, so the legal tiers are **low, medium, and high — never xhigh** (Fable never runs at xhigh; high is Fable's ceiling) — this line sets effort only, never a model. Default (and ceiling) high; drop to **medium** when Capability 2 came from the Coupling bump rather than Risk/Uncertainty, so the plan is mostly sequencing known work. Reserve **low** for an issue whose approach is already settled in the issue body and only needs ordering.
 - Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium or low.** Fable builds may drop one tier further to **low**, a discretionary Fable-only tier below the formula's own floor, for issues judged lighter than Volume 0–7 warrants. **Fable's ceiling is high — never assign or run Fable 5 at xhigh, on any stage (build, plan, validate, review, or fix).** When unsure between two tiers, take the higher (best-solution rule) — capped at high on Fable.
