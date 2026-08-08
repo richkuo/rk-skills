@@ -155,7 +155,7 @@ describe('Execution block ordering contract', () => {
     expect(milestoneWorkflow).toMatch(/projected token total.*1\.5 million/i)
     expect(milestoneWorkflow).toMatch(/not a total-agent guarantee/i)
     expect(milestoneWorkflow).toMatch(/nested fix agents/i)
-    expect(milestoneWorkflow).toMatch(/retry-aware direct ceiling.*planned direct-agent count \+ number of issues/is)
+    expect(milestoneWorkflow).toMatch(/retry-aware direct ceiling.*planned direct-agent count \+ 3 × number of issues/is)
     expect(milestoneWorkflow).toMatch(/warning counts all scheduled agents/i)
     expect(milestoneWorkflow).toMatch(/never label.*safe/i)
     expect(milestoneWorkflow).toMatch(/maxReviewCycles.*not.*guaranteed cap/is)
@@ -180,7 +180,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
     expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
-    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
     expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
     expect(executionPlanReview).toMatch(/Revision names a plan model.*Only the effort is stampable/is)
     expect(executionPlanReview).toMatch(/plan effort at `low` or `medium`.*Allowed/is)
@@ -208,7 +208,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('every document that states the plan effort default states high', () => {
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
-    expect(executionPlanReview).toMatch(/Validate effort and Plan effort both default to high/i)
+    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
     expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
     expect(fableplan).toMatch(/Plan effort.*absent.*dispatches at `high` — the repo attribution default/is)
   })
@@ -341,14 +341,20 @@ describe('milestoneplan table contract', () => {
 
   test('marks absent fields as missing and names the pipeline default', () => {
     expect(body).toMatch(/\*missing\* — never blank, never a guessed default/i)
-    expect(body).toMatch(/`model fable, effort high`/)
+    // A block-less issue derives its build from the validated score band, so the
+    // preview must never predict a constant fable/high fallback.
+    expect(body).toMatch(/derives its build from the validated score band/)
+    expect(body).not.toMatch(/`model fable, effort high`/)
     expect(body).toMatch(/never infer edges from prose/i)
   })
 
   test('routes validation off the score, never off the Build model or a stamp', () => {
     expect(body).toMatch(/never from the Build model and never stamped/)
-    expect(body).toMatch(/below `\[C20\]` it is `Opus 5 · medium`/)
-    expect(body).toMatch(/at `\[C20\]` and above it is `Fable 5`/)
+    expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C9\]`/)
+    expect(body).toMatch(/`Opus 5 · high` at `\[C10\]`–`\[C40\]`/)
+    expect(body).toMatch(/`Opus 5 · xhigh` at `\[C41\]`–`\[C60\]`/)
+    expect(body).toMatch(/`Fable 5 · medium` at `\[C61\]`–`\[C80\]`/)
+    expect(body).toMatch(/`Fable 5 · high` at `\[C81\]` and above/)
     expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
   })
 

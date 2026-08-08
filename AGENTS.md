@@ -42,13 +42,13 @@
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
-- Press `#` in a session to incorporate learnings into AGENTS.md.
+- Press `#` in a session to incorporate learnings into CLAUDE.md.
 - Never proactively invoke `superpowers:*` skills — only on explicit `/` trigger.
 - **If CI runs via `act` locally** (e.g. GitHub Actions minutes are exhausted or no runner is registered) instead of a GitHub-hosted/self-hosted runner: scrub the log for secrets (tokens, keys, unmasked env values) and truncate or split if it would exceed GitHub's ~65k-char comment limit; post that sanitized output as a PR comment ending with the LLM Attribution Footer (`gh pr comment <n> --body-file <prepared-body>` — raw footer-less dumps are not exempt, whether via `--body-file` or pasted inline) so the result is visible to reviewers; then read that comment before merging — fix or explain any failure first, never merge past a posted failure without a stated reason. If `act` wasn't run either, run the project's lint/typecheck/test commands locally before merging instead of merging blind.
 
 ## LLM Attribution Footer
 
-**Every durable artifact an LLM authors or edits ends with this footer** — PR bodies, commit messages, issue bodies, issue/PR/review comments, anything committed to a repo or posted to a tracker (ephemeral chat replies exempt). Replaces the default Codex attribution; no `Co-Authored-By` trailer. Always the final lines, preceded by `---` on its own line:
+**Every durable artifact an LLM authors or edits ends with this footer** — PR bodies, commit messages, issue bodies, issue/PR/review comments, anything committed to a repo or posted to a tracker (ephemeral chat replies exempt). Replaces the default Claude Code attribution; no `Co-Authored-By` trailer. Always the final lines, preceded by `---` on its own line:
 
 ```
 ---
@@ -58,15 +58,15 @@
 - **Verb:** `Created` (new work), `Updated` (edits/revisions), `Validated` (review/verification).
 - `<current model>`: the model actually in use (e.g. `Opus 5`).
 - `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that discretionary tier; default `high`. Fable 5 never uses `xhigh` — `high` is its ceiling on every stage.
-- `<harness>`: what produced the change — `Codex` for an interactive session, or the specific skill/agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). Named values identify the skill/harness. They do **not** identify the git operations. A hand-done commit/push/PR in a session is `Codex`. Never write `commit-push-pr` for it.
-- **Project precedence:** a repo AGENTS.md footer format overrides this default.
+- `<harness>`: what produced the change — `Claude Code` for an interactive session, or the specific skill/agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). Named values identify the skill/harness. They do **not** identify the git operations. A hand-done commit/push/PR in a session is `Claude Code`. Never write `commit-push-pr` for it.
+- **Project precedence:** a repo CLAUDE.md footer format overrides this default.
 
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
 - **PR body order:** `## Summary` / verification first — keep those scannable, don't restate the whole issue. End with `## Plain simple English` — one short paragraph under 55 words in ASD-STE100, no jargon, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary. (`work-on-issue` enforces this when opening PRs.)
 - **Never use bare `#<number>` to number a list item or step in a PR or issue body/comment.** GitHub auto-links any `#<number>` to that repo's issue/PR of the same number — silently cross-referencing and notifying an unrelated issue when you only meant "item 1" or "root cause #2". Use `1.`, `(1)`, or "Item 1" for enumeration; reserve bare `#<number>` for a genuine, intentional issue/PR reference. Applies equally to issue bodies and to PRs.
-- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]` — Conventional Commits `type` (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`) and `scope` (`#<issue>` when the PR closes one, else a short component name, or omit the scope entirely when neither fits), followed by the lowercase imperative summary, then a trailing `[C<score>, <model>, <effort>]` bracket (append `, fableplan` for the Capability-2 band). E.g. `fix(#95): resolve double-fill race on order matching [C95, Fable 5, high]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
+- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]` — Conventional Commits `type` (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`) and `scope` (`#<issue>` when the PR closes one, else a short component name, or omit the scope entirely when neither fits), followed by the lowercase imperative summary, then a trailing `[C<score>, <model>, <effort>]` bracket (append `, fableplan` for score ≥ 61). E.g. `fix(#95): resolve double-fill race on order matching [C95, Opus 5, xhigh, fableplan]`. When the PR closes an issue, reuse the score from the issue's `[C<score>]` title prefix and pair it with the model/effort actually used to build the PR; derive both fresh via the `validate-issue` step 6 formula for standalone PRs.
 
 ### PR review format
 
@@ -75,9 +75,9 @@
 ## GitHub Issues
 
 - **Before creating or editing any GitHub issue, load the `github-issue-format` skill** — it defines the mandatory `[C<score>]` title convention, complexity rationale line, and complete-body rule. Never file an issue without it.
-- **Every issue's complexity rationale line ends with an explicit `· fableplan: <yes|no>` signal** — `yes` only at Capability 2 (score 50–74); every other band is `no` (0–1 need no separate plan, band 3 is built by Fable 5 directly). If the signal is absent, treat it as ambiguous. Do not read it as "no". When the signal is `yes`, `new-issue`/`validate-issue` must offer the fableplan step and let the user decide — never launch it unprompted, never silently drop it; autonomous loop skills apply their own documented gates instead of asking.
+- **Every issue's complexity rationale line ends with an explicit `· fableplan: <yes|no>` signal** — `yes` at score ≥ 61 (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); scores below 61 are `no` (they need no separate plan). If the signal is absent, treat it as ambiguous. Do not read it as "no". When the signal is `yes`, `new-issue`/`validate-issue` must offer the fableplan step and let the user decide — never launch it unprompted, never silently drop it; autonomous loop skills apply their own documented gates instead of asking.
 
 ## This Repository
 
 - **All changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
-- **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `codex/issue-873-scale-in-pyramiding`. On Claude Code, use the native `EnterWorktree` tool and pass the `cc/`-prefixed name directly (the tool uses it verbatim, it does not add a prefix itself). On Cursor/Codex (no `EnterWorktree` tool), use `git worktree add` and add the `cursor/`/`codex/` prefix by hand.
+- **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `cc/issue-873-scale-in-pyramiding`. On Claude Code, use the native `EnterWorktree` tool and pass the `cc/`-prefixed name directly (the tool uses it verbatim, it does not add a prefix itself). On Cursor/Codex (no `EnterWorktree` tool), use `git worktree add` and add the `cursor/`/`codex/` prefix by hand.

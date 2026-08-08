@@ -50,7 +50,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Score the work to implement the fix **correctly, including tests** using the **canonical formula in `validate-issue` step 6** (load that skill or mirror it exactly): five axes 0–4 → **Capability** (0–3 from Risk/Uncertainty + Coupling≥3 bump) and **Volume** (0–24 from Scope+Coupling+Verification) → `score = 25 × Capability + Volume`. The score is a **model + effort routing signal**, not a time estimate — never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
-From the Capability band, also fix the **fableplan signal**: `fableplan: yes` only when Capability = 2 (score 50–74 — Opus-class build, planned by Fable 5 first); `no` for every other band (0–1 need no separate plan; band 3 is built by Fable 5 directly). It goes on the rationale line in step 6 — always explicit, never omitted.
+From the score, also fix the **fableplan signal**: `fableplan: yes` when the score is ≥ 61 (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); `no` below 61, which needs no separate plan. It goes on the rationale line in step 6 — always explicit, never omitted.
 
 ### 5. Scope check — one issue or several?
 
@@ -82,7 +82,7 @@ Body structure:
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`), and always ends with the explicit fableplan signal from step 4 (`· fableplan: yes` iff Capability 2). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (or `low` when a Fable build actually ran at that discretionary tier; default `high`), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
+The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`), and always ends with the explicit fableplan signal from step 4 (`· fableplan: yes` iff score ≥ 61). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (or `low` when a Fable build actually ran at that discretionary tier; default `high`), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
 
 File it:
 
@@ -96,7 +96,7 @@ Add `--label`/`--assignee` only when the repo visibly uses them (`gh label list`
 
 Terse: issue URL, number, one-line summary of what it covers, complexity score, and any candidate follow-ups you did **not** file (with why). Offer "validate issue" / "work on issue" as next steps in one line.
 
-**When the issue's signal is `fableplan: yes`, also ask the user explicitly** — one line, e.g. "This issue is Capability 2 — want a Fable 5 plan posted before building? (fableplan)" — and let the user decide; don't launch fableplan unprompted, and don't silently drop the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
+**When the issue's signal is `fableplan: yes`, also ask the user explicitly** — one line, e.g. "This issue scored 61 or higher — want a Fable 5 plan posted before building? (fableplan)" — and let the user decide; don't launch fableplan unprompted, and don't silently drop the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
 
 ## Guardrails
 
