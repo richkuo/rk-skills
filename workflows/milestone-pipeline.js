@@ -173,10 +173,10 @@ function firstReviewTrigger(ex) {
 
 // Band-derived build for an issue with no Execution block: the band default,
 // with one relief valve — a trivial band-0 issue (Capability 0, Volume ≤ 7,
-// so score ≤ 7) builds at high instead of xhigh.
+// so score ≤ 10) builds at high instead of xhigh.
 function derivedBuild(complexity) {
   const band = bandFor(complexity)
-  const effort = band === BANDS[0] && complexity > 0 && complexity <= 7 ? 'high' : band.build.effort
+  const effort = band === BANDS[0] && complexity > 0 && complexity <= 10 ? 'high' : band.build.effort
   return { model: band.build.model, effort, fableplan: band.fableplan, band }
 }
 

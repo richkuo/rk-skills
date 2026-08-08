@@ -108,7 +108,7 @@ describe('complexity score band encoding', () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
     // validate-issue holds the canonical matrix.
-    expect(validateIssue).toContain('| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | `@claude` (standard trigger, no pinned model) |')
+    expect(validateIssue).toContain('| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 10) | `@claude` (standard trigger, no pinned model) |')
     expect(validateIssue).toContain('| 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |')
     expect(validateIssue).toContain('| 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |')
     expect(validateIssue).toContain('| 3 | 75–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |')

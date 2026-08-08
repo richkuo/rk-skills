@@ -60,7 +60,7 @@ Assignment — **derive from the complexity score band** (canonical formula in `
 
 | Capability | Score band | Build model | fableplan first | Effort |
 |---|---|---|---|---|
-| 0 | 0–24 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh (high when score ≤ 7 — trivial surface) |
+| 0 | 0–24 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh (high when score ≤ 10 — trivial surface) |
 | 1 | 25–49 | Opus 5 | No | xhigh |
 | 2 | 50–74 | Opus 5 | **Yes** | high |
 | 3 | 75–99 | Opus 5 | **Yes** | xhigh |

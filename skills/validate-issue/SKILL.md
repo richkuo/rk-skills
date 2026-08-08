@@ -234,7 +234,7 @@ The band fixes every routing default — validation, planning, build, and first 
 
 | Capability | Score band | Validate | fableplan first | Build | First review |
 |---|---|---|---|---|---|
-| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | `@claude` (standard trigger, no pinned model) |
+| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 10) | `@claude` (standard trigger, no pinned model) |
 | 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |
 | 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |
 | 3 | 75–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |

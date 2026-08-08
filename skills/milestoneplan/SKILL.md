@@ -42,7 +42,7 @@ Output is **exactly one markdown table** — one row per issue in the milestone,
 
 After the table, print **one note line** stating what was factored out of the columns: that validation routes off the score band (Opus 5 · medium at 0–24, Opus 5 · high at 25–49, Fable 5 · high at 50+ or no prefix), which rows carry a legacy stamped `Validate effort` that therefore goes unread, which rows' stamped Build model or Effort diverges from their band default (name the band value — informational only: when validation confirms the higher score at run time, the pipeline re-routes the issue to the band defaults and the orchestrating session restamps it), plus anything uniform that was dropped (e.g. `Runs after` all `none`).
 
-Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with an extra line in the note that the pipeline derives its build from the validated score band (Sonnet 5 · xhigh at 0–24 — high at ≤ 7, Opus 5 · xhigh at 25–49, Opus 5 · high with a Fable plan at 50–74, Opus 5 · xhigh with a Fable plan at 75+ or no prefix).
+Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with an extra line in the note that the pipeline derives its build from the validated score band (Sonnet 5 · xhigh at 0–24 — high at ≤ 10, Opus 5 · xhigh at 25–49, Opus 5 · high with a Fable plan at 50–74, Opus 5 · xhigh with a Fable plan at 75+ or no prefix).
 
 Print nothing else besides the table and the note. No verdict, no findings list, no wave plan, no cost projection.
 

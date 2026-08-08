@@ -1064,25 +1064,32 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('derives build routing from the validated score when the Execution block is missing', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: 'Unprefixed, rescored trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
           { number: 3, title: 'Unprefixed, rescored hard', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 4, title: 'Trivial ceiling', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 5, title: 'Just above trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
         ],
       }),
       'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
       'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 80 }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
+      'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 11 }),
     })
 
     // Both validate on the top band (no prefix), then build from the validated score:
-    // C6 is a trivial band-0 issue (score ≤ 7 → high, not xhigh); C80 builds Opus 5 xhigh with a plan first.
+    // C6 is a trivial band-0 issue (score ≤ 10 → high instead of xhigh); C80 builds Opus 5 xhigh with a plan first.
     expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
     expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–24'))).toBeTrue()
     expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 75+'))).toBeTrue()
+    // The trivial relief is inclusive at 10 and ends at 11.
+    expect(started(events, 'implement:#4 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'implement:#5 (sonnet/xhigh)')).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
