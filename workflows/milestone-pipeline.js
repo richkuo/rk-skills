@@ -141,16 +141,29 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // so no issue can carry a stale validate line that nothing reads. A score of 0
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
+// The first-review default is cross-model wherever a stronger tier exists —
+// a sibling of the builder shares its blind spots (band 3 has nothing above
+// Fable, so fable/fable is forced; band 1's opus/opus is the accepted gap
+// since the only stronger tier is Fable and band 2 already pays for it).
 const BANDS = [
-  { name: '0–24', min: 0, max: 24, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'sonnet', effort: 'high' } },
-  { name: '25–49', min: 25, max: 49, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
-  { name: '50–74', min: 50, max: 74, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
-  { name: '75+', min: 75, max: Infinity, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
+  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
+  { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
 ]
 
 function bandFor(complexity) {
   if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
   return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
+}
+
+// Band-derived build for an issue with no Execution block: the band default,
+// with one relief valve — a trivial band-0 issue (Capability 0, Volume ≤ 7,
+// so score ≤ 7) builds at high instead of xhigh.
+function derivedBuild(complexity) {
+  const band = bandFor(complexity)
+  const effort = band === BANDS[0] && complexity > 0 && complexity <= 7 ? 'high' : band.build.effort
+  return { model: band.build.model, effort, fableplan: band.fableplan, band }
 }
 
 const PREP_SCHEMA = {
@@ -181,9 +194,10 @@ const PREP_SCHEMA = {
 
 const VALIDATION_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'summary', 'corrections', 'implementation_constraints'],
+  required: ['verdict', 'summary', 'corrections', 'implementation_constraints', 'rescored_complexity'],
   properties: {
     verdict: { type: 'string', enum: ['VALID', 'VALID_WITH_CORRECTIONS', 'INVALID'] },
+    rescored_complexity: { type: 'integer', description: 'Your own step-6 complexity score (0–99) for the issue as validated; 0 only if you could not score it. The runtime escalates to a higher band when this outranks the title prefix — upward only, never downward' },
     summary: { type: 'string', description: 'One-paragraph verdict summary' },
     corrections: { type: 'array', items: { type: 'string' }, description: 'Concrete edits the issue body needs (empty if none)' },
     implementation_constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the implementer must honor (invariants, refuted approaches, preferred option, merge-order notes)' },
@@ -309,7 +323,8 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     baseRefs.length ? `\nHard dependency base refs, ordered by predecessor track and pinned to the reviewed pull request commits: ${JSON.stringify(baseRefs)}. Verify each PR/ref/SHA tuple and validate against those exact commits, not only the default branch, before returning a valid verdict.` : '',
     `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
-    `and the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes).`,
+    `the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes),`,
+    `and rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it.`,
   ].join(' ')
 }
 
@@ -538,7 +553,7 @@ Return via StructuredOutput: released, tag, release_url, docs_change (pr_merged 
 // verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
 // never a fix push that no reviewer would see.
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
-  const bandReview = bandFor(ex.complexity).review
+  const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
   const notes = []
   let nextReview = firstReview
@@ -635,7 +650,7 @@ const normalizedIssues = prep.issues.map((issue) => {
 })
 const EX = new Map(normalizedIssues.map((i) => [i.number, i]))
 const missing = normalizedIssues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
-if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — running them on conservative defaults (fable/high)`)
+if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — build routing derives from each issue's validated score band`)
 
 // ---- Dependency graph: unrelated tracks run concurrently; every successor
 // waits for its predecessors' stable readiness boundary. ----
@@ -738,8 +753,7 @@ async function executeTrack(trackIndex) {
       status = 'blocked'
       break
     }
-    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
-    const modelId = MODEL_IDS[ex.model] || 'fable'
+    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
@@ -755,7 +769,7 @@ async function executeTrack(trackIndex) {
       label: `validate:#${issue}`,
     }
     const validationDispatch = await validateWithRetry(issue, validationPrompt, validationOptions)
-    const validation = validationDispatch.validation
+    let validation = validationDispatch.validation
     blocker = validationDispatch.blocker
     if (!validation) {
       log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
@@ -765,6 +779,25 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
+    // Escalation: the validator's own score outranks the title prefix upward,
+    // never downward. An under-scored issue got the weakest validator — the
+    // one least likely to catch the under-score — so a higher rescored band
+    // re-validates once on that band's stronger route before the verdict
+    // stands. The escalated score also drives downstream band defaults.
+    const rescored = Number.isInteger(validation.rescored_complexity) ? validation.rescored_complexity : 0
+    let effectiveComplexity = ex.complexity > 0 ? ex.complexity : rescored
+    if (rescored > 0 && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
+      effectiveComplexity = rescored
+      const escalatedBand = bandFor(rescored)
+      log(`#${issue}: validator re-scored ${ex.complexity > 0 ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${MODEL_NAMES[escalatedBand.validate.model]} @ ${escalatedBand.validate.effort}`)
+      const escalatedDispatch = await validateWithRetry(issue, validationPrompt, { ...validationOptions, model: escalatedBand.validate.model, effort: escalatedBand.validate.effort })
+      if (escalatedDispatch.validation) {
+        validation = escalatedDispatch.validation
+      } else {
+        log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
+      }
+    }
+    ex.effective_complexity = effectiveComplexity
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary
       log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
@@ -774,6 +807,17 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
+
+    // An issue with no Execution block now has a validated score — derive its
+    // build and fableplan from the band instead of a conservative constant.
+    if (ex.missing_block) {
+      const derived = derivedBuild(effectiveComplexity)
+      ex.model = derived.model
+      ex.effort = derived.effort
+      ex.fableplan = derived.fableplan
+      log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from band ${derived.band.name}`)
+    }
+    const modelId = MODEL_IDS[ex.model] || 'fable'
 
     let plan = null
     const planEffort = ex.plan_effort || 'high'

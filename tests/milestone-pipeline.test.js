@@ -62,7 +62,7 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
         })),
       }
     } else if (options.phase === 'Validate') {
-      result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
+      result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 0 }
     } else if (options.phase === 'Plan') {
       result = { plan: `plan for #${issueFromLabel(options.label)}`, constraints: [] }
     } else if (options.phase === 'Implement') {
@@ -361,7 +361,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
     // The dispatch-side band defaults are what make omission safe.
-    expect(source).toContain('const bandReview = bandFor(ex.complexity).review')
+    expect(source).toContain('const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review')
     expect(source).toContain('const validateBand = bandFor(ex.complexity)')
   })
 
@@ -974,12 +974,57 @@ describe('milestone-pipeline subagent review mode', () => {
       }),
     })
 
-    expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
+    // Cross-model where a stronger tier exists: Opus reviews Sonnet builds,
+    // Fable reviews Opus builds; band 3 has nothing above Fable.
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1003 c1 (opus/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1004 c1 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1004 c1 (fable/high)')).toBeTrue()
     expect(started(events, 'review:PR#1005 c1 (fable/high)')).toBeTrue()
     // No [C..] prefix is unknown, not small — the first review keeps the top band.
     expect(started(events, 'review:PR#1006 c1 (fable/high)')).toBeTrue()
+  })
+
+  test('escalates validation when the validator re-scores into a higher band', async () => {
+    const validations = []
+    const { events, logs } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'xhigh', first_review_model: undefined, first_review_effort: undefined })] }),
+      'validate:#2': (event) => {
+        validations.push({ model: event.model, effort: event.effort })
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 60 }
+      },
+    })
+
+    // C10 validated on the band-0 route first, then re-validated once on band 2's.
+    expect(validations).toEqual([
+      { model: 'opus', effort: 'medium' },
+      { model: 'fable', effort: 'high' },
+    ])
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C60 (band 50–74) — re-validating on Fable 5 @ high'))).toBeTrue()
+    // The stamped build survives; the review default follows the escalated band.
+    expect(started(events, 'implement:#2 (sonnet/xhigh)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+  })
+
+  test('derives build routing from the validated score when the Execution block is missing', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Unprefixed, rescored trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 3, title: 'Unprefixed, rescored hard', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+        ],
+      }),
+      'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
+      'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 80 }),
+    })
+
+    // Both validate on the top band (no prefix), then build from the validated score:
+    // C6 is a trivial band-0 issue (score ≤ 7 → high, not xhigh); C80 keeps Fable and plans first.
+    expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeFalse()
+    expect(started(events, 'implement:#3 (fable/high)')).toBeTrue()
+    expect(started(events, 'plan:#3')).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–24'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Fable 5 @ high with fableplan from band 75+'))).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
