@@ -162,7 +162,7 @@ describe('complexity score band encoding', () => {
     expect(executionPlanReview).not.toContain('conflicts with the heuristics')
     expect(claudeMd).toContain('model + effort routing signal')
     expect(claudeMd).not.toContain('describe complexity as scope and risk')
-    // Money double-fill example must round-trip Risk 4 → Capability 3 → Fable 5 (not Opus).
+    // Money double-fill example must round-trip Risk 4 → Capability 3 → band-5 build on Opus 5 (not Fable).
     expect(githubIssueFormat).toContain('[C95] Orders can be filled twice')
     expect(githubIssueFormat).toContain('Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh')
     // Fable never pairs with xhigh — high is Fable's ceiling.
