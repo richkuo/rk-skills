@@ -1,13 +1,13 @@
 export const meta = {
   name: 'milestone-pipeline',
   description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, review each pull request to a stable readiness boundary, record orchestrator in-session merges at LGTM plus green CI, pause awaiting each unmerged one, and defer the release to the orchestrator when every issue merges',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, merged?: [{pr, merge_sha, issue_state}] }',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, merged?: [{issue, pr, merge_sha, issue_state}] }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — Fable at the stamped Validate effort, or Opus at medium below C20' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or build-agent first cycle plus fresh two-cycle fix agents against @claude in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
     { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
   ],
@@ -101,11 +101,12 @@ function visitTrack(trackIndex, path) {
 TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
-// 'subagent' (default): reviews run as in-session subagents — a reviewer agent
-// posts a pr-review-format comment, a fixer agent resolves it, orchestrated by
-// this script; no GitHub Actions dependency (runner outages can't stall the
-// loop) and no queue latency. 'github' preserves the @claude Action flow.
-const REVIEW_MODE = ARGS.reviewMode ?? 'subagent'
+// 'github' (default): reviews run through the repo's @claude Action, so the
+// review history lives on GitHub under the same bot used outside pipeline
+// runs. 'subagent' reviews in-session — a reviewer agent posts a
+// pr-review-format comment, a fixer agent resolves it — the fallback when the
+// repo lacks the Action or GitHub Actions is unavailable.
+const REVIEW_MODE = ARGS.reviewMode ?? 'github'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Only enforced when the turn has a token target (budget.total set); below the
 // floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
@@ -120,8 +121,9 @@ const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
 // explicitly is rejected. After a recorded merge, successors build from the
 // updated base branch instead of stacking on unmerged predecessor heads.
 const MERGE = ARGS.merge ?? REVIEW_LOOP
-// When every issue merged, one Sonnet agent runs sync-docs-release (doc sync →
-// land it → create-release). Defaults to merge; meaningless without it.
+// When every issue merged, the run defers the release to the orchestrator,
+// which runs sync-docs-release in-session (doc sync → land it →
+// create-release). No agent runs here. Defaults to merge; meaningless without it.
 const RELEASE = ARGS.release ?? MERGE
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (REVIEW_MODE !== 'subagent' && REVIEW_MODE !== 'github') throw new Error("reviewMode must be 'subagent' or 'github'")
@@ -131,22 +133,37 @@ if (typeof MERGE !== 'boolean') throw new Error('merge must be a boolean')
 if (MERGE && !REVIEW_LOOP) throw new Error('merge requires reviewLoop — LGTM review readiness is the merge criterion')
 if (typeof RELEASE !== 'boolean') throw new Error('release must be a boolean')
 if (RELEASE && !MERGE) throw new Error('release requires merge — a release only makes sense after the run lands the code')
-// PRs the orchestrator already merged in-session, as { pr, merge_sha,
-// issue_state } records. The orchestrator verifies each PR is MERGED before
-// recording it; this run trusts the record and never re-checks. An LGTM PR
-// with no record pauses its track as awaiting_merge — the orchestrator merges
-// it, appends the record, and resumes the run (cached agents replay).
-const MERGED_INPUT = ARGS.merged ?? []
-if (!Array.isArray(MERGED_INPUT)) throw new Error('merged must be an array of { pr, merge_sha, issue_state } records')
-const MERGED = new Map()
-for (const entry of MERGED_INPUT) {
-  if (!entry || !Number.isInteger(entry.pr) || entry.pr <= 0 || typeof entry.merge_sha !== 'string' || entry.merge_sha.length === 0) {
-    throw new Error('each merged record requires an integer pr and a non-empty merge_sha')
-  }
-  if (MERGED.has(entry.pr)) throw new Error(`duplicate merged record for PR #${entry.pr}`)
-  MERGED.set(entry.pr, { merge_sha: entry.merge_sha, issue_state: entry.issue_state === 'closed' || entry.issue_state === 'open' ? entry.issue_state : 'unknown' })
-}
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
+
+// PRs the orchestrator already merged in-session, as { issue, pr, merge_sha,
+// issue_state } records. The orchestrator verifies each PR is MERGED before
+// recording it; this run never re-checks GitHub, so the record is the only
+// evidence a merge happened and one mistyped number would otherwise report an
+// open PR as merged, build successors from a base that lacks the code, and let
+// the release fire. Every record therefore identifies the issue/PR PAIR: the
+// map is keyed by issue (validated to belong to this run), and the merge gate
+// additionally requires the recorded pr to equal the PR this run opened for
+// that issue. An LGTM PR with no record pauses its track as awaiting_merge —
+// the orchestrator merges it, appends the record, and resumes (cached agents
+// replay). Records that never match a gated pair are reported, never ignored.
+const MERGED_INPUT = ARGS.merged ?? []
+if (!Array.isArray(MERGED_INPUT)) throw new Error('merged must be an array of { issue, pr, merge_sha, issue_state } records')
+const RUN_ISSUES = new Set(ALL_ISSUES)
+const MERGED = new Map()
+const MERGED_PRS = new Set()
+for (const entry of MERGED_INPUT) {
+  if (!entry || !Number.isInteger(entry.issue) || entry.issue <= 0 || !Number.isInteger(entry.pr) || entry.pr <= 0 || typeof entry.merge_sha !== 'string' || entry.merge_sha.length === 0) {
+    throw new Error('each merged record requires an integer issue, an integer pr, and a non-empty merge_sha')
+  }
+  if (!RUN_ISSUES.has(entry.issue)) throw new Error(`merged record for issue #${entry.issue} (PR #${entry.pr}) names an issue outside this run`)
+  if (MERGED.has(entry.issue)) throw new Error(`duplicate merged record for issue #${entry.issue}`)
+  if (MERGED_PRS.has(entry.pr)) throw new Error(`duplicate merged record for PR #${entry.pr}`)
+  MERGED.set(entry.issue, { pr: entry.pr, merge_sha: entry.merge_sha, issue_state: entry.issue_state === 'closed' || entry.issue_state === 'open' ? entry.issue_state : 'unknown' })
+  MERGED_PRS.add(entry.pr)
+}
+// Issues whose record the merge gate actually consumed. Anything left over at
+// the end is a record this run never matched — surfaced, never silently unused.
+const CONSUMED_MERGE_RECORDS = new Set()
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
@@ -840,7 +857,23 @@ async function executeTrack(trackIndex) {
       // orchestrator verified it MERGED before recording); an unrecorded PR
       // pauses the track here so the orchestrator can gate on CI, merge it
       // pinned to this reviewed head, and resume with the record appended.
-      const recordedMerge = MERGED.get(impl.pr_number)
+      const recordedMerge = MERGED.get(issue)
+      if (recordedMerge && recordedMerge.pr !== impl.pr_number) {
+        // The record claims a different PR closed this issue. One of the two
+        // numbers is wrong, so neither can be trusted: refuse to count this as
+        // merged, and block descendants rather than build them from a base
+        // branch that may not contain the code. The record stays unconsumed so
+        // the end-of-run report names it.
+        blocker = `merged record for issue #${issue} names PR #${recordedMerge.pr}, but this run opened PR #${impl.pr_number} for it — correct the record before resuming`
+        record.status = 'merge_record_mismatch'
+        record.blocker = blocker
+        log(`PR #${impl.pr_number}: ${blocker}`)
+        localSkipped.push({ issue, reason: blocker })
+        status = 'blocked'
+        unresolved = true
+        blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+        break
+      }
       if (!recordedMerge) {
         blocker = `PR #${impl.pr_number} awaits orchestrator merge (LGTM at ${head.ref} @ ${head.sha})`
         record.status = 'awaiting_merge'
@@ -852,6 +885,7 @@ async function executeTrack(trackIndex) {
         blockIssues(track, issueIndex + 1, `hard prerequisite #${issue}: ${blocker}`, localSkipped, 'merge_pending')
         break
       }
+      CONSUMED_MERGE_RECORDS.add(issue)
       record.status = 'merged'
       record.merge_sha = recordedMerge.merge_sha
       record.issue_state = recordedMerge.issue_state
@@ -899,6 +933,17 @@ await parallel(TRACKS.map((_track, trackIndex) => () => runTrack(trackIndex)))
 const resultOrder = new Map(ALL_ISSUES.map((issue, index) => [issue, index]))
 results.sort((left, right) => resultOrder.get(left.issue) - resultOrder.get(right.issue))
 
+// A record the merge gate never consumed means the orchestrator's bookkeeping
+// and this run disagree — the issue never reached the gate, or its record was
+// rejected as a mismatch. Name each one so a wrong record can never look like
+// a silently accepted merge.
+const unmatched_merged_records = MERGED_INPUT
+  .filter((entry) => !CONSUMED_MERGE_RECORDS.has(entry.issue))
+  .map((entry) => ({ issue: entry.issue, pr: entry.pr, reason: results.find((result) => result.issue === entry.issue)?.status === 'merge_record_mismatch' ? 'record names a different PR than the run opened for this issue' : 'issue never reached the merge gate in this run' }))
+for (const entry of unmatched_merged_records) {
+  log(`merged record for issue #${entry.issue} (PR #${entry.pr}) was not used — ${entry.reason}`)
+}
+
 // ---- Release: only when every issue in the run reached merged — a partial
 // milestone never publishes. No agent runs here either: the release lands a
 // doc change and publishes, so it belongs to the orchestrator in-session. ----
@@ -922,4 +967,4 @@ const awaiting_merge = results
   .filter((result) => result.status === 'awaiting_merge')
   .map((result) => ({ issue: result.issue, pr: result.pr, pr_url: result.pr_url, head_ref: result.head_ref, head_sha: result.head_sha }))
 
-return { results, release, awaiting_merge }
+return { results, release, awaiting_merge, unmatched_merged_records }
