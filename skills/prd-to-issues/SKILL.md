@@ -65,6 +65,8 @@ Assignment — **derive from the complexity score band** (canonical formula in `
 | 2 | 50–74 | Opus 5 | **Yes** | high |
 | 3 | 75–99 | Opus 5 | **Yes** | xhigh |
 
+**Never stamp Fable 5 as the Build model** — no band defaults to a Fable build, and this skill never assigns one; a Fable build exists only when the user explicitly directs it on a specific issue.
+
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
 - **fableplan first: Yes** means Capability ≥ 2 (score ≥ 50): a Fable 5 plan is posted before the build; the builder is Opus 5 at both bands: high at band 2, xhigh at band 3. Never on Capability 0–1.

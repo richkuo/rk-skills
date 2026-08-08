@@ -239,7 +239,7 @@ The band fixes every routing default — validation, planning, build, and first 
 | 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |
 | 3 | 75–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |
 
-**Fable never runs at xhigh — high is its ceiling on every stage.** A Fable build may be revised down to `medium`, or to a discretionary Fable-only `low` for a Capability-3 issue judged lighter than Volume 0–7 warrants. A missing `[C..]` prefix is unknown, and unknown is not small: it routes as band 3.
+**Fable never runs at xhigh — high is its ceiling on every stage.** **Fable is never a build default: no band assigns Fable 5 as the builder, and a Fable build happens only when the user explicitly directs it** (stamped, it may run at `high`, `medium`, or a discretionary Fable-only `low` for a Capability-3 issue judged lighter than Volume 0–7 warrants). A missing `[C..]` prefix is unknown, and unknown is not small: it routes as band 3.
 
 The first review is the `@claude` GitHub Action posted on the PR: the standard `@claude review` trigger at band 0 (the Action's configured default model), `@claude opus review` at bands 1–2, `@claude fable review effort:high` at band 3. In subagent review mode the same models apply, with band 0 inheriting the session default. Sonnet never takes a first review; it appears only as the cheaper re-review after a fix pass that addressed nothing blocking.
 

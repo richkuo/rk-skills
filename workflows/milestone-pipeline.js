@@ -601,7 +601,7 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
       break
     }
     const fix = await agent(subagentFixPrompt(issue, prNumber, ex, validation, plan, review.comment_url), {
-      model: MODEL_IDS[ex.model] || 'fable',
+      model: MODEL_IDS[ex.model] || 'opus',
       effort: ex.effort,
       schema: REVIEW_FIX_SCHEMA,
       phase: 'Review Loop',
@@ -627,7 +627,7 @@ const prep = await agent(
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
 - do NOT extract a "**Validate effort:**" or "**Validate model:**" line — validation is derived from the [C..] score band by the runtime and a legacy stamp is never read
-If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
+If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model opus, effort high, fableplan false — never fable: Fable builds only on an explicit stamp, and the runtime re-derives these from the validated score anyway). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
 )
@@ -770,7 +770,7 @@ async function executeTrack(trackIndex) {
       status = 'blocked'
       break
     }
-    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true }
+    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
@@ -858,7 +858,8 @@ async function executeTrack(trackIndex) {
       ex.fableplan = derived.fableplan
       log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from band ${derived.band.name}`)
     }
-    const modelId = MODEL_IDS[ex.model] || 'fable'
+    // Fable is never a build fallback — it builds only on an explicit user stamp.
+    const modelId = MODEL_IDS[ex.model] || 'opus'
 
     let plan = null
     const planEffort = ex.plan_effort || 'high'

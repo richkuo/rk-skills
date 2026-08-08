@@ -362,6 +362,10 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
     // The dispatch-side band defaults are what make omission safe.
     expect(source).toContain('const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review')
+    // Fable is never a build fallback — unknown or unmapped models dispatch on Opus.
+    expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
+    expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
+    expect(source).not.toMatch(/build: \{ model: 'fable'/)
     expect(source).toContain('const validateBand = bandFor(ex.complexity)')
   })
 
