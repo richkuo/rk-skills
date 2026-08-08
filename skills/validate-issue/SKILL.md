@@ -247,6 +247,51 @@ The first review is the `@claude` GitHub Action posted on the PR: the standard `
 
 **Escalation:** the validating agent returns its own step-6 score alongside the verdict. When that score lands in a higher band than the title prefix, the pipeline re-validates once on the higher band's route and re-routes the whole issue from the higher score — build model, build effort, fableplan, and review all move to the escalated band's defaults, replacing the stale stamps — upward only, never downward. The rescore is returned in the run results so the orchestrating session can restamp the issue's `[C..]` title and Execution block and report the change to the user. This closes the loop where an under-scored issue would get the weakest validator, the one least likely to catch the under-score.
 
+#### Diff-measured review escalation
+
+The `[C..]` score is a prediction made when the issue was filed. The diff is a measurement made when the pull request is open. When a build moves far more surface than the score's Volume claimed, the reviewer the score routed is too weak for what actually shipped — a `[C15]` issue that produces a 1300-line diff still draws the bare `@claude` band-1 reviewer. At review time the pipeline re-measures Volume from the diff and re-derives an **implied score**:
+
+`implied score = 25 × Capability + implied Volume`, with **Capability taken unchanged from the title score** (`Capability = floor(score / 25)`, `Volume = score mod 25`).
+
+Implied Volume comes from two ladders on the same canonical 0–24 scale. Each maps the effective diff — the diff after the exclusions below — onto the scale, and the **stronger signal wins**: a wide sweep and a deep single-file rewrite each drag real review surface, and either alone is enough.
+
+| Effective changed lines (added + deleted) | Implied Volume |
+|---|---|
+| 0–49 | 0 |
+| 50–99 | 2 |
+| 100–199 | 4 |
+| 200–349 | 8 |
+| 350–549 | 12 |
+| 550–799 | 16 |
+| 800–1199 | 20 |
+| 1200 or more | 24 |
+
+| Effective changed files | Implied Volume |
+|---|---|
+| 1–3 | 0 |
+| 4–7 | 2 |
+| 8–14 | 4 |
+| 15–24 | 8 |
+| 25–39 | 12 |
+| 40 or more | 16 |
+
+**Exclusions (noise that costs a reviewer nothing to read).** Excluded files count toward neither ladder:
+
+- **Lockfiles** by basename: `bun.lock`, `bun.lockb`, `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `go.sum`, `poetry.lock`, `uv.lock`, `Pipfile.lock`, `Gemfile.lock`, `composer.lock`, `Podfile.lock`, `flake.lock`, `mix.lock`, `packages.lock.json`.
+- **Generated output** by path segment: `node_modules`, `dist`, `build`, `vendor`, `coverage`, `generated`, `__generated__`, `__snapshots__`, `.next`, `.nuxt`, `.svelte-kit`; and by suffix: `.min.js`, `.min.css`, `.map`, `.snap`, `.pb.go`, `.pb.cc`, `.pb.h`, `_pb2.py`, `_pb2.pyi`, `.generated.ts`, `.generated.js`, `.g.dart`, `.freezed.dart`.
+- **Every file that moves no line** — a **pure rename**, a mode-only change, a binary swap. These count toward neither the line total nor the file count.
+
+Keep the exclusion list short and generic. Excluding a file only lowers the implied Volume, and a lower implied Volume only means less escalation, so a wrong entry weakens the review instead of strengthening it.
+
+**Rules the escalation obeys:**
+
+- **Upward only, never downward.** A small diff never lowers the review tier: a small diff can still carry Capability-3 risk (money, data integrity, security).
+- **It never weakens a stronger reviewer.** When the issue stamps a `PR review:` trigger that already outranks the escalated band's reviewer, the stamp stands. The divergence is still recorded.
+- **Only the review moves.** The build already ran, so build model, build effort, and fableplan are untouched.
+- **It corrects Volume under-scoring alone.** It cannot detect under-scored risk; the safety carve-out still covers that.
+- In default github review mode the cycle-1 trigger is posted before the diff exists. When the measured diff escalates the band, cycle 1's verdict never becomes the readiness boundary — the pipeline posts the escalated trigger and waits for that verdict, even when cycle 1 already returned `LGTM`. A run that exhausts `maxReviewCycles` before the escalated review runs ends `max_cycles_exhausted` rather than approved.
+- Each escalated issue carries a `review_escalation` record in the run results (implied score, implied Volume, band, reviewer, measured diff, and whether the reviewer actually changed) so the orchestrating session can restamp the issue's `[C..]` prefix and tell the user.
+
 Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
 
 #### Golden examples (consistency checklist)

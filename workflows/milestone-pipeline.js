@@ -6,8 +6,8 @@ export const meta = {
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model and effort derived from its [C..] score band, never stamped' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
-    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, measure its diff, and trigger @claude review only in github review mode' },
+    { title: 'Review Loop', detail: 'review band re-derived from the measured diff (upward only), then build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
     { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
   ],
@@ -190,21 +190,167 @@ const BANDS = [
   { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } },
 ]
 
-function bandFor(complexity) {
-  if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
-  return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
+function bandForScore(score) {
+  return BANDS.find((band) => score >= band.min && score <= band.max) || BANDS[BANDS.length - 1]
 }
 
-// The github-mode cycle-1 trigger comment, derived from the band unless the
-// issue stamps its own `@claude <model> review …` line. Band 0 is the bare
-// standard trigger; the Action picks its configured default model.
-function firstReviewTrigger(ex) {
-  const stamped = MODEL_IDS[ex.first_review_model]
-  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
-  const review = bandFor(ex.effective_complexity ?? ex.complexity).review
+// A missing [C..] prefix is unknown, and unknown is not small: it routes as the
+// top band. Only use this for a score read off an issue — a score the runtime
+// computed is never "missing", so it goes through bandForScore.
+function bandFor(complexity) {
+  if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
+  return bandForScore(complexity)
+}
+
+// The `@claude` trigger comment a band's review route posts. Band 0–1's null
+// model is the bare standard trigger; the Action picks its configured default.
+function bandTriggerPhrase(review) {
   if (!review.model) return '@claude review'
   if (review.model === 'opus') return '@claude opus review'
   return `@claude ${review.model} review effort:${review.effort}`
+}
+
+// The github-mode cycle-1 trigger comment, derived from the band unless the
+// issue stamps its own `@claude <model> review …` line.
+function firstReviewTrigger(ex) {
+  const stamped = MODEL_IDS[ex.first_review_model]
+  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+  return bandTriggerPhrase(bandFor(ex.effective_complexity ?? ex.complexity).review)
+}
+
+// The review route an issue carries before any diff is measured: its stamped
+// `PR review:` trigger when one exists, else its band default.
+function reviewRouteFor(ex) {
+  const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
+  return { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
+}
+
+// ---- Diff-measured review escalation ----
+// The [C..] score is a prediction made when the issue was filed; the diff is a
+// measurement made when the pull request is open. When the diff moves more
+// surface than the score's Volume claimed, the reviewer the score routed is too
+// weak for what actually shipped. At review time the pipeline re-derives an
+// implied score — the title's Capability unchanged, Volume re-measured from the
+// diff — and moves the review to the higher band. Upward only: a small diff
+// never lowers the review tier, because a small diff can still carry
+// Capability-3 risk (money, data integrity, security). This corrects Volume
+// under-scoring alone; it cannot detect under-scored risk, which stays with the
+// safety carve-out. Build routing is untouched — the build already ran.
+const REVIEW_MODEL_RANK = { haiku: 0, sonnet: 1, opus: 2, fable: 3 }
+const REVIEW_EFFORT_RANK = { low: 0, medium: 1, high: 2, xhigh: 3 }
+
+// A null model is "no override — inherit the session default", the bare-@claude
+// reviewer at bands 0–1. It ranks with the weakest named model.
+function reviewStrength(route) {
+  return [REVIEW_MODEL_RANK[route?.model] ?? 0, REVIEW_EFFORT_RANK[route?.effort] ?? 0]
+}
+
+function isStrongerReview(candidate, current) {
+  const [candidateModel, candidateEffort] = reviewStrength(candidate)
+  const [currentModel, currentEffort] = reviewStrength(current)
+  if (candidateModel !== currentModel) return candidateModel > currentModel
+  return candidateEffort > currentEffort
+}
+
+// Churn that costs a reviewer nothing to skim. Excluding a file can only lower
+// the implied Volume, and a lower implied Volume can only mean less escalation,
+// so this list stays short and generic on purpose — a wrong entry weakens the
+// review instead of strengthening it.
+const LOCKFILE_BASENAMES = new Set([
+  'bun.lock', 'bun.lockb', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml',
+  'cargo.lock', 'go.sum', 'poetry.lock', 'uv.lock', 'pipfile.lock', 'gemfile.lock', 'composer.lock',
+  'podfile.lock', 'flake.lock', 'mix.lock', 'packages.lock.json',
+])
+const GENERATED_PATH_SEGMENTS = new Set([
+  'node_modules', 'dist', 'build', 'vendor', 'coverage', 'generated', '__generated__', '__snapshots__',
+  '.next', '.nuxt', '.svelte-kit',
+])
+const GENERATED_SUFFIXES = ['.min.js', '.min.css', '.map', '.snap', '.pb.go', '.pb.cc', '.pb.h', '_pb2.py', '_pb2.pyi', '.generated.ts', '.generated.js', '.g.dart', '.freezed.dart']
+
+function isNoiseFile(path) {
+  const segments = path.toLowerCase().split('/')
+  const basename = segments[segments.length - 1]
+  if (LOCKFILE_BASENAMES.has(basename)) return true
+  if (segments.slice(0, -1).some((segment) => GENERATED_PATH_SEGMENTS.has(segment))) return true
+  return GENERATED_SUFFIXES.some((suffix) => basename.endsWith(suffix))
+}
+
+// The review surface a pull request actually presents. `unmeasured` stays true
+// when the implementation agent reported no usable per-file stats — the runtime
+// then routes the review from the score band alone and says so, rather than
+// treating an absent measurement as a small diff.
+function effectiveDiff(files) {
+  const stats = { files: 0, lines: 0, excluded_files: 0, excluded_lines: 0, unmeasured: true }
+  if (!Array.isArray(files)) return stats
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string' || file.path.length === 0) continue
+    const additions = Number.isInteger(file.additions) && file.additions > 0 ? file.additions : 0
+    const deletions = Number.isInteger(file.deletions) && file.deletions > 0 ? file.deletions : 0
+    const lines = additions + deletions
+    stats.unmeasured = false
+    // A pure rename, a mode change, and a binary swap move no reviewable line.
+    if (lines === 0 || isNoiseFile(file.path)) {
+      stats.excluded_files += 1
+      stats.excluded_lines += lines
+      continue
+    }
+    stats.files += 1
+    stats.lines += lines
+  }
+  return stats
+}
+
+// Both ladders land on the canonical 0–24 Volume scale, in the same even steps
+// the (Scope + Coupling + Verification) × 2 formula produces. Documented in
+// skills/validate-issue/SKILL.md — keep the two in step.
+const DIFF_LINE_VOLUME = [[49, 0], [99, 2], [199, 4], [349, 8], [549, 12], [799, 16], [1199, 20], [Infinity, 24]]
+const DIFF_FILE_VOLUME = [[3, 0], [7, 2], [14, 4], [24, 8], [39, 12], [Infinity, 16]]
+
+function ladderVolume(ladder, value) {
+  return ladder.find(([max]) => value <= max)[1]
+}
+
+// The stronger of the two signals wins: a 30-file docs sweep and a 1200-line
+// single-file rewrite both drag real review surface, and either alone is enough.
+function impliedVolume(stats) {
+  return Math.max(ladderVolume(DIFF_LINE_VOLUME, stats.lines), ladderVolume(DIFF_FILE_VOLUME, stats.files))
+}
+
+// Null when the diff implies nothing higher than the score already routed. A
+// missing [C..] prefix already routes as the top band, so it never escalates.
+function reviewEscalation(ex, stats) {
+  const base = ex.effective_complexity ?? ex.complexity
+  if (!Number.isInteger(base) || base <= 0) return null
+  if (stats.unmeasured) return null
+  const volume = impliedVolume(stats)
+  const implied = 25 * Math.min(3, Math.floor(base / 25)) + volume
+  const baseBand = bandFor(base)
+  const impliedBand = bandForScore(implied)
+  if (BANDS.indexOf(impliedBand) <= BANDS.indexOf(baseBand)) return null
+  return {
+    from: base,
+    to: implied,
+    volume,
+    band: impliedBand.name,
+    review: { ...impliedBand.review },
+    trigger: bandTriggerPhrase(impliedBand.review),
+    applied: false,
+    diff: { files: stats.files, lines: stats.lines, excluded_files: stats.excluded_files, excluded_lines: stats.excluded_lines },
+  }
+}
+
+// The route the review loop actually runs, plus the escalation record the
+// orchestrator restamps from. An escalation replaces the routed reviewer only
+// when it is strictly stronger, so a stamped Fable reviewer is never demoted to
+// the escalated band's Opus default.
+function reviewRoutingFor(ex, diffFiles) {
+  const route = reviewRouteFor(ex)
+  const stats = effectiveDiff(diffFiles)
+  const escalation = reviewEscalation(ex, stats)
+  const applied = Boolean(escalation) && isStrongerReview(escalation.review, route)
+  if (escalation) escalation.applied = applied
+  const effective = applied ? escalation.review : route
+  return { route, escalation, effective, applied, measured: !stats.unmeasured, trigger: bandTriggerPhrase(effective) }
 }
 
 // Band-derived build for an issue with no Execution block: the band default.
@@ -263,7 +409,7 @@ const PLAN_SCHEMA = {
 
 const IMPLEMENT_SCHEMA = {
   type: 'object',
-  required: ['pr_number', 'pr_url', 'head_ref', 'head_sha', 'summary', 'tests_passed', 'github_review_status', 'github_review_nonblocking_remaining', 'github_review_summary'],
+  required: ['pr_number', 'pr_url', 'head_ref', 'head_sha', 'summary', 'tests_passed', 'diff_files', 'github_review_status', 'github_review_nonblocking_remaining', 'github_review_summary'],
   properties: {
     pr_number: { type: 'integer', description: '0 if blocked / no PR opened' },
     pr_url: { type: 'string' },
@@ -271,6 +417,20 @@ const IMPLEMENT_SCHEMA = {
     head_sha: { type: 'string', description: 'Verified pull request head commit at implementation completion; empty if blocked / no PR opened' },
     summary: { type: 'string' },
     tests_passed: { type: 'boolean' },
+    diff_files: {
+      type: 'array',
+      description: 'Every file the pull request changes against its base, measured (never estimated) from `git diff --numstat -M <base>...<head>`. Report EVERY changed file verbatim — lockfiles, generated output, and renames included — because the runtime applies its own exclusion list and uses the result to decide whether the review needs a stronger reviewer than the score routed. Empty array when blocked / no PR opened',
+      items: {
+        type: 'object',
+        required: ['path', 'additions', 'deletions'],
+        properties: {
+          path: { type: 'string', description: 'Repository-relative path after the change (the destination path for a rename)' },
+          additions: { type: 'integer', description: 'Added lines; 0 for a pure rename, a mode-only change, or a binary file' },
+          deletions: { type: 'integer', description: 'Deleted lines; 0 for a pure rename, a mode-only change, or a binary file' },
+          renamed: { type: 'boolean', description: 'True when the file was renamed or copied' },
+        },
+      },
+    },
     github_review_status: { type: 'string', enum: ['not_run', 'lgtm', 'needs_updates', 'blocked'], description: 'Standing @claude verdict after the implementation agent handles github review cycle 1; not_run outside github review mode' },
     github_review_nonblocking_remaining: { type: 'integer', description: 'Non-blocking findings still open after github review cycle 1; 0 when not_run or at a bare LGTM' },
     github_review_summary: { type: 'string', description: 'What the implementation agent fixed or refuted in github review cycle 1 and the standing verdict; empty when not_run' },
@@ -414,14 +574,20 @@ Validation summary (from a Fable review of the issue against the current code): 
 ${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nThe user approved this milestone run plan, which explicitly authorizes applying these validation corrections to this issue.\nFooter: \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.\n` : ''}${plan ? `\nA Fable 5 implementation plan was posted on the issue — implement against it. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
 Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.${reviewDirective}
 
-Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact current headRefName after any cycle-1 fixes), head_sha (exact current headRefOid), summary, tests_passed, github_review_status, github_review_nonblocking_remaining, github_review_summary, any github_review_blocker, any implementation blocker, and flags the operator should know about. If implementation is blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
+Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`, then measure its diff at that same head: \`git fetch origin && git diff --numstat -M origin/<base branch>...<head sha>\`. Return one diff_files entry per changed file with its exact added and deleted line counts, straight from that output — every file verbatim, including lockfiles, generated output, and renames (0/0 for a pure rename). Never estimate, sample, or pre-filter the list: the pipeline applies its own exclusions and decides from the result whether this diff needs a stronger reviewer than the issue's score routed.
+
+Return via StructuredOutput: pr_number, pr_url, head_ref (exact current headRefName after any cycle-1 fixes), head_sha (exact current headRefOid), summary, tests_passed, diff_files, github_review_status, github_review_nonblocking_remaining, github_review_summary, any github_review_blocker, any implementation blocker, and flags the operator should know about. If implementation is blocked, return pr_number 0, empty head fields, an empty diff_files array, and the blocker instead of guessing.`
 }
 
-function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit) {
+function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit, routing, openWithEscalatedReview) {
   const footerModel = MODEL_NAMES[ex.model]
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   const endCycle = startCycle + cycleLimit - 1
-  return `You are a PR review-resolution agent in this repo. You own review cycles ${startCycle} through ${endCycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}. Read all state from the PR itself; do not assume anything a previous agent did. Run at most ${cycleLimit} cycle${cycleLimit === 1 ? '' : 's'}, and stop early on a bare LGTM or blocker.
+  const escalationDirective = routing.applied
+    ? `\n\nThis PR's measured diff (${routing.escalation.diff.lines} changed lines across ${routing.escalation.diff.files} file(s), noise excluded) implies C${routing.escalation.to} and routes review band ${routing.escalation.band} — above the band the issue's [C${routing.escalation.from}] score routed. Every review trigger you post in this batch MUST be \`${routing.trigger}\` (its own one-line comment, no footer), overriding the fix-pr-review skill's default re-trigger routing.${openWithEscalatedReview ? ` Cycle ${startCycle - 1} was reviewed by a weaker reviewer than this diff warrants, so START by posting \`${routing.trigger}\` and waiting for that verdict — treat it as the review for cycle ${startCycle}, even when an LGTM already stands on the PR.` : ''}`
+    : ''
+
+  return `You are a PR review-resolution agent in this repo. You own review cycles ${startCycle} through ${endCycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}. Read all state from the PR itself; do not assume anything a previous agent did. Run at most ${cycleLimit} cycle${cycleLimit === 1 ? '' : 's'}, and stop early on a bare LGTM or blocker.${escalationDirective}
 
 For each assigned cycle:
 1. Fetch the latest @claude review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
@@ -440,8 +606,15 @@ At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,hea
 // Script-owned github-mode loop: the build agent completes cycle 1, then each
 // fresh fix agent completes at most two cycles. The stopping rules and return
 // shape remain compatible with the merge gate.
-async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initialReview) {
+async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initialReview, routing) {
   const modelId = MODEL_IDS[ex.model]
+  // Cycle 1's trigger was composed before the diff existed. When the measured
+  // diff escalates the band, the standing cycle-1 verdict came from a reviewer
+  // this PR outgrew, so it is never the readiness boundary — LGTM or not —
+  // until a batch runs, because every batch re-triggers on the escalated
+  // trigger. Cleared once a batch runs; still owed at cycle exhaustion means
+  // the loop ends unapproved.
+  let escalationOwed = routing.applied
   if (initialReview.status === 'not_run') {
     return { final_status: 'blocked', cycles_run: 0, summary: 'implementation agent did not complete github review cycle 1', head_ref: initialReview.head_ref, head_sha: initialReview.head_sha, blocker: 'github review cycle 1 was not run' }
   }
@@ -454,8 +627,16 @@ async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initia
   if (initialReview.status === 'blocked') {
     return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: initialReview.blocker || 'implementation agent review cycle blocked' }
   }
-  if (initialReview.status === 'lgtm' && initialReview.nonblocking_remaining === 0) {
+  // A bare LGTM is the only cycle-1 outcome that would otherwise end the loop,
+  // so it is the only one where a batch must open with the escalated review
+  // instead of reaching it through the normal fix-then-re-trigger flow.
+  const cycleOneWasBareLgtm = initialReview.status === 'lgtm' && initialReview.nonblocking_remaining === 0
+  if (cycleOneWasBareLgtm && !escalationOwed) {
     return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
+  }
+  if (escalationOwed) {
+    notes.push(`review escalated to band ${routing.escalation.band} from the measured diff — cycle 1's verdict does not stand until \`${routing.trigger}\` reviews this head`)
+    log(`PR #${prNumber}: cycle 1's verdict predates the diff measurement — re-reviewing on ${routing.trigger}`)
   }
 
   while (cycles < MAX_REVIEW_CYCLES) {
@@ -463,7 +644,9 @@ async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initia
     const cycleLimit = Math.min(2, MAX_REVIEW_CYCLES - cycles)
     const endCycle = startCycle + cycleLimit - 1
     const labelCycles = cycleLimit === 1 ? `c${startCycle}` : `c${startCycle}-c${endCycle}`
-    const batchResult = await agent(githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit), {
+    const batchPrompt = githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit, routing, escalationOwed && cycleOneWasBareLgtm)
+    escalationOwed = false
+    const batchResult = await agent(batchPrompt, {
       model: modelId,
       effort: ex.effort,
       schema: githubReviewBatchSchema(cycleLimit),
@@ -490,6 +673,13 @@ async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initia
     if (batchResult.status === 'lgtm' && cycles >= MAX_REVIEW_CYCLES) {
       return { final_status: 'lgtm_with_nonblocking', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
     }
+  }
+  // An escalation that never got a cycle to run is not a readiness boundary:
+  // the only standing verdict came from the reviewer this diff outgrew.
+  if (escalationOwed) {
+    notes.push(`no review cycle remained to run the escalated \`${routing.trigger}\` review`)
+    log(`PR #${prNumber}: maxReviewCycles exhausted before the escalated ${routing.trigger} review could run`)
+    return { final_status: 'max_cycles_exhausted', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
   }
   return {
     final_status: standingStatus === 'lgtm' ? 'lgtm_with_nonblocking' : 'max_cycles_exhausted',
@@ -541,11 +731,12 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 // Returns the same shape as the github-mode review-loop agent. A needs_updates
 // verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
 // never a fix push that no reviewer would see.
-async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
+async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan, routing) {
   // model null means "no override — inherit the session default", the
-  // subagent equivalent of the bare @claude trigger (band 0).
-  const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
-  const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
+  // subagent equivalent of the bare @claude trigger (band 0). The pipeline
+  // dispatches this first reviewer itself, so a diff-measured escalation
+  // applies to the first review directly.
+  const firstReview = { ...routing.effective }
   const notes = []
   let nextReview = firstReview
   let head = { ref: '', sha: '' }
@@ -899,10 +1090,21 @@ async function executeTrack(trackIndex) {
     log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${reviewNote}`)
 
     if (REVIEW_LOOP) {
+      // The score routed the review from a prediction; the diff is the
+      // measurement. Re-derive the review band from what actually shipped
+      // before any reviewer runs — upward only.
+      const routing = reviewRoutingFor(ex, impl.diff_files)
+      if (routing.escalation) {
+        record.review_escalation = routing.escalation
+        const reviewer = `${MODEL_NAMES[routing.escalation.review.model] || 'the session default reviewer'} @ ${routing.escalation.review.effort}`
+        log(`#${issue}: PR #${impl.pr_number} diff measures ${routing.escalation.diff.lines} changed lines across ${routing.escalation.diff.files} file(s) (excluded ${routing.escalation.diff.excluded_files} noise file(s)) — implied C${routing.escalation.to} (Volume ${routing.escalation.volume}) outranks C${routing.escalation.from}; review escalates to band ${routing.escalation.band} (${reviewer})${routing.applied ? '' : ' — the routed reviewer already outranks it and stands'}; the issue needs a [C${routing.escalation.to}] restamp`)
+      } else if (!routing.measured) {
+        log(`#${issue}: PR #${impl.pr_number} returned no diff stats — review escalation skipped; the [C..] band alone routes the review`)
+      }
       let review
       try {
         review = REVIEW_MODE === 'subagent'
-          ? await runSubagentReviewLoop(issue, impl.pr_number, ex, validation, plan)
+          ? await runSubagentReviewLoop(issue, impl.pr_number, ex, validation, plan, routing)
           : await runGithubReviewLoop(issue, impl.pr_number, ex, validation, plan, {
               status: impl.github_review_status,
               nonblocking_remaining: impl.github_review_nonblocking_remaining,
@@ -910,7 +1112,7 @@ async function executeTrack(trackIndex) {
               blocker: impl.github_review_blocker,
               head_ref: impl.head_ref,
               head_sha: impl.head_sha,
-            })
+            }, routing)
       } catch (error) {
         review = { final_status: 'blocked', cycles_run: 0, summary: `review-loop threw: ${error?.message || error}` }
       }

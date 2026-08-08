@@ -81,6 +81,7 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
         head_sha: headSha(issue),
         summary: 'implemented',
         tests_passed: true,
+        diff_files: [{ path: 'src/small.js', additions: 4, deletions: 1 }],
         github_review_status: githubReviewEnabled ? 'needs_updates' : 'not_run',
         github_review_nonblocking_remaining: 0,
         github_review_summary: githubReviewEnabled ? 'cycle 1 needs updates' : '',
@@ -841,6 +842,7 @@ describe('milestone-pipeline github review mode', () => {
       head_sha: headSha(2, fill),
       summary: 'implemented',
       tests_passed: true,
+      diff_files: [{ path: 'src/small.js', additions: 4, deletions: 1 }],
       github_review_status: status,
       github_review_nonblocking_remaining: nonblocking,
       github_review_summary: `cycle 1 ${status}`,
@@ -1456,5 +1458,250 @@ describe('milestone-pipeline merge and release', () => {
     expect(output.results[0].status).toBe('merged')
     expect(events.some((event) => event.phase === 'Release')).toBeFalse()
     expect(output.release).toBeNull()
+  })
+})
+
+describe('milestone-pipeline diff-measured review escalation', () => {
+  const escalationIssue = (overrides = {}) => ({
+    number: 2,
+    title: 'Issue 2',
+    complexity: 15,
+    model: 'sonnet',
+    effort: 'xhigh',
+    fableplan: false,
+    missing_block: false,
+    ...overrides,
+  })
+
+  /** An implementation result whose PR carries the given per-file diff stats. */
+  function implementedWithDiff(diffFiles, overrides = {}) {
+    return {
+      pr_number: 1002,
+      pr_url: 'https://example.test/pr/1002',
+      head_ref: 'codex/issue-2',
+      head_sha: headSha(2),
+      summary: 'implemented',
+      tests_passed: true,
+      diff_files: diffFiles,
+      github_review_status: 'lgtm',
+      github_review_nonblocking_remaining: 0,
+      github_review_summary: 'cycle 1 clean',
+      flags: [],
+      ...overrides,
+    }
+  }
+
+  function sourceFiles(count, linesEach) {
+    return Array.from({ length: count }, (_unused, index) => ({
+      path: `src/file-${index}.js`,
+      additions: linesEach,
+      deletions: 0,
+    }))
+  }
+
+  async function runEscalation(diffFiles, { prep = {}, args = {} } = {}) {
+    return executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merge: false, ...args }, {
+      Prep: () => ({ issues: [escalationIssue(prep)] }),
+      Implement: () => implementedWithDiff(diffFiles),
+    })
+  }
+
+  test('escalates the first review when the measured diff crosses a band boundary upward', async () => {
+    const { output, events, logs } = await runEscalation([{ path: 'src/engine.js', additions: 700, deletions: 600 }])
+
+    // C15 is Capability 0, so the implied score is the re-measured Volume alone:
+    // 1300 effective lines → Volume 24 → C24 → band 21–40, one band above C15.
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeFalse()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toEqual({
+      from: 15,
+      to: 24,
+      volume: 24,
+      band: '21–40',
+      review: { model: 'opus', effort: 'high' },
+      trigger: '@claude opus review',
+      applied: true,
+      diff: { files: 1, lines: 1300, excluded_files: 0, excluded_lines: 0 },
+    })
+    expect(logs.some((message) => message.includes('#2: PR #1002 diff measures 1300 changed lines across 1 file(s)') && message.includes('implied C24 (Volume 24) outranks C15') && message.includes('review escalates to band 21–40 (Opus 5 @ high)'))).toBeTrue()
+  })
+
+  test('does not escalate when the measured diff lands in the same band', async () => {
+    const { output, events } = await runEscalation([{ path: 'src/engine.js', additions: 30, deletions: 10 }])
+
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('never lowers the review band on a small diff', async () => {
+    const { output, events } = await runEscalation([{ path: 'src/tiny.js', additions: 1, deletions: 1 }], {
+      prep: { complexity: 90, model: 'opus', effort: 'xhigh' },
+    })
+
+    // C90 is band 81+ (Fable 5 review). The implied score is 75 + Volume 0 = C75,
+    // a lower band — the review stays on the stronger routed reviewer.
+    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('an escalation never weakens a stamped reviewer that is already stronger', async () => {
+    const { output, events } = await runEscalation([{ path: 'src/engine.js', additions: 700, deletions: 600 }], {
+      prep: { first_review_model: 'fable', first_review_effort: 'high' },
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    // The escalated band routes Opus 5; the stamped Fable 5 reviewer outranks it,
+    // so the stamp stands. The divergence is still recorded for the restamp.
+    expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
+    expect(record?.review_escalation?.applied).toBeFalse()
+    expect(record?.review_escalation?.to).toBe(24)
+  })
+
+  test('excludes lockfile and generated churn from the measured diff', async () => {
+    const { output, events } = await runEscalation([
+      { path: 'bun.lock', additions: 2000, deletions: 1800 },
+      { path: 'dist/bundle.min.js', additions: 900, deletions: 0 },
+      { path: 'node_modules/left-pad/index.js', additions: 500, deletions: 0 },
+      { path: 'tests/__snapshots__/render.test.js.snap', additions: 700, deletions: 0 },
+      { path: 'src/engine.js', additions: 20, deletions: 5 },
+    ])
+
+    // 25 effective lines in one file → Volume 0 → no escalation.
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('excludes pure renames from the measured file count', async () => {
+    const renames = Array.from({ length: 31 }, (_unused, index) => ({
+      path: `skills/renamed-${index}/SKILL.md`,
+      additions: 0,
+      deletions: 0,
+      renamed: true,
+    }))
+    const { output, events } = await runEscalation([...renames, { path: 'src/engine.js', additions: 6, deletions: 4 }], {
+      prep: { complexity: 5 },
+    })
+
+    // 32 changed files would imply Volume 12 (C12, band 10–20) and escalate C5.
+    // 31 of them move no line, so the effective diff is one file and 10 lines.
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('a wide file count escalates the band and is recorded even when the reviewer does not change', async () => {
+    const { output, events } = await runEscalation(sourceFiles(30, 20), { prep: { complexity: 5 } })
+
+    // 600 effective lines → Volume 16; 30 files → Volume 12. The stronger signal
+    // wins: C16, band 10–20, one band above C5 — same bare reviewer, so the
+    // record exists for the restamp while the routed reviewer is unchanged.
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toMatchObject({
+      from: 5,
+      to: 16,
+      volume: 16,
+      band: '10–20',
+      applied: false,
+      diff: { files: 30, lines: 600 },
+    })
+  })
+
+  test('reports a missing diff measurement instead of silently skipping escalation', async () => {
+    const { output, logs } = await runEscalation([])
+
+    expect(logs.some((message) => message.includes('#2: PR #1002 returned no diff stats — review escalation skipped'))).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('reports a diff list with no usable entry as unmeasured, never as a small diff', async () => {
+    const { output, logs } = await runEscalation([{ path: '', additions: 900, deletions: 900 }, { additions: 5 }, null])
+
+    expect(logs.some((message) => message.includes('#2: PR #1002 returned no diff stats — review escalation skipped'))).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
+  })
+
+  test('github mode reviews an escalated diff again even when cycle 1 already returned LGTM', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [escalationIssue()] }),
+      Implement: () => implementedWithDiff([{ path: 'src/engine.js', additions: 700, deletions: 600 }]),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    // Cycle 1 posted the band-1 bare trigger before the diff existed. The
+    // measured diff routes band 21–40, so the loop runs one more cycle pinned to
+    // the escalated trigger instead of accepting the weaker reviewer's LGTM.
+    const batch = events.find((event) => event.state === 'started' && event.label === 'review-loop:PR#1002 c2-c3')
+    expect(batch).toBeTruthy()
+    expect(batch.prompt).toContain('@claude opus review')
+    expect(batch.prompt).toContain('START by posting')
+    expect(record?.status).toBe('lgtm')
+    expect(record?.review_escalation?.applied).toBeTrue()
+  })
+
+  test('github mode pins the escalated trigger without spending a cycle when cycle 1 already needs updates', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [escalationIssue()] }),
+      Implement: () => implementedWithDiff([{ path: 'src/engine.js', additions: 700, deletions: 600 }], {
+        github_review_status: 'needs_updates',
+        github_review_summary: 'cycle 1 needs updates',
+      }),
+    })
+    const batch = events.find((event) => event.state === 'started' && event.label === 'review-loop:PR#1002 c2-c3')
+
+    // The batch already re-triggers after its fixes, so the escalated trigger
+    // rides on that re-trigger instead of consuming a review of its own.
+    expect(batch.prompt).toContain('Every review trigger you post in this batch MUST be `@claude opus review`')
+    expect(batch.prompt).not.toContain('START by posting')
+  })
+
+  test('github mode never approves an escalated PR whose non-blocking LGTM exhausted the cycles', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false, maxReviewCycles: 1 }, {
+      Prep: () => ({ issues: [escalationIssue()] }),
+      Implement: () => implementedWithDiff([{ path: 'src/engine.js', additions: 700, deletions: 600 }], {
+        github_review_nonblocking_remaining: 2,
+      }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    // Without the escalation this would return lgtm_with_nonblocking and merge.
+    expect(record?.review.final_status).toBe('max_cycles_exhausted')
+    expect(record?.status).toBe('review_max_cycles_exhausted')
+  })
+
+  test('github mode accepts a cycle-1 LGTM untouched when the diff implies no escalation', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [escalationIssue()] }),
+      Implement: () => implementedWithDiff([{ path: 'src/engine.js', additions: 30, deletions: 10 }]),
+    })
+
+    expect(events.filter((event) => event.phase === 'Review Loop')).toHaveLength(0)
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('lgtm')
+  })
+
+  test('github mode never reports LGTM when no cycle remains to run the escalated review', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false, maxReviewCycles: 1 }, {
+      Prep: () => ({ issues: [escalationIssue()] }),
+      Implement: () => implementedWithDiff([{ path: 'src/engine.js', additions: 700, deletions: 600 }]),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(record?.review.final_status).toBe('max_cycles_exhausted')
+    expect(record?.status).toBe('review_max_cycles_exhausted')
+  })
+
+  test('validate-issue documents the diff-to-Volume ladders and the exclusion list', async () => {
+    const skill = await Bun.file(new URL('../skills/validate-issue/SKILL.md', import.meta.url)).text()
+
+    expect(skill).toContain('#### Diff-measured review escalation')
+    expect(skill).toContain('25 × Capability + implied Volume')
+    expect(skill).toContain('upward only, never downward')
+    // Both ladders are stated, with their boundary rows.
+    expect(skill).toContain('| 0–49 | 0 |')
+    expect(skill).toContain('| 1200 or more | 24 |')
+    expect(skill).toContain('| 1–3 | 0 |')
+    expect(skill).toContain('| 40 or more | 16 |')
+    // The exclusion list is named, not implied.
+    expect(skill).toContain('bun.lock')
+    expect(skill).toContain('pure rename')
+    expect(skill).toContain('__generated__')
   })
 })
