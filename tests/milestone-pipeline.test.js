@@ -1506,24 +1506,59 @@ describe('milestone-pipeline diff-measured review escalation', () => {
     })
   }
 
-  test('escalates the first review when the measured diff crosses a band boundary upward', async () => {
+  test('escalates the first review when the size floor is crossed', async () => {
     const { output, events, logs } = await runEscalation([{ path: 'src/engine.js', additions: 700, deletions: 600 }])
 
-    // C15 is Capability 0, so the implied score is the re-measured Volume alone:
-    // 1300 effective lines → Volume 24 → C24 → band 21–40, one band above C15.
+    // One file in one subsystem with no tests: Scope 4, Coupling 0,
+    // Verification 0 → Volume 8 → implied C8, a LOWER band than C15. The 1300
+    // reviewable lines cross the size floor, which lifts the review on its own.
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeFalse()
     expect(output.results.find((result) => result.issue === 2)?.review_escalation).toEqual({
       from: 15,
-      to: 24,
-      volume: 24,
+      to: 8,
+      volume: 8,
+      axes: { scope: 4, coupling: 0, verification: 0 },
       band: '21–40',
+      reason: 'size floor',
       review: { model: 'opus', effort: 'high' },
       trigger: '@claude opus review',
       applied: true,
-      diff: { files: 1, lines: 1300, excluded_files: 0, excluded_lines: 0 },
+      diff: { files: 1, lines: 1300, test_files: 0, subsystems: 1, languages: 1, excluded_files: 0, excluded_lines: 0 },
     })
-    expect(logs.some((message) => message.includes('#2: PR #1002 diff measures 1300 changed lines across 1 file(s)') && message.includes('implied C24 (Volume 24) outranks C15') && message.includes('review escalates to band 21–40 (Opus 5 @ high)'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: PR #1002 diff measures 1300 changed lines across 1 file(s)') && message.includes('Scope 4, Coupling 0, Verification 0 → Volume 8, implied C8') && message.includes('review escalates to band 21–40 (Opus 5 @ high) on size floor'))).toBeTrue()
+  })
+
+  test('a size-floor escalation never asks for a [C..] restamp', async () => {
+    const { logs } = await runEscalation([{ path: 'src/engine.js', additions: 700, deletions: 600 }])
+
+    // The floor moves the reviewer without claiming the filed score was wrong.
+    expect(logs.some((message) => message.includes('restamp'))).toBeFalse()
+  })
+
+  test('escalates on the implied score when the measured axes outrank the filed Volume', async () => {
+    const diff = [
+      ...sourceFiles(10, 30),
+      { path: 'tests/engine.test.js', additions: 40, deletions: 10 },
+    ]
+    const { output, events, logs } = await runEscalation(diff, { prep: { complexity: 5 } })
+
+    // 11 files / 350 lines → Scope 3; two subsystems → Coupling 1; one test file
+    // of 50 lines → Verification 1. Volume 10 → implied C10, one band above C5.
+    // Both bands review with the bare reviewer, so the routed reviewer is
+    // unchanged while the divergence is still recorded for the restamp.
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toMatchObject({
+      from: 5,
+      to: 10,
+      volume: 10,
+      axes: { scope: 3, coupling: 1, verification: 1 },
+      band: '10–20',
+      reason: 'implied score',
+      applied: false,
+      diff: { files: 11, lines: 350, test_files: 1, subsystems: 2 },
+    })
+    expect(logs.some((message) => message.includes('the issue needs a [C10] restamp'))).toBeTrue()
   })
 
   test('does not escalate when the measured diff lands in the same band', async () => {
@@ -1550,11 +1585,12 @@ describe('milestone-pipeline diff-measured review escalation', () => {
     })
     const record = output.results.find((result) => result.issue === 2)
 
-    // The escalated band routes Opus 5; the stamped Fable 5 reviewer outranks it,
-    // so the stamp stands. The divergence is still recorded for the restamp.
+    // The size floor routes Opus 5; the stamped Fable 5 reviewer outranks it,
+    // so the stamp stands. The divergence is still recorded.
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
     expect(record?.review_escalation?.applied).toBeFalse()
-    expect(record?.review_escalation?.to).toBe(24)
+    expect(record?.review_escalation?.band).toBe('21–40')
+    expect(record?.review_escalation?.reason).toBe('size floor')
   })
 
   test('excludes lockfile and generated churn from the measured diff', async () => {
@@ -1588,21 +1624,26 @@ describe('milestone-pipeline diff-measured review escalation', () => {
     expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
   })
 
-  test('a wide file count escalates the band and is recorded even when the reviewer does not change', async () => {
-    const { output, events } = await runEscalation(sourceFiles(30, 20), { prep: { complexity: 5 } })
+  test('a wide, shallow sweep crosses the size floor on file count alone', async () => {
+    const { output, events } = await runEscalation(sourceFiles(30, 8), { prep: { complexity: 5 } })
 
-    // 600 effective lines → Volume 16; 30 files → Volume 12. The stronger signal
-    // wins: C16, band 10–20, one band above C5 — same bare reviewer, so the
-    // record exists for the restamp while the routed reviewer is unchanged.
-    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    // 240 lines stays under the line threshold; 30 files crosses the file one.
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.review_escalation).toMatchObject({
-      from: 5,
-      to: 16,
-      volume: 16,
-      band: '10–20',
-      applied: false,
-      diff: { files: 30, lines: 600 },
+      band: '21–40',
+      reason: 'size floor',
+      applied: true,
+      diff: { files: 30, lines: 240 },
     })
+  })
+
+  test('holds the routed reviewer just under both size-floor thresholds', async () => {
+    const { output, events } = await runEscalation(sourceFiles(24, 24), { prep: { complexity: 5 } })
+
+    // 24 files and 576 lines: both stay below the floor, and Scope 4 alone gives
+    // Volume 8 → implied C8, still band 0–9.
+    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.review_escalation).toBeUndefined()
   })
 
   test('reports a missing diff measurement instead of silently skipping escalation', async () => {
@@ -1688,17 +1729,25 @@ describe('milestone-pipeline diff-measured review escalation', () => {
     expect(record?.status).toBe('review_max_cycles_exhausted')
   })
 
-  test('validate-issue documents the diff-to-Volume ladders and the exclusion list', async () => {
+  test('validate-issue documents both escalation rules and the exclusion list', async () => {
     const skill = await Bun.file(new URL('../skills/validate-issue/SKILL.md', import.meta.url)).text()
 
     expect(skill).toContain('#### Diff-measured review escalation')
-    expect(skill).toContain('25 × Capability + implied Volume')
-    expect(skill).toContain('upward only, never downward')
-    // Both ladders are stated, with their boundary rows.
-    expect(skill).toContain('| 0–49 | 0 |')
-    expect(skill).toContain('| 1200 or more | 24 |')
-    expect(skill).toContain('| 1–3 | 0 |')
-    expect(skill).toContain('| 40 or more | 16 |')
+    // Rule 1 runs the canonical Volume formula, with Capability left alone.
+    expect(skill).toContain('##### Rule 1 — implied score from the canonical axes')
+    expect(skill).toContain('`Volume = (Scope + Coupling + Verification) × 2`, `implied score = 25 × Capability + Volume`')
+    expect(skill).toContain('**Capability is taken unchanged from the title score**')
+    // Rule 2 is a named floor, not a Volume claim.
+    expect(skill).toContain('##### Rule 2 — the size floor')
+    expect(skill).toContain('**600 or more changed lines, or 25 or more changed files**')
+    expect(skill).toContain('lifts the review to **band 2 (Opus 5 · high)** on its own')
+    expect(skill).toContain('it earns **no** `[C..]` restamp')
+    expect(skill).toContain('Upward only, never downward')
+    // Each axis states its step table, with the boundary rows.
+    expect(skill).toContain('| 1 | 0 | | 0–49 | 0 |')
+    expect(skill).toContain('| 16 or more | 4 | | 1200 or more | 4 |')
+    expect(skill).toContain('| 5 or more | 4 | | | |')
+    expect(skill).toContain('| 7 or more | 4 | | 700 or more | 4 |')
     // The exclusion list is named, not implied.
     expect(skill).toContain('bun.lock')
     expect(skill).toContain('pure rename')

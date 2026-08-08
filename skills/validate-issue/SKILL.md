@@ -249,48 +249,66 @@ The first review is the `@claude` GitHub Action posted on the PR: the standard `
 
 #### Diff-measured review escalation
 
-The `[C..]` score is a prediction made when the issue was filed. The diff is a measurement made when the pull request is open. When a build moves far more surface than the score's Volume claimed, the reviewer the score routed is too weak for what actually shipped — a `[C15]` issue that produces a 1300-line diff still draws the bare `@claude` band-1 reviewer. At review time the pipeline re-measures Volume from the diff and re-derives an **implied score**:
+The `[C..]` score is a prediction made when the issue was filed. The diff is a measurement made when the pull request is open. When a build moves far more surface than the score claimed, the reviewer the score routed is too weak for what actually shipped. At review time the pipeline measures the pull request's **effective diff** — the diff after the exclusions below — and applies two independent rules. Either can raise the review band; neither can lower it.
 
-`implied score = 25 × Capability + implied Volume`, with **Capability taken unchanged from the title score** (`Capability = floor(score / 25)`, `Volume = score mod 25`).
-
-Implied Volume comes from two ladders on the same canonical 0–24 scale. Each maps the effective diff — the diff after the exclusions below — onto the scale, and the **stronger signal wins**: a wide sweep and a deep single-file rewrite each drag real review surface, and either alone is enough.
-
-| Effective changed lines (added + deleted) | Implied Volume |
-|---|---|
-| 0–49 | 0 |
-| 50–99 | 2 |
-| 100–199 | 4 |
-| 200–349 | 8 |
-| 350–549 | 12 |
-| 550–799 | 16 |
-| 800–1199 | 20 |
-| 1200 or more | 24 |
-
-| Effective changed files | Implied Volume |
-|---|---|
-| 1–3 | 0 |
-| 4–7 | 2 |
-| 8–14 | 4 |
-| 15–24 | 8 |
-| 25–39 | 12 |
-| 40 or more | 16 |
-
-**Exclusions (noise that costs a reviewer nothing to read).** Excluded files count toward neither ladder:
+**The effective diff.** Excluded files count toward nothing:
 
 - **Lockfiles** by basename: `bun.lock`, `bun.lockb`, `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `go.sum`, `poetry.lock`, `uv.lock`, `Pipfile.lock`, `Gemfile.lock`, `composer.lock`, `Podfile.lock`, `flake.lock`, `mix.lock`, `packages.lock.json`.
 - **Generated output** by path segment: `node_modules`, `dist`, `build`, `vendor`, `coverage`, `generated`, `__generated__`, `__snapshots__`, `.next`, `.nuxt`, `.svelte-kit`; and by suffix: `.min.js`, `.min.css`, `.map`, `.snap`, `.pb.go`, `.pb.cc`, `.pb.h`, `_pb2.py`, `_pb2.pyi`, `.generated.ts`, `.generated.js`, `.g.dart`, `.freezed.dart`.
-- **Every file that moves no line** — a **pure rename**, a mode-only change, a binary swap. These count toward neither the line total nor the file count.
+- **Every file that moves no line** — a **pure rename**, a mode-only change, a binary swap.
 
-Keep the exclusion list short and generic. Excluding a file only lowers the implied Volume, and a lower implied Volume only means less escalation, so a wrong entry weakens the review instead of strengthening it.
+Keep this list short and generic. Excluding a file only shrinks the measured surface, and a smaller surface only means less escalation, so a wrong entry weakens the review instead of strengthening it.
 
-**Rules the escalation obeys:**
+##### Rule 1 — implied score from the canonical axes
+
+The diff re-derives the three **Volume** axes, and the scale's own formula does the rest: `Volume = (Scope + Coupling + Verification) × 2`, `implied score = 25 × Capability + Volume`. **Capability is taken unchanged from the title score** (`Capability = floor(score / 25)`), because no diff evidences Risk or Uncertainty.
+
+**Scope** — breadth and depth, the larger of the two:
+
+| Effective files | Scope | | Effective lines (added + deleted) | Scope |
+|---|---|---|---|---|
+| 1 | 0 | | 0–49 | 0 |
+| 2–3 | 1 | | 50–199 | 1 |
+| 4–7 | 2 | | 200–549 | 2 |
+| 8–15 | 3 | | 550–1199 | 3 |
+| 16 or more | 4 | | 1200 or more | 4 |
+
+**Coupling** — spread stands in for cross-boundary coordination, the larger of the two. Top-level directory proxies "subsystem" (root-level files share one bucket); file extension proxies "language". A diff shows how far a change spreads; it never shows whether the parts talk, so this axis is a proxy and reads low by design.
+
+| Distinct subsystems | Coupling | | Distinct languages | Coupling |
+|---|---|---|---|---|
+| 1 | 0 | | 1 | 0 |
+| 2 | 1 | | 2 | 1 |
+| 3 | 2 | | 3 or more | 2 |
+| 4 | 3 | | | |
+| 5 or more | 4 | | | |
+
+**Verification** — the test surface the diff carries, the larger of the two. A test file is one under a `test`/`tests`/`spec`/`specs`/`__tests__`/`e2e` directory, or one whose name carries `.test.`, `.spec.`, `_test.`, `-test.`, or a `test_` prefix.
+
+| Test files | Verification | | Test lines | Verification |
+|---|---|---|---|---|
+| 0 | 0 | | 0 | 0 |
+| 1 | 1 | | 1–99 | 1 |
+| 2–3 | 2 | | 100–299 | 2 |
+| 4–6 | 3 | | 300–699 | 3 |
+| 7 or more | 4 | | 700 or more | 4 |
+
+When the implied score lands in a higher band than the title score, the review moves to that band's reviewer, and the issue earns a `[C..]` restamp.
+
+##### Rule 2 — the size floor
+
+Volume alone moves a Capability-0 issue very little: crossing out of band 1 needs Volume 21 of 24, which means nearly every axis maxed. A diff past the point where one reviewing pass can hold it still needs a capable reviewer, whatever the axes say. So an effective diff of **600 or more changed lines, or 25 or more changed files**, lifts the review to **band 2 (Opus 5 · high)** on its own.
+
+Both thresholds are judgment calls, checked against this repository's 40 most recent merged pull requests so a routine change never trips them. The floor moves the reviewer without claiming the filed score was wrong, so it earns **no** `[C..]` restamp.
+
+##### Rules both obey
 
 - **Upward only, never downward.** A small diff never lowers the review tier: a small diff can still carry Capability-3 risk (money, data integrity, security).
-- **It never weakens a stronger reviewer.** When the issue stamps a `PR review:` trigger that already outranks the escalated band's reviewer, the stamp stands. The divergence is still recorded.
+- **Neither weakens a stronger reviewer.** When the issue stamps a `PR review:` trigger that already outranks the escalated band's reviewer, the stamp stands. The divergence is still recorded.
 - **Only the review moves.** The build already ran, so build model, build effort, and fableplan are untouched.
-- **It corrects Volume under-scoring alone.** It cannot detect under-scored risk; the safety carve-out still covers that.
+- **They correct Volume and raw size.** Neither detects under-scored risk; the safety carve-out still covers that.
 - In default github review mode the cycle-1 trigger is posted before the diff exists. When the measured diff escalates the band, cycle 1's verdict never becomes the readiness boundary — the pipeline posts the escalated trigger and waits for that verdict, even when cycle 1 already returned `LGTM`. A run that exhausts `maxReviewCycles` before the escalated review runs ends `max_cycles_exhausted` rather than approved.
-- Each escalated issue carries a `review_escalation` record in the run results (implied score, implied Volume, band, reviewer, measured diff, and whether the reviewer actually changed) so the orchestrating session can restamp the issue's `[C..]` prefix and tell the user.
+- Each escalated issue carries a `review_escalation` record in the run results (implied score, implied Volume, the three axes, band, which rule fired, reviewer, measured diff, and whether the reviewer actually changed) so the orchestrating session can report it and restamp when rule 1 fired.
 
 Safety carve-outs (money, data integrity, security, auto-protective) remain absolute overrides in consumers that already have them — they force the capable path when flagged even if Risk was under-scored.
 

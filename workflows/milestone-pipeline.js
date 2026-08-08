@@ -7,7 +7,7 @@ export const meta = {
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model and effort derived from its [C..] score band, never stamped' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, measure its diff, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'review band re-derived from the measured diff (upward only), then build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Review Loop', detail: 'review band re-derived from the measured diff — canonical Volume axes plus a size floor, upward only — then build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
     { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
   ],
@@ -227,15 +227,24 @@ function reviewRouteFor(ex) {
 
 // ---- Diff-measured review escalation ----
 // The [C..] score is a prediction made when the issue was filed; the diff is a
-// measurement made when the pull request is open. When the diff moves more
-// surface than the score's Volume claimed, the reviewer the score routed is too
-// weak for what actually shipped. At review time the pipeline re-derives an
-// implied score — the title's Capability unchanged, Volume re-measured from the
-// diff — and moves the review to the higher band. Upward only: a small diff
-// never lowers the review tier, because a small diff can still carry
-// Capability-3 risk (money, data integrity, security). This corrects Volume
-// under-scoring alone; it cannot detect under-scored risk, which stays with the
-// safety carve-out. Build routing is untouched — the build already ran.
+// measurement made when the pull request is open. Two independent rules move
+// the review upward when the two disagree, and neither ever moves it down —
+// a small diff can still carry Capability-3 risk (money, data integrity,
+// security), which no diff can show.
+//
+// 1. IMPLIED SCORE. The diff re-derives the canonical Volume axes — Scope,
+//    Coupling, Verification — and the scale's own formula turns them into a
+//    score: Volume = (Scope + Coupling + Verification) × 2, implied score =
+//    25 × Capability + Volume, with Capability taken unchanged from the title
+//    because a diff cannot evidence Risk or Uncertainty. A higher band wins.
+// 2. SIZE FLOOR. Volume alone cannot lift a Capability-0 issue far: the axes
+//    would have to be near-maximal. But a diff past the point where one pass
+//    can hold it needs a capable reviewer whatever the axes say, so crossing
+//    the floor lifts the review to band 2 (Opus 5) on its own.
+//
+// This corrects Volume under-scoring and raw size. It cannot detect
+// under-scored risk, which stays with the safety carve-out. Build routing is
+// untouched — the build already ran.
 const REVIEW_MODEL_RANK = { haiku: 0, sonnet: 1, opus: 2, fable: 3 }
 const REVIEW_EFFORT_RANK = { low: 0, medium: 1, high: 2, xhigh: 3 }
 
@@ -267,6 +276,8 @@ const GENERATED_PATH_SEGMENTS = new Set([
 ])
 const GENERATED_SUFFIXES = ['.min.js', '.min.css', '.map', '.snap', '.pb.go', '.pb.cc', '.pb.h', '_pb2.py', '_pb2.pyi', '.generated.ts', '.generated.js', '.g.dart', '.freezed.dart']
 
+const TEST_PATH_SEGMENTS = new Set(['test', 'tests', 'spec', 'specs', '__tests__', 'e2e'])
+
 function isNoiseFile(path) {
   const segments = path.toLowerCase().split('/')
   const basename = segments[segments.length - 1]
@@ -275,12 +286,37 @@ function isNoiseFile(path) {
   return GENERATED_SUFFIXES.some((suffix) => basename.endsWith(suffix))
 }
 
+// The Verification axis measures the test surface a change drags, so the diff's
+// own test files are the only direct evidence of it available here.
+function isTestFile(path) {
+  const segments = path.toLowerCase().split('/')
+  const basename = segments[segments.length - 1]
+  if (segments.slice(0, -1).some((segment) => TEST_PATH_SEGMENTS.has(segment))) return true
+  return /[._-](test|spec)\./.test(basename) || basename.startsWith('test_')
+}
+
+// Top-level directory stands in for "subsystem" and file extension for
+// "language" — both are proxies for the Coupling axis, which a diff cannot
+// observe directly. Root-level files share one bucket: they are one layer.
+function subsystemOf(path) {
+  const segments = path.split('/')
+  return segments.length > 1 ? segments[0].toLowerCase() : '.'
+}
+
+function languageOf(path) {
+  const basename = path.toLowerCase().split('/').pop()
+  const dot = basename.lastIndexOf('.')
+  return dot > 0 ? basename.slice(dot + 1) : ''
+}
+
 // The review surface a pull request actually presents. `unmeasured` stays true
 // when the implementation agent reported no usable per-file stats — the runtime
 // then routes the review from the score band alone and says so, rather than
 // treating an absent measurement as a small diff.
 function effectiveDiff(files) {
-  const stats = { files: 0, lines: 0, excluded_files: 0, excluded_lines: 0, unmeasured: true }
+  const subsystems = new Set()
+  const languages = new Set()
+  const stats = { files: 0, lines: 0, test_files: 0, test_lines: 0, subsystems: 0, languages: 0, excluded_files: 0, excluded_lines: 0, unmeasured: true }
   if (!Array.isArray(files)) return stats
   for (const file of files) {
     if (!file || typeof file.path !== 'string' || file.path.length === 0) continue
@@ -296,46 +332,88 @@ function effectiveDiff(files) {
     }
     stats.files += 1
     stats.lines += lines
+    subsystems.add(subsystemOf(file.path))
+    const language = languageOf(file.path)
+    if (language) languages.add(language)
+    if (isTestFile(file.path)) {
+      stats.test_files += 1
+      stats.test_lines += lines
+    }
   }
+  stats.subsystems = subsystems.size
+  stats.languages = languages.size
   return stats
 }
 
-// Both ladders land on the canonical 0–24 Volume scale, in the same even steps
-// the (Scope + Coupling + Verification) × 2 formula produces. Documented in
-// skills/validate-issue/SKILL.md — keep the two in step.
-const DIFF_LINE_VOLUME = [[49, 0], [99, 2], [199, 4], [349, 8], [549, 12], [799, 16], [1199, 20], [Infinity, 24]]
-const DIFF_FILE_VOLUME = [[3, 0], [7, 2], [14, 4], [24, 8], [39, 12], [Infinity, 16]]
+// Every step table maps a measured count onto one canonical 0–4 axis value.
+// Documented in skills/validate-issue/SKILL.md — keep the two in step.
+// Scope is "files/layers/languages; new abstraction vs localized": breadth from
+// the file count, depth from the line count, the larger of the two.
+const SCOPE_FILE_STEPS = [[1, 0], [3, 1], [7, 2], [15, 3], [Infinity, 4]]
+const SCOPE_LINE_STEPS = [[49, 0], [199, 1], [549, 2], [1199, 3], [Infinity, 4]]
+// Coupling is "multiple interacting subsystems / cross-boundary coordination".
+// A diff shows only how far the change spreads, never whether the parts talk.
+const COUPLING_SUBSYSTEM_STEPS = [[1, 0], [2, 1], [3, 2], [4, 3], [Infinity, 4]]
+const COUPLING_LANGUAGE_STEPS = [[1, 0], [2, 1], [Infinity, 2]]
+// Verification is "test/repro surface to prove it".
+const VERIFICATION_FILE_STEPS = [[0, 0], [1, 1], [3, 2], [6, 3], [Infinity, 4]]
+const VERIFICATION_LINE_STEPS = [[0, 0], [99, 1], [299, 2], [699, 3], [Infinity, 4]]
 
-function ladderVolume(ladder, value) {
-  return ladder.find(([max]) => value <= max)[1]
+function axisStep(steps, value) {
+  return steps.find(([max]) => value <= max)[1]
 }
 
-// The stronger of the two signals wins: a 30-file docs sweep and a 1200-line
-// single-file rewrite both drag real review surface, and either alone is enough.
-function impliedVolume(stats) {
-  return Math.max(ladderVolume(DIFF_LINE_VOLUME, stats.lines), ladderVolume(DIFF_FILE_VOLUME, stats.files))
+// The canonical Volume axes, as far as a diff can evidence them. Risk and
+// Uncertainty are absent on purpose: no diff shows either, so Capability stays
+// the title's.
+function impliedAxes(stats) {
+  return {
+    scope: Math.max(axisStep(SCOPE_FILE_STEPS, stats.files), axisStep(SCOPE_LINE_STEPS, stats.lines)),
+    coupling: Math.max(axisStep(COUPLING_SUBSYSTEM_STEPS, stats.subsystems), axisStep(COUPLING_LANGUAGE_STEPS, stats.languages)),
+    verification: Math.max(axisStep(VERIFICATION_FILE_STEPS, stats.test_files), axisStep(VERIFICATION_LINE_STEPS, stats.test_lines)),
+  }
 }
 
-// Null when the diff implies nothing higher than the score already routed. A
-// missing [C..] prefix already routes as the top band, so it never escalates.
+// The size floor: past this much reviewable surface, one reviewing pass stops
+// being able to hold the change, whatever the axes say. Both thresholds were
+// checked against this repository's 40 most recent merged pull requests so a
+// routine change never trips them. Band 2 is Opus 5 · high — the first band
+// that pins a capable reviewer.
+const SIZE_FLOOR_LINES = 600
+const SIZE_FLOOR_FILES = 25
+const SIZE_FLOOR_BAND_INDEX = 2
+
+// Null when neither rule implies anything higher than the score already routed.
+// A missing [C..] prefix already routes as the top band, so it never escalates.
 function reviewEscalation(ex, stats) {
   const base = ex.effective_complexity ?? ex.complexity
   if (!Number.isInteger(base) || base <= 0) return null
   if (stats.unmeasured) return null
-  const volume = impliedVolume(stats)
+  const axes = impliedAxes(stats)
+  const volume = (axes.scope + axes.coupling + axes.verification) * 2
   const implied = 25 * Math.min(3, Math.floor(base / 25)) + volume
-  const baseBand = bandFor(base)
-  const impliedBand = bandForScore(implied)
-  if (BANDS.indexOf(impliedBand) <= BANDS.indexOf(baseBand)) return null
+  const baseIndex = BANDS.indexOf(bandFor(base))
+  const impliedIndex = BANDS.indexOf(bandForScore(implied))
+  const floorIndex = stats.lines >= SIZE_FLOOR_LINES || stats.files >= SIZE_FLOOR_FILES ? SIZE_FLOOR_BAND_INDEX : -1
+  const targetIndex = Math.max(impliedIndex, floorIndex)
+  if (targetIndex <= baseIndex) return null
+  const band = BANDS[targetIndex]
+  const reasons = []
+  if (impliedIndex > baseIndex) reasons.push('implied score')
+  if (floorIndex > baseIndex) reasons.push('size floor')
   return {
     from: base,
     to: implied,
     volume,
-    band: impliedBand.name,
-    review: { ...impliedBand.review },
-    trigger: bandTriggerPhrase(impliedBand.review),
+    axes,
+    band: band.name,
+    // Only an implied score above the title's justifies a [C..] restamp; the
+    // size floor moves the reviewer without claiming the score was wrong.
+    reason: reasons.join(' + '),
+    review: { ...band.review },
+    trigger: bandTriggerPhrase(band.review),
     applied: false,
-    diff: { files: stats.files, lines: stats.lines, excluded_files: stats.excluded_files, excluded_lines: stats.excluded_lines },
+    diff: { files: stats.files, lines: stats.lines, test_files: stats.test_files, subsystems: stats.subsystems, languages: stats.languages, excluded_files: stats.excluded_files, excluded_lines: stats.excluded_lines },
   }
 }
 
@@ -584,7 +662,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   const endCycle = startCycle + cycleLimit - 1
   const escalationDirective = routing.applied
-    ? `\n\nThis PR's measured diff (${routing.escalation.diff.lines} changed lines across ${routing.escalation.diff.files} file(s), noise excluded) implies C${routing.escalation.to} and routes review band ${routing.escalation.band} — above the band the issue's [C${routing.escalation.from}] score routed. Every review trigger you post in this batch MUST be \`${routing.trigger}\` (its own one-line comment, no footer), overriding the fix-pr-review skill's default re-trigger routing.${openWithEscalatedReview ? ` Cycle ${startCycle - 1} was reviewed by a weaker reviewer than this diff warrants, so START by posting \`${routing.trigger}\` and waiting for that verdict — treat it as the review for cycle ${startCycle}, even when an LGTM already stands on the PR.` : ''}`
+    ? `\n\nThis PR's measured diff (${routing.escalation.diff.lines} changed lines across ${routing.escalation.diff.files} file(s), noise excluded) routes review band ${routing.escalation.band} on ${routing.escalation.reason} — above the band the issue's [C${routing.escalation.from}] score routed. Every review trigger you post in this batch MUST be \`${routing.trigger}\` (its own one-line comment, no footer), overriding the fix-pr-review skill's default re-trigger routing.${openWithEscalatedReview ? ` Cycle ${startCycle - 1} was reviewed by a weaker reviewer than this diff warrants, so START by posting \`${routing.trigger}\` and waiting for that verdict — treat it as the review for cycle ${startCycle}, even when an LGTM already stands on the PR.` : ''}`
     : ''
 
   return `You are a PR review-resolution agent in this repo. You own review cycles ${startCycle} through ${endCycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}. Read all state from the PR itself; do not assume anything a previous agent did. Run at most ${cycleLimit} cycle${cycleLimit === 1 ? '' : 's'}, and stop early on a bare LGTM or blocker.${escalationDirective}
@@ -1096,8 +1174,10 @@ async function executeTrack(trackIndex) {
       const routing = reviewRoutingFor(ex, impl.diff_files)
       if (routing.escalation) {
         record.review_escalation = routing.escalation
-        const reviewer = `${MODEL_NAMES[routing.escalation.review.model] || 'the session default reviewer'} @ ${routing.escalation.review.effort}`
-        log(`#${issue}: PR #${impl.pr_number} diff measures ${routing.escalation.diff.lines} changed lines across ${routing.escalation.diff.files} file(s) (excluded ${routing.escalation.diff.excluded_files} noise file(s)) — implied C${routing.escalation.to} (Volume ${routing.escalation.volume}) outranks C${routing.escalation.from}; review escalates to band ${routing.escalation.band} (${reviewer})${routing.applied ? '' : ' — the routed reviewer already outranks it and stands'}; the issue needs a [C${routing.escalation.to}] restamp`)
+        const escalation = routing.escalation
+        const reviewer = `${MODEL_NAMES[escalation.review.model] || 'the session default reviewer'} @ ${escalation.review.effort}`
+        const restamp = escalation.reason.includes('implied score') ? `; the issue needs a [C${escalation.to}] restamp` : ''
+        log(`#${issue}: PR #${impl.pr_number} diff measures ${escalation.diff.lines} changed lines across ${escalation.diff.files} file(s) (excluded ${escalation.diff.excluded_files} noise file(s)) — Scope ${escalation.axes.scope}, Coupling ${escalation.axes.coupling}, Verification ${escalation.axes.verification} → Volume ${escalation.volume}, implied C${escalation.to}; review escalates to band ${escalation.band} (${reviewer}) on ${escalation.reason}${routing.applied ? '' : ' — the routed reviewer already outranks it and stands'}${restamp}`)
       } else if (!routing.measured) {
         log(`#${issue}: PR #${impl.pr_number} returned no diff stats — review escalation skipped; the [C..] band alone routes the review`)
       }
