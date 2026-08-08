@@ -39,7 +39,7 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
   const events = []
   const logs = []
   const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
-  const githubReviewEnabled = (parsedArgs.reviewLoop ?? true) && parsedArgs.reviewMode === 'github'
+  const githubReviewEnabled = (parsedArgs.reviewLoop ?? true) && (parsedArgs.reviewMode ?? 'github') === 'github'
   const budgetGlobal = budget ?? { total: null, spent: () => 0, remaining: () => Infinity }
   const agent = async (prompt, options) => {
     const event = { label: options.label, phase: options.phase, model: options.model, effort: options.effort, schema: options.schema, prompt }
@@ -515,9 +515,9 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test.each([
     ['disabled', { tracks: [[2]], reviewLoop: false }, 'off'],
-    ['github-mode', { tracks: [[2]], reviewLoop: true, reviewMode: 'github' }, 'github'],
-    ['enabled', { tracks: [[2]], reviewLoop: true }, 'subagent'],
-    ['enabled by default', { tracks: [[2]] }, 'subagent'],
+    ['subagent-mode', { tracks: [[2]], reviewLoop: true, reviewMode: 'subagent' }, 'subagent'],
+    ['enabled', { tracks: [[2]], reviewLoop: true }, 'github'],
+    ['enabled by default', { tracks: [[2]] }, 'github'],
   ])('%s review loops control the initial review request and reporting', async (_name, args, mode) => {
     const { events, logs } = await executeWorkflow(args)
     const prompt = promptFor(events, 'implement:#2 (fable/high)')
@@ -926,7 +926,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a clean first-cycle LGTM reviews once on the issue first-review spec and dispatches no fixer', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue()] }),
     })
     const record = output.results.find((result) => result.issue === 2)
@@ -939,7 +939,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('defaults the first review to opus/high when the PR review line is standard or absent', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue({ first_review_model: undefined, first_review_effort: undefined })] }),
     })
 
@@ -948,7 +948,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
     let reviewCycle = 0
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue({ model: 'sonnet', effort: 'high', first_review_model: 'opus', first_review_effort: 'xhigh' })] }),
       'Review Loop': (event) => {
         if (event.label.startsWith('fix:')) {
@@ -972,7 +972,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
   test('an LGTM with non-blocking findings fixes them and re-reviews on sonnet/high', async () => {
     let reviewCycle = 0
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'Review Loop': (event) => {
         if (event.label.startsWith('fix:')) {
@@ -994,7 +994,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('an LGTM with non-blocking findings on the final cycle stops as lgtm_with_nonblocking without a fixer', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1 }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1, reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'Review Loop': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }),
     })
@@ -1009,6 +1009,7 @@ describe('milestone-pipeline subagent review mode', () => {
     const { output, events } = await executeWorkflow({
       tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
       maxReviewCycles: 1,
+      reviewMode: 'subagent',
     }, {
       Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
       'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
@@ -1024,6 +1025,7 @@ describe('milestone-pipeline subagent review mode', () => {
   test('a fixer blocker ends the loop blocked and blocks descendants', async () => {
     const { output, events } = await executeWorkflow({
       tracks: [{ issues: [2] }, { issues: [9], after: [0] }],
+      reviewMode: 'subagent',
     }, {
       Prep: () => ({ issues: [prepIssue(), prepIssue({ number: 9, title: 'Issue 9' })] }),
       'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
@@ -1037,7 +1039,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('subagent reviewer and fixer prompts carry the review contract', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
       'review:PR#1002 c2 (fable/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }),
@@ -1058,7 +1060,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
 describe('milestone-pipeline merge and release', () => {
   test('merges each PR at review readiness on sonnet/low and reports merged', async () => {
-    const { output, events, logs } = await executeWorkflow({ tracks: [[2]] })
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' })
     const record = output.results.find((result) => result.issue === 2)
     const mergeEvent = events.find((event) => event.state === 'started' && event.label === 'merge:PR#1002')
 
