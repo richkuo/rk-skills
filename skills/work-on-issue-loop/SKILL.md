@@ -94,7 +94,7 @@ There is no "stuck on `Needs Updates` past the cap" case to report — per step 
 
 In every case, give: PR URL, number of review cycles run, final verdict, any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
 
-**Cap the report at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase or its internals.
+**Cap the report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
 
 After that narrative, name each unverified source from any `**Verification limitation:**` lines in the terminal review (source names only, omit when none) — that list sits outside the word cap.
 

@@ -198,7 +198,7 @@ describe('loop/validate pipeline contract', () => {
     for (const path of REPORT_CAP) {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(
-        /\*\*Cap the whole report[^\n]*55 words, plain simple English in ASD-STE100\*\*[^\n]*no litotes or litotes-adjacent hedging/,
+        /\*\*Cap the whole report[^\n]*55 words, plain simple English in ASD-STE100\*\*[^\n]*apply the Response Style rules in CLAUDE\.md\/AGENTS\.md/,
       )
     }
   })

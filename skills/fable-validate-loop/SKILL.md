@@ -68,7 +68,7 @@ It runs its full loop: work-on-issue implements in a worktree and opens the PR, 
 
 Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line covering the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate. 
 
-**Cap the whole report at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase.
+**Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 

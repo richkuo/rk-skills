@@ -52,7 +52,7 @@ Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `sk
 
 Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run, final verdict). Prefix it with a one-line note of what happened in steps 2–3 (issue updated or not; scope check passed) so the user sees the whole chain, not just the tail.
 
-**Cap the whole report (prefix + relayed summary) at 55 words, plain simple English in ASD-STE100** — active voice, no jargon, no litotes or litotes-adjacent hedging, written for a reader with no context on this codebase or its internals.
+**Cap the whole report (prefix + relayed summary) at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
 
 ## Red Flags — STOP
 
