@@ -1,13 +1,13 @@
 export const meta = {
   name: 'milestone-pipeline',
   description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, review each pull request to a stable readiness boundary, merge at LGTM plus green CI, and cut a release when every issue merges',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true }',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — Fable at the stamped Validate effort, or Opus at medium below C20' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or build-agent first cycle plus fresh two-cycle fix agents against @claude in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'squash-merge each PR at LGTM plus green CI on the pinned reviewed head, delete its branch, confirm its issue closed; successors then build from the updated base branch', model: 'sonnet' },
     { title: 'Release', detail: 'when every issue merged: sync docs and publish a GitHub release via the sync-docs-release skill', model: 'sonnet' },
   ],
@@ -101,11 +101,12 @@ function visitTrack(trackIndex, path) {
 TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
-// 'subagent' (default): reviews run as in-session subagents — a reviewer agent
-// posts a pr-review-format comment, a fixer agent resolves it, orchestrated by
-// this script; no GitHub Actions dependency (runner outages can't stall the
-// loop) and no queue latency. 'github' preserves the @claude Action flow.
-const REVIEW_MODE = ARGS.reviewMode ?? 'subagent'
+// 'github' (default): reviews run through the repo's @claude Action, so the
+// review history lives on GitHub under the same bot used outside pipeline
+// runs. 'subagent' reviews in-session — a reviewer agent posts a
+// pr-review-format comment, a fixer agent resolves it — the fallback when the
+// repo lacks the Action or GitHub Actions is unavailable.
+const REVIEW_MODE = ARGS.reviewMode ?? 'github'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Only enforced when the turn has a token target (budget.total set); below the
 // floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
