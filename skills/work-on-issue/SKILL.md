@@ -177,6 +177,6 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
-| Writing the PR body | `## Summary` / verification first; include `Closes #<N>` (without it the merge doesn't resolve the issue); end with `## Plain simple English` (≤55 words, ASD-STE100, no jargon), then the repo's footer convention — **Created** verb, no `Co-authored-by` |
+| Writing the PR body | `## Summary` / verification first; include `Closes #<N>` (without it the merge doesn't resolve the issue); end with `## Plain simple English` (≤55 words, ASD-STE100, per the CLAUDE.md/AGENTS.md Response Style rules), then the repo's footer convention — **Created** verb, no `Co-authored-by` |
 | Tempted to trigger an `@claude` review or wait on CI after opening the PR | Don't — the skill ends with the open PR; review requests are the caller's job |
 | Tempted to pause and ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report |
