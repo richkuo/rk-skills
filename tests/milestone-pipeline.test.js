@@ -57,13 +57,12 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           complexity: 20,
           model: 'fable',
           effort: 'high',
-          validate_effort: 'high',
           fableplan: false,
           missing_block: false,
         })),
       }
     } else if (options.phase === 'Validate') {
-      result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [] }
+      result = { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 0 }
     } else if (options.phase === 'Plan') {
       result = { plan: `plan for #${issueFromLabel(options.label)}`, constraints: [] }
     } else if (options.phase === 'Implement') {
@@ -159,7 +158,6 @@ describe('milestone-pipeline dependency scheduling', () => {
           complexity: 20,
           model: 'fable',
           effort: 'high',
-          validate_effort: 'high',
           fableplan,
           missing_block: false,
         }],
@@ -254,7 +252,6 @@ describe('milestone-pipeline dependency scheduling', () => {
           complexity: 20,
           model: 'fable',
           effort: 'high',
-          validate_effort: 'high',
           fableplan: number === 2,
           missing_block: false,
         })),
@@ -273,10 +270,10 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
-          { number: 3, title: 'Stamped low', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
-          { number: 4, title: 'No stamp', complexity: 60, model: 'opus', effort: 'xhigh', validate_effort: 'high', fableplan: true, missing_block: false },
-          { number: 5, title: 'No plan stage', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+          { number: 2, title: 'Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
+          { number: 3, title: 'Stamped low', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
+          { number: 4, title: 'No stamp', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: true, missing_block: false },
+          { number: 5, title: 'No plan stage', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
         ],
       }),
     })
@@ -314,13 +311,13 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 2, title: 'No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
           // plan_effort present despite the omit contract: a prep agent that fills it in
           // anyway is exactly what the missing_block half of the guard defends against,
           // so this fixture fails if `&& !normalized.missing_block` is removed.
-          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
-          { number: 4, title: 'Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', validate_effort: 'high', fableplan: true, missing_block: false },
-          { number: 5, title: 'No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: true },
+          { number: 3, title: 'No Execution block at all', complexity: 20, model: 'fable', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
+          { number: 4, title: 'Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', fableplan: true, missing_block: false },
+          { number: 5, title: 'No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
         ],
       }),
     })
@@ -353,36 +350,78 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
 
-  test('routes validation off the score: Opus at medium below C20, else Fable', async () => {
+  test('prep is contracted to omit the stamps the band derives', () => {
+    const source = workflowSource
+    // Validation is fully band-derived — prep must not parse a legacy Validate stamp back in.
+    expect(source).not.toMatch(/validate_effort/)
+    expect(source).toContain('do NOT extract a "**Validate effort:**"')
+    // First review defaults to the band; presence of the fields means "an operator stamped a trigger".
+    const reviewSchemaLine = source.match(/^ +first_review_model: \{.*$/m)[0]
+    expect(reviewSchemaLine).toMatch(/OMIT this field when the line is a standard/)
+    const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
+    expect(reviewPromptLine).toMatch(/OMIT both fields/)
+    // The dispatch-side band defaults are what make omission safe.
+    expect(source).toContain('const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review')
+    // Fable is never a build fallback — unknown or unmapped models dispatch on Opus.
+    expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
+    expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
+    expect(source).not.toMatch(/build: \{ model: 'fable'/)
+    expect(source).toContain('const validateBand = bandFor(ex.complexity)')
+  })
+
+  test('derives validation entirely from the [C..] score band', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6]],
+      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13]],
       reviewLoop: false,
     }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Light, unstamped', complexity: 2, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          { number: 3, title: 'Light, stamped high', complexity: 19, model: 'sonnet', effort: 'high', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 4, title: 'At the boundary', complexity: 20, model: 'opus', effort: 'high', validate_effort: 'medium', fableplan: false, missing_block: false },
-          { number: 5, title: 'Heavy', complexity: 68, model: 'opus', effort: 'xhigh', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 6, title: 'No [C..] prefix', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 2, title: 'Band 0 floor', complexity: 2, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 0 ceiling', complexity: 9, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 1 floor', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 5, title: 'Band 1 ceiling', complexity: 20, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 6, title: 'Band 2 floor', complexity: 21, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 7, title: 'Band 2 ceiling', complexity: 40, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: 'Band 3 floor', complexity: 41, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 9, title: 'Band 3 ceiling', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 10, title: 'Band 4 floor', complexity: 61, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 11, title: 'Band 4 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 12, title: 'Band 5', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 13, title: 'No [C..] prefix', complexity: 0, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
       }),
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
-    // Below C20 the score alone decides — the Build model never leaks in.
+    // The score alone decides — the Build model never leaks in, and nothing is stampable.
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
-    // A stamped Validate effort does not survive the light route.
     expect(dispatch('validate:#3')).toMatchObject({ model: 'opus', effort: 'medium' })
-    // C20 itself is not light — the boundary is exclusive.
-    expect(dispatch('validate:#4')).toMatchObject({ model: 'fable', effort: 'medium' })
-    expect(dispatch('validate:#5')).toMatchObject({ model: 'fable', effort: 'high' })
+    // Band boundaries are inclusive at 10/21/41/61/81.
+    expect(dispatch('validate:#4')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#9')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#10')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#11')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#12')).toMatchObject({ model: 'fable', effort: 'high' })
     // complexity 0 means "no prefix" — unknown, not small.
-    expect(dispatch('validate:#6')).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(dispatch('validate:#13')).toMatchObject({ model: 'fable', effort: 'high' })
 
-    expect(logs.filter((message) => message.includes('validating on Opus 5 at medium'))).toEqual([
-      '#2: C2 < 20 — validating on Opus 5 at medium',
-      '#3: C19 < 20 — validating on Opus 5 at medium (stamped Validate effort high not read)',
+    expect(logs.filter((message) => message.includes('validating on'))).toEqual([
+      '#2: C2 (band 0–9) — validating on Opus 5 @ medium',
+      '#3: C9 (band 0–9) — validating on Opus 5 @ medium',
+      '#4: C10 (band 10–20) — validating on Opus 5 @ high',
+      '#5: C20 (band 10–20) — validating on Opus 5 @ high',
+      '#6: C21 (band 21–40) — validating on Opus 5 @ high',
+      '#7: C40 (band 21–40) — validating on Opus 5 @ high',
+      '#8: C41 (band 41–60) — validating on Opus 5 @ xhigh',
+      '#9: C60 (band 41–60) — validating on Opus 5 @ xhigh',
+      '#10: C61 (band 61–80) — validating on Fable 5 @ medium',
+      '#11: C80 (band 61–80) — validating on Fable 5 @ medium',
+      '#12: C81 (band 81+) — validating on Fable 5 @ high',
+      '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
     ])
   })
 
@@ -394,28 +433,32 @@ describe('milestone-pipeline dependency scheduling', () => {
     }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Fable medium', complexity: 20, model: 'fable', effort: 'medium', validate_effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 3, title: 'Opus medium', complexity: 20, model: 'opus', effort: 'medium', validate_effort: 'medium', fableplan: false, missing_block: false },
-          { number: 4, title: 'Sonnet medium', complexity: 20, model: 'sonnet', effort: 'medium', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 5, title: 'Haiku medium', complexity: 20, model: 'haiku', effort: 'medium', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 6, title: 'Valid defaults', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
-          { number: 8, title: 'Valid xhigh', complexity: 20, model: 'opus', effort: 'xhigh', validate_effort: 'medium', fableplan: false, missing_block: false },
-          { number: 9, title: 'Fable low', complexity: 20, model: 'fable', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 10, title: 'Opus low', complexity: 20, model: 'opus', effort: 'low', validate_effort: 'high', fableplan: false, missing_block: false },
-          { number: 11, title: 'Fable xhigh', complexity: 20, model: 'fable', effort: 'xhigh', validate_effort: 'high', fableplan: false, missing_block: false },
+          { number: 2, title: 'Fable medium', complexity: 5, model: 'fable', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 3, title: 'Opus medium', complexity: 5, model: 'opus', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 4, title: 'Sonnet medium', complexity: 5, model: 'sonnet', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 5, title: 'Haiku medium', complexity: 5, model: 'haiku', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 6, title: 'Valid defaults', complexity: 5, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: 'Valid xhigh', complexity: 5, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 9, title: 'Fable low', complexity: 5, model: 'fable', effort: 'low', fableplan: false, missing_block: false },
+          { number: 10, title: 'Opus low', complexity: 5, model: 'opus', effort: 'low', fableplan: false, missing_block: false },
+          { number: 11, title: 'Fable xhigh', complexity: 5, model: 'fable', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
       }),
     })
 
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
-    expect(effortFor('validate:#2')).toBe('high')
+    // All stamped issues here are C5 (band 0) → validation is band-derived opus/medium.
+    expect(effortFor('validate:#2')).toBe('medium')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
     expect(effortFor('review-loop:PR#1002 c2-c3')).toBe('medium')
     expect(effortFor('validate:#3')).toBe('medium')
-    expect(effortFor('validate:#4')).toBe('high')
-    expect(effortFor('validate:#5')).toBe('high')
-    expect(effortFor('validate:#6')).toBe('high')
+    expect(effortFor('validate:#4')).toBe('medium')
+    expect(effortFor('validate:#5')).toBe('medium')
+    expect(effortFor('validate:#6')).toBe('medium')
+    // #7 has no prep entry — the fallback has complexity 0, which routes as the top band.
     expect(effortFor('validate:#7')).toBe('high')
+    expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
@@ -423,8 +466,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     }
     expect(effortFor('implement:#6 (fable/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1006 c2-c3')).toBe('high')
-    expect(effortFor('implement:#7 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('high')
     expect(effortFor('validate:#8')).toBe('medium')
     expect(effortFor('implement:#8 (opus/xhigh)')).toBe('xhigh')
     expect(effortFor('review-loop:PR#1008 c2-c3')).toBe('xhigh')
@@ -443,7 +484,6 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     const normalizations = logs.filter((message) => message.includes('normalized'))
     expect(normalizations).toEqual([
-      '#2: normalized validate effort xhigh → high',
       '#3: normalized build effort medium → high for Opus 5 (low/medium are Fable-only)',
       '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
       '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
@@ -917,7 +957,6 @@ describe('milestone-pipeline subagent review mode', () => {
     complexity: 60,
     model: 'fable',
     effort: 'high',
-    validate_effort: 'high',
     fableplan: false,
     missing_block: false,
     first_review_model: 'fable',
@@ -938,12 +977,131 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(record?.review.cycles_run).toBe(1)
   })
 
-  test('defaults the first review to opus/high when the PR review line is standard or absent', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
-      Prep: () => ({ issues: [prepIssue({ first_review_model: undefined, first_review_effort: undefined })] }),
+  test('defaults the first review to the [C..] band when the PR review line is standard or absent', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewMode: 'subagent' }, {
+      Prep: () => ({
+        issues: [
+          prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 3, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 4, complexity: 80, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 5, complexity: 90, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 6, complexity: 0, first_review_model: undefined, first_review_effort: undefined }),
+        ],
+      }),
     })
 
+    // Bands 0–1 are the bare-@claude equivalent: no model override, the
+    // reviewer inherits the session default.
+    const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
+    expect(bandZeroReview).toBeTruthy()
+    expect(bandZeroReview.model).toBeUndefined()
+    expect(started(events, 'review:PR#1003 c1 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1004 c1 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1005 c1 (fable/high)')).toBeTrue()
+    // No [C..] prefix is unknown, not small — the first review keeps the top band.
+    expect(started(events, 'review:PR#1006 c1 (fable/high)')).toBeTrue()
+  })
+
+  test('github mode derives the cycle-1 trigger phrase from the band', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Band 1', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 3', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 5, title: 'Stamped trigger', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `codex/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
+    expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    // A stamped PR review line overrides the band trigger.
+    expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+  })
+
+  test('escalates validation when the validator re-scores into a higher band', async () => {
+    const validations = []
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
+      Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'xhigh', first_review_model: undefined, first_review_effort: undefined })] }),
+      'validate:#2': (event) => {
+        validations.push({ model: event.model, effort: event.effort })
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 70 }
+      },
+    })
+
+    // C10 validated on the band-1 route first, then re-validated once on band 4's.
+    expect(validations).toEqual([
+      { model: 'opus', effort: 'high' },
+      { model: 'fable', effort: 'medium' },
+    ])
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
+    // The stale stamp is re-routed to the escalated band: build, plan, and review all follow C70.
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+    // The rescore rides on the result record so the orchestrator can restamp the issue.
+    expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
+      from: 10,
+      to: 70,
+      previous: { model: 'sonnet', effort: 'xhigh', fableplan: false },
+      rerouted: { model: 'opus', effort: 'high', fableplan: true },
+    })
+  })
+
+  test('a downward rescore never weakens routing and records no rescore', async () => {
+    const validations = []
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue({ complexity: 60, model: 'opus', effort: 'high', fableplan: true, first_review_model: undefined, first_review_effort: undefined })] }),
+      'validate:#2': (event) => {
+        validations.push({ model: event.model, effort: event.effort })
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }
+      },
+    })
+
+    expect(validations).toEqual([{ model: 'opus', effort: 'xhigh' }])
+    expect(logs.some((message) => message.includes('RESCORED'))).toBeFalse()
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.rescore).toBeUndefined()
+  })
+
+  test('derives build routing from the validated score when the Execution block is missing', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Unprefixed, rescored trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 3, title: 'Unprefixed, rescored hard', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 4, title: 'Band 0 ceiling', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 5, title: 'Band 1 floor', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+        ],
+      }),
+      'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
+      'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 90 }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 9 }),
+      'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
+    })
+
+    // All validate on the top band (no prefix), then build from the validated score:
+    // C6 lands in band 0 (Sonnet 5 high); C90 builds Opus 5 xhigh with a plan first.
+    expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeFalse()
+    expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
+    expect(started(events, 'plan:#3')).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–9'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
+    // The Sonnet high band ends at 9; 10 starts the Sonnet xhigh band.
+    expect(started(events, 'implement:#4 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'implement:#5 (sonnet/xhigh)')).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {

@@ -1,6 +1,6 @@
 ---
 name: fable-validate-fableplan
-description: Use when the user asks to validate a GitHub issue with Fable 5 and always plan it with Fable 5, stopping once the plan is posted — "fable-validate-fableplan", "fable validate and fable plan #N", "validate and plan #N with fable, don't build it". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, then has fableplan produce and post a Fable 5 implementation plan for EVERY issue (no Capability gate), and stops at the posted plan — no worktree, no build, no PR, no review loop. Stops earlier when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The no-implementation counterpart to fable-validate-fableplan-loop.
+description: Use when the user asks to validate a GitHub issue with Fable 5 and always plan it with Fable 5, stopping once the plan is posted — "fable-validate-fableplan", "fable validate and fable plan #N", "validate and plan #N with fable, don't build it". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, then has fableplan produce and post a Fable 5 implementation plan for EVERY issue (no score gate), and stops at the posted plan — no worktree, no build, no PR, no review loop. Stops earlier when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The no-implementation counterpart to fable-validate-fableplan-loop.
 ---
 
 # fable-validate-fableplan
@@ -11,7 +11,7 @@ This is **fable-validate-fableplan-loop with the implementation stage removed** 
 
 **Do not skip or reorder the chain.** Validation gates planning — a plan built on refuted claims is wrong. There is **no sanctioned skip**: every step runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
 
-**No Capability gate.** fableplan **always runs** for every issue that passes the scope gate, whatever the validated complexity score. There is no "skip when Capability < 2 / score < 50" rule in this skill — producing the plan is the product, so gating it away would leave the run with no output. This matches `fable-validate-fableplan-loop`; it is the deliberate difference from `fable-validate-loop` / `validate-fableplan-loop`.
+**No score gate.** fableplan **always runs** for every issue that passes the scope gate, whatever the validated complexity score. There is no "skip when the score is below 61" rule in this skill — producing the plan is the product, so gating it away would leave the run with no output. This matches `fable-validate-fableplan-loop`; it is the deliberate difference from `fable-validate-loop` / `validate-fableplan-loop`.
 
 ## Input
 
@@ -72,7 +72,7 @@ Report, in order: scope gate passed, issue updated or not, plan posted (comment 
 |---|---|
 | Tempted to implement the plan, open a worktree, or open a PR | Out of scope — this skill ends at the posted plan; name `work-on-issue` / `work-on-issue-loop` / `fable-validate-fableplan-loop` as the follow-on instead of starting one |
 | Tempted to skip validation and go straight to planning | Never reorder — validate-then-plan is the point of this skill, and there is no sanctioned skip |
-| Tempted to skip fableplan because the issue scored below 50 (Capability < 2) | Don't — there is no Capability gate here; fableplan always runs, and the plan is this skill's only output |
+| Tempted to skip fableplan because the issue scored below 61 | Don't — there is no score gate here; fableplan always runs, and the plan is this skill's only output |
 | `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — planning is wasted or wrong in those cases |
 | Tempted to wait for a literal user reply to fable-validate's or fableplan's prompt | Parse the output yourself and proceed per the step rules |
 | Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, so the plan targets the corrected issue |

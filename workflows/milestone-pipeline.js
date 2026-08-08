@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
-    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — Fable at the stamped Validate effort, or Opus at medium below C20' },
+    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model and effort derived from its [C..] score band, never stamped' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
@@ -17,10 +17,11 @@ export const meta = {
 // `after` is a hard code dependency; `runsAfter` is ordering only. Serial issues
 // within every track are conservative hard dependencies because their edge kind
 // is not explicit. The full graph is validated before any agent starts.
-// Unlike issue-pipeline, there is no complexity-threshold model routing:
-// model/effort/fableplan/plan effort come from each issue's ## Execution block (stamped by
-// prd-to-issues, revised by execution-plan-review). Prep preserves representable
-// stale combinations so the runtime can normalize and log them before dispatch.
+// Build model/effort/fableplan/plan effort come from each issue's ## Execution
+// block (stamped by prd-to-issues, revised by execution-plan-review); validation
+// and the first-review default derive from the [C..] score band (see BANDS).
+// Prep preserves representable stale combinations so the runtime can normalize
+// and log them before dispatch.
 // Validation still runs as the first step of every issue. Predecessor PRs change
 // the ground truth, so each issue is re-checked against its pinned dependency
 // heads immediately before it starts.
@@ -135,18 +136,48 @@ const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
 
-// Validation routes off the [C..] score, not off the Build model. Below this
-// score an issue is Capability 0 with small Volume — a whole-issue Fable pass
-// buys nothing a cheaper reviewer misses — so it validates on Opus at medium.
-// A score of 0 means "no [C..] prefix", which is unknown, not small: it keeps
-// the Fable default. Derived, never stamped, so no issue can carry a stale
-// validate-model line that nothing reads.
-const LIGHT_VALIDATE_MAX_COMPLEXITY = 20
+// Every routing default derives from the [C<score>] band. Stamped Execution
+// fields (Build model, Effort, fableplan, Plan effort, PR review) override the
+// build/plan/first-review defaults; validation is derived only — never stamped,
+// so no issue can carry a stale validate line that nothing reads. A score of 0
+// means "no [C..] prefix", which is unknown, not small: it routes as the top
+// band. Fable never runs at xhigh, so the Fable rows cap at high.
+// The reviewer is always a fresh agent — sharing the builder's model family
+// is accepted; the fresh context is the isolation that matters. Bands 0–1's
+// first review is the standard bare-@claude reviewer: model null means "no
+// override — inherit the session default". Sonnet never takes a first
+// review: it appears only as the cheaper re-review after a pass that
+// addressed nothing blocking (see runSubagentReviewLoop).
+const BANDS = [
+  { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } },
+  { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
+  { name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
+  { name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
+  { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } },
+]
 
-function validateRouting(ex) {
-  const light = ex.complexity > 0 && ex.complexity < LIGHT_VALIDATE_MAX_COMPLEXITY
-  if (light) return { model: 'opus', effort: 'medium', light: true }
-  return { model: 'fable', effort: ex.validate_effort || 'high', light: false }
+function bandFor(complexity) {
+  if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
+  return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
+}
+
+// The github-mode cycle-1 trigger comment, derived from the band unless the
+// issue stamps its own `@claude <model> review …` line. Band 0 is the bare
+// standard trigger; the Action picks its configured default model.
+function firstReviewTrigger(ex) {
+  const stamped = MODEL_IDS[ex.first_review_model]
+  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+  const review = bandFor(ex.effective_complexity ?? ex.complexity).review
+  if (!review.model) return '@claude review'
+  if (review.model === 'opus') return '@claude opus review'
+  return `@claude ${review.model} review effort:${review.effort}`
+}
+
+// Band-derived build for an issue with no Execution block: the band default.
+function derivedBuild(complexity) {
+  const band = bandFor(complexity)
+  return { model: band.build.model, effort: band.build.effort, fableplan: band.fableplan, band }
 }
 
 const PREP_SCHEMA = {
@@ -164,11 +195,10 @@ const PREP_SCHEMA = {
           complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
-          validate_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'Raw tier from optional "Validate effort:" after low→medium; default high when absent; runtime normalizes xhigh→high' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; OMIT this field entirely when the line is absent — the runtime defaults it to high, and its presence is how the runtime tells a stamped tier from an unstamped one. The planner is always Fable 5, so low/medium/high are legal; preserve a stamped xhigh verbatim so the runtime can clamp it to high and log (Fable never runs at xhigh). Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
-          first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; opus when the line is standard or absent' },
-          first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; high when unspecified' },
+          first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; OMIT this field when the line is a standard `@claude` trigger or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
+          first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; OMIT when unspecified — the runtime derives the default from the [C..] band' },
           missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
         },
       },
@@ -178,9 +208,10 @@ const PREP_SCHEMA = {
 
 const VALIDATION_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'summary', 'corrections', 'implementation_constraints'],
+  required: ['verdict', 'summary', 'corrections', 'implementation_constraints', 'rescored_complexity'],
   properties: {
     verdict: { type: 'string', enum: ['VALID', 'VALID_WITH_CORRECTIONS', 'INVALID'] },
+    rescored_complexity: { type: 'integer', description: 'Your own step-6 complexity score (0–99) for the issue as validated; 0 only if you could not score it. The runtime escalates to a higher band when this outranks the title prefix — upward only, never downward' },
     summary: { type: 'string', description: 'One-paragraph verdict summary' },
     corrections: { type: 'array', items: { type: 'string' }, description: 'Concrete edits the issue body needs (empty if none)' },
     implementation_constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the implementer must honor (invariants, refuted approaches, preferred option, merge-order notes)' },
@@ -306,7 +337,8 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     baseRefs.length ? `\nHard dependency base refs, ordered by predecessor track and pinned to the reviewed pull request commits: ${JSON.stringify(baseRefs)}. Verify each PR/ref/SHA tuple and validate against those exact commits, not only the default branch, before returning a valid verdict.` : '',
     `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
-    `and the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes).`,
+    `the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes),`,
+    `and rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it.`,
   ].join(' ')
 }
 
@@ -361,7 +393,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
     ? '\n\nThis run has reviewLoop disabled: do not request or trigger any pull request review. Return github_review_status not_run, github_review_nonblocking_remaining 0, and an empty github_review_summary.'
     : REVIEW_MODE === 'github'
       ? `\n\nAfter the PR is open, handle github review cycle 1 yourself:
-1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "@claude review"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
+1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
 4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-7 routing, and wait for that re-review verdict.
@@ -527,33 +559,38 @@ Return via StructuredOutput: released, tag, release_url, docs_change (pr_merged 
 
 // Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
 // pr-review-format comment and returns its verdict; a fixer resolves it; repeat.
-// First review runs on the issue's "PR review:" model/effort (default opus/high);
+// First review runs on the issue's "PR review:" model/effort when one is
+// stamped, else on the [C..] band's review default;
 // a re-review after a fix pass that addressed only non-blocking findings drops
 // to sonnet/high, mirroring the fix-pr-review skill's @claude-sonnet routing.
 // Returns the same shape as the github-mode review-loop agent. A needs_updates
 // verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
 // never a fix push that no reviewer would see.
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
-  const firstReview = { model: MODEL_IDS[ex.first_review_model] || 'opus', effort: ex.first_review_effort || 'high' }
+  // model null means "no override — inherit the session default", the
+  // subagent equivalent of the bare @claude trigger (band 0).
+  const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
+  const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
   const notes = []
   let nextReview = firstReview
   let head = { ref: '', sha: '' }
   let cycles = 0
   while (cycles < MAX_REVIEW_CYCLES) {
     cycles += 1
-    const review = await agent(subagentReviewPrompt(issue, prNumber, cycles), {
-      model: nextReview.model,
+    const reviewOptions = {
       effort: nextReview.effort,
       schema: SUBAGENT_REVIEW_SCHEMA,
       phase: 'Review Loop',
-      label: `review:PR#${prNumber} c${cycles} (${nextReview.model}/${nextReview.effort})`,
-    })
+      label: `review:PR#${prNumber} c${cycles} (${nextReview.model || 'claude'}/${nextReview.effort})`,
+    }
+    if (nextReview.model) reviewOptions.model = nextReview.model
+    const review = await agent(subagentReviewPrompt(issue, prNumber, cycles), reviewOptions)
     if (!review) {
       return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: `cycle ${cycles} reviewer agent failed` }
     }
     head = { ref: review.head_ref, sha: review.head_sha }
-    notes.push(`cycle ${cycles} review (${nextReview.model}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
-    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
+    notes.push(`cycle ${cycles} review (${nextReview.model || 'claude'}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
+    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model || 'claude'}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
     if (review.verdict === 'lgtm' && review.blocking_count + review.nonblocking_count === 0) {
       return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: review.head_ref, head_sha: review.head_sha }
     }
@@ -564,7 +601,7 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
       break
     }
     const fix = await agent(subagentFixPrompt(issue, prNumber, ex, validation, plan, review.comment_url), {
-      model: MODEL_IDS[ex.model] || 'fable',
+      model: MODEL_IDS[ex.model] || 'opus',
       effort: ex.effort,
       schema: REVIEW_FIX_SCHEMA,
       phase: 'Review Loop',
@@ -586,11 +623,11 @@ const prep = await agent(
 - complexity: the integer from the [C<score>] title prefix (0 if absent)
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
-- validate_effort: from the optional "**Validate effort:**" line — same values; when the line is absent, use high; preserve xhigh so the runtime can identify and log it. Report it verbatim even on a low-score issue: the runtime, not you, decides that a sub-C20 issue validates on Opus at medium and that this stamped tier goes unread
 - plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers; preserve a stamped xhigh verbatim so the runtime can clamp and log it (Fable never runs at xhigh). Only the effort is stampable — never read a model from this line
 - fableplan: true when "**fableplan first:**" starts with "Yes"
-- first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, use opus and high
-If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model fable, effort high, fableplan false). Do not modify anything anywhere.
+- first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
+- do NOT extract a "**Validate effort:**" or "**Validate model:**" line — validation is derived from the [C..] score band by the runtime and a legacy stamp is never read
+If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model opus, effort high, fableplan false — never fable: Fable builds only on an explicit stamp, and the runtime re-derives these from the validated score anyway). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
 )
@@ -600,10 +637,6 @@ const normalizedIssues = prep.issues.map((issue) => {
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
-  }
-  if (normalized.validate_effort === 'xhigh') {
-    log(`#${normalized.number}: normalized validate effort xhigh → high`)
-    normalized.validate_effort = 'high'
   }
   // Fable never runs at xhigh — high is its ceiling on every stage. Clamp, never dispatch.
   if (normalized.model === 'fable' && normalized.effort === 'xhigh') {
@@ -634,7 +667,7 @@ const normalizedIssues = prep.issues.map((issue) => {
 })
 const EX = new Map(normalizedIssues.map((i) => [i.number, i]))
 const missing = normalizedIssues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
-if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — running them on conservative defaults (fable/high)`)
+if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — build routing derives from each issue's validated score band`)
 
 // ---- Dependency graph: unrelated tracks run concurrently; every successor
 // waits for its predecessors' stable readiness boundary. ----
@@ -737,16 +770,14 @@ async function executeTrack(trackIndex) {
       status = 'blocked'
       break
     }
-    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'fable', effort: 'high', fableplan: false }
-    const modelId = MODEL_IDS[ex.model] || 'fable'
+    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
     const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
-    const validateRoute = validateRouting(ex)
-    if (validateRoute.light) {
-      log(`#${issue}: C${ex.complexity} < ${LIGHT_VALIDATE_MAX_COMPLEXITY} — validating on Opus 5 at medium${ex.validate_effort ? ` (stamped Validate effort ${ex.validate_effort} not read)` : ''}`)
-    }
+    const validateBand = bandFor(ex.complexity)
+    const validateRoute = validateBand.validate
+    log(`#${issue}: ${ex.complexity > 0 ? `C${ex.complexity} (band ${validateBand.name})` : 'no [C..] prefix — unknown routes as the top band'} — validating on ${MODEL_NAMES[validateRoute.model]} @ ${validateRoute.effort}`)
     const validationOptions = {
       model: validateRoute.model,
       effort: validateRoute.effort,
@@ -755,7 +786,7 @@ async function executeTrack(trackIndex) {
       label: `validate:#${issue}`,
     }
     const validationDispatch = await validateWithRetry(issue, validationPrompt, validationOptions)
-    const validation = validationDispatch.validation
+    let validation = validationDispatch.validation
     blocker = validationDispatch.blocker
     if (!validation) {
       log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
@@ -765,6 +796,25 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
+    // Escalation: the validator's own score outranks the title prefix upward,
+    // never downward. An under-scored issue got the weakest validator — the
+    // one least likely to catch the under-score — so a higher rescored band
+    // re-validates once on that band's stronger route before the verdict
+    // stands. The escalated score also drives downstream band defaults.
+    const rescored = Number.isInteger(validation.rescored_complexity) ? validation.rescored_complexity : 0
+    let effectiveComplexity = ex.complexity > 0 ? ex.complexity : rescored
+    if (rescored > 0 && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
+      effectiveComplexity = rescored
+      const escalatedBand = bandFor(rescored)
+      log(`#${issue}: validator re-scored ${ex.complexity > 0 ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${MODEL_NAMES[escalatedBand.validate.model]} @ ${escalatedBand.validate.effort}`)
+      const escalatedDispatch = await validateWithRetry(issue, validationPrompt, { ...validationOptions, model: escalatedBand.validate.model, effort: escalatedBand.validate.effort })
+      if (escalatedDispatch.validation) {
+        validation = escalatedDispatch.validation
+      } else {
+        log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
+      }
+    }
+    ex.effective_complexity = effectiveComplexity
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary
       log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
@@ -774,6 +824,42 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
+
+    // A validated rescore that lands in a higher band re-routes the stamped
+    // build too: the stamp predates the rescore, so the stronger band default
+    // replaces it (upward only — a downward rescore never weakens routing).
+    // The rescore rides on the issue's result record so the orchestrator can
+    // restamp the [C..] title and Execution block and tell the user.
+    let rescore = null
+    if (!ex.missing_block && ex.complexity > 0 && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
+      const derived = derivedBuild(effectiveComplexity)
+      rescore = {
+        from: ex.complexity,
+        to: effectiveComplexity,
+        previous: { model: ex.model, effort: ex.effort, fableplan: ex.fableplan },
+        rerouted: { model: derived.model, effort: derived.effort, fableplan: derived.fableplan },
+      }
+      ex.model = derived.model
+      ex.effort = derived.effort
+      ex.fableplan = derived.fableplan
+      // A stamped first-review trigger predates the rescore too — the band
+      // default for the rescored band takes over.
+      delete ex.first_review_model
+      delete ex.first_review_effort
+      log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
+    }
+
+    // An issue with no Execution block now has a validated score — derive its
+    // build and fableplan from the band instead of a conservative constant.
+    if (ex.missing_block) {
+      const derived = derivedBuild(effectiveComplexity)
+      ex.model = derived.model
+      ex.effort = derived.effort
+      ex.fableplan = derived.fableplan
+      log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from band ${derived.band.name}`)
+    }
+    // Fable is never a build fallback — it builds only on an explicit user stamp.
+    const modelId = MODEL_IDS[ex.model] || 'opus'
 
     let plan = null
     const planEffort = ex.plan_effort || 'high'
@@ -811,7 +897,7 @@ async function executeTrack(trackIndex) {
     if (!impl || !implementationHead) {
       blocker ||= impl?.blocker || (impl?.pr_number ? 'opened pull request without a verified head ref and commit' : 'implementation agent failed or opened no pull request')
       log(`#${issue}: blocked — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
-      addResult({ issue, status: 'blocked', blocker })
+      addResult(rescore ? { issue, status: 'blocked', blocker, rescore } : { issue, status: 'blocked', blocker })
       localSkipped.push({ issue, reason: `implementation blocked — ${blocker}` })
       status = 'blocked'
       unresolved = !impl || Boolean(impl.pr_number)
@@ -830,6 +916,7 @@ async function executeTrack(trackIndex) {
       tests_passed: impl.tests_passed,
       flags: impl.flags || [],
     }
+    if (rescore) record.rescore = rescore
     addResult(record)
     const reviewNote = REVIEW_LOOP
       ? REVIEW_MODE === 'subagent' ? ', dispatching subagent review; waiting for review readiness' : ', @claude review triggered; waiting for review readiness'
