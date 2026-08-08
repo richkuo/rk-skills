@@ -207,7 +207,7 @@ describe('loop/validate pipeline contract', () => {
     const inventory = texts[INVENTORY]
     expect(inventory).toContain('fable-validate-fableplan-loop')
     expect(inventory).toContain('fableplan-loop')
-    expect(inventory).toMatch(/no.*Capability gate|Always-plan/i)
+    expect(inventory).toMatch(/no score gate|score gate removed/i)
     expect(inventory).toContain('maxReviewCycles')
     expect(inventory).toMatch(/Out of scope/i)
     expect(inventory).toContain('tests/loop-validate-pipeline-contract.test.js')
