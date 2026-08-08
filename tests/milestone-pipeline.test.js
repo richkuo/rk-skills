@@ -1014,7 +1014,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
   test('escalates validation when the validator re-scores into a higher band', async () => {
     const validations = []
-    const { events, logs } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]] }, {
       Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'xhigh', first_review_model: undefined, first_review_effort: undefined })] }),
       'validate:#2': (event) => {
         validations.push({ model: event.model, effort: event.effort })
@@ -1028,9 +1028,35 @@ describe('milestone-pipeline subagent review mode', () => {
       { model: 'fable', effort: 'high' },
     ])
     expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C60 (band 50–74) — re-validating on Fable 5 @ high'))).toBeTrue()
-    // The stamped build survives; the review default follows the escalated band.
-    expect(started(events, 'implement:#2 (sonnet/xhigh)')).toBeTrue()
+    // The stale stamp is re-routed to the escalated band: build, plan, and review all follow C60.
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C60 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 50–74); the issue needs a [C60] restamp'))).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+    // The rescore rides on the result record so the orchestrator can restamp the issue.
+    expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
+      from: 10,
+      to: 60,
+      previous: { model: 'sonnet', effort: 'xhigh', fableplan: false },
+      rerouted: { model: 'opus', effort: 'high', fableplan: true },
+    })
+  })
+
+  test('a downward rescore never weakens routing and records no rescore', async () => {
+    const validations = []
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]] }, {
+      Prep: () => ({ issues: [prepIssue({ complexity: 60, model: 'opus', effort: 'high', fableplan: true, first_review_model: undefined, first_review_effort: undefined })] }),
+      'validate:#2': (event) => {
+        validations.push({ model: event.model, effort: event.effort })
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }
+      },
+    })
+
+    expect(validations).toEqual([{ model: 'fable', effort: 'high' }])
+    expect(logs.some((message) => message.includes('RESCORED'))).toBeFalse()
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.rescore).toBeUndefined()
   })
 
   test('derives build routing from the validated score when the Execution block is missing', async () => {

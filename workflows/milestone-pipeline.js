@@ -825,6 +825,30 @@ async function executeTrack(trackIndex) {
       break
     }
 
+    // A validated rescore that lands in a higher band re-routes the stamped
+    // build too: the stamp predates the rescore, so the stronger band default
+    // replaces it (upward only — a downward rescore never weakens routing).
+    // The rescore rides on the issue's result record so the orchestrator can
+    // restamp the [C..] title and Execution block and tell the user.
+    let rescore = null
+    if (!ex.missing_block && ex.complexity > 0 && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
+      const derived = derivedBuild(effectiveComplexity)
+      rescore = {
+        from: ex.complexity,
+        to: effectiveComplexity,
+        previous: { model: ex.model, effort: ex.effort, fableplan: ex.fableplan },
+        rerouted: { model: derived.model, effort: derived.effort, fableplan: derived.fableplan },
+      }
+      ex.model = derived.model
+      ex.effort = derived.effort
+      ex.fableplan = derived.fableplan
+      // A stamped first-review trigger predates the rescore too — the band
+      // default for the rescored band takes over.
+      delete ex.first_review_model
+      delete ex.first_review_effort
+      log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
+    }
+
     // An issue with no Execution block now has a validated score — derive its
     // build and fableplan from the band instead of a conservative constant.
     if (ex.missing_block) {
@@ -872,7 +896,7 @@ async function executeTrack(trackIndex) {
     if (!impl || !implementationHead) {
       blocker ||= impl?.blocker || (impl?.pr_number ? 'opened pull request without a verified head ref and commit' : 'implementation agent failed or opened no pull request')
       log(`#${issue}: blocked — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
-      addResult({ issue, status: 'blocked', blocker })
+      addResult(rescore ? { issue, status: 'blocked', blocker, rescore } : { issue, status: 'blocked', blocker })
       localSkipped.push({ issue, reason: `implementation blocked — ${blocker}` })
       status = 'blocked'
       unresolved = !impl || Boolean(impl.pr_number)
@@ -891,6 +915,7 @@ async function executeTrack(trackIndex) {
       tests_passed: impl.tests_passed,
       flags: impl.flags || [],
     }
+    if (rescore) record.rescore = rescore
     addResult(record)
     const reviewNote = REVIEW_LOOP
       ? REVIEW_MODE === 'subagent' ? ', dispatching subagent review; waiting for review readiness' : ', @claude review triggered; waiting for review readiness'
