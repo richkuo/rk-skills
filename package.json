@@ -12,7 +12,6 @@
   "files": [
     "bin",
     "skills",
-    "agents",
     "workflows",
     ".claude-plugin",
     "README.md",

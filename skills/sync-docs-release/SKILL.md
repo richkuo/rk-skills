@@ -5,21 +5,17 @@ description: Use when the user wants to sync docs and then cut a release in one 
 
 # sync-docs-release
 
-Runs three operations in strict sequence. Do not skip steps or reorder them.
+Runs three operations in strict sequence, all in the main session. Do not skip steps or reorder them, and do not delegate any step to a subagent — every edit, commit, and release action stays visible in this session.
 
 ## Step 1 — Sync docs
 
-Invoke the `sync-docs-runner` subagent via the Agent tool:
+Invoke the `sync-docs` skill via the Skill tool and follow it to completion here, passing the user's request plus any session context (target branch, last-sync SHA, specific files).
 
-- `subagent_type`: `sync-docs-runner`
-- `description`: `Sync docs to recent commits`
-- `prompt`: Pass through the user's request verbatim plus any session context (target branch, last-sync SHA, specific files, etc.). Do not paste workflow steps into the prompt.
-
-Wait for the agent to return. Relay its summary to the user before proceeding.
+Summarize the doc edits for the user before proceeding.
 
 ## Step 2 — Land the doc changes
 
-sync-docs leaves its edits uncommitted in whatever checkout it ran in. **Never commit them to the repository's default branch**, and never treat a direct commit as acceptable merely because the checkout happens to be sitting on that branch.
+sync-docs leaves its edits uncommitted in the current checkout. **Never commit them to the repository's default branch**, and never treat a direct commit as acceptable merely because the checkout happens to be sitting on that branch.
 
 First, if `git status` shows no doc changes at all, report "no doc changes to commit" and go straight to Step 3.
 
@@ -33,8 +29,6 @@ Otherwise pick the landing path:
 
 ### Direct-commit path
 
-Commit the doc changes directly in the main session:
-
 1. Run `git status` and `git diff` to see all changes.
 2. Run `git log --oneline -10` to understand the commit message style used in this repo.
 3. Confirm you are NOT on the repository's default branch. If you are, stop and report that instead of committing.
@@ -46,8 +40,6 @@ Commit the doc changes directly in the main session:
 Do not push. Report the result (commit SHA or "no changes") to the user.
 
 ### Branch + PR path
-
-Do this in the main session rather than delegating it — it pushes and opens a PR:
 
 1. Save the edits as a patch before touching anything: `git diff -- <doc files> > <scratchpad>/docs-sync.patch`. Verify the patch is non-empty.
 2. Only once the patch exists, restore the original checkout: `git checkout -- <doc files>`.
@@ -70,10 +62,6 @@ Skip this step entirely if the user chose "stop here".
 
 If they chose merge-then-release, first wait for the PR's checks (`gh pr checks <n> --watch`), merge it, then update the local default branch (`git checkout <default> && git pull --ff-only`) and remove the worktree — the release must be cut from a checkout that actually contains the merged docs.
 
-Then invoke the `create-release-runner` subagent via the Agent tool:
+Then invoke the `create-release` skill via the Skill tool and follow it to completion here, carrying the user's original context (target version or bump type, release-notes specifics) and how the doc changes landed — the PR number and merge commit, or the fact that they are still unmerged.
 
-- `subagent_type`: `create-release-runner`
-- `description`: `Cut and publish a release`
-- `prompt`: Pass through the user's original request verbatim plus any context they provided (target version or bump type, release-notes specifics, etc.), including how the doc changes landed — the PR number and merge commit, or the fact that they are still unmerged. Do not paste workflow steps.
-
-After the agent returns, relay its summary and the release URL to the user.
+Report the tag and the release URL to the user.
