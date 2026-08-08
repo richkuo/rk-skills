@@ -20,6 +20,7 @@
 - **No verbal irony.** Never say the opposite of what you mean for sarcasm, mock praise, or dry inversion. Write the intended meaning in plain words. Write "This design is fragile." Do not write "Oh great, another rock-solid design."
 - **No metacommentary.** Never narrate your own response or process ("Good question", "To answer this", "Let me explain", "In short", "As mentioned above", "It's worth noting"). Never describe what the response will do or just did. State the content itself.
 - **Scope of the four rules above** (stacked contrast, litotes, verbal irony, metacommentary): chat replies and every written artifact — PR bodies, commit messages, issue bodies, review comments, and docs.
+- **Skills and templates:** point at this Response Style section for shared rules; do not restate them in skill prose. Skill-specific caps (e.g. 55-word Plain simple English) stay local.
 - Never give time/effort estimates ("2–4 days"). A complexity score is a model + effort routing signal (Capability band + Volume). It gives no duration.
 - No follow-up-question menus; ask at most one, only when needed to proceed.
 
