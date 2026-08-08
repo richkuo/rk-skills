@@ -350,9 +350,11 @@ describe('milestoneplan table contract', () => {
 
   test('routes validation off the score, never off the Build model or a stamp', () => {
     expect(body).toMatch(/never from the Build model and never stamped/)
-    expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C24\]`/)
-    expect(body).toMatch(/`Opus 5 · high` at `\[C25\]`–`\[C49\]`/)
-    expect(body).toMatch(/`Fable 5 · high` at `\[C50\]` and above/)
+    expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C9\]`/)
+    expect(body).toMatch(/`Opus 5 · high` at `\[C10\]`–`\[C40\]`/)
+    expect(body).toMatch(/`Opus 5 · xhigh` at `\[C41\]`–`\[C60\]`/)
+    expect(body).toMatch(/`Fable 5 · medium` at `\[C61\]`–`\[C80\]`/)
+    expect(body).toMatch(/`Fable 5 · high` at `\[C81\]` and above/)
     expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
   })
 

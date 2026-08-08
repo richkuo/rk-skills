@@ -125,11 +125,11 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('gated validate→plan loops state Capability < 2 / below 50 plus safety carve-out', () => {
+  test('gated validate→plan loops state the below-61 score gate plus safety carve-out', () => {
     for (const path of CAPABILITY_GATE) {
       const body = procedureBody(texts[path])
-      expect(body, path).toMatch(/Capability\s*<\s*2/)
-      expect(body, path).toMatch(/below 50|score\s*<\s*50/)
+      expect(body, path).toMatch(/\*\*Score gate:\*\*/)
+      expect(body, path).toMatch(/below 61|score\s*<\s*61/)
       // Four carve-out terms must sit with the safety carve-out, not as stray keywords.
       expect(body, path).toMatch(
         /safety carve-out[\s\S]{0,300}money[\s\S]{0,120}data integrity[\s\S]{0,120}security[\s\S]{0,120}auto-protective/i,
@@ -137,14 +137,14 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('always-plan skills document the missing Capability gate as intentional', () => {
+  test('always-plan skills document the missing score gate as intentional', () => {
     for (const path of ALWAYS_PLAN) {
       const body = procedureBody(texts[path])
-      expect(body, path).toMatch(/no Capability gate|Capability gate removed/i)
+      expect(body, path).toMatch(/no score gate|score gate removed/i)
       expect(body, path).toMatch(/always runs|for EVERY issue/i)
       // Must not install the skip gate as this skill's own procedure heading.
       expect(body, path).not.toMatch(
-        /\*\*Capability gate:\*\*[^\n]*below 50[^\n]*skip fableplan/i,
+        /\*\*Score gate:\*\*[^\n]*below 61[^\n]*skip fableplan/i,
       )
     }
   })

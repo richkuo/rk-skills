@@ -371,19 +371,23 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('derives validation entirely from the [C..] score band', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6], [7], [8], [9]],
+      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13]],
       reviewLoop: false,
     }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Band 0 floor', complexity: 2, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 3, title: 'Band 0 ceiling', complexity: 24, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 4, title: 'Band 1 floor', complexity: 25, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 5, title: 'Band 1 ceiling', complexity: 49, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 6, title: 'Band 2 floor', complexity: 50, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 7, title: 'Band 2 ceiling', complexity: 74, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 8, title: 'Band 3', complexity: 75, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
-          { number: 9, title: 'No [C..] prefix', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 2, title: 'Band 0 floor', complexity: 2, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 0 ceiling', complexity: 9, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 1 floor', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 5, title: 'Band 1 ceiling', complexity: 20, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 6, title: 'Band 2 floor', complexity: 21, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 7, title: 'Band 2 ceiling', complexity: 40, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: 'Band 3 floor', complexity: 41, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 9, title: 'Band 3 ceiling', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 10, title: 'Band 4 floor', complexity: 61, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 11, title: 'Band 4 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 12, title: 'Band 5', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 13, title: 'No [C..] prefix', complexity: 0, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
       }),
     })
@@ -392,24 +396,32 @@ describe('milestone-pipeline dependency scheduling', () => {
     // The score alone decides — the Build model never leaks in, and nothing is stampable.
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
     expect(dispatch('validate:#3')).toMatchObject({ model: 'opus', effort: 'medium' })
-    // Band boundaries are inclusive at 25/50/75.
+    // Band boundaries are inclusive at 10/21/41/61/81.
     expect(dispatch('validate:#4')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'high' })
-    expect(dispatch('validate:#6')).toMatchObject({ model: 'fable', effort: 'high' })
-    expect(dispatch('validate:#7')).toMatchObject({ model: 'fable', effort: 'high' })
-    expect(dispatch('validate:#8')).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#9')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#10')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#11')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#12')).toMatchObject({ model: 'fable', effort: 'high' })
     // complexity 0 means "no prefix" — unknown, not small.
-    expect(dispatch('validate:#9')).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(dispatch('validate:#13')).toMatchObject({ model: 'fable', effort: 'high' })
 
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
-      '#2: C2 (band 0–24) — validating on Opus 5 @ medium',
-      '#3: C24 (band 0–24) — validating on Opus 5 @ medium',
-      '#4: C25 (band 25–49) — validating on Opus 5 @ high',
-      '#5: C49 (band 25–49) — validating on Opus 5 @ high',
-      '#6: C50 (band 50–74) — validating on Fable 5 @ high',
-      '#7: C74 (band 50–74) — validating on Fable 5 @ high',
-      '#8: C75 (band 75+) — validating on Fable 5 @ high',
-      '#9: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
+      '#2: C2 (band 0–9) — validating on Opus 5 @ medium',
+      '#3: C9 (band 0–9) — validating on Opus 5 @ medium',
+      '#4: C10 (band 10–20) — validating on Opus 5 @ high',
+      '#5: C20 (band 10–20) — validating on Opus 5 @ high',
+      '#6: C21 (band 21–40) — validating on Opus 5 @ high',
+      '#7: C40 (band 21–40) — validating on Opus 5 @ high',
+      '#8: C41 (band 41–60) — validating on Opus 5 @ xhigh',
+      '#9: C60 (band 41–60) — validating on Opus 5 @ xhigh',
+      '#10: C61 (band 61–80) — validating on Fable 5 @ medium',
+      '#11: C80 (band 61–80) — validating on Fable 5 @ medium',
+      '#12: C81 (band 81+) — validating on Fable 5 @ high',
+      '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
     ])
   })
 
@@ -421,21 +433,21 @@ describe('milestone-pipeline dependency scheduling', () => {
     }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Fable medium', complexity: 20, model: 'fable', effort: 'medium', fableplan: false, missing_block: false },
-          { number: 3, title: 'Opus medium', complexity: 20, model: 'opus', effort: 'medium', fableplan: false, missing_block: false },
-          { number: 4, title: 'Sonnet medium', complexity: 20, model: 'sonnet', effort: 'medium', fableplan: false, missing_block: false },
-          { number: 5, title: 'Haiku medium', complexity: 20, model: 'haiku', effort: 'medium', fableplan: false, missing_block: false },
-          { number: 6, title: 'Valid defaults', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
-          { number: 8, title: 'Valid xhigh', complexity: 20, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 9, title: 'Fable low', complexity: 20, model: 'fable', effort: 'low', fableplan: false, missing_block: false },
-          { number: 10, title: 'Opus low', complexity: 20, model: 'opus', effort: 'low', fableplan: false, missing_block: false },
-          { number: 11, title: 'Fable xhigh', complexity: 20, model: 'fable', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 2, title: 'Fable medium', complexity: 5, model: 'fable', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 3, title: 'Opus medium', complexity: 5, model: 'opus', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 4, title: 'Sonnet medium', complexity: 5, model: 'sonnet', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 5, title: 'Haiku medium', complexity: 5, model: 'haiku', effort: 'medium', fableplan: false, missing_block: false },
+          { number: 6, title: 'Valid defaults', complexity: 5, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: 'Valid xhigh', complexity: 5, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 9, title: 'Fable low', complexity: 5, model: 'fable', effort: 'low', fableplan: false, missing_block: false },
+          { number: 10, title: 'Opus low', complexity: 5, model: 'opus', effort: 'low', fableplan: false, missing_block: false },
+          { number: 11, title: 'Fable xhigh', complexity: 5, model: 'fable', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
       }),
     })
 
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
-    // All stamped issues here are C20 (band 0) → validation is band-derived opus/medium.
+    // All stamped issues here are C5 (band 0) → validation is band-derived opus/medium.
     expect(effortFor('validate:#2')).toBe('medium')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
     expect(effortFor('review-loop:PR#1002 c2-c3')).toBe('medium')
@@ -970,16 +982,16 @@ describe('milestone-pipeline subagent review mode', () => {
       Prep: () => ({
         issues: [
           prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 3, complexity: 30, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 4, complexity: 60, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 5, complexity: 80, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 3, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 4, complexity: 80, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 5, complexity: 90, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 6, complexity: 0, first_review_model: undefined, first_review_effort: undefined }),
         ],
       }),
     })
 
-    // Band 0 is the bare-@claude equivalent: no model override, the reviewer
-    // inherits the session default.
+    // Bands 0–1 are the bare-@claude equivalent: no model override, the
+    // reviewer inherits the session default.
     const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
     expect(bandZeroReview).toBeTruthy()
     expect(bandZeroReview.model).toBeUndefined()
@@ -994,9 +1006,9 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: 'Band 0', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 3, title: 'Band 2', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 4, title: 'Band 3', complexity: 80, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 2, title: 'Band 1', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 3', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
           { number: 5, title: 'Stamped trigger', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
         ],
       }),
@@ -1022,25 +1034,25 @@ describe('milestone-pipeline subagent review mode', () => {
       Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'xhigh', first_review_model: undefined, first_review_effort: undefined })] }),
       'validate:#2': (event) => {
         validations.push({ model: event.model, effort: event.effort })
-        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 60 }
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 70 }
       },
     })
 
-    // C10 validated on the band-0 route first, then re-validated once on band 2's.
+    // C10 validated on the band-1 route first, then re-validated once on band 4's.
     expect(validations).toEqual([
-      { model: 'opus', effort: 'medium' },
-      { model: 'fable', effort: 'high' },
+      { model: 'opus', effort: 'high' },
+      { model: 'fable', effort: 'medium' },
     ])
-    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C60 (band 50–74) — re-validating on Fable 5 @ high'))).toBeTrue()
-    // The stale stamp is re-routed to the escalated band: build, plan, and review all follow C60.
-    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C60 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 50–74); the issue needs a [C60] restamp'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
+    // The stale stamp is re-routed to the escalated band: build, plan, and review all follow C70.
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     // The rescore rides on the result record so the orchestrator can restamp the issue.
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
-      to: 60,
+      to: 70,
       previous: { model: 'sonnet', effort: 'xhigh', fableplan: false },
       rerouted: { model: 'opus', effort: 'high', fableplan: true },
     })
@@ -1056,7 +1068,7 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    expect(validations).toEqual([{ model: 'fable', effort: 'high' }])
+    expect(validations).toEqual([{ model: 'opus', effort: 'xhigh' }])
     expect(logs.some((message) => message.includes('RESCORED'))).toBeFalse()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
@@ -1069,25 +1081,25 @@ describe('milestone-pipeline subagent review mode', () => {
         issues: [
           { number: 2, title: 'Unprefixed, rescored trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
           { number: 3, title: 'Unprefixed, rescored hard', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
-          { number: 4, title: 'Trivial ceiling', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
-          { number: 5, title: 'Just above trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 4, title: 'Band 0 ceiling', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          { number: 5, title: 'Band 1 floor', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
         ],
       }),
       'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
-      'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 80 }),
-      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
-      'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 11 }),
+      'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 90 }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 9 }),
+      'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
     })
 
-    // Both validate on the top band (no prefix), then build from the validated score:
-    // C6 is a trivial band-0 issue (score ≤ 10 → high instead of xhigh); C80 builds Opus 5 xhigh with a plan first.
+    // All validate on the top band (no prefix), then build from the validated score:
+    // C6 lands in band 0 (Sonnet 5 high); C90 builds Opus 5 xhigh with a plan first.
     expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–24'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 75+'))).toBeTrue()
-    // The trivial relief is inclusive at 10 and ends at 11.
+    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–9'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
+    // The Sonnet high band ends at 9; 10 starts the Sonnet xhigh band.
     expect(started(events, 'implement:#4 (sonnet/high)')).toBeTrue()
     expect(started(events, 'implement:#5 (sonnet/xhigh)')).toBeTrue()
   })

@@ -95,43 +95,50 @@ describe('complexity score band encoding', () => {
     expect(prdToIssues).toContain('25 × Capability + Volume')
   })
 
-  test('fableplan gates key off Capability ≥ 2 / score ≥ 50', () => {
-    expect(fableValidateLoop).toContain('Capability < 2')
-    expect(fableValidateLoop).toContain('below 50')
-    expect(fableValidateLoop).not.toMatch(/below C50/)
-    expect(validateFableplanLoop).toContain('Capability < 2')
-    expect(validateFableplanLoop).toContain('below 50')
-    expect(readme).toContain('Capability ≥ 2 / score ≥ 50')
+  test('fableplan gates key off score ≥ 61', () => {
+    expect(fableValidateLoop).toContain('below 61')
+    expect(fableValidateLoop).not.toMatch(/below 50|below C50|Capability < 2/)
+    expect(validateFableplanLoop).toContain('below 61')
+    expect(validateFableplanLoop).not.toMatch(/below 50|Capability < 2/)
+    expect(readme).toContain('score ≥ 61')
+    expect(readme).not.toContain('score ≥ 50')
   })
 
-  test('the four-band routing matrix is stated consistently across docs and the pipeline', async () => {
+  test('the six-band routing matrix is stated consistently across docs and the pipeline', async () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
     // validate-issue holds the canonical matrix.
-    expect(validateIssue).toContain('| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 10) | `@claude` (standard trigger, no pinned model) |')
-    expect(validateIssue).toContain('| 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |')
-    expect(validateIssue).toContain('| 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |')
-    expect(validateIssue).toContain('| 3 | 75–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |')
+    expect(validateIssue).toContain('| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high | `@claude` (standard trigger, no pinned model) |')
+    expect(validateIssue).toContain('| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh | `@claude` (standard trigger, no pinned model) |')
+    expect(validateIssue).toContain('| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high | Opus 5 · high |')
+    expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh | Opus 5 · high |')
+    expect(validateIssue).toContain('| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high | Opus 5 · high |')
+    expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |')
     // Escalation is part of the canonical statement.
     expect(validateIssue).toMatch(/upward only, never downward/)
 
     // prd-to-issues stamps Execution blocks from the same matrix.
-    expect(prdToIssues).toContain('| 1 | 25–49 | Opus 5 | No | xhigh |')
-    expect(prdToIssues).toContain('| 2 | 50–74 | Opus 5 | **Yes** | high |')
-    expect(prdToIssues).toMatch(/\| 3 \| 75–99 \| Opus 5 \| \*\*Yes\*\* \| xhigh/)
+    expect(prdToIssues).toContain("| 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |")
+    expect(prdToIssues).toContain("| 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |")
+    expect(prdToIssues).toContain('| 2 | 21–40 | Opus 5 | No | high |')
+    expect(prdToIssues).toContain('| 3 | 41–60 | Opus 5 | No | xhigh |')
+    expect(prdToIssues).toContain('| 4 | 61–80 | Opus 5 | **Yes** | high |')
+    expect(prdToIssues).toMatch(/\| 5 \| 81–99 \| Opus 5 \| \*\*Yes\*\* \| xhigh/)
     expect(prdToIssues).toMatch(/Validation is fully derived from the score/)
 
     // The pipeline executes the same matrix.
-    expect(pipeline).toContain("{ name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } }")
 
-    // fableplan is yes at Capability ≥ 2 everywhere the signal is defined,
+    // fableplan is yes at score ≥ 61 everywhere the signal is defined,
     // and the worked example round-trips its own band through the rule.
     for (const doc of [validateIssue, newIssue, githubIssueFormat]) {
-      expect(doc).toMatch(/Capability ≥ 2/)
-      expect(doc).not.toMatch(/only when Capability = 2|only at Capability 2/)
+      expect(doc).toMatch(/score is ≥ 61|score is 61 or higher|score ≥ 61/)
+      expect(doc).not.toMatch(/Capability ≥ 2 \(score ≥ 50|only when Capability = 2|only at Capability 2/)
     }
     expect(githubIssueFormat).toContain('Volume 20 — Opus 5, xhigh · fableplan: yes')
     // No document may keep describing the superseded band-3 = "no" convention.

@@ -142,16 +142,18 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
 // The reviewer is always a fresh agent — sharing the builder's model family
-// is accepted; the fresh context is the isolation that matters. Band 0's
+// is accepted; the fresh context is the isolation that matters. Bands 0–1's
 // first review is the standard bare-@claude reviewer: model null means "no
 // override — inherit the session default". Sonnet never takes a first
 // review: it appears only as the cheaper re-review after a pass that
 // addressed nothing blocking (see runSubagentReviewLoop).
 const BANDS = [
-  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
-  { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
-  { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
-  { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } },
+  { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } },
+  { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
+  { name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
+  { name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
+  { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } },
 ]
 
 function bandFor(complexity) {
@@ -171,13 +173,10 @@ function firstReviewTrigger(ex) {
   return `@claude ${review.model} review effort:${review.effort}`
 }
 
-// Band-derived build for an issue with no Execution block: the band default,
-// with one relief valve — a trivial band-0 issue (Capability 0, Volume ≤ 7,
-// so score ≤ 10) builds at high instead of xhigh.
+// Band-derived build for an issue with no Execution block: the band default.
 function derivedBuild(complexity) {
   const band = bandFor(complexity)
-  const effort = band === BANDS[0] && complexity > 0 && complexity <= 10 ? 'high' : band.build.effort
-  return { model: band.build.model, effort, fableplan: band.fableplan, band }
+  return { model: band.build.model, effort: band.build.effort, fableplan: band.fableplan, band }
 }
 
 const PREP_SCHEMA = {
