@@ -234,14 +234,14 @@ The band fixes every routing default — validation, planning, build, and first 
 
 | Capability | Score band | Validate | fableplan first | Build | First review |
 |---|---|---|---|---|---|
-| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | Sonnet 5 · high |
+| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | Opus 5 · high |
 | 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |
 | 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |
 | 3 | 75–99 | Fable 5 · high | **Yes** | Fable 5 · high | Fable 5 · high |
 
 **Fable never runs at xhigh — high is its ceiling on every stage.** A Fable build may be revised down to `medium`, or to a discretionary Fable-only `low` for a Capability-3 issue judged lighter than Volume 0–7 warrants. A missing `[C..]` prefix is unknown, and unknown is not small: it routes as band 3.
 
-The first review always runs as a fresh agent. It may share the builder's model — the fresh context is the isolation that matters.
+The first review always runs as a fresh agent. It may share the builder's model — the fresh context is the isolation that matters. Sonnet never takes a first review; it appears only as the cheaper re-review after a fix pass that addressed nothing blocking.
 
 **Escalation:** the validating agent returns its own step-6 score alongside the verdict. When that score lands in a higher band than the title prefix, the pipeline re-validates once on the higher band's route and derives downstream review defaults from the higher score — upward only, never downward. This closes the loop where an under-scored issue would get the weakest validator, the one least likely to catch the under-score.
 

@@ -976,7 +976,8 @@ describe('milestone-pipeline subagent review mode', () => {
 
     // The reviewer is a fresh agent on the band's review model — it may share
     // the builder's model; the fresh context is the isolation that matters.
-    expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
+    // Sonnet never takes a first review, so band 0 defaults to Opus.
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1003 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1004 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1005 c1 (fable/high)')).toBeTrue()

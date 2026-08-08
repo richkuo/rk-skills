@@ -142,9 +142,11 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
 // The reviewer is always a fresh agent — sharing the builder's model family
-// is accepted; the fresh context is the isolation that matters.
+// is accepted; the fresh context is the isolation that matters. Sonnet never
+// takes a first review: it appears only as the cheaper re-review after a pass
+// that addressed nothing blocking (see runSubagentReviewLoop).
 const BANDS = [
-  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'sonnet', effort: 'high' } },
+  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
   { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
   { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
