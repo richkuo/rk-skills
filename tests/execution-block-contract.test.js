@@ -341,7 +341,10 @@ describe('milestoneplan table contract', () => {
 
   test('marks absent fields as missing and names the pipeline default', () => {
     expect(body).toMatch(/\*missing\* — never blank, never a guessed default/i)
-    expect(body).toMatch(/`model fable, effort high`/)
+    // A block-less issue derives its build from the validated score band, so the
+    // preview must never predict a constant fable/high fallback.
+    expect(body).toMatch(/derives its build from the validated score band/)
+    expect(body).not.toMatch(/`model fable, effort high`/)
     expect(body).toMatch(/never infer edges from prose/i)
   })
 

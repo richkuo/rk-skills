@@ -974,15 +974,42 @@ describe('milestone-pipeline subagent review mode', () => {
       }),
     })
 
-    // The reviewer is a fresh agent on the band's review model — it may share
-    // the builder's model; the fresh context is the isolation that matters.
-    // Sonnet never takes a first review, so band 0 defaults to Opus.
-    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
+    // Band 0 is the bare-@claude equivalent: no model override, the reviewer
+    // inherits the session default.
+    const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
+    expect(bandZeroReview).toBeTruthy()
+    expect(bandZeroReview.model).toBeUndefined()
     expect(started(events, 'review:PR#1003 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1004 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1005 c1 (fable/high)')).toBeTrue()
     // No [C..] prefix is unknown, not small — the first review keeps the top band.
     expect(started(events, 'review:PR#1006 c1 (fable/high)')).toBeTrue()
+  })
+
+  test('github mode derives the cycle-1 trigger phrase from the band', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Band 0', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 2', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 3', complexity: 80, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 5, title: 'Stamped trigger', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `codex/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
+    expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    // A stamped PR review line overrides the band trigger.
+    expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
   })
 
   test('escalates validation when the validator re-scores into a higher band', async () => {

@@ -108,7 +108,7 @@ describe('complexity score band encoding', () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
     // validate-issue holds the canonical matrix.
-    expect(validateIssue).toContain('| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | Opus 5 · high |')
+    expect(validateIssue).toContain('| 0 | 0–24 | Opus 5 · medium | No | Sonnet 5 · xhigh (high at score ≤ 7) | `@claude` (standard trigger, no pinned model) |')
     expect(validateIssue).toContain('| 1 | 25–49 | Opus 5 · high | No | Opus 5 · xhigh | Opus 5 · high |')
     expect(validateIssue).toContain('| 2 | 50–74 | Fable 5 · high | **Yes** | Opus 5 · high | Opus 5 · high |')
     expect(validateIssue).toContain('| 3 | 75–99 | Fable 5 · high | **Yes** | Fable 5 · high | Fable 5 · high |')
@@ -122,7 +122,7 @@ describe('complexity score band encoding', () => {
     expect(prdToIssues).toMatch(/Validation is fully derived from the score/)
 
     // The pipeline executes the same matrix.
-    expect(pipeline).toContain("{ name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } }")
     expect(pipeline).toContain("{ name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } }")

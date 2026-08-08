@@ -142,11 +142,13 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
 // The reviewer is always a fresh agent — sharing the builder's model family
-// is accepted; the fresh context is the isolation that matters. Sonnet never
-// takes a first review: it appears only as the cheaper re-review after a pass
-// that addressed nothing blocking (see runSubagentReviewLoop).
+// is accepted; the fresh context is the isolation that matters. Band 0's
+// first review is the standard bare-@claude reviewer: model null means "no
+// override — inherit the session default". Sonnet never takes a first
+// review: it appears only as the cheaper re-review after a pass that
+// addressed nothing blocking (see runSubagentReviewLoop).
 const BANDS = [
-  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
+  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
   { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
   { name: '50–74', min: 50, max: 74, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'fable', effort: 'high' }, review: { model: 'fable', effort: 'high' } },
@@ -155,6 +157,18 @@ const BANDS = [
 function bandFor(complexity) {
   if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
   return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
+}
+
+// The github-mode cycle-1 trigger comment, derived from the band unless the
+// issue stamps its own `@claude <model> review …` line. Band 0 is the bare
+// standard trigger; the Action picks its configured default model.
+function firstReviewTrigger(ex) {
+  const stamped = MODEL_IDS[ex.first_review_model]
+  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+  const review = bandFor(ex.effective_complexity ?? ex.complexity).review
+  if (!review.model) return '@claude review'
+  if (review.model === 'opus') return '@claude opus review'
+  return `@claude ${review.model} review effort:${review.effort}`
 }
 
 // Band-derived build for an issue with no Execution block: the band default,
@@ -379,7 +393,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
     ? '\n\nThis run has reviewLoop disabled: do not request or trigger any pull request review. Return github_review_status not_run, github_review_nonblocking_remaining 0, and an empty github_review_summary.'
     : REVIEW_MODE === 'github'
       ? `\n\nAfter the PR is open, handle github review cycle 1 yourself:
-1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "@claude review"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
+1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
 4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-7 routing, and wait for that re-review verdict.
@@ -553,6 +567,8 @@ Return via StructuredOutput: released, tag, release_url, docs_change (pr_merged 
 // verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
 // never a fix push that no reviewer would see.
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
+  // model null means "no override — inherit the session default", the
+  // subagent equivalent of the bare @claude trigger (band 0).
   const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
   const notes = []
@@ -561,19 +577,20 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
   let cycles = 0
   while (cycles < MAX_REVIEW_CYCLES) {
     cycles += 1
-    const review = await agent(subagentReviewPrompt(issue, prNumber, cycles), {
-      model: nextReview.model,
+    const reviewOptions = {
       effort: nextReview.effort,
       schema: SUBAGENT_REVIEW_SCHEMA,
       phase: 'Review Loop',
-      label: `review:PR#${prNumber} c${cycles} (${nextReview.model}/${nextReview.effort})`,
-    })
+      label: `review:PR#${prNumber} c${cycles} (${nextReview.model || 'claude'}/${nextReview.effort})`,
+    }
+    if (nextReview.model) reviewOptions.model = nextReview.model
+    const review = await agent(subagentReviewPrompt(issue, prNumber, cycles), reviewOptions)
     if (!review) {
       return { final_status: 'blocked', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha, blocker: `cycle ${cycles} reviewer agent failed` }
     }
     head = { ref: review.head_ref, sha: review.head_sha }
-    notes.push(`cycle ${cycles} review (${nextReview.model}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
-    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
+    notes.push(`cycle ${cycles} review (${nextReview.model || 'claude'}/${nextReview.effort}): ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking — ${review.summary}`)
+    log(`PR #${prNumber}: cycle ${cycles} review (${nextReview.model || 'claude'}/${nextReview.effort}) → ${review.verdict}, ${review.blocking_count} blocking + ${review.nonblocking_count} non-blocking`)
     if (review.verdict === 'lgtm' && review.blocking_count + review.nonblocking_count === 0) {
       return { final_status: 'lgtm', cycles_run: cycles, summary: notes.join('\n'), head_ref: review.head_ref, head_sha: review.head_sha }
     }
