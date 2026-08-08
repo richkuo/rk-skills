@@ -1,15 +1,15 @@
 export const meta = {
   name: 'milestone-pipeline',
-  description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, review each pull request to a stable readiness boundary, merge at LGTM plus green CI, and cut a release when every issue merges',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true }',
+  description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, review each pull request to a stable readiness boundary, record orchestrator in-session merges at LGTM plus green CI, pause awaiting each unmerged one, and defer the release to the orchestrator when every issue merges',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'subagent\' | \'github\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, merged?: [{pr, merge_sha, issue_state}] }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — Fable at the stamped Validate effort, or Opus at medium below C20' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
     { title: 'Review Loop', detail: 'reviewer/fixer subagent cycles (default) or build-agent first cycle plus fresh two-cycle fix agents against @claude in github mode, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
-    { title: 'Merge', detail: 'squash-merge each PR at LGTM plus green CI on the pinned reviewed head, delete its branch, confirm its issue closed; successors then build from the updated base branch', model: 'sonnet' },
-    { title: 'Release', detail: 'when every issue merged: sync docs and publish a GitHub release via the sync-docs-release skill', model: 'sonnet' },
+    { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
+    { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
   ],
 }
 
@@ -112,11 +112,13 @@ const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Checked at issue start only — best-effort, not a ceiling guarantee; size the
 // floor to roughly one issue's worst-case cost (implement + full review loop).
 const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
-// Merge each PR once it reaches LGTM readiness (plus green CI, checked by the
-// merge agent). Defaults to reviewLoop because LGTM is the merge criterion —
-// with review loops off there is no completed criterion, so merging is off and
-// asking for it explicitly is rejected. After a merge, successors build from
-// the updated base branch instead of stacking on unmerged predecessor heads.
+// Merge gating stays LGTM-based, but no agent in this run ever merges: the
+// orchestrator merges each PR in-session, under the user's own permission
+// mode, and records it in args.merged on the next resume. Defaults to
+// reviewLoop because LGTM is the merge criterion — with review loops off
+// there is no completed criterion, so merging is off and asking for it
+// explicitly is rejected. After a recorded merge, successors build from the
+// updated base branch instead of stacking on unmerged predecessor heads.
 const MERGE = ARGS.merge ?? REVIEW_LOOP
 // When every issue merged, one Sonnet agent runs sync-docs-release (doc sync →
 // land it → create-release). Defaults to merge; meaningless without it.
@@ -129,6 +131,21 @@ if (typeof MERGE !== 'boolean') throw new Error('merge must be a boolean')
 if (MERGE && !REVIEW_LOOP) throw new Error('merge requires reviewLoop — LGTM review readiness is the merge criterion')
 if (typeof RELEASE !== 'boolean') throw new Error('release must be a boolean')
 if (RELEASE && !MERGE) throw new Error('release requires merge — a release only makes sense after the run lands the code')
+// PRs the orchestrator already merged in-session, as { pr, merge_sha,
+// issue_state } records. The orchestrator verifies each PR is MERGED before
+// recording it; this run trusts the record and never re-checks. An LGTM PR
+// with no record pauses its track as awaiting_merge — the orchestrator merges
+// it, appends the record, and resumes the run (cached agents replay).
+const MERGED_INPUT = ARGS.merged ?? []
+if (!Array.isArray(MERGED_INPUT)) throw new Error('merged must be an array of { pr, merge_sha, issue_state } records')
+const MERGED = new Map()
+for (const entry of MERGED_INPUT) {
+  if (!entry || !Number.isInteger(entry.pr) || entry.pr <= 0 || typeof entry.merge_sha !== 'string' || entry.merge_sha.length === 0) {
+    throw new Error('each merged record requires an integer pr and a non-empty merge_sha')
+  }
+  if (MERGED.has(entry.pr)) throw new Error(`duplicate merged record for PR #${entry.pr}`)
+  MERGED.set(entry.pr, { merge_sha: entry.merge_sha, issue_state: entry.issue_state === 'closed' || entry.issue_state === 'open' ? entry.issue_state : 'unknown' })
+}
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
@@ -258,32 +275,6 @@ const githubReviewBatchSchema = (cycleLimit) => ({
     blocker: { type: 'string', description: 'Only when status is blocked' },
   },
 })
-
-const MERGE_SCHEMA = {
-  type: 'object',
-  required: ['merged', 'merge_sha', 'issue_state', 'summary'],
-  properties: {
-    merged: { type: 'boolean' },
-    merge_sha: { type: 'string', description: 'Merge commit SHA on the base branch; empty when merged is false' },
-    issue_state: { type: 'string', enum: ['closed', 'open', 'unknown'], description: 'State of the linked issue after the merge' },
-    branch_deleted: { type: 'boolean', description: 'Whether the PR head branch was deleted' },
-    summary: { type: 'string' },
-    blocker: { type: 'string', description: 'Only when merged is false: what stopped the merge' },
-  },
-}
-
-const RELEASE_SCHEMA = {
-  type: 'object',
-  required: ['released', 'summary'],
-  properties: {
-    released: { type: 'boolean' },
-    tag: { type: 'string', description: 'Published release tag; empty when released is false' },
-    release_url: { type: 'string' },
-    docs_change: { type: 'string', enum: ['pr_merged', 'direct_commit', 'none_needed'], description: 'How the doc sync landed' },
-    summary: { type: 'string' },
-    blocker: { type: 'string', description: 'Only when released is false: what stopped the release' },
-  },
-}
 
 function completedContext(completed) {
   return completed.map((record) => `- Issue #${record.issue} → PR #${record.prNumber} ${record.head.merged ? '(merged into the base branch)' : `(head: ${record.head.ref} @ ${record.head.sha})`}`).join('\n')
@@ -492,38 +483,6 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: fixed_count, refuted_count, the exact head_ref and head_sha after your push, a summary of what was fixed and what was refuted, and blocker ONLY if the pass could not complete.`
 }
 
-function mergePrompt(issue, prNumber, head, reviewMode) {
-  const githubReviewGate = reviewMode === 'github'
-    ? `4. Independent review gate (the FINAL read before merge): re-fetch the live PR head and ALL PR issue comments after every CI wait and any branch update. The live head must still equal the reviewed readiness SHA ${head.sha}; if update-branch changed it, STOP and require a fresh review. From the full comment history, identify the newest exact one-line \`@claude [model] review [effort]\` trigger and the newest completed review output from \`github-actions[bot]\` whose body links \`/actions/runs/<run-id>\`. Resolve that linked run and require \`status == completed\` and \`conclusion == success\`. Require the output's \`created_at\` to be later than the trigger's \`created_at\`, and require its body to contain exactly one standalone verdict line that is \`LGTM\` (not \`Needs Updates\`). A newer trigger or run-linked bot comment without a completed matching output blocks the merge; never fall back to an older LGTM. Do not compare the workflow run's \`head_sha\` to the PR: an \`issue_comment\` run reports the default-branch SHA, not the PR head (GitHub's Actions event reference: \`issue_comment\` runs use the last commit on the default branch), so bind the verdict to the code by time instead. Resolve when head ${head.sha} became visible on GitHub — the earliest \`created_at\` among \`gh api repos/{owner}/{repo}/commits/${head.sha}/check-suites\`, or that commit's \`.commit.committer.date\` when it has no check suite — and require the LGTM output's \`created_at\` to be strictly later. An LGTM that predates the head it would merge reviewed older code: STOP. This gate must catch a re-review that changes or supersedes the verdict during CI. Once it succeeds, run step 5 immediately — no command may run between this final validation and the pinned merge.`
-    : ''
-  const mergeStep = reviewMode === 'github' ? 5 : 4
-  const verifyStep = mergeStep + 1
-  const issueStep = mergeStep + 2
-  const verifiedShaRule = reviewMode === 'github'
-    ? `<verified-sha> is ${head.sha}; if step 3 changed the head, step 4 blocks until a fresh review reaches readiness.`
-    : `<verified-sha> is ${head.sha} when step 3 did not update the branch, or the new head you captured after update-branch.`
-  return `You are a merge agent in this repo. PR #${prNumber} (closes issue #${issue}) reached review readiness at head ${head.ref} @ ${head.sha}. The user approved this milestone run plan, which explicitly authorizes merging this PR, deleting its branch, and closing its issue.
-
-1. Verify the PR: \`gh pr view ${prNumber} --json state,headRefName,headRefOid,mergeStateStatus\` — it must be OPEN with headRefOid exactly ${head.sha}. A different head means commits landed after the review: STOP and return merged false with that as the blocker.
-2. CI gate: \`gh pr checks ${prNumber} --watch\` and wait for completion. Any failed check → do NOT merge; return merged false with the failing check as the blocker. No checks configured counts as passing.
-3. If the branch is behind the base at all — whether or not the repo requires up-to-date branches: run \`gh pr update-branch ${prNumber}\` ONLY when it merges cleanly, then capture the new head (\`gh pr view ${prNumber} --json headRefOid\`) and repeat the CI gate on that new head. The reviewed code must prove itself against the base it will actually land on — never merge a behind branch untested. If update-branch reports conflicts, do NOT resolve them — return merged false, blocker "merge conflict with the base branch".
-${githubReviewGate ? `${githubReviewGate}\n` : ''}${mergeStep}. Merge: \`gh pr merge ${prNumber} --squash --delete-branch --match-head-commit <verified-sha>\` — ALWAYS pin: ${verifiedShaRule} Never run the merge unpinned. If the merge is rejected because the head no longer matches, a commit landed after your CI gate: do NOT retry with a fresh SHA — return merged false with that as the blocker.
-${verifyStep}. Verify: \`gh pr view ${prNumber} --json state,mergeCommit\` — state must be MERGED; record the merge commit SHA.
-${issueStep}. Confirm issue #${issue} auto-closed (\`gh issue view ${issue} --json state\`). If still open, close it: \`gh issue close ${issue} --comment "Closed by PR #${prNumber}.\n\n---\nUpdated with LLM: Sonnet 5 | low | Harness: milestone-pipeline"\`.
-
-Never push commits, never edit files, never resolve merge conflicts. Return via StructuredOutput: merged, merge_sha, issue_state, branch_deleted, summary, and blocker only when merged is false.`
-}
-
-function releasePrompt(mergedRecords) {
-  const mergedList = mergedRecords.map((record) => `- Issue #${record.issue} → PR #${record.pr} (${record.pr_url})`).join('\n')
-  return `You are a release agent in this repo. Every issue in this milestone run merged:
-${mergedList}
-
-The user approved this milestone run plan, which explicitly authorizes syncing docs and publishing a release. Invoke the \`sync-docs-release\` skill and follow it exactly: sync CLAUDE.md / AGENTS.md / SKILL.md / README.md to reflect the merged PRs above, land the doc changes (branch + PR per the repo's rules, or a direct commit when the repo allows it — if the docs land via PR, merge that PR after its checks pass before releasing), then run create-release. Footers: \`Created with LLM: Sonnet 5 | medium | Harness: milestone-pipeline\`.
-
-Return via StructuredOutput: released, tag, release_url, docs_change (pr_merged / direct_commit / none_needed), summary, and blocker only when released is false.`
-}
-
 // Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
 // pr-review-format comment and returns its verdict; a fixer resolves it; repeat.
 // First review runs on the issue's "PR review:" model/effort (default opus/high);
@@ -671,9 +630,9 @@ function verifiedHead(pr, ref, sha) {
   return { pr, ref, sha: sha.toLowerCase() }
 }
 
-function blockIssues(track, startIndex, reason, skipped) {
+function blockIssues(track, startIndex, reason, skipped, status = 'dependency_blocked') {
   for (const issue of track.issues.slice(startIndex)) {
-    addResult({ issue, status: 'dependency_blocked', blocker: reason })
+    addResult({ issue, status, blocker: reason })
     skipped.push({ issue, reason })
     log(`#${issue}: blocked — ${reason}`)
   }
@@ -876,33 +835,27 @@ async function executeTrack(trackIndex) {
     }
 
     if (MERGE) {
-      let merge
-      try {
-        merge = await agent(mergePrompt(issue, impl.pr_number, head, REVIEW_MODE), {
-          model: 'sonnet',
-          effort: 'low',
-          schema: MERGE_SCHEMA,
-          phase: 'Merge',
-          label: `merge:PR#${impl.pr_number}`,
-        })
-      } catch (error) {
-        merge = { merged: false, blocker: `merge threw: ${error?.message || error}` }
-      }
-      if (!merge || !merge.merged) {
-        blocker = merge?.blocker || `PR #${impl.pr_number} merge agent failed`
-        record.status = 'merge_blocked'
+      // No merge agent runs in this workflow: merging is the orchestrator's
+      // job, in-session. A PR recorded in args.merged already landed (the
+      // orchestrator verified it MERGED before recording); an unrecorded PR
+      // pauses the track here so the orchestrator can gate on CI, merge it
+      // pinned to this reviewed head, and resume with the record appended.
+      const recordedMerge = MERGED.get(impl.pr_number)
+      if (!recordedMerge) {
+        blocker = `PR #${impl.pr_number} awaits orchestrator merge (LGTM at ${head.ref} @ ${head.sha})`
+        record.status = 'awaiting_merge'
         record.blocker = blocker
-        log(`PR #${impl.pr_number}: merge blocked — ${blocker}`)
-        localSkipped.push({ issue, reason: `PR #${impl.pr_number} did not merge — ${blocker}` })
+        log(`PR #${impl.pr_number}: awaiting orchestrator merge — merge it in-session, then resume with the args.merged record`)
+        localSkipped.push({ issue, reason: blocker })
         status = 'blocked'
         unresolved = true
-        blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: PR #${impl.pr_number} did not merge — ${blocker}`, localSkipped)
+        blockIssues(track, issueIndex + 1, `hard prerequisite #${issue}: ${blocker}`, localSkipped, 'merge_pending')
         break
       }
       record.status = 'merged'
-      record.merge_sha = merge.merge_sha
-      record.issue_state = merge.issue_state
-      log(`PR #${impl.pr_number}: merged; issue #${issue} ${merge.issue_state}`)
+      record.merge_sha = recordedMerge.merge_sha
+      record.issue_state = recordedMerge.issue_state
+      log(`PR #${impl.pr_number}: merged by the orchestrator; issue #${issue} ${recordedMerge.issue_state}`)
       head = { ...head, merged: true }
       localCompleted.push({ issue, prNumber: impl.pr_number, prUrl: impl.pr_url, head })
       baseRefs = []
@@ -947,7 +900,8 @@ const resultOrder = new Map(ALL_ISSUES.map((issue, index) => [issue, index]))
 results.sort((left, right) => resultOrder.get(left.issue) - resultOrder.get(right.issue))
 
 // ---- Release: only when every issue in the run reached merged — a partial
-// milestone never publishes. ----
+// milestone never publishes. No agent runs here either: the release lands a
+// doc change and publishes, so it belongs to the orchestrator in-session. ----
 let release = null
 if (RELEASE) {
   const mergedRecords = results.filter((result) => result.status === 'merged')
@@ -956,22 +910,16 @@ if (RELEASE) {
     log(summary)
     release = { released: false, skipped: true, summary }
   } else {
-    try {
-      release = await agent(releasePrompt(mergedRecords), {
-        model: 'sonnet',
-        effort: 'medium',
-        schema: RELEASE_SCHEMA,
-        phase: 'Release',
-        label: 'release:sync-docs-release',
-      })
-    } catch (error) {
-      release = { released: false, summary: `release agent threw: ${error?.message || error}` }
-    }
-    release ||= { released: false, summary: 'release agent failed' }
-    log(release.released
-      ? `release published: ${release.tag}${release.release_url ? ` (${release.release_url})` : ''}`
-      : `release not published — ${release.blocker || release.summary}`)
+    const summary = 'every issue merged — run sync-docs-release in-session (sync docs, land the doc change, then create-release)'
+    log(`release deferred to the orchestrator: ${summary}`)
+    release = { released: false, deferred: true, summary }
   }
 }
 
-return { results, release }
+// Every LGTM PR still waiting on an orchestrator merge, so the orchestrator
+// can merge each one and resume without re-parsing per-issue results.
+const awaiting_merge = results
+  .filter((result) => result.status === 'awaiting_merge')
+  .map((result) => ({ issue: result.issue, pr: result.pr, pr_url: result.pr_url, head_ref: result.head_ref, head_sha: result.head_sha }))
+
+return { results, release, awaiting_merge }

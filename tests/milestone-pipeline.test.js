@@ -17,6 +17,12 @@ function headSha(issue, fill = '0') {
   return issue.toString(16).padStart(40, fill)
 }
 
+// An orchestrator-merge record for args.merged, matching the SHA convention
+// the old merge-agent stub used (headSha(pr, 'e')).
+function mergedRecord(pr) {
+  return { pr, merge_sha: headSha(pr, 'e'), issue_state: 'closed' }
+}
+
 function deferred() {
   let resolve
   let reject
@@ -111,11 +117,6 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           head_sha: headSha(issue),
         }
       }
-    } else if (options.phase === 'Merge') {
-      const pr = Number(options.label.match(/PR#(\d+)/)?.[1])
-      result = { merged: true, merge_sha: headSha(pr, 'e'), issue_state: 'closed', branch_deleted: true, summary: 'merged' }
-    } else if (options.phase === 'Release') {
-      result = { released: true, tag: 'v1.0.0', release_url: 'https://example.test/releases/v1.0.0', docs_change: 'pr_merged', summary: 'released' }
     } else {
       throw new Error(`unexpected phase: ${options.phase}`)
     }
@@ -926,7 +927,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a clean first-cycle LGTM reviews once on the issue first-review spec and dispatches no fixer', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], merged: [mergedRecord(1002)] }, {
       Prep: () => ({ issues: [prepIssue()] }),
     })
     const record = output.results.find((result) => result.issue === 2)
@@ -948,7 +949,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
     let reviewCycle = 0
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], merged: [mergedRecord(1002)] }, {
       Prep: () => ({ issues: [prepIssue({ model: 'sonnet', effort: 'high', first_review_model: 'opus', first_review_effort: 'xhigh' })] }),
       'Review Loop': (event) => {
         if (event.label.startsWith('fix:')) {
@@ -972,7 +973,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
   test('an LGTM with non-blocking findings fixes them and re-reviews on sonnet/high', async () => {
     let reviewCycle = 0
-    const { output, events } = await executeWorkflow({ tracks: [[2]] }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], merged: [mergedRecord(1002)] }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'Review Loop': (event) => {
         if (event.label.startsWith('fix:')) {
@@ -994,7 +995,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('an LGTM with non-blocking findings on the final cycle stops as lgtm_with_nonblocking without a fixer', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1 }, {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 1, merged: [mergedRecord(1002)] }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'Review Loop': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 1, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'one optional' }),
     })
@@ -1057,49 +1058,56 @@ describe('milestone-pipeline subagent review mode', () => {
 })
 
 describe('milestone-pipeline merge and release', () => {
-  test('merges each PR at review readiness on sonnet/low and reports merged', async () => {
-    const { output, events, logs } = await executeWorkflow({ tracks: [[2]] })
+  test('records an orchestrator merge from args.merged and reports merged without dispatching any merge agent', async () => {
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2]], merged: [mergedRecord(1002)] })
     const record = output.results.find((result) => result.issue === 2)
-    const mergeEvent = events.find((event) => event.state === 'started' && event.label === 'merge:PR#1002')
 
-    expect(mergeEvent.model).toBe('sonnet')
-    expect(mergeEvent.effort).toBe('low')
-    expect(mergeEvent.phase).toBe('Merge')
-    expect(mergeEvent.prompt).toContain('--match-head-commit <verified-sha>')
-    expect(mergeEvent.prompt).toContain('ALWAYS pin')
-    expect(mergeEvent.prompt).toContain(`<verified-sha> is ${headSha(2)} when step 3 did not update the branch`)
-    expect(mergeEvent.prompt).toContain('Never run the merge unpinned')
-    expect(mergeEvent.prompt).toContain('gh pr checks 1002 --watch')
-    expect(mergeEvent.prompt).toContain('If the branch is behind the base at all')
-    expect(mergeEvent.prompt).toContain('never merge a behind branch untested')
-    expect(mergeEvent.prompt).toContain('never resolve merge conflicts')
-    expect(mergeEvent.prompt).not.toContain('github-actions[bot]')
+    expect(events.some((event) => event.phase === 'Merge')).toBeFalse()
     expect(record?.status).toBe('merged')
     expect(record?.merge_sha).toBe(headSha(1002, 'e'))
     expect(record?.issue_state).toBe('closed')
-    expect(logs.some((message) => message.includes('PR #1002: merged; issue #2 closed'))).toBeTrue()
+    expect(output.awaiting_merge).toEqual([])
+    expect(logs.some((message) => message.includes('PR #1002: merged by the orchestrator; issue #2 closed'))).toBeTrue()
   })
 
-  test('github mode independently verifies the standing review on the final head', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github' })
-    const mergePrompt = promptFor(events, 'merge:PR#1002')
+  test('an LGTM PR without a merged record pauses as awaiting_merge and defers successors', async () => {
+    const { output, events, logs } = await executeWorkflow({
+      tracks: [
+        { issues: [2, 3] },
+        { issues: [9], after: [0] },
+        { issues: [12], runsAfter: [0] },
+      ],
+    })
+    const record = output.results.find((result) => result.issue === 2)
 
-    expect(mergePrompt).toContain('Independent review gate (the FINAL read before merge)')
-    expect(mergePrompt).toContain(`live head must still equal the reviewed readiness SHA ${headSha(2)}`)
-    expect(mergePrompt).toContain('newest exact one-line `@claude [model] review [effort]` trigger')
-    expect(mergePrompt).toContain('newest completed review output from `github-actions[bot]`')
-    expect(mergePrompt).toContain('`status == completed` and `conclusion == success`')
-    expect(mergePrompt).toContain("output's `created_at` to be later than the trigger's `created_at`")
-    expect(mergePrompt).toContain('exactly one standalone verdict line that is `LGTM`')
-    expect(mergePrompt).toContain('without a completed matching output blocks the merge')
-    expect(mergePrompt).toContain('`Needs Updates`')
-    expect(mergePrompt).toContain('an `issue_comment` run reports the default-branch SHA, not the PR head')
-    expect(mergePrompt).toContain(`commits/${headSha(2)}/check-suites`)
-    expect(mergePrompt).toContain('`.commit.committer.date` when it has no check suite')
-    expect(mergePrompt).toContain("require the LGTM output's `created_at` to be strictly later")
-    expect(mergePrompt).toContain('An LGTM that predates the head it would merge reviewed older code: STOP')
-    expect(mergePrompt).toContain('if step 3 changed the head, step 4 blocks until a fresh review reaches readiness')
-    expect(mergePrompt).toContain('no command may run between this final validation and the pinned merge')
+    expect(events.some((event) => event.phase === 'Merge')).toBeFalse()
+    expect(record?.status).toBe('awaiting_merge')
+    expect(record?.blocker).toContain('awaits orchestrator merge')
+    expect(record?.blocker).toContain(headSha(2))
+    expect(output.results.find((result) => result.issue === 3)?.status).toBe('merge_pending')
+    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
+    expect(output.results.find((result) => result.issue === 12)?.status).toBe('dependency_blocked')
+    expect(started(events, 'validate:#3')).toBeFalse()
+    expect(started(events, 'validate:#9')).toBeFalse()
+    expect(started(events, 'validate:#12')).toBeFalse()
+    expect(output.awaiting_merge).toEqual([
+      { issue: 2, pr: 1002, pr_url: 'https://example.test/pr/1002', head_ref: 'codex/issue-2', head_sha: headSha(2) },
+    ])
+    expect(output.release?.released).toBeFalse()
+    expect(output.release?.skipped).toBeTrue()
+    expect(logs.some((message) => message.includes('PR #1002: awaiting orchestrator merge'))).toBeTrue()
+  })
+
+  test('the skill documents the orchestrator in-session merge procedure', async () => {
+    const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
+
+    expect(skill).toContain('--match-head-commit <verified-sha>')
+    expect(skill).toContain('gh pr checks <num> --watch')
+    expect(skill).toContain('gh pr update-branch')
+    expect(skill).toContain('never resolve conflicts yourself')
+    expect(skill).toContain('resumeFromRunId')
+    expect(skill).toContain('`args.merged` extended by `{pr, merge_sha, issue_state}`')
+    expect(skill).toContain('no background subagent ever holds merge authority')
   })
 
   test('merge and release default off when review loops are off', async () => {
@@ -1116,6 +1124,10 @@ describe('milestone-pipeline merge and release', () => {
     ['release without merge', { tracks: [[2]], merge: false, release: true }, /release requires merge/],
     ['non-boolean merge', { tracks: [[2]], merge: 'yes' }, /merge must be a boolean/],
     ['non-boolean release', { tracks: [[2]], release: 'yes' }, /release must be a boolean/],
+    ['non-array merged', { tracks: [[2]], merged: 'PR 1002' }, /merged must be an array/],
+    ['merged record without a pr number', { tracks: [[2]], merged: [{ merge_sha: 'abc' }] }, /integer pr and a non-empty merge_sha/],
+    ['merged record without a merge sha', { tracks: [[2]], merged: [{ pr: 1002, merge_sha: '' }] }, /integer pr and a non-empty merge_sha/],
+    ['duplicate merged records', { tracks: [[2]], merged: [{ pr: 1002, merge_sha: 'a' }, { pr: 1002, merge_sha: 'b' }] }, /duplicate merged record for PR #1002/],
   ])('rejects %s before prep', async (_name, args, message) => {
     let prepStarted = false
     const running = executeWorkflow(args, {
@@ -1138,9 +1150,10 @@ describe('milestone-pipeline merge and release', () => {
     expect(output.release).toBeNull()
   })
 
-  test('successors of a merged predecessor build from the base branch with no baseRefs', async () => {
+  test('successors of a recorded merge build from the base branch with no baseRefs', async () => {
     const { events } = await executeWorkflow({
       tracks: [{ issues: [2, 3] }, { issues: [9], after: [0] }],
+      merged: [mergedRecord(1002), mergedRecord(1003)],
     })
     const inTrackPrompt = promptFor(events, 'implement:#3 (fable/high)')
     const crossTrackPrompt = promptFor(events, 'implement:#9 (fable/high)')
@@ -1153,45 +1166,21 @@ describe('milestone-pipeline merge and release', () => {
     expect(promptFor(events, 'validate:#9')).not.toContain('Hard dependency base refs')
   })
 
-  test('a blocked merge blocks hard and ordering descendants and skips the release', async () => {
-    const { output, events } = await executeWorkflow({
-      tracks: [
-        { issues: [2] },
-        { issues: [9], after: [0] },
-        { issues: [12], runsAfter: [0] },
-      ],
-    }, {
-      'merge:PR#1002': () => ({ merged: false, merge_sha: '', issue_state: 'open', branch_deleted: false, summary: 'ci failed', blocker: 'required check test-suite failed' }),
+  test('release defers to the orchestrator when every issue merged', async () => {
+    const { output, events, logs } = await executeWorkflow({
+      tracks: [[2], [3]],
+      merged: [mergedRecord(1002), mergedRecord(1003)],
     })
-    const record = output.results.find((result) => result.issue === 2)
 
-    expect(record?.status).toBe('merge_blocked')
-    expect(record?.blocker).toBe('required check test-suite failed')
-    expect(output.results.find((result) => result.issue === 9)?.status).toBe('dependency_blocked')
-    expect(output.results.find((result) => result.issue === 12)?.status).toBe('dependency_blocked')
-    expect(started(events, 'validate:#9')).toBeFalse()
-    expect(started(events, 'validate:#12')).toBeFalse()
-    expect(output.release?.released).toBeFalse()
-    expect(output.release?.skipped).toBeTrue()
-  })
-
-  test('release dispatches one sonnet/medium sync-docs-release agent when every issue merged', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2], [3]] })
-    const releaseEvent = events.find((event) => event.state === 'started' && event.label === 'release:sync-docs-release')
-
-    expect(releaseEvent.model).toBe('sonnet')
-    expect(releaseEvent.effort).toBe('medium')
-    expect(releaseEvent.phase).toBe('Release')
-    expect(releaseEvent.prompt).toContain('sync-docs-release')
-    expect(releaseEvent.prompt).toContain('- Issue #2 → PR #1002')
-    expect(releaseEvent.prompt).toContain('- Issue #3 → PR #1003')
-    expect(releaseEvent.prompt).toContain('Created with LLM: Sonnet 5 | medium | Harness: milestone-pipeline')
-    expect(output.release.released).toBeTrue()
-    expect(output.release.tag).toBe('v1.0.0')
+    expect(events.some((event) => event.phase === 'Release')).toBeFalse()
+    expect(output.release.released).toBeFalse()
+    expect(output.release.deferred).toBeTrue()
+    expect(output.release.summary).toContain('sync-docs-release in-session')
+    expect(logs.some((message) => message.includes('release deferred to the orchestrator'))).toBeTrue()
   })
 
   test('release is skipped when any issue did not merge', async () => {
-    const { output, events, logs } = await executeWorkflow({ tracks: [[2], [3]] }, {
+    const { output, events, logs } = await executeWorkflow({ tracks: [[2], [3]], merged: [mergedRecord(1002)] }, {
       'validate:#3': () => ({
         verdict: 'INVALID',
         summary: 'invalid',
@@ -1204,25 +1193,15 @@ describe('milestone-pipeline merge and release', () => {
     expect(events.some((event) => event.phase === 'Release')).toBeFalse()
     expect(output.release?.released).toBeFalse()
     expect(output.release?.skipped).toBeTrue()
+    expect(output.release?.deferred).toBeUndefined()
     expect(logs.some((message) => message.includes('release skipped — 1 of 2 issues reached merged status'))).toBeTrue()
   })
 
-  test('release: false skips the release stage while merging stays on', async () => {
-    const { output, events } = await executeWorkflow({ tracks: [[2]], release: false })
+  test('release: false skips the deferred-release marker while merging stays on', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], release: false, merged: [mergedRecord(1002)] })
 
     expect(output.results[0].status).toBe('merged')
     expect(events.some((event) => event.phase === 'Release')).toBeFalse()
     expect(output.release).toBeNull()
-  })
-
-  test('a release agent failure is reported without failing the run', async () => {
-    const { output, logs } = await executeWorkflow({ tracks: [[2]] }, {
-      'release:sync-docs-release': () => { throw new Error('release crashed') },
-    })
-
-    expect(output.results[0].status).toBe('merged')
-    expect(output.release.released).toBeFalse()
-    expect(output.release.summary).toContain('release crashed')
-    expect(logs.some((message) => message.includes('release not published'))).toBeTrue()
   })
 })
