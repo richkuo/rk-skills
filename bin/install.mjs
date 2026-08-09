@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const skillsSrc = join(pkgRoot, 'skills');
-const agentsSrc = join(pkgRoot, 'agents');
 const workflowsSrc = join(pkgRoot, 'workflows');
 
 if (!existsSync(skillsSrc)) {
@@ -39,15 +38,13 @@ for (const name of skills) {
 	cpSync(join(skillsSrc, name), join(skillsDir, name), { recursive: true });
 }
 
-// Some skills are dispatch shims that invoke subagents; install their agent files too.
-const agents = existsSync(agentsSrc)
-	? readdirSync(agentsSrc).filter((name) => name.endsWith('.md')).sort()
-	: [];
-if (agents.length > 0) {
-	mkdirSync(agentsDir, { recursive: true });
-	for (const name of agents) {
-		cpSync(join(agentsSrc, name), join(agentsDir, name));
-	}
+// sync-docs and create-release used to dispatch to runner subagents; they now
+// carry their workflows inline. Remove the stale runner files this installer
+// wrote in earlier versions so they cannot be dispatched to by mistake.
+const retiredAgents = ['sync-docs-runner.md', 'create-release-runner.md'];
+const removedAgents = retiredAgents.filter((name) => existsSync(join(agentsDir, name)));
+for (const name of removedAgents) {
+	rmSync(join(agentsDir, name));
 }
 
 // Dynamic workflow scripts some skills invoke via the Workflow tool.
@@ -65,10 +62,10 @@ const scope = project ? 'this project' : 'your personal skills';
 console.log(`rk-skills installed ${skills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
 console.log(`  ${skills.join(', ')}`);
-if (agents.length > 0) {
-	console.log(`\nAlso installed ${agents.length} subagents into:`);
+if (removedAgents.length > 0) {
+	console.log(`\nRemoved ${removedAgents.length} retired subagents from:`);
 	console.log(`  ${agentsDir}`);
-	console.log(`  ${agents.map((n) => n.replace(/\.md$/, '')).join(', ')}`);
+	console.log(`  ${removedAgents.map((n) => n.replace(/\.md$/, '')).join(', ')}`);
 }
 if (workflows.length > 0) {
 	console.log(`\nAlso installed ${workflows.length} workflow scripts into:`);

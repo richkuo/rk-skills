@@ -26,9 +26,14 @@ for dir in "$REPO"/skills/*/; do
   link "skills/$name" "$CLAUDE/skills/$name"
 done
 
-for f in "$REPO"/agents/*.md; do
-  name="$(basename "$f")"
-  link "agents/$name" "$CLAUDE/agents/$name"
+# sync-docs and create-release once dispatched to runner subagents. They now
+# carry their workflows inline, so drop any symlink an older run left behind.
+for name in sync-docs-runner.md create-release-runner.md; do
+  target="$CLAUDE/agents/$name"
+  if [ -L "$target" ]; then
+    rm "$target"
+    echo "removed retired agent symlink $target"
+  fi
 done
 
 for f in "$REPO"/workflows/*.js; do
