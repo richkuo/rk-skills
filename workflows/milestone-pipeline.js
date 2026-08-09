@@ -180,7 +180,10 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // first review is the standard bare-@claude reviewer: model null means "no
 // override — inherit the session default". Sonnet never takes a first
 // review: it appears only as the cheaper re-review after a pass that
-// addressed nothing blocking (see runSubagentReviewLoop).
+// addressed nothing blocking (see runSubagentReviewLoop). Fable also reviews
+// only cycle 1: after a fable first review, the blocking re-review ladder
+// steps down to opus/high for cycle 2 and the standard bare-@claude reviewer
+// from cycle 3 on (see runSubagentReviewLoop).
 const BANDS = [
   { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } },
   { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
@@ -403,7 +406,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
 1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
-4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-7 routing, and wait for that re-review verdict.
+4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-7 routing (when cycle 1 ran on the \`@claude fable review\` trigger, the blocking re-trigger is \`@claude opus review\` — fable reviews only the first cycle, never a repeat of the fable trigger), and wait for that re-review verdict.
 5. Stop after that verdict. Do not fix the re-review's findings; the pipeline gives later cycles to another agent.
 
 Return the standing verdict as github_review_status, the remaining non-blocking count, and a github_review_summary. If cycle 1 cannot finish, return github_review_status blocked and github_review_blocker.`
@@ -426,7 +429,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @claude review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-7 routing (\`@claude review\`, or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-7 routing (\`@claude opus review\` when the review just addressed ran on the \`@claude fable review\` trigger — fable reviews only the first cycle; else \`@claude review\`; or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -538,6 +541,9 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 // stamped, else on the [C..] band's review default;
 // a re-review after a fix pass that addressed only non-blocking findings drops
 // to sonnet/high, mirroring the fix-pr-review skill's @claude-sonnet routing.
+// A fable first review is first-review-only: the blocking re-review after it
+// runs opus/high, and blocking re-reviews after that run the standard
+// bare-@claude reviewer (model null) — fable never re-reviews.
 // Returns the same shape as the github-mode review-loop agent. A needs_updates
 // verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
 // never a fix push that no reviewer would see.
@@ -587,7 +593,11 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
     }
     notes.push(`cycle ${cycles} fix: ${fix.fixed_count} fixed, ${fix.refuted_count} refuted — ${fix.summary}`)
     head = { ref: fix.head_ref, sha: fix.head_sha }
-    nextReview = review.blocking_count === 0 ? { model: 'sonnet', effort: 'high' } : firstReview
+    nextReview = review.blocking_count === 0
+      ? { model: 'sonnet', effort: 'high' }
+      : firstReview.model === 'fable'
+        ? (cycles === 1 ? { model: 'opus', effort: 'high' } : { model: null, effort: 'high' })
+        : firstReview
   }
   return { final_status: 'max_cycles_exhausted', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
 }

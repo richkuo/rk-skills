@@ -211,6 +211,7 @@ Created with LLM: <current model> | <effort> | Harness: Claude Code
 Route the re-review by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
 
 - **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 1.5 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): trigger plain — this repo's default (Opus) reviews the fix. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier Opus re-review is what catches the real regression you dismissed.
+  - **Exception — the review you just addressed ran on the fable trigger** (`@claude fable review …`): fable reviews only the first cycle. Route this blocking re-review to `@claude opus review`; blocking re-reviews after that opus pass go plain. Never repeat the fable trigger.
 - **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to Sonnet via the `@claude sonnet` shorthand instead.
 
 Post a **separate** comment so the bot triggers cleanly on its own line:
@@ -218,6 +219,9 @@ Post a **separate** comment so the bot triggers cleanly on its own line:
 ```bash
 # blocking findings were addressed
 gh pr comment <N> --body "@claude review"
+
+# blocking findings were addressed and the previous review ran on the fable trigger
+gh pr comment <N> --body "@claude opus review"
 
 # only non-blocking items were addressed
 gh pr comment <N> --body "@claude sonnet review"
