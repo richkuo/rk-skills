@@ -34,7 +34,7 @@ Keep the vetted plan's scratchpad file — step 2 passes it through. If fablepla
 
 ### 2. Hand off to work-on-issue
 
-Invoke the `work-on-issue` skill for the same issue number (Skill tool, `skill: work-on-issue`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations from the plan are allowed only when the code contradicts the plan, and must be named in the PR body.
+Invoke the `work-on-issue` skill for the same issue number (Skill tool, `skill: work-on-issue`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations follow `work-on-issue` step 2's plan-deviation policy — the traced code, anything posted on the issue after the plan, then correctness and safety — and must each be named in the PR body. Don't narrow that policy here.
 
 work-on-issue runs its full process: it implements in a fresh worktree, verifies, commits, pushes, and opens a PR that closes the issue. It ends at the open PR — **requesting review is out of scope for this skill.** If the user wants the PR driven through review to convergence, that's `fableplan-loop` (this chain plus the review loop), `validate-fableplan-loop`, or a separate `fix-pr-review-loop` run; say so rather than triggering review here.
 
