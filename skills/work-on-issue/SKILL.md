@@ -36,6 +36,17 @@ Two gates, checked while no worktree or code exists yet:
 - **The issue must still be open.** If it's closed, stop and report — don't implement a resolved issue.
 - **No existing PR may already address it** — discovering one later wastes the entire cycle, splits review, and orphans a branch. Inspect any search hit: a PR that merely mentions `#<N>` in passing doesn't count, one that fixes it does. If a genuine PR exists, surface it and stop (or, if it's this session's own branch, continue on it).
 
+### 0.1 Detect an implementation plan in the comment thread
+
+The thread often already carries a vetted plan: `fableplan` and every chain that wraps it post one under the heading `## Implementation plan (Fable 5)`, and maintainers sometimes paste their own. That plan was produced with more deliberation than a fresh read of the issue, so **it must be found before any code is written, never discovered afterwards.** Scan the comments fetched in step 0:
+
+- **Match on the heading first** — a comment starting with `## Implementation plan` (any parenthetical model tag) is a plan. Also treat a comment a maintainer clearly frames as the implementation plan for this issue as one, even without the heading.
+- **If several exist, the newest wins.** Earlier ones are superseded drafts; do not merge them.
+- **A caller-supplied plan does not end the scan.** When the caller (`fableplan-work-on-issue`, `fableplan-loop`, the loop chains) points you at a plan file, still check the thread — a plan comment newer than the caller's copy supersedes it. The same plan in both places is one artifact, not two competing ones.
+- **Record what you adopted** — the comment author, its URL, and its date — for step 2 and the PR body.
+
+Finding no plan is normal: proceed with the issue body and validation findings alone.
+
 ### 1. Resolve and verify the worktree base
 
 All implementation happens in a fresh worktree — never on the default branch itself or a divergent checked-out branch. Detect and fetch the default branch even when dependencies are supplied because it remains the pull request base:
@@ -95,6 +106,14 @@ The resulting `HEAD` is the only authorized base for validation and implementati
 
 Read the issue body **and its comment thread**, already fetched in step 0 (maintainer clarifications and prior validation reports often live in comments), the validation findings if validate-issue produced them this session, and the repo's `CLAUDE.md` / architecture docs for the subsystem you're about to touch. Establish: which files change, what the correct fix is (per the traced code, not the prose), what tests prove it, and which conventions/invariants govern the area. If the issue's proposed sketch was marked ⚠️/❌ during validation, implement the **optimal direction for this repo**, not the original sketch — correctness and the codebase's patterns outrank issue loyalty.
 
+**An adopted plan is the blueprint.** If step 0.1 found one, implement to it rather than re-deriving an approach — the plan already cost a planning pass. Three things override it, in this order:
+
+1. **The traced code.** Where the plan contradicts what the code actually does, follow the code.
+2. **Anything newer on the issue.** A maintainer comment or an issue edit posted after the plan supersedes the part it touches.
+3. **Correctness and safety.** A plan step that breaks an invariant is wrong; implement the safe design instead.
+
+Every deviation is deliberate and must be named in the PR body (step 6) with its reason. Silent divergence from a posted plan is a defect, because a reviewer reads the plan and expects the diff to match it.
+
 ### 3. Implement the fix
 
 Build the absolute-best solution the issue calls for, evaluated as if cost, effort, time, token spend, and code volume were unlimited — they are not factors. The only constraints that override "best" are correctness and safety.
@@ -141,8 +160,9 @@ Shell state does **not** persist between Bash commands, so `$DEFAULT_BRANCH` fro
 gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)" --head <branch> --title "<title>" --body-file <body-file>
 ```
 
-- **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket if a Fable plan ran first). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
+- **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket if a Fable plan ran first — including a plan adopted from the issue thread in step 0.1, which counts the same as one produced this session). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
 - **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified under `## Summary` / verification headings first; keep it scannable, don't restate the whole issue. **End with `## Plain simple English`** — one short paragraph under 55 words in ASD-STE100 (Simplified Technical English) per the CLAUDE.md/AGENTS.md Response Style rules, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary.
+- **Adopted plan:** when step 0.1 found a plan, link the comment and state that the diff follows it, then list every deviation with its reason (or state that there were none). A reviewer compares the diff against that plan.
 - **Dependency base:** when `baseRefs` was supplied, list every predecessor pull request and verified head in integration order, state that they must merge first, and keep the PR base set to the repository's default branch.
 - **Footer:** same convention as the commit — **Created** verb, repo footer format (global default `Created with LLM: <current model> | <effort> | Harness: <harness>`, harness resolved per step 5: `Claude Code` interactively, the Action identifier in CI). No `Co-authored-by` trailer.
 
@@ -170,6 +190,9 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Issue lives in a different repo than the current checkout | Stop — work in a clone of that repo, or tell the user which repo to check out |
 | Issue is already closed | Stop and report — don't implement a resolved issue |
 | An open PR already addresses the issue | Don't start a duplicate — catch this in step 0, before a worktree exists; surface it (or continue on it if it's this session's branch) |
+| Issue thread already carries an implementation plan | Adopt the newest one (step 0.1) and build to it; name every deviation in the PR body and add `, fableplan` to the title bracket |
+| Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Follow the code / the newer instruction / the safe design, and state the deviation in the PR body |
+| Tempted to re-derive an approach although a plan comment exists | Don't — the plan was already vetted; deviate only for the three reasons in step 2 |
 | Issue description conflicts with what the code actually does | Trust the traced code; implement the real fix, note the discrepancy in the PR body |
 | Issue's proposed sketch was ⚠️/❌ in validation | Implement the optimal direction for this repo, not the original sketch |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
