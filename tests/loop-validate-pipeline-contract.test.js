@@ -63,6 +63,18 @@ const REPORT_CAP = [
   'skills/fable-new-issue-loop/SKILL.md',
 ]
 
+// work-on-issue owns the plan-deviation policy for a plan adopted from the issue
+// thread; the chains that hand a plan down may restate it but must not narrow it
+// back to "only when the code contradicts the plan".
+const PLAN_DEVIATION_OWNER = 'skills/work-on-issue/SKILL.md'
+const PLAN_DEVIATION_CALLERS = [
+  'skills/fableplan-work-on-issue/SKILL.md',
+  'skills/fableplan-loop/SKILL.md',
+  'skills/fable-validate-loop/SKILL.md',
+  'skills/fable-validate-fableplan-loop/SKILL.md',
+  'skills/validate-fableplan-loop/SKILL.md',
+]
+
 const INVENTORY = 'docs/contract-inventory.md'
 
 /** Strip YAML frontmatter so description: keywords cannot satisfy procedure rules. */
@@ -98,6 +110,8 @@ const texts = Object.fromEntries(
         VERDICT_TEMPLATE_OWNER,
         ...VERDICT_TEMPLATE_CONSUMERS,
         ...REPORT_CAP,
+        PLAN_DEVIATION_OWNER,
+        ...PLAN_DEVIATION_CALLERS,
         INVENTORY,
       ]),
     ].map(async (path) => [path, await read(path)]),
@@ -199,6 +213,32 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(
         /\*\*Cap the whole report[^\n]*55 words, plain simple English in ASD-STE100\*\*[^\n]*apply the Response Style rules in CLAUDE\.md\/AGENTS\.md/,
+      )
+    }
+  })
+
+  test('work-on-issue owns one plan-deviation policy and no caller narrows it', () => {
+    const owner = procedureBody(texts[PLAN_DEVIATION_OWNER])
+    // All three overrides, plus the marker that a caller cannot narrow them.
+    expect(owner, PLAN_DEVIATION_OWNER).toMatch(
+      /adopted plan is the blueprint[\s\S]{0,900}traced code[\s\S]{0,400}newer on the issue[\s\S]{0,400}[Cc]orrectness and safety/,
+    )
+    expect(owner, PLAN_DEVIATION_OWNER).toMatch(/single plan-deviation policy/i)
+    expect(owner, PLAN_DEVIATION_OWNER).toMatch(/never narrows it|does not remove the other two/i)
+    // The `, fableplan` marker stays keyed to Fable authorship, not to adoption.
+    expect(owner, PLAN_DEVIATION_OWNER).toMatch(/Fable-authored/)
+    expect(owner, PLAN_DEVIATION_OWNER).not.toMatch(
+      /adopted from the issue thread in step 0\.1, which counts the same as one produced this session/,
+    )
+
+    for (const path of PLAN_DEVIATION_CALLERS) {
+      const body = procedureBody(texts[path])
+      // The superseded narrower rule must not come back.
+      expect(body, `${path}: narrowed deviation rule`).not.toMatch(
+        /deviations?[^.\n]{0,80}only when the code contradicts the plan/i,
+      )
+      expect(body, `${path}: defers to work-on-issue step 2`).toMatch(
+        /deviations[^.\n]{0,120}step 2's plan-deviation policy/i,
       )
     }
   })

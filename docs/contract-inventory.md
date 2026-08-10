@@ -28,6 +28,8 @@ This inventory records every shared pipeline rule those families restate in pros
 | `skills/validate-issue/SKILL.md` | Base validator — inventored; does **not** restate loop pipeline stop rules |
 | `skills/fable-validate/SKILL.md` | Fable wrapper for validate-issue — inventored; does **not** restate loop pipeline stop rules |
 | `skills/fix-pr-review/SKILL.md` | Fixer classifier — states the `**Verification limitation:**` not-a-finding carve-out |
+| `skills/work-on-issue/SKILL.md` | Canonical owner of the adopted-plan deviation policy the plan-handoff chains restate |
+| `skills/fableplan-work-on-issue/SKILL.md` | Plan handoff — restates the deviation policy; no loop stage |
 
 Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not listed here; they appear only in the rule rows below that name them.
 
@@ -42,6 +44,7 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not
 | Validation scope / feasibility / existing-PR stop | Shared semantic in validate→plan/implement chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` | Stop instead of continuing the chain when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing open PR | Whether a Fable plan step sits between update and implement; whether the chain ends at the posted plan (`fable-validate-fableplan`) or at a reviewed PR | same |
 | Verdict-block template | `validate-issue` step 7 output format | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` (each quotes the template it parses) | One template line co-locates every parsed field: `Update issue description?`, `Complexity: <…>/100`, `Capability <k>`, `Volume <v>`, `fableplan: <yes\|no>`, `Scope: <OK \| too large — split/umbrella/narrow>` | Placeholder spelling (`<score>` vs `<0-100>`, `<Yes\|No>` vs `<Yes \| No>`) | same |
 | Final-report 55-word plain-simple-English cap | Shared presentation rule of the autonomous chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan`, `fableplan-loop`, `fableplan-work-on-issue`, `new-issue-loop`, `fable-new-issue-loop` | Bold "Cap the whole report … 55 words, plain simple English in ASD-STE100" instruction in the report step, followed on the same line by "apply the Response Style rules in CLAUDE.md/AGENTS.md" | Parenthetical scope notes ("prefix + relayed summary") and trailing phrasing | same |
+| Adopted-plan deviation policy | `work-on-issue` step 2 | `fableplan-work-on-issue`, `fableplan-loop`, `fable-validate-loop`, `fable-validate-fableplan-loop`, `validate-fableplan-loop` (each hands a plan down) | A plan adopted from the issue thread is the blueprint; it is overridden only by the traced code, anything posted on the issue after the plan, then correctness and safety. Callers may restate the policy but must never narrow it back to "only when the code contradicts the plan"; every deviation is named in the PR body | Caller phrasing and whether the handoff targets `work-on-issue` or `work-on-issue-loop`; the score-gated chains add their "no plan was produced" note | same |
 
 ## Intentional exceptions
 
