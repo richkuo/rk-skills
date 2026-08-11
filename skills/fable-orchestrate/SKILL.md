@@ -5,6 +5,8 @@ description: Use when the user wants a task decomposed and driven by a Fable 5 o
 
 # fable-orchestrate
 
+> **Harness:** Claude Code only. This skill drives the **Workflow** tool, which Codex and Cursor do not offer.
+
 Run a task with **Fable 5 as orchestrator** and **Sonnet 5 workers**. The main agent (you, on Fable) owns decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Principle: mechanical volume on Sonnet, every judgment call on Fable.
 
 ## Input

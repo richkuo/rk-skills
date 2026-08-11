@@ -1,7 +1,7 @@
 {
   "name": "rk-skills",
   "version": "1.23.1",
-  "description": "Installer for Claude Code workflow skills — GitHub issue/PR/release automation and Fable-driven planning.",
+  "description": "Installer for Claude Code, Codex, and Cursor workflow skills — GitHub issue/PR/release automation and Fable-driven planning.",
   "type": "module",
   "scripts": {
     "test": "bun test"
@@ -23,6 +23,9 @@
   "keywords": [
     "claude-code",
     "claude",
+    "codex",
+    "cursor",
+    "agent-skills",
     "skills",
     "plugin",
     "workflow",

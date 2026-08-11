@@ -5,6 +5,8 @@ description: Use when the user wants a GitHub issue created by a Fable 5 subagen
 
 # fable-new-issue
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Delegate issue drafting to a **Fable 5** subagent, then file it from the main agent. The subagent only researches and composes — it never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
 
 ## Input

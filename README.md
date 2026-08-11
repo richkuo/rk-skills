@@ -1,10 +1,10 @@
 # rk-skills
 
-Workflow skills for [Claude Code](https://claude.com/claude-code) — automate GitHub issues, PR review loops, docs syncing, and releases.
+Workflow skills for [Claude Code](https://claude.com/claude-code), [Codex](https://learn.chatgpt.com/docs/skills-and-plugins), and [Cursor](https://cursor.com/docs/skills) — automate GitHub issues, PR review loops, docs syncing, and releases.
 
 [![npm](https://img.shields.io/badge/npm-rk--skills-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/rk-skills)
 
-A "skill" is a reusable instruction file that teaches Claude Code how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and Claude follows its steps.
+A "skill" is a reusable instruction file that teaches a coding agent how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and the agent follows its steps. All three agents read the same folder format, so one install covers whichever you use — see [Harness support](#harness-support) for the handful of skills that need Claude Code.
 
 ## Skills
 
@@ -114,19 +114,45 @@ mkdir -p .github/workflows && \
 
 Also included:
 
-- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
-- `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
+- `CLAUDE.md` / `AGENTS.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow), kept byte-identical by a test. Use `CLAUDE.md` as a reference for your own `~/.claude/CLAUDE.md`, and `AGENTS.md` for `~/.codex/AGENTS.md` or a repo-root `AGENTS.md` that Codex and Cursor both read.
+- `commands/commit.md` — a `/commit` slash command for creating well-formed git commits (Claude Code; Codex has deprecated custom prompts in favour of skills).
+- `install.sh` — symlinks this checkout into each harness's skill root for local development, so edits take effect without reinstalling.
 - `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently.
 
 ## Install (with npx)
 
-Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
+Copy every skill into your coding agents with one command — no marketplace, no clone:
 
 ```sh
 npx rk-skills
 ```
 
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and any dynamic workflow scripts** (the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/`); it does not install `CLAUDE.md` (the example global config) or the `/commit` command.
+By default it installs into **every harness already present on the machine**, and reports which ones it found:
+
+| Harness | Skill root it installs into |
+|---|---|
+| Claude Code | `~/.claude/skills/` |
+| Codex | `~/.codex/skills/` |
+| Cursor | `~/.cursor/skills/` |
+
+Cursor also scans the Claude Code and Codex skill roots, so when one of those is already installed the auto-detection skips Cursor's own root — otherwise every skill would appear in Cursor two or three times. Pass `--cursor` to install there anyway.
+
+| Flag | Effect |
+|---|---|
+| `--claude` / `--codex` / `--cursor` | Install only into the named harnesses, creating the directory if it is missing |
+| `--all` | Install into all three |
+| `--project` | Install into `./.claude`, `./.codex`, `./.cursor` instead of `$HOME` |
+
+This path is copy-based — re-run it to update — whereas the plugin below auto-updates. A skill directory that is already a symlink into a local checkout is left alone, so a development clone keeps its live links. It installs the **skills and any dynamic workflow scripts** (the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/` — Claude Code only, since it is the only harness with the Workflow tool); it does not install `CLAUDE.md` / `AGENTS.md` (the example global config) or the `/commit` command.
+
+## Harness support
+
+Every skill is a plain [Agent Skills](https://agentskills.io) folder — a `SKILL.md` with `name` and `description` frontmatter — which all three agents discover on their own. Most run anywhere. Two groups do not:
+
+- **Fable-model skills** (`fableplan*`, `fable-*`, `validate-fableplan-loop`) dispatch a subagent pinned to Fable 5, which only Claude Code offers. On Codex and Cursor use `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants instead.
+- **`milestone-workflow` and `fable-orchestrate`** drive Claude Code's Workflow tool.
+
+Each of those files opens with a `> **Harness:**` line saying so, so you find out before the run starts rather than partway through. `AGENTS.md` in this repo mirrors `CLAUDE.md` for the agents that read `AGENTS.md` (Codex and Cursor); a test keeps the two in lockstep.
 
 ## Install (as a plugin)
 

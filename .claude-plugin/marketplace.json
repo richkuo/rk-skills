@@ -1,6 +1,6 @@
 {
   "name": "rk-skills",
-  "description": "Marketplace for rk-skills: Claude Code workflow skills for GitHub issues, PR review loops, docs syncing, and releases.",
+  "description": "Marketplace for rk-skills: workflow skills for GitHub issues, PR review loops, docs syncing, and releases.",
   "owner": {
     "name": "Richard Kuo"
   },
@@ -8,7 +8,7 @@
     {
       "name": "rk-skills",
       "source": "./",
-      "description": "Claude Code workflow skills: GitHub issue/PR/release automation and Fable-driven planning."
+      "description": "Workflow skills for Claude Code, Codex, and Cursor: GitHub issue/PR/release automation and Fable-driven planning."
     }
   ]
 }

@@ -43,7 +43,7 @@ Do not push. Report the result (commit SHA or "no changes") to the user.
 
 1. Save the edits as a patch before touching anything: `git diff -- <doc files> > <scratchpad>/docs-sync.patch`. Verify the patch is non-empty.
 2. Only once the patch exists, restore the original checkout: `git checkout -- <doc files>`.
-3. `git fetch origin`, then create a worktree off the latest default branch with the branch prefix the repo requires (`cc/` on Claude Code) — e.g. `cc/sync-docs-<date>`.
+3. `git fetch origin`, then create a worktree off the latest default branch with the coding-agent prefix the repo requires (`cc/` on Claude Code, `cursor/` on Cursor, `codex/` on Codex) — e.g. `cc/sync-docs-<date>`.
 4. Apply the patch in the worktree with `git apply`, confirm the resulting diff matches what sync-docs produced, and stage only doc files.
 5. Commit with a message focused on the "why", ending in the repo's attribution footer.
 6. Push the branch and open a PR against the default branch, following the repo's PR title and body conventions.

@@ -5,6 +5,8 @@ description: Use when the user wants a GitHub issue planned by Fable 5 and then 
 
 # fableplan-work-on-issue
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Chain fableplan → work-on-issue into one autonomous run: Fable 5 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue implements that plan in an isolated worktree and opens a PR that closes the issue.
 
 This is **validate-fableplan-loop with the validation and review-loop stages removed** — no `validate-issue` before planning, and the handoff is to `work-on-issue` (single-shot, ends at the open PR) rather than `work-on-issue-loop` (which triggers `@claude` and cycles through review). Reach for this when you already trust the issue and just want a Fable-vetted plan built and shipped as a PR, without paying for validation or driving review to convergence.

@@ -5,6 +5,8 @@ description: Use when the user wants a GitHub issue validated by a Fable 5 subag
 
 # fable-validate
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Delegate issue validation to a **Fable 5** subagent, then act on its verdict in the main agent. The subagent only validates — it never edits files or the issue; the main agent handles all follow-on actions.
 
 ## Input

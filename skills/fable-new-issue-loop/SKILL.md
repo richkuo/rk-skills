@@ -5,6 +5,8 @@ description: Use when the user asks to have a Fable 5 subagent draft and file a 
 
 # fable-new-issue-loop
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5 subagent drafts the issue, the main agent files it, and the loop drives it to a reviewed PR without a human in between. Identical to new-issue-loop except the front of the chain is fable-new-issue.
 
 **Do not skip filing a complete issue.** The downstream loop validates and implements *the issue text* — a thin or unverified draft propagates straight into the PR. Every step of fable-new-issue still runs (subagent drafting, duplicate gate, spot-check, filing); only the "offer next steps and wait" step is replaced by the handoff.

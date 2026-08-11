@@ -3,9 +3,11 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-// AGENTS.md is the Codex-harness rendition of CLAUDE.md. The two files must be
-// line-for-line identical except for these harness substitutions. Any other
-// difference is drift: a rule landed in one file and not the other.
+// AGENTS.md is the non-Claude rendition of CLAUDE.md — Codex and Cursor both
+// read AGENTS.md, so a line naming one specific harness is usually wrong there
+// and neutral wording is preferred. The two files must be line-for-line
+// identical except for these harness substitutions. Any other difference is
+// drift: a rule landed in one file and not the other.
 const SUBSTITUTIONS = [
   { from: 'CLAUDE.md', to: 'AGENTS.md' },
   { from: 'Claude Code', to: 'Codex' },

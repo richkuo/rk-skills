@@ -3,3 +3,10 @@
 *.orig
 __pycache__/
 *.pyc
+
+# Agent worktrees: Claude Code's EnterWorktree writes into .claude/worktrees,
+# Cursor and Codex sessions create their own under .worktrees (see CLAUDE.md).
+.worktrees/
+.claude/worktrees/
+.cursor/worktrees/
+.codex/worktrees/

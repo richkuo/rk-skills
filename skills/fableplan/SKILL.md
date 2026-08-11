@@ -5,6 +5,8 @@ description: Use when the user wants a task planned by a Fable 5 planning subage
 
 # fableplan
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Delegate planning to a **Fable 5** Plan subagent, then build from its plan in the main agent. The main agent does the building — the subagent only plans.
 
 ## Input
@@ -93,24 +95,24 @@ The plan is now safely posted to the issue regardless of what happens next — d
 
 Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task, prefixed with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
 
-**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the tracked cwd; it uses the name verbatim, adding no prefix itself). It branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default) — set to `head` it branches from the local HEAD, which may be stale — so fetch first and verify the base after:
+**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the tracked cwd). It branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default) — set to `head` it branches from the local HEAD, which may be stale — so fetch first and verify the base after:
 
 ```
 git fetch origin <default-branch>
 EnterWorktree(name: "cc/fableplan/<short-task-name>")
-git -C .claude/worktrees/cc/fableplan/<short-task-name> rev-parse HEAD origin/<default-branch>   # the two SHAs must match
+git -C <reported-worktree-path> rev-parse HEAD origin/<default-branch>   # the two SHAs must match
 ```
 
-Anchor the check (and any reset) with `-C <worktree-path>` — cwd doesn't reliably persist between Bash calls, and an unanchored command in the original checkout would misreport or, worse, destroy uncommitted work there. If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
+**`EnterWorktree` normalises the name rather than using it verbatim** — it has been observed to replace `/` with `+` and to prefix the branch with `worktree-`. Take `<reported-worktree-path>` from the tool's own result and the branch from `git branch --show-current`; never rebuild either from the name you passed. Anchor the check (and any reset) with `-C <worktree-path>` — cwd doesn't reliably persist between Bash calls, and an unanchored command in the original checkout would misreport or, worse, destroy uncommitted work there. If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
 
-**On Cursor or Codex** (no `EnterWorktree` tool), create it by hand — the coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
+**On Cursor or Codex** (no `EnterWorktree` tool), create it by hand under the repo's harness-neutral `.worktrees/` directory — never write into `.claude/`, which belongs to another agent. The coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
 
 ```
 git fetch origin <default-branch>
-git worktree add ../<repo>-fableplan-cursor-<short-task-name> -b cursor/fableplan/<short-task-name> origin/<default-branch>
+git worktree add .worktrees/cursor/fableplan/<short-task-name> -b cursor/fableplan/<short-task-name> origin/<default-branch>
 ```
 
-(swap `cursor` for `codex` on Codex), then `cd` into it and re-verify `pwd` before later steps — shell state doesn't persist between Bash calls.
+(swap `cursor` for `codex` on Codex), then `cd` into it and re-verify `pwd` before later steps — shell state doesn't persist between Bash calls. Add `.worktrees/` to the repo's `.gitignore` if it is missing.
 
 Do all of step 8's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
 

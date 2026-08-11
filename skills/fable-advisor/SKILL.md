@@ -5,6 +5,8 @@ description: Use when the user wants a task executed by the current session mode
 
 # fable-advisor
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Execute a task in the main agent (the **executor**) with a persistent **Fable 5 advisor** subagent overseeing it. The advisor plans and advises; the executor builds. A **separate fresh Fable 5 reviewer** — never the advisor — issues the binding pre-commit verdict, so the plan's author never grades its own implementation.
 
 When the task is a **GitHub issue**, the executor runs `work-on-issue`'s build-and-ship pipeline (gates, worktree, red → green verification, staging discipline, PR conventions, guardrail table) with the advisor and reviewer layered around it — `work-on-issue` stays the single source of truth for that pipeline, so any future hardening of it applies here too. **Issue-less prose tasks** take a lighter standalone path.

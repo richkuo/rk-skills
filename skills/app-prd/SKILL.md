@@ -47,7 +47,7 @@ Structure (adapt section names to the product, keep the skeleton):
 
 ### 4. Land it
 
-Worktree off latest `origin/main`, branch `cc/prd`, commit `PRD.md`, push, open a PR. Attribution footer on the PRD file itself, the commit, and the PR body (`Created`).
+Worktree off latest `origin/main`, branch `<agent>/prd` — the coding-agent prefix from `CLAUDE.md`/`AGENTS.md`: `cc/` on Claude Code, `cursor/` on Cursor, `codex/` on Codex — commit `PRD.md`, push, open a PR. Attribution footer on the PRD file itself, the commit, and the PR body (`Created`).
 
 ### 5. Iterate on the same PR
 

@@ -66,22 +66,22 @@ If `baseRefs` is absent, the resolved worktree base is `origin/<default>` as bef
 
 ### 1.1 Create the isolated worktree
 
-- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
+- **If validate-issue already entered a worktree for this issue this session** (cwd is under a `…/worktrees/…/issue-<N>-…` path), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
 - **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the session cwd in one step):
 
 ```
 EnterWorktree(name: "cc/issue-<N>-<slug>")
 ```
 
-Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. EnterWorktree starts from its configured base; when `baseRefs` is present, immediately move the brand-new, commit-free branch to the first verified SHA with an anchored `git -C <worktree-path> reset --hard <resolved-first-sha>`. Never do this to a re-entered worktree.
+Pass the name **with** the `cc/` prefix so the agent identifier survives into the branch. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. **`EnterWorktree` normalises the name rather than using it verbatim** — it has been observed to replace `/` with `+` and to prefix the branch with `worktree-`, so `cc/issue-873-…` can land as branch `worktree-cc+issue-873-…`. Never assume the branch equals the name you passed: read the tool's reported path and `git branch --show-current`, and use those actual values everywhere later steps need the branch or path. EnterWorktree starts from its configured base; when `baseRefs` is present, immediately move the brand-new, commit-free branch to the first verified SHA with an anchored `git -C <worktree-path> reset --hard <resolved-first-sha>`. Never do this to a re-entered worktree.
 
-- **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
+- **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing branch and directory by hand — `cursor/` or `codex/` respectively. Put it under the repo's harness-neutral `.worktrees/` directory; never write into `.claude/`, which belongs to another agent:
 
 ```bash
-git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> <resolved-base>
+git worktree add .worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<slug> <resolved-base>
 ```
 
-(swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
+(swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps. Here the branch **is** the name you passed, so no re-reading is needed. Add `.worktrees/` to the repo's `.gitignore` if it is missing, so a worktree is never committed.
 
 If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
 

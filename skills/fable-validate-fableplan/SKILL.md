@@ -5,6 +5,8 @@ description: Use when the user asks to validate a GitHub issue with Fable 5 and 
 
 # fable-validate-fableplan
 
+> **Harness:** Claude Code only. This skill dispatches a subagent pinned to the **Fable 5** model, which Codex and Cursor do not offer. On those harnesses, run the non-Fable counterpart instead: `new-issue`, `validate-issue`, `work-on-issue`, and their `-loop` variants cover the same pipeline without a Fable stage.
+
 Chain fable-validate → (conditional) update issue → fableplan into one autonomous run, and stop there: Fable 5 validates the issue, the main agent fixes the issue description if needed, and Fable 5 plans the implementation. The vetted plan is posted to the issue as a comment. **Nothing is built.**
 
 This is **fable-validate-fableplan-loop with the implementation stage removed** — the head of that chain is identical (same validation, same scope gate, same issue edits, same unconditional Fable plan), but the handoff to `work-on-issue-loop` is dropped. Reach for this when you want the issue fact-checked, corrected, and planned so a human (or a later run) can decide what to do with the plan. When the plan should be built and driven through review in the same run, use `fable-validate-fableplan-loop` instead.

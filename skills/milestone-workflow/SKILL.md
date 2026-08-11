@@ -5,6 +5,8 @@ description: Use when the user wants a milestone of Execution-block-stamped GitH
 
 # milestone-workflow
 
+> **Harness:** Claude Code only. This skill drives the **Workflow** tool, which Codex and Cursor do not offer.
+
 Turn a reviewed milestone into a running multi-agent pipeline. Static plan, dependency-aware dispatch: the dependency graph is decided here with the user; execution waits for stable predecessor results and builds hard-dependent work from their reviewed code. With merging on (the default when review loops run), no subagent ever merges: at each LGTM the run pauses as `awaiting_merge`, the orchestrating session merges that PR in-session (squash at green CI, branch deleted, issue closed), then resumes the run with the merge recorded in `args.merged` — successors build from the updated base branch. When every issue merges, the run defers the release and the orchestrator runs `sync-docs-release` in-session.
 
 For a read-only look at the milestone before committing to a run — a single table of what routing is stamped on each issue (complexity, dependencies, validate/build model and effort, fableplan, plan effort, first review) — use `milestoneplan` first. It reads without editing anything, then hands off here.
