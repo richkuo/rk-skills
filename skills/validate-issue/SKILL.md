@@ -269,6 +269,14 @@ A high complexity score is not automatically a defect — a single hard change c
 
 A genuinely-large-but-atomic change (one root cause, one inseparable diff) is **not** too large — the high score already tells the story; only flag when the parts are independently landable.
 
+**Split gates — flag a split/umbrella only when EVERY gate passes:**
+
+1. **Separable** — each part lands in its own PR, passes its own tests, and delivers value alone (the test above).
+2. **Size floor** — each part alone would score **≥ C41** under the step 6 formula. Fold smaller parts into the parent as checklist lines or "Runs after" follow-ups; a mechanical migration or cross-repo client sync below the floor never justifies its own issue.
+3. **Overhead test** — at least one holds: the combined diff would exceed one comfortable review pass (roughly 500 changed lines, an estimate); the parts route to different models or effort tiers; or one part carries safety risk (money, data integrity, security) and the others do not.
+
+Keep the issue as ONE when any gate fails, when one root cause ties the parts, or when the parts share a design that must change together (e.g. a contract plus all its consumers). These gates are conservative by design — mid-band issues almost always stay whole; splits belong to top-band umbrellas whose parts are each substantial.
+
 When it IS too large, recommend exactly one disposition (state which and why in the output):
 
 | Disposition | Use when | Action to recommend |
