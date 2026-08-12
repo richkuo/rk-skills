@@ -265,21 +265,29 @@ Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); 
 
 ### 6.5. Scope disposition — is the issue too large to be ONE issue?
 
-A high complexity score is not automatically a defect — a single hard change can be correctly scoped. The defect is when one issue **bundles work that should be tracked as several**. Decide from the traced edit list (step 6), not the prose: an issue is too large when **the deliverables are separable** — two or more parts each land in their own PR, pass their own tests, and deliver value alone — **or** it reads as an "and also" laundry list spanning unrelated subsystems with no single root cause tying them.
+A high complexity score is not automatically a defect — a single hard change can be correctly scoped. The defect is when one issue **bundles work that should be tracked as several**. Decide from the traced edit list (step 6), not the prose. Two patterns make an issue a **split candidate**: **the deliverables are separable** — two or more parts each land in their own PR, pass their own tests, and deliver value alone — **or** it reads as an "and also" laundry list spanning unrelated subsystems with no single root cause tying them. A candidate becomes a Split/Umbrella recommendation only when it also passes the split gates below — **the gates win**: a laundry list whose parts all fall below the size floor stays ONE issue, restructured as a checklist inside its own body (same keep-as-ONE fold emit as gate 2).
 
 A genuinely-large-but-atomic change (one root cause, one inseparable diff) is **not** too large — the high score already tells the story; only flag when the parts are independently landable.
+
+**Split gates — recommend the Split or Umbrella disposition only when EVERY gate passes.** The gates govern only those two dispositions; **Narrow scope** files no new issue and stays available regardless of the gates.
+
+1. **Separable** — each part lands in its own PR, passes its own tests, and delivers value alone (the test above).
+2. **Size floor** — first fold every part scoring below **C41** (step 6 formula) into the parent as checklist lines; a mechanical migration or cross-repo client sync below the floor never justifies its own issue. The gate then passes when **two or more remaining parts each score ≥ C41**; with fewer than two substantial parts, the issue stays ONE and the satellites stay folded. Whenever this step keeps the issue as ONE and folded any part into checklist lines — an all-below-floor laundry list, or a mixed candidate with fewer than two remaining substantial parts — emit the Scope section as `OK — restructure as in-body checklist` with the proposed lines, and set **Update issue description? Yes**; when the body is already that checklist, omit the Scope section. A folded satellite must keep a surviving home under every disposition: when any part was folded, recommend **Umbrella** (the parent survives as the tracker) — never Split, which closes the parent and would discard the folded work. The floor is deliberate even for purely mechanical work: a part with Risk ≤ 1, Uncertainty ≤ 1, and Coupling ≤ 2 tops out at C20 under the formula, so large low-risk grinds stay in one issue by design.
+3. **Overhead test** — at least one holds: the combined diff would exceed one comfortable review pass (roughly 500 changed lines, an estimate); the parts land in different score bands of the step 6 routing matrix; or one part carries safety risk (money, data integrity, security) and the others do not.
+
+Keep the issue as ONE (no Split, no Umbrella) when any gate fails, or when one root cause ties the parts so they cannot land independently. A shared design that must ship as one diff fails gate 1 and stays ONE. Do not apply this keep-as-ONE rule when every gate passes — those cases take Split or Umbrella from the table. These gates are conservative by design — mid-band issues almost always stay whole; splits belong to top-band umbrellas whose parts are each substantial.
 
 When it IS too large, recommend exactly one disposition (state which and why in the output):
 
 | Disposition | Use when | Action to recommend |
 |-------------|----------|---------------------|
-| **Split into N issues** | Parts are independent — no shared design, no ordering dependency, each separately landable | File each as its own fully-specified issue, then close/repurpose this one. List the proposed splits with a one-line scope each. |
-| **Umbrella / tracking issue** | Parts are related and need coordinated design or a shared sequence, but are still individually shippable | Keep THIS issue as the parent; convert its body to a checklist of child issues (`- [ ] #…`), move per-part detail into the children. List the proposed children. |
+| **Split into N issues** | Parts are independent — no shared design, no ordering dependency, each separately landable — and gate 2 folded nothing (a folded satellite forces Umbrella) | File each as its own fully-specified issue, then close/repurpose this one. List the proposed splits with a one-line scope each. |
+| **Umbrella / tracking issue** | Parts are individually shippable and need coordinated design or a shared sequence (e.g. a compatible contract plus its consumers); **or** gate 2 folded a satellite, so the parent survives as the tracker even when the remaining parts are independent | Keep THIS issue as the parent; convert its body to a checklist of child issues (`- [ ] #…`), move per-part detail into the children. List the proposed children. |
 | **Narrow scope** | Much of the issue is speculative/optional/"nice to have" around one real core | Cut to the core deliverable; move the rest to a "Future / out of scope" note or a single follow-up. Name the core vs what's cut. |
 
 **Each proposed split/child is itself fully specified — never recommend filing a stub.** Per the repo's issue rules, every spun-off issue needs its own complexity-prefixed plain-simple-English title (a clear sentence in ASD-STE100, no unexplained jargon), problem statement, and acceptance criteria before it's filed. If a part isn't ready to spec, recommend tracking it as a checklist line in the parent, not a separate issue yet. Don't actually file the children during validation — propose them; filing happens only if the user says to act on the disposition.
 
-This decision is **independent of "Update issue description?"** — an issue can be factually accurate (verdict: No update) yet still need to be split. Surface both.
+This decision is **independent of "Update issue description?"** — an issue can be factually accurate (verdict: No update) yet still need to be split. Surface both. In-body checklist restructuring is itself a description edit, so it sets Yes; the verdict line still reads `Scope: OK` so autonomous loops do not treat it as too large.
 
 ### 7. Output verdict
 
@@ -305,8 +313,8 @@ Proposal:
 - Goal (plain simple English in ASD-STE100 per the CLAUDE.md/AGENTS.md Response Style rules, ≤55 words): <plain-simple-English summary of what the issue is trying to accomplish — outcome, not mechanism>
 - <✅|⚠️|❌> <lifetime/population/benefit/consumer/failure — one line each only when not ✅> (omit this verdict line if no step 5c / trivial fix)
 
-Scope: (omit unless the issue is too large per step 6.5)
-- <Split | Umbrella | Narrow> — <one-line why> · proposed parts:
+Scope: (omit unless the issue is too large per step 6.5, or step 6.5 recommends in-body checklist restructuring)
+- <Split | Umbrella | Narrow | OK — restructure as in-body checklist> — <one-line why> · proposed parts:
   - <part 1 — one-line scope>
   - <part 2 — one-line scope>
 
@@ -361,7 +369,7 @@ Rules:
 - No restatement of the issue title or body.
 - Each claim/concern fits on one line. If you need more, the claim is too broad — split it.
 - Drop the Concerns section entirely when there are none. Don't write "None."
-- **Yes** when any ❌/⚠️ **claim** affects the fix, the description states wrong behavior, repro/scope is missing, **step 5a is ⚠️/❌**, **step 5c is ⚠️/❌** (proposal contradicts itself or omits failure/deploy/consumer scope), or a **material 5b finding** (safety gap, conflict/regression with recent work, missing parity surface) means the proposal as written shouldn't be implemented. **No** when claims are ✅, architecture, proposal consistency, and general checks are clean (or trivial/local), the problem statement is accurate, and there's enough context to start work.
+- **Yes** when any ❌/⚠️ **claim** affects the fix, the description states wrong behavior, repro/scope is missing, **step 5a is ⚠️/❌**, **step 5c is ⚠️/❌** (proposal contradicts itself or omits failure/deploy/consumer scope), a **material 5b finding** (safety gap, conflict/regression with recent work, missing parity surface) means the proposal as written shouldn't be implemented, or **step 6.5 recommends in-body checklist restructuring** (the body is not already that checklist). **No** when claims are ✅, architecture, proposal consistency, and general checks are clean (or trivial/local), the problem statement is accurate, there's enough context to start work, and step 6.5 does not require a body restructure.
 - Keep claim descriptions short — verb phrase only, no full sentences.
 
 ## Red Flags — STOP
