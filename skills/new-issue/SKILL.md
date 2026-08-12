@@ -54,7 +54,7 @@ From the score, also fix the **fableplan signal**: `fableplan: yes` when the sco
 
 ### 5. Scope check — one issue or several?
 
-If the deliverables are separable — parts that each land in their own PR, pass their own tests, and deliver value alone — apply the **split gates in `validate-issue` step 6.5** (size floor and overhead test; that step is the single owner of the split policy, for creation and validation alike). When every gate passes, file the core issue and tell the user which parts warrant their own issues (each fully specified before filing — never stubs). When any gate fails, keep the parts in one issue as a checklist.
+If the deliverables are separable — parts that each land in their own PR, pass their own tests, and deliver value alone — apply the **split gates in `validate-issue` step 6.5** (size floor and overhead test; that step is the single owner of the split policy, for creation and validation alike). When every gate passes, file the core issue and tell the user which parts warrant their own issues (each fully specified before filing — never stubs). Otherwise fold sub-floor parts into the parent as checklist lines and keep one issue.
 
 ### 6. Compose and file
 
