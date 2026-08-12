@@ -265,17 +265,17 @@ Work the axes in scratch; **report only** `N/100 — Capability <k> (<driver>); 
 
 ### 6.5. Scope disposition — is the issue too large to be ONE issue?
 
-A high complexity score is not automatically a defect — a single hard change can be correctly scoped. The defect is when one issue **bundles work that should be tracked as several**. Decide from the traced edit list (step 6), not the prose: an issue is too large when **the deliverables are separable** — two or more parts each land in their own PR, pass their own tests, and deliver value alone — **or** it reads as an "and also" laundry list spanning unrelated subsystems with no single root cause tying them.
+A high complexity score is not automatically a defect — a single hard change can be correctly scoped. The defect is when one issue **bundles work that should be tracked as several**. Decide from the traced edit list (step 6), not the prose. Two patterns make an issue a **split candidate**: **the deliverables are separable** — two or more parts each land in their own PR, pass their own tests, and deliver value alone — **or** it reads as an "and also" laundry list spanning unrelated subsystems with no single root cause tying them. A candidate becomes a Split/Umbrella recommendation only when it also passes the split gates below — **the gates win**: a laundry list whose parts all fall below the size floor stays ONE issue, restructured as a checklist inside its own body.
 
 A genuinely-large-but-atomic change (one root cause, one inseparable diff) is **not** too large — the high score already tells the story; only flag when the parts are independently landable.
 
-**Split gates — flag a split/umbrella only when EVERY gate passes:**
+**Split gates — recommend the Split or Umbrella disposition only when EVERY gate passes.** The gates govern only those two dispositions; **Narrow scope** files no new issue and stays available regardless of the gates.
 
 1. **Separable** — each part lands in its own PR, passes its own tests, and delivers value alone (the test above).
-2. **Size floor** — each part alone would score **≥ C41** under the step 6 formula. Fold smaller parts into the parent as checklist lines or "Runs after" follow-ups; a mechanical migration or cross-repo client sync below the floor never justifies its own issue.
-3. **Overhead test** — at least one holds: the combined diff would exceed one comfortable review pass (roughly 500 changed lines, an estimate); the parts route to different models or effort tiers; or one part carries safety risk (money, data integrity, security) and the others do not.
+2. **Size floor** — each part alone would score **≥ C41** under the step 6 formula. Fold smaller parts into the parent as checklist lines; a mechanical migration or cross-repo client sync below the floor never justifies its own issue. The floor is deliberate even for purely mechanical work: a part with Risk ≤ 1, Uncertainty ≤ 1, and Coupling ≤ 2 tops out at C20 under the formula, so large low-risk grinds stay in one issue by design.
+3. **Overhead test** — at least one holds: the combined diff would exceed one comfortable review pass (roughly 500 changed lines, an estimate); the parts land in different score bands of the step 6 routing matrix; or one part carries safety risk (money, data integrity, security) and the others do not.
 
-Keep the issue as ONE when any gate fails, when one root cause ties the parts, or when the parts share a design that must change together (e.g. a contract plus all its consumers). These gates are conservative by design — mid-band issues almost always stay whole; splits belong to top-band umbrellas whose parts are each substantial.
+Keep the issue as ONE (no Split, no Umbrella) when any gate fails, when one root cause ties the parts, or when the parts share a design that must change together (e.g. a contract plus all its consumers). These gates are conservative by design — mid-band issues almost always stay whole; splits belong to top-band umbrellas whose parts are each substantial.
 
 When it IS too large, recommend exactly one disposition (state which and why in the output):
 
