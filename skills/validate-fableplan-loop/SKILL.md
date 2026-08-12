@@ -19,7 +19,7 @@ Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 ### 1. Run validate-issue
 
-Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 7 — and produce its verdict block:
+Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 8 — and produce its verdict block:
 
 ```
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
@@ -33,7 +33,7 @@ Check the verdict's **Scope** field, **Architecture** section, and **Concerns** 
 
 | Condition | Action |
 |---|---|
-| `Scope: too large` (validate-issue step 6.5 flagged split / umbrella / narrow) | **STOP.** Report the disposition and proposed parts; do not proceed to planning or work-on-issue-loop. Implementing a multi-part issue as one PR reproduces the scope problem in the diff — that needs a human call on how to split it. |
+| `Scope: too large` (validate-issue step 7 flagged split / umbrella / narrow) | **STOP.** Report the disposition and proposed parts; do not proceed to planning or work-on-issue-loop. Implementing a multi-part issue as one PR reproduces the scope problem in the diff — that needs a human call on how to split it. |
 | Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; planning and implementing a design the validation itself rejected would ship the wrong fix. |
 | A **merged** PR already implements the fix (verdict recommends closing/repurposing the issue) | **STOP.** Report the PR and the close/repurpose recommendation — there's nothing left to implement. |
 | An **open** PR is already addressing the issue (named under Concerns) | **STOP.** Report the overlapping PR; whether to supersede, join, or wait on in-flight work is a human call — auto-implementing duplicates it. |
@@ -42,7 +42,7 @@ Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already a
 
 ### 3. Apply the update-issue edits, if called for
 
-If the verdict says **Update issue description? Yes**, apply validate-issue's step 8 now — the suggested title/body edits plus the stacked `Updated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
+If the verdict says **Update issue description? Yes**, apply validate-issue's step 11 now — the suggested title/body edits plus the stacked `Updated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
 
 If **No**, skip straight to step 4.
 

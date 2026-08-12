@@ -44,7 +44,7 @@ Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already a
 
 ### 3. Apply the update-issue edits, if called for
 
-If the verdict says **Update issue description? Yes**, apply the suggested title/body edits now per fable-validate step 5 / validate-issue step 8 — claim-verification gate, final consistency pass, and the stacked attribution line (`Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate-fableplan`) — from the current checkout (no worktree for issue edits).
+If the verdict says **Update issue description? Yes**, apply the suggested title/body edits now per fable-validate step 5 / validate-issue step 11 — claim-verification gate, final consistency pass, and the stacked attribution line (`Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate-fableplan`) — from the current checkout (no worktree for issue edits).
 
 If **No**, skip straight to step 4.
 

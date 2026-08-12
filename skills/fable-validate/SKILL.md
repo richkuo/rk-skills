@@ -39,9 +39,9 @@ Do not validate the issue yourself first — the subagent owns the validation. S
 - `description`: `Validate issue #<N>` (or `Validate latest issue`)
 - `prompt`: hand it everything needed to validate independently:
   - The issue reference exactly as the user gave it (or "no issue referenced — resolve the latest open issue per the procedure"), plus the working directory.
-  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 7 exactly** — baseline resolution, fetch with `--comments` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5c/5b proposal checks, complexity score, scope disposition, and the step-7 verdict format.
-  - It must STOP at step 7: no step 7.5/8 actions, no `gh issue edit`, no comments posted, no file edits — including via Bash (it lacks Edit/Write but still has Bash, so state this explicitly).
-  - Return the complete step-7 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against.
+  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, fetch with `--comments` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
+  - It must STOP at step 8: no step 9/10/11 actions, no `gh issue edit`, no comments posted, no file edits — including via Bash (it lacks Edit/Write but still has Bash, so state this explicitly).
+  - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against.
 
 The subagent's final message comes back as the tool result; it is not shown to the user.
 
@@ -57,15 +57,15 @@ Before presenting it, spot-check the verdict's load-bearing findings against the
 
 ### 4. Relay the verdict to the user
 
-Present the vetted verdict in the validate-issue step-7 format, noting it was produced by Fable 5 and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
+Present the vetted verdict in the validate-issue step-8 format, noting it was produced by Fable 5 and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
 
 ### 5. Follow-on actions (main agent)
 
 Handle the user's reply per the validate-issue procedure — these are main-agent actions, never re-delegated:
 
-- **"update issue"** → apply the suggested title/body edits per validate-issue step 8, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate` (stack under any existing footer lines per step 8; a repo CLAUDE.md footer format overrides).
-- **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 7.5, surfacing any step-6.5 scope disposition first.
-- **"split issue" / "decompose"** → file the proposed parts per validate-issue step 6.5, each fully specified.
+- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate` (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
+- **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
+- **"split issue" / "decompose"** → file the proposed parts per validate-issue step 7, each fully specified.
 
 ## Notes
 

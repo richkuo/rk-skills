@@ -48,13 +48,13 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 ### 4. Score complexity
 
-Score the work to implement the fix **correctly, including tests** using the **canonical formula in `validate-issue` step 6** (load that skill or mirror it exactly): five axes 0–4 → **Capability** (0–3 from Risk/Uncertainty + Coupling≥3 bump) and **Volume** (0–24 from Scope+Coupling+Verification) → `score = 25 × Capability + Volume`. The score is a **model + effort routing signal**, not a time estimate — never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
+Load and apply the canonical score formula and routing table in `validate-issue` step 6. Do not restate or approximate them here. The score is a **model + effort routing signal**. It is not a time estimate; never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
 From the score, also fix the **fableplan signal**: `fableplan: yes` when the score is ≥ 61 (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); `no` below 61, which needs no separate plan. It goes on the rationale line in step 6 — always explicit, never omitted.
 
 ### 5. Scope check — one issue or several?
 
-If the deliverables are separable — parts that each land in their own PR, pass their own tests, and deliver value alone — apply the **split gates in `validate-issue` step 6.5** (size floor and overhead test; that step is the single owner of the split policy, for creation and validation alike). When every gate passes, file the core issue, fold any sub-floor satellites into it as checklist lines (the filed core issue is their surviving home), and tell the user which substantial parts warrant their own issues (each fully specified before filing — never stubs). Otherwise fold sub-floor parts into the parent as checklist lines and keep one issue.
+If the deliverables are separable — parts that each land in their own PR, pass their own tests, and deliver value alone — apply the **split gates in `validate-issue` step 7** (size floor and overhead test; that step is the single owner of the split policy, for creation and validation alike). When every gate passes, file the core issue, fold any sub-floor satellites into it as checklist lines (the filed core issue is their surviving home), and tell the user which substantial parts warrant their own issues (each fully specified before filing — never stubs). Otherwise fold sub-floor parts into the parent as checklist lines and keep one issue.
 
 ### 6. Compose and file
 
