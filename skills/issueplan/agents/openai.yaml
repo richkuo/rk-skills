@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Plan"
+  short_description: "Plan and build issues in the current session"
+  default_prompt: "Use $issueplan to plan and build this issue in the current session."
