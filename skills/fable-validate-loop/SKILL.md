@@ -54,7 +54,7 @@ If **No**, skip straight to step 4.
 
 Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. **Do NOT execute fableplan's steps 7–8 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
 
-Give the planning subagent the validation verdict (the scratchpad copy from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5b concerns).
+Give the planning subagent the validation verdict (the scratchpad copy from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns).
 
 Keep the vetted plan's scratchpad file — step 5 passes it through. If fableplan fails after its internal retry, stop and report; don't fall back to planning yourself or implementing unplanned.
 

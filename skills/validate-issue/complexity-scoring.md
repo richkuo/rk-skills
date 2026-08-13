@@ -34,9 +34,9 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 
 - Fable 5 has a high-effort ceiling and never runs at xhigh.
 - Fable is never the default builder. A Fable build requires explicit user direction.
-- The first review uses the standard trigger at scores 0–20, Opus 5 at 21–80, and Fable 5 high at 81–99.
+- Derive the first-review trigger and model from the main skill's band table.
 - After a Fable first review, all blocking re-reviews use the standard reviewer. Fable does not repeat.
-- In subagent mode, scores 0–20 inherit the session reviewer; Sonnet appears only for a cheaper non-blocking re-review.
+- In subagent mode, bands with the standard trigger inherit the session reviewer; Sonnet appears only for a cheaper non-blocking re-review.
 - A missing score routes as the highest band because its complexity is unknown.
 
 When validation produces a higher score band than the issue title, revalidate once on the higher route and replace all stale routing stamps. Never lower routing from a validator rescore. Safety carve-outs for money, data integrity, security, and auto-protective logic always force the capable path when Risk was under-scored.

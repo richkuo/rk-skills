@@ -55,6 +55,12 @@ const STEP_LABEL_CONSUMERS = [
   ['tests/complexity-score.test.js', ['6']],
 ]
 
+const PROPOSAL_CONCERN_CONSUMERS = [
+  'skills/fable-validate-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
+  'skills/fable-validate-fableplan-loop/SKILL.md',
+]
+
 describe('complexity score band encoding', () => {
   /** Parse golden rows from the validate-issue scoring reference so table drift fails CI. */
   function parseGoldenExamples(markdown) {
@@ -93,6 +99,23 @@ describe('complexity score band encoding', () => {
     }
   })
 
+  test('proposal concern consumers follow the current general-check label', async () => {
+    const proposalLabels = [...validateIssue.matchAll(/^#### (5[a-z])\. /gm)].map((match) => match[1])
+    const generalChecksLabel = validateIssue.match(/^#### (5[a-z])\. General checks$/m)?.[1]
+    expect(generalChecksLabel).toBeDefined()
+
+    for (const path of PROPOSAL_CONCERN_CONSUMERS) {
+      const text = await read(path)
+      expect(text, path).toContain(`${generalChecksLabel} concerns`)
+      for (const label of proposalLabels.filter((candidate) => candidate !== generalChecksLabel)) {
+        expect(text, path).not.toContain(`${label} concerns`)
+      }
+    }
+
+    const fableValidate = await read('skills/fable-validate/SKILL.md')
+    expect(fableValidate).toContain(`${proposalLabels.join('/')} proposal checks`)
+  })
+
   test('the validate-issue core stays small and delegates complete procedures', async () => {
     const [architecture, consistency, editing] = await Promise.all([
       read('skills/validate-issue/architecture.md'),
@@ -119,6 +142,12 @@ describe('complexity score band encoding', () => {
     for (const marker of ['Verify the rewrite', 'final consistency pass', 'Edit the title', 'Verify the saved issue']) {
       expect(editing).toContain(marker)
     }
+    expect(editing).toContain('harness that actually produced the edit')
+    expect(editing).toContain('GitHub Action identifier')
+    expect(editing).not.toContain('Use `Codex` for this interactive harness')
+    expect(validateIssueScoring).toContain("main skill's band table")
+    expect(validateIssueScoring).not.toMatch(/first review[^\n]*(?:0–20|21–80|81–99)/i)
+    expect(validateIssueScoring).not.toContain('scores 0–20 inherit')
   })
 
   test('golden examples in the validate-issue reference match the executable formula', () => {

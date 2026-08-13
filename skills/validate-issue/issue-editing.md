@@ -25,7 +25,7 @@ Updated with LLM: <prior model> | <effort> | Harness: <harness>
 Updated with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-Collapse exact duplicates only. When no footer exists, append the current `Updated` line. Use the model and effort that actually ran. Use `Codex` for this interactive harness unless a repository rule overrides it.
+Collapse exact duplicates only. When no footer exists, append the current `Updated` line. Use the model, effort, and harness that actually produced the edit. In continuous integration, use the GitHub Action identifier from the system prompt; its absence means the session is interactive. Use the specific interactive tool, such as Claude Code, Cursor, or Codex. A repository footer rule overrides this default.
 
 ## Verify the saved issue
 
