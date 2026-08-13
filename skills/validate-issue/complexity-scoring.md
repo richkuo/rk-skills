@@ -22,13 +22,13 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 
 #### Golden examples (consistency checklist)
 
-| Axes (S,C,R,U,V) | Capability | Volume | Score | Routing meaning |
+| Axes (S,C,R,U,V) | Capability | Volume | Score | Score rationale |
 |---|---|---|---|---|
-| (4,0,0,0,0) | 0 | 8 | **8** | Large mechanical work uses Sonnet 5 at high effort |
-| (0,0,0,4,0) | 3 | 0 | **75** | Small hard design uses a Fable plan and Opus 5 build |
-| (0,4,1,1,0) | 2 | 8 | **58** | Heavy coordination uses Opus 5 at xhigh effort |
-| (0,0,4,0,0) | 3 | 0 | **75** | Small safety work uses a Fable plan and Opus 5 build |
-| (0,0,3,0,0) | 2 | 0 | **50** | Elevated impact uses Opus 5 at xhigh effort |
+| (4,0,0,0,0) | 0 | 8 | **8** | Scope raises Volume without raising Capability |
+| (0,0,0,4,0) | 3 | 0 | **75** | Uncertainty 4 maps to Capability 3 |
+| (0,4,1,1,0) | 2 | 8 | **58** | Coupling 4 forces Capability 2 |
+| (0,0,4,0,0) | 3 | 0 | **75** | Risk 4 maps to Capability 3 |
+| (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2 |
 
 ## Routing details
 
@@ -41,4 +41,4 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 
 When validation produces a higher score band than the issue title, revalidate once on the higher route and replace all stale routing stamps. Never lower routing from a validator rescore. Safety carve-outs for money, data integrity, security, and auto-protective logic always force the capable path when Risk was under-scored.
 
-Set `fableplan: yes` for scores 61 or higher. The planner is Fable 5; the builder remains Opus 5 at high effort through 80 and xhigh from 81. Set `no` below 61.
+Derive the `fableplan` signal, planner, builder, and effort from the main skill's band table.

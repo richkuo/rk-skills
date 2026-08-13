@@ -159,6 +159,16 @@ describe('complexity score band encoding', () => {
     }
   })
 
+  test('the scoring reference leaves band outcomes in the canonical table', () => {
+    const goldenExamples = validateIssueScoring
+      .split('#### Golden examples (consistency checklist)')[1]
+      .split('## Routing details')[0]
+
+    expect(goldenExamples).not.toMatch(/Sonnet|Opus|Fable|builder|planner|effort/)
+    expect(validateIssueScoring).not.toMatch(/builder remains|through 80|from 81/)
+    expect(validateIssueScoring).toContain("Derive the `fableplan` signal, planner, builder, and effort from the main skill's band table")
+  })
+
   test('skills document the band formula and drop the old sum×5 / Risk floor', () => {
     expect(validateIssue).toContain('25 × Capability + Volume')
     expect(validateIssue).toContain('0–99 under current axis bounds')
