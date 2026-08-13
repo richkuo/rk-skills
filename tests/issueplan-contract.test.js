@@ -3,9 +3,10 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [issueplan, readme] = await Promise.all([
+const [issueplan, readme, openaiYaml] = await Promise.all([
   read('skills/issueplan/SKILL.md'),
   read('README.md'),
+  read('skills/issueplan/agents/openai.yaml'),
 ])
 
 describe('issueplan contract', () => {
@@ -28,6 +29,12 @@ describe('issueplan contract', () => {
     expect(issueplan).toContain('Build from the plan')
   })
 
+  test('discloses the no-issue build path', () => {
+    expect(issueplan).toContain('Without an issue, it builds and opens a pull request after presenting the plan.')
+    expect(issueplan).toContain('For a task with no issue, continue directly into worktree creation, implementation, and pull request creation')
+    expect(readme).toContain('A prose task proceeds to implementation and a PR after the plan.')
+  })
+
   test('attributes the plan to the active session', () => {
     expect(issueplan).toContain('Created with LLM: <current session model> | <current session effort> | Harness: issueplan')
     expect(issueplan).toContain('Never infer unavailable attribution values.')
@@ -36,5 +43,17 @@ describe('issueplan contract', () => {
   test('is documented in the skill catalog', () => {
     expect(readme).toContain('| `issueplan` |')
     expect(readme).toMatch(/issueplan.*current session/is)
+  })
+
+  test('ships valid Codex agent metadata', () => {
+    const metadata = Bun.YAML.parse(openaiYaml)
+
+    expect(metadata).toEqual({
+      interface: {
+        display_name: 'Issue Plan',
+        short_description: 'Plan and build tasks in the current session',
+        default_prompt: 'Use $issueplan to plan and build this task in the current session.',
+      },
+    })
   })
 })

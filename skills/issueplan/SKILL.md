@@ -1,6 +1,7 @@
 ---
 name: issueplan
-description: Use when the user wants the current large language model to plan a task in the same session before building it. Produces and checks an implementation plan without a subagent, posts it when a GitHub issue is referenced, then asks whether to continue building. Trigger on "/issueplan", "issueplan this", or "plan this issue in this session".
+description: >-
+  Use when the user wants the current large language model to plan and build a task in the same session without a subagent. When an issue is referenced, it posts the plan and asks whether to build. Without an issue, it builds and opens a pull request after presenting the plan. Trigger on "/issueplan", "issueplan this", or "plan this issue in this session".
 ---
 
 # issueplan
@@ -97,13 +98,15 @@ Show the checked plan to the user. Include the issue comment URL when step 4 pos
 
 State any attribution limitation or repository constraint that affects the plan.
 
-### 6. Ask whether to build when an issue was referenced
+### 6. Confirm issue builds or continue prose tasks
 
 Ask whether to continue building or stop after the posted plan. Use the harness question tool when one is available.
 
 End the workflow when the user stops. They can resume later with `work-on-issue`.
 
-Continue directly when the user gave no issue. Ask first only when the plan exposes a required product decision or unsafe ambiguity.
+For a task with no issue, continue directly into worktree creation, implementation, and pull request creation after presenting the checked plan.
+
+Ask first only when the plan exposes a required product decision or unsafe ambiguity.
 
 ### 7. Create an isolated git worktree
 
