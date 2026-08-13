@@ -34,6 +34,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 | `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
 | `work-on-issue` | Implements an issue end-to-end: scans the issue thread for a posted implementation plan and builds to it (newest wins; deviations must be named in the PR), in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. |
 | `work-on-issue-loop` | Runs `work-on-issue`, requests a code review, then keeps fixing whatever the review finds until the PR gets an approval ("LGTM" — looks good to me). |
+| `issueplan` | Uses the current session's LLM to plan and build a task without a subagent. For an issue, it posts the plan and asks whether to build. A prose task proceeds to implementation and a PR after the plan. |
 
 ### PR review skills
 
