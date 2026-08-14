@@ -279,16 +279,22 @@ jobs:
 
       # The agent cannot post: it has no network and no write credential. This
       # trusted step posts its final message with the job token, using
-      # --body-file so the model output is never shell-evaluated.
+      # --body-file so the model output is never shell-evaluated. The appended
+      # run link is what downstream comment selection and merge recency gates
+      # resolve the review through, matching codex-run.yml.
       - name: Post the Codex review comment
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number }}
           OUTPUT_FILE: ${{ runner.temp }}/codex-review.md
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ ! -s "$OUTPUT_FILE" ]; then
             echo "::error::Codex produced no review output — nothing to post."
             exit 1
           fi
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$OUTPUT_FILE"
+          BODY_FILE="$RUNNER_TEMP/codex-review-comment.md"
+          cp "$OUTPUT_FILE" "$BODY_FILE"
+          printf '\n\n[Codex run log](%s)\n' "$RUN_URL" >> "$BODY_FILE"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$BODY_FILE"

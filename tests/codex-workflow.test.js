@@ -262,4 +262,19 @@ describe('Codex workflow bundle', () => {
     // worth of wording in two places and cannot drift.
     expect(codexPrompt).toBe(claudePrompt)
   })
+
+  test('the minimal review template appends the run link the merge gates key on', async () => {
+    // fix-pr-review-loop / work-on-issue-loop select a Codex review comment by
+    // its /actions/runs/<run-id> link, and milestone-workflow's merge recency
+    // gate only accepts comments carrying one — a template without it makes
+    // every merge unapprovable.
+    const minimalReview = await read('templates/codex-review.yml')
+    expect(minimalReview).toContain(
+      'RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+    )
+    const block = stepRunBlock(minimalReview, 'Post the Codex review comment')
+    expect(block).toBeTruthy()
+    expect(block).toContain("printf '\\n\\n[Codex run log](%s)\\n' \"$RUN_URL\"")
+    expect(block).toContain('--body-file "$BODY_FILE"')
+  })
 })

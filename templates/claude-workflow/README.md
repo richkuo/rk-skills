@@ -92,7 +92,8 @@ parses the `docs-release/*` branch name.
 | `@claude review` | PR review (read-only contract, `LGTM` / `Needs Updates` format) | No |
 | `@claude <anything else>` on a PR | fix-pr: re-validate all unaddressed review feedback, fix what survives, fold in any comment text as additional scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@claude <anything>` on an issue | implement: validate → implement → PR via the issue-workflow prompt | Yes |
-| `@claude sync docs` / `create release` / `sync release` | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@claude sync-docs` / `@claude create-release` (hyphenated — the classifier does not match `sync docs` / `create release` with a space) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@claude sync-release` | docs/release flow — only after your repo adds `sync-release` to the vendored `claude.yml` candidate list (see the `flow` note above); the template does not detect it by default | Scoped |
 
 Model shorthand (`@claude opus …`, `sonnet`, `fable` — each also accepted with a
 `5` suffix, e.g. `opus5`) and `effort:low|medium|high|xhigh` are parsed from the

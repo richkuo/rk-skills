@@ -115,7 +115,8 @@ workflow that parses the `docs-release/*` branch name.
 | `@codex review` | PR review (read-only contract, `LGTM` / `Needs Updates` format) | No |
 | `@codex <anything else>` on a PR | fix-pr: re-validate all unaddressed review feedback, fix what survives, fold in any comment text as additional scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@codex <anything>` on an issue | implement: validate → implement → PR via the issue-workflow prompt | Yes |
-| `@codex sync docs` / `create release` / `sync release` | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@codex sync-docs` / `@codex create-release` (hyphenated — the classifier does not match `sync docs` / `create release` with a space) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@codex sync-release` | docs/release flow — only after your repo adds `sync-release` to the vendored `codex.yml` candidate list (see the `flow` note above); the template does not detect it by default | Scoped |
 
 Model shorthand and `effort:low|medium|high|xhigh` are parsed from the comment.
 Review events (formal reviews, inline comments) always stay read-only regardless

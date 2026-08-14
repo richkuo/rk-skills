@@ -1,6 +1,6 @@
 ---
 name: work-on-issue-loop
-description: Use when the user asks to implement a GitHub issue and drive it through review to completion autonomously — "work on issue and loop until approved", "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop. Runs work-on-issue to implement and open the PR, triggers the first @claude review itself, then waits for each review to land and calls fix-pr-review to resolve it. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
+description: Use when the user asks to implement a GitHub issue and drive it through review to completion autonomously — "work on issue and loop until approved", "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop. Runs work-on-issue to implement and open the PR, triggers the first review from the selected review bot itself (@claude by default, @codex when selected), then waits for each review to land and calls fix-pr-review to resolve it. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
 ---
 
 # work-on-issue-loop
@@ -66,7 +66,7 @@ Evaluate in this order:
 
 ### 4. Resolve the review and loop
 
-Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 10).
+Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh review from the selected review bot itself (routed to the cheap model shorthand when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 10).
 
 fix-pr-review also decides its own delegation (its step 5): it always validates the findings inline, then either implements inline or hands steps 6–11 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
 
@@ -91,7 +91,7 @@ Stop the loop and report the terminal state — don't claim blanket success:
 |---|---|
 | Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
 | `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
-| Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the `@claude` GitHub Action / bot status. |
+| Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the selected review bot's GitHub Action status. |
 | work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) | **Nothing to drive.** Relay its report; zero review cycles ran. |
 
 There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
@@ -108,7 +108,7 @@ After that narrative, name each unverified source from any `**Verification limit
 |---|---|
 | `review_count > 5` and the latest verdict is `LGTM` | Stop right there — don't invoke fix-pr-review again just because non-blocking findings remain; report per step 5 |
 | `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going — invoke fix-pr-review and loop again; the cap only changes what counts as "done" on an LGTM, it never force-stops a `Needs Updates` PR |
-| Latest "review" is your own prior fix-pr-review disposition comment or an `@claude review` trigger comment, not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
+| Latest "review" is your own prior fix-pr-review disposition comment or a review trigger comment (`@claude review` / `@codex review`), not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
 | Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — below the cap, LGTM-with-findings still goes through fix-pr-review; only past the cap does the first LGTM end it regardless of findings. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
