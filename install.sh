@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Recreate the ~/.claude symlinks that point into this repo.
-# Safe: backs up any existing real file to <name>.bak. The only deletions are
-# the skills and agents this repo itself retired, listed by name below.
+# Safe: backs up any existing real file or directory to <name>.bak. The only
+# outright deletions are symlinks for the skills and agents this repo itself
+# retired, listed by name below — a symlink holds no data of its own.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,17 +30,22 @@ done
 
 # pr-review-format was renamed to pr-review. The loop above only links names the
 # repo still has, so an older symlink — or a directory `bunx rk-skills` copied
-# here — would keep the retired name invokable. Drop it unless the repo ships it
-# again, so a future re-add cannot be deleted.
+# here — would keep the retired name invokable. Retire it unless the repo ships
+# it again, so a future re-add cannot be retired. A real directory may be
+# user-authored rather than a stale copy, so it is backed up, never deleted.
 for name in pr-review-format; do
   if [ -e "$REPO/skills/$name" ]; then continue; fi
   target="$CLAUDE/skills/$name"
   if [ -L "$target" ]; then            # -L first: the rename leaves it dangling
     rm "$target"
     echo "removed renamed skill symlink $target"
-  elif [ -d "$target" ]; then
-    rm -rf "$target"
-    echo "removed renamed skill directory $target"
+  elif [ -e "$target" ]; then
+    if [ -e "$target.bak" ]; then      # never overwrite an earlier backup
+      echo "kept renamed skill $target ($target.bak already exists)"
+    else
+      mv "$target" "$target.bak"
+      echo "backed up renamed skill $target -> $target.bak"
+    fi
   fi
 done
 

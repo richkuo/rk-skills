@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -57,6 +59,24 @@ function seedRetiredSkill(claudeDir, { asSymlink }) {
 
 const stillThere = (path) => lstatSync(path, { throwIfNoEntry: false }) !== undefined
 
+/**
+ * Stage a minimal copy of the repo so the installers' repo-still-ships guard
+ * can actually run: against the real repo the retired name is always absent,
+ * so that branch is unreachable. Both installers resolve the repo root from
+ * their own file location, so a staged copy redirects them cleanly.
+ */
+function stageRepo() {
+  const repo = makeTempDir('rk-skills-repo-')
+  mkdirSync(join(repo, 'bin'), { recursive: true })
+  cpSync(join(repoRoot, 'bin/install.mjs'), join(repo, 'bin/install.mjs'))
+  cpSync(join(repoRoot, 'install.sh'), join(repo, 'install.sh'))
+  for (const name of [SKILL, RETIRED]) {
+    mkdirSync(join(repo, 'skills', name), { recursive: true })
+    writeFileSync(join(repo, 'skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`)
+  }
+  return repo
+}
+
 describe('PR review skill name', () => {
   test('ships the review contract as the pr-review skill', async () => {
     const skill = await read(`skills/${SKILL}/SKILL.md`)
@@ -69,11 +89,12 @@ describe('PR review skill name', () => {
     // so an alias in either form would keep the retired contract loadable.
     expect(existsSync(new URL(RETIRED, skillsDir))).toBe(false)
 
+    // Synchronous read so the assertion settles — and can fail — inside the test.
     for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
       const manifest = new URL(`${entry.name}/SKILL.md`, skillsDir)
       if (!existsSync(manifest)) continue
-      expect(Bun.file(manifest).text()).resolves.not.toMatch(
+      expect(readFileSync(manifest, 'utf8'), entry.name).not.toMatch(
         new RegExp(`^name:\\s*${RETIRED}\\s*$`, 'm'),
       )
     }
@@ -103,7 +124,7 @@ describe('PR review skill name', () => {
     expect(workflow).toContain(`PROMPT_FILE=$PROMPTS_DIR/${RETIRED}.md`)
   })
 
-  test('bin/install.mjs deletes a leftover retired skill from the destination', () => {
+  test('bin/install.mjs retires a leftover retired skill from the destination', () => {
     for (const asSymlink of [false, true]) {
       const project = makeTempDir('rk-skills-mjs-')
       const leftover = seedRetiredSkill(join(project, '.claude'), { asSymlink })
@@ -114,11 +135,18 @@ describe('PR review skill name', () => {
 
       expect(run.exitCode, run.stderr.toString()).toBe(0)
       expect(stillThere(leftover), `symlink: ${asSymlink}`).toBe(false)
+      if (asSymlink) {
+        // A symlink holds no data, so it is deleted with no backup.
+        expect(stillThere(`${leftover}.bak`)).toBe(false)
+      } else {
+        // A real directory may be user-authored, so its content moves to .bak.
+        expect(readFileSync(join(`${leftover}.bak`, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
+      }
       expect(existsSync(join(project, '.claude/skills', SKILL, 'SKILL.md'))).toBe(true)
     }
   })
 
-  test('install.sh deletes a leftover retired skill from the destination', () => {
+  test('install.sh retires a leftover retired skill from the destination', () => {
     for (const asSymlink of [false, true]) {
       const home = makeTempDir('rk-skills-sh-')
       const leftover = seedRetiredSkill(join(home, '.claude'), { asSymlink })
@@ -129,23 +157,67 @@ describe('PR review skill name', () => {
 
       expect(run.exitCode, run.stderr.toString()).toBe(0)
       expect(stillThere(leftover), `symlink: ${asSymlink}`).toBe(false)
+      if (asSymlink) {
+        expect(stillThere(`${leftover}.bak`)).toBe(false)
+      } else {
+        expect(readFileSync(join(`${leftover}.bak`, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
+      }
       expect(existsSync(join(home, '.claude/skills', SKILL, 'SKILL.md'))).toBe(true)
     }
   })
 
-  test('neither installer deletes a name the repo still ships', () => {
-    const project = makeTempDir('rk-skills-guard-')
-    const claudeDir = join(project, '.claude')
-    const kept = join(claudeDir, 'skills', SKILL)
-    mkdirSync(kept, { recursive: true })
-    writeFileSync(join(kept, 'SKILL.md'), `---\nname: ${SKILL}\n---\n`)
+  test('neither installer overwrites an existing backup or deletes the original', () => {
+    const installers = [
+      {
+        name: 'bin/install.mjs',
+        run: (base) =>
+          Bun.spawnSync([process.execPath, join(repoRoot, 'bin/install.mjs'), '--project'], { cwd: base }),
+      },
+      {
+        name: 'install.sh',
+        run: (base) =>
+          Bun.spawnSync(['bash', join(repoRoot, 'install.sh')], { env: { ...process.env, HOME: base } }),
+      },
+    ]
+    for (const installer of installers) {
+      const base = makeTempDir('rk-skills-bak-')
+      const leftover = seedRetiredSkill(join(base, '.claude'), { asSymlink: false })
+      const backup = join(base, '.claude/skills', `${RETIRED}.bak`)
+      writeFileSync(backup, 'earlier backup\n')
 
-    const run = Bun.spawnSync([process.execPath, join(repoRoot, 'bin/install.mjs'), '--project'], {
+      const run = installer.run(base)
+
+      expect(run.exitCode, run.stderr.toString()).toBe(0)
+      expect(stillThere(leftover), installer.name).toBe(true)
+      expect(readFileSync(backup, 'utf8'), installer.name).toBe('earlier backup\n')
+    }
+  })
+
+  test('neither installer retires a name the repo ships', () => {
+    // The live repo never ships the retired name, so the repo-still-ships guard
+    // is unreachable against it; the staged repo copy makes that branch run.
+    const mjsRepo = stageRepo()
+    const project = makeTempDir('rk-skills-guard-mjs-')
+    seedRetiredSkill(join(project, '.claude'), { asSymlink: false })
+
+    const mjsRun = Bun.spawnSync([process.execPath, join(mjsRepo, 'bin/install.mjs'), '--project'], {
       cwd: project,
     })
 
-    expect(run.exitCode, run.stderr.toString()).toBe(0)
-    expect(existsSync(join(kept, 'SKILL.md'))).toBe(true)
-    expect(run.stdout.toString()).not.toContain('Removed')
+    expect(mjsRun.exitCode, mjsRun.stderr.toString()).toBe(0)
+    expect(existsSync(join(project, '.claude/skills', RETIRED, 'SKILL.md'))).toBe(true)
+    expect(stillThere(join(project, '.claude/skills', `${RETIRED}.bak`))).toBe(false)
+
+    const shRepo = stageRepo()
+    const home = makeTempDir('rk-skills-guard-sh-')
+
+    const shRun = Bun.spawnSync(['bash', join(shRepo, 'install.sh')], {
+      env: { ...process.env, HOME: home },
+    })
+
+    expect(shRun.exitCode, shRun.stderr.toString()).toBe(0)
+    // The link loop just linked the shipped skill; the guard must leave it alone.
+    expect(lstatSync(join(home, '.claude/skills', RETIRED)).isSymbolicLink()).toBe(true)
+    expect(readFileSync(join(home, '.claude/skills', RETIRED, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
   })
 })

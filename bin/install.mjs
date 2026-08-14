@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,16 +40,31 @@ for (const name of skills) {
 
 // pr-review-format was renamed to pr-review. The copy loop above never deletes
 // a skill that left the repo, so an earlier install keeps the retired name — and
-// its stale copy of the review contract — invokable. Drop it, but never a name
-// the repo still ships, so re-adding one of these later cannot delete it.
+// its stale copy of the review contract — invokable. Retire it, but never a name
+// the repo still ships, so re-adding one of these later cannot retire it.
 const retiredSkills = ['pr-review-format'].filter((name) => !skills.includes(name));
-const removedSkills = retiredSkills.filter(
+const removedSkills = [];
+const backedUpSkills = [];
+const keptSkills = [];
+for (const name of retiredSkills) {
+	const target = join(skillsDir, name);
 	// lstat, not existsSync: install.sh leaves a symlink here, and the rename
 	// makes that symlink dangle, which existsSync reports as absent.
-	(name) => lstatSync(join(skillsDir, name), { throwIfNoEntry: false }) !== undefined,
-);
-for (const name of removedSkills) {
-	rmSync(join(skillsDir, name), { recursive: true, force: true });
+	const stat = lstatSync(target, { throwIfNoEntry: false });
+	if (stat === undefined) continue;
+	if (stat.isSymbolicLink()) {
+		// A symlink holds no data of its own; remove it outright.
+		rmSync(target, { force: true });
+		removedSkills.push(name);
+	} else if (lstatSync(`${target}.bak`, { throwIfNoEntry: false }) === undefined) {
+		// A real directory or file may be user-authored rather than this
+		// installer's stale copy — back it up instead of deleting it.
+		renameSync(target, `${target}.bak`);
+		backedUpSkills.push(name);
+	} else {
+		// A backup already exists; never overwrite it or delete the original.
+		keptSkills.push(name);
+	}
 }
 
 // sync-docs and create-release used to dispatch to runner subagents; they now
@@ -77,9 +92,17 @@ console.log(`rk-skills installed ${skills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
 console.log(`  ${skills.join(', ')}`);
 if (removedSkills.length > 0) {
-	console.log(`\nRemoved ${removedSkills.length} renamed skills from:`);
+	console.log(`\nRemoved ${removedSkills.length} renamed skill symlinks from:`);
 	console.log(`  ${skillsDir}`);
 	console.log(`  ${removedSkills.join(', ')}`);
+}
+if (backedUpSkills.length > 0) {
+	console.log(`\nBacked up ${backedUpSkills.length} renamed skills in ${skillsDir}:`);
+	console.log(`  ${backedUpSkills.map((n) => `${n} -> ${n}.bak`).join(', ')}`);
+}
+if (keptSkills.length > 0) {
+	console.log(`\nKept ${keptSkills.length} renamed skills in place (a .bak already exists):`);
+	console.log(`  ${keptSkills.join(', ')}`);
 }
 if (removedAgents.length > 0) {
 	console.log(`\nRemoved ${removedAgents.length} retired subagents from:`);
