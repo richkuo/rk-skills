@@ -1028,6 +1028,48 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     // A stamped PR review line overrides the band trigger.
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    // The default review bot is Claude; nothing here mentions Codex.
+    for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#3 (opus/high)', 'implement:#4 (fable/high)']) {
+      expect(promptFor(events, label), label).not.toContain('@codex')
+    }
+  })
+
+  test('reviewBot codex routes every github-mode trigger to @codex', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Band 1', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 3, title: 'Band 3', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 4, title: 'Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          { number: 5, title: 'Stamped trigger', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `codex/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    // Codex has one flagship, so both heavy Claude tiers collapse onto the bare
+    // trigger; only the cheap tier keeps a distinct shorthand.
+    expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@codex review"')
+    expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@codex review"')
+    expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex luna review effort:high"')
+    for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#5 (sonnet/xhigh)']) {
+      const prompt = promptFor(events, label)
+      expect(prompt, label).toContain('.github/workflows/codex.yml')
+      expect(prompt, label).toContain('never switch to @claude')
+    }
+  })
+
+  test('rejects an unknown reviewBot', async () => {
+    await expect(
+      executeWorkflow({ tracks: [[2]], reviewBot: 'gemini' }, { Prep: () => ({ issues: [prepIssue()] }) }),
+    ).rejects.toThrow("reviewBot must be 'claude' or 'codex'")
   })
 
   test('escalates validation when the validator re-scores into a higher band', async () => {
@@ -1258,12 +1300,12 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(reviewPrompt).toContain('Load the `pr-review` skill')
     expect(reviewPrompt).not.toContain('pr-review-format')
-    expect(reviewPrompt).toContain('do NOT trigger any `@claude` review comment')
+    expect(reviewPrompt).toContain('do NOT trigger any `@claude` or `@codex` review comment')
     expect(reviewPrompt).not.toContain('re-review cycle')
     expect(reReviewPrompt).toContain('re-review cycle 2')
     expect(fixPrompt).toContain('fix-pr-review')
     expect(fixPrompt).toContain('https://example.test/pr/1002#r1')
-    expect(fixPrompt).toContain('do NOT trigger, post, or wait for any `@claude` re-review')
+    expect(fixPrompt).toContain('do NOT trigger, post, or wait for any `@claude` or `@codex` re-review')
   })
 })
 

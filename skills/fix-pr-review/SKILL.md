@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review
-description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh @claude re-review.
+description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh re-review from the selected review bot (@claude by default, @codex when selected).
 ---
 
 # fix-pr-review
@@ -154,12 +154,14 @@ Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). Per t
 
 Post one comment that tells the reviewer exactly what happened to each finding — this is how a refuted finding gets its pushback on the record. Compose and post it per [disposition-comment.md](disposition-comment.md) — read it completely; it holds the template with its five sections, the slotting rules for CI Failure findings, the inline-thread reply recipe, the posting command, and the comment footer.
 
-### 10. Trigger the @claude re-review
+### 10. Trigger the re-review
 
-Route the re-review by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
+**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
 
-- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 2 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): trigger plain — this repo's default (Opus) reviews the fix. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier Opus re-review is what catches the real regression you dismissed.
-- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to Sonnet via the `@claude sonnet` shorthand instead.
+Then route by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
+
+- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 2 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): trigger plain — the repo's default model reviews the fix. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
+- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to the cheap model shorthand instead — `@claude sonnet` on Claude, `@codex luna` on Codex.
 
 Post a **separate** comment so the bot triggers cleanly on its own line:
 
@@ -169,9 +171,13 @@ gh pr comment <N> --body "@claude review"
 
 # only non-blocking items were addressed
 gh pr comment <N> --body "@claude sonnet review"
+
+# same two cases when this cycle selected Codex
+gh pr comment <N> --body "@codex review"
+gh pr comment <N> --body "@codex luna review"
 ```
 
-(If this repo uses a different review trigger phrase or model-shorthand syntax, match it — check the repo's `.github/workflows/claude.yml` for how it resolves `@claude <shorthand>`, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
+(If this repo uses a different review trigger phrase or model-shorthand syntax, match it — check the repo's `.github/workflows/claude.yml` or `codex.yml` for how it resolves the shorthand, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
 
 ### 11. Report to the user
 

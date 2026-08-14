@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from compose_claude_comment import compose, model_display_name
 
 HARNESS = "anthropics/claude-code-action@v1"
+CODEX_HARNESS = "openai/codex-action@v1"
 
 
 class ModelDisplayNameTest(unittest.TestCase):
@@ -20,6 +21,16 @@ class ModelDisplayNameTest(unittest.TestCase):
         self.assertEqual(model_display_name("claude-opus-5"), "Claude Opus 5")
         self.assertEqual(model_display_name("claude-sonnet-5"), "Claude Sonnet 5")
         self.assertEqual(model_display_name("claude-fable-5"), "Claude Fable 5")
+
+    def test_codex_ids_mapped(self):
+        # codex-run.yml patches its comments with these same scripts, so every
+        # slug codex.yml can resolve must have a display name here.
+        self.assertEqual(model_display_name("gpt-5.6-sol"), "GPT-5.6 Sol")
+        self.assertEqual(model_display_name("gpt-5.6-terra"), "GPT-5.6 Terra")
+        self.assertEqual(model_display_name("gpt-5.6-luna"), "GPT-5.6 Luna")
+        self.assertEqual(
+            model_display_name("gpt-5.3-codex-spark"), "GPT-5.3 Codex Spark"
+        )
 
     def test_unknown_id_passes_through(self):
         self.assertEqual(model_display_name("claude-next-6"), "claude-next-6")
@@ -34,6 +45,13 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual(
             out,
             "## Review\nLGTM\n\n---\nLLM: Claude Sonnet 5 | xhigh | Harness: " + HARNESS,
+        )
+
+    def test_appends_codex_footer(self):
+        out = compose("LGTM", "gpt-5.6-luna", "xhigh", CODEX_HARNESS)
+        self.assertEqual(
+            out,
+            "LGTM\n\n---\nLLM: GPT-5.6 Luna | xhigh | Harness: " + CODEX_HARNESS,
         )
 
     def test_empty_effort_reads_unknown(self):
