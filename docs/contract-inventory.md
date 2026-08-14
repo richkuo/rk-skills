@@ -30,6 +30,8 @@ This inventory records every shared pipeline rule those families restate in pros
 | `skills/fix-pr-review/SKILL.md` | Fixer classifier — states the `**Verification limitation:**` not-a-finding carve-out |
 | `skills/work-on-issue/SKILL.md` | Canonical owner of the adopted-plan deviation policy the plan-handoff chains restate |
 | `skills/fableplan-work-on-issue/SKILL.md` | Plan handoff — restates the deviation policy; no loop stage |
+| `skills/validate-issue/issue-editing.md` | Canonical owner of the issue-edit attribution verb |
+| `skills/github-issue-format/SKILL.md` | Format skill every issue editor loads — lists the three footer verbs |
 
 Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not listed here; they appear only in the rule rows below that name them.
 
@@ -44,6 +46,7 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not
 | Validation scope / feasibility / existing-PR stop | Shared semantic in validate→plan/implement chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` | Stop instead of continuing the chain when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing open PR | Whether a Fable plan step sits between update and implement; whether the chain ends at the posted plan (`fable-validate-fableplan`) or at a reviewed PR | same |
 | Verdict-block template | `validate-issue` step 8 output format | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan` (each quotes the template it parses) | One template line co-locates every parsed field: `Update issue description?`, `Complexity: <…>/100`, `Capability <k>`, `Volume <v>`, `fableplan: <yes\|no>`, `Scope: <OK \| too large — split/umbrella/narrow>` | Placeholder spelling (`<score>` vs `<0-100>`, `<Yes\|No>` vs `<Yes \| No>`) | same |
 | Final-report 55-word plain-simple-English cap | Shared presentation rule of the autonomous chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan`, `fableplan-loop`, `fableplan-work-on-issue`, `new-issue-loop`, `fable-new-issue-loop` | Bold "Cap the whole report … 55 words, plain simple English in ASD-STE100" instruction in the report step, followed on the same line by "apply the Response Style rules in CLAUDE.md/AGENTS.md" | Parenthetical scope notes ("prefix + relayed summary") and trailing phrasing | same |
+| Issue-edit attribution verb | `skills/validate-issue/issue-editing.md` | `validate-issue-loop`, `validate-fableplan-loop`, `fable-validate`, `fable-validate-loop`, `fable-validate-fableplan`, `fable-validate-fableplan-loop` (each names the appended footer line); `github-issue-format` lists the verb set; `workflows/milestone-pipeline.js` issue-correction prompt | A validation-driven issue edit appends `Validated with LLM: <model> \| <effort> \| Harness: <harness>` — never `Updated` on that path, because the edit is review output. Prior `Created` / `Updated` lines are preserved, never replaced | Harness suffix per wrapper (`fable-validate`, `validate-fableplan-loop`, …); which model authored the validation | same |
 | Adopted-plan deviation policy | `work-on-issue` step 2 | `fableplan-work-on-issue`, `fableplan-loop`, `fable-validate-loop`, `fable-validate-fableplan-loop`, `validate-fableplan-loop` (each hands a plan down) | A plan adopted from the issue thread is the blueprint; it is overridden only by the traced code, anything posted on the issue after the plan, then correctness and safety. Callers may restate the policy but must never narrow it back to "only when the code contradicts the plan"; every deviation is named in the PR body | Caller phrasing and whether the handoff targets `work-on-issue` or `work-on-issue-loop`; the score-gated chains add their "no plan was produced" note | same |
 
 ## Intentional exceptions
@@ -54,7 +57,7 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md`) are not
 
 ### Base validators are not pipeline consumers
 
-`validate-issue` and `fable-validate` own claim-tracing and scoring. They do not restate the review-cycle threshold, score gate, or new-issue duplicate stop. The guard does not require those markers in those two files.
+`validate-issue` and `fable-validate` own claim-tracing and scoring. They do not restate the review-cycle threshold, score gate, or new-issue duplicate stop. The guard does not require those markers in those two files. They are still consumers of the issue-edit attribution verb row above, which `validate-issue/issue-editing.md` owns.
 
 ## Out of scope for this inventory's guard
 

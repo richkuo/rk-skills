@@ -16,16 +16,16 @@ Change the title when it names the wrong behavior, component, root cause, scope,
 
 ## Edit the body
 
-Apply all validated corrections with `gh issue edit <N> --body-file <file>`. Keep the body complete. Preserve prior attribution lines and append the current update after one final `---` separator:
+Apply all validated corrections with `gh issue edit <N> --body-file <file>`. Keep the body complete. Preserve prior attribution lines and append the current line after one final `---` separator:
 
 ```text
 ---
 Created with LLM: <original model> | <effort> | Harness: <harness>
-Updated with LLM: <prior model> | <effort> | Harness: <harness>
-Updated with LLM: <current model> | <effort> | Harness: <harness>
+Validated with LLM: <prior model> | <effort> | Harness: <harness>
+Validated with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-Collapse exact duplicates only. When no footer exists, append the current `Updated` line. Use the model, effort, and harness that actually produced the edit. In continuous integration, use the GitHub Action identifier from the system prompt; its absence means the session is interactive. Use the specific interactive tool, such as Claude Code, Cursor, or Codex. A repository footer rule overrides this default.
+This edit is the output of a validation pass, so the appended verb is always `Validated`. Prior `Created` and `Updated` lines stay exactly as written. Collapse exact duplicates only. When no footer exists, append the current `Validated` line. Use the model, effort, and harness that actually produced the edit. In continuous integration, use the GitHub Action identifier from the system prompt; its absence means the session is interactive. Use the specific interactive tool, such as Claude Code, Cursor, or Codex. A repository footer rule overrides this default.
 
 ## Verify the saved issue
 
