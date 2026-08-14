@@ -73,6 +73,7 @@ describe('fable dispatch contract', () => {
       '--effort',
       '--output-format json',
       '--permission-mode plan',
+      '--allowedTools',
     ]) {
       expect(shim, flag).toContain(flag)
     }
@@ -112,11 +113,27 @@ describe('fable dispatch contract', () => {
     // Prompt passes without shell interpolation.
     expect(skill).toMatch(/never[\s\S]{0,120}interpolat/i)
 
-    // The footer names the model modelUsage reports.
+    // The footer names the model modelUsage reports, and the harness field
+    // names the harness actually running — never a hardcoded constant.
     expect(skill).toMatch(/footer[\s\S]{0,160}\.?modelUsage/i)
+    expect(skill).toMatch(/harness[\s\S]{0,120}actually running/i)
 
-    // Fable's effort ceiling holds on the CLI path too.
-    expect(skill).toMatch(/xhigh[\s\S]{0,120}high/i)
+    // The allowedTools list comes from the calling skill and stays read-only.
+    expect(skill).toMatch(/allowedTools[\s\S]{0,400}read-only/i)
+
+    // A completed-but-substituted shim result is adopted, never re-run.
+    expect(skill).toMatch(/adopt[\s\S]{0,120}step-?\s?3/i)
+
+    // Fable's effort ceiling holds on the CLI path too — every tier above
+    // high clamps, not only xhigh.
+    expect(skill).toMatch(/tier above `high`[\s\S]{0,120}becomes `high`/i)
+    expect(skill).toMatch(/`max`[\s\S]{0,120}becomes `high`/i)
+  })
+
+  test('no dispatcher hardcodes the harness field in its footer template', () => {
+    for (const path of KNOWN_DISPATCHERS) {
+      expect(skillTexts[path], path).not.toContain('Harness: Claude Code')
+    }
   })
 
   test('README lists fable-dispatch as a reference skill', async () => {

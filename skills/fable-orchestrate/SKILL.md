@@ -72,11 +72,11 @@ The verdict is **binding**: do not commit while blocking findings stand.
 
 ### 7. Commit, push, PR
 
-On approval, commit and push the task branch and open one PR per the repo's conventions. The PR body includes an **Orchestration log**: the decomposition (pieces → workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the review verdict trail. Footer per convention, naming the session model actually in use:
+On approval, commit and push the task branch and open one PR per the repo's conventions. The PR body includes an **Orchestration log**: the decomposition (pieces → workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the review verdict trail. Footer per convention, naming the session model and the harness actually in use (`<harness>` per `fable-dispatch` section 6):
 
 ```
 ---
-Created with LLM: <session model> | high | Harness: Claude Code | fable-orchestrate
+Created with LLM: <session model> | high | Harness: <harness> | fable-orchestrate
 ```
 
 ### 8. Report to the user

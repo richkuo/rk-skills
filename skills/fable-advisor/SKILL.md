@@ -86,7 +86,7 @@ Add `-R owner/repo` when the issue lives in another repo. Prefix the body with t
 
 ```
 ---
-Created with LLM: Fable 5 | high | Harness: Claude Code | fable-advisor
+Created with LLM: Fable 5 | high | Harness: <harness> | fable-advisor
 ```
 
 Give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply.
@@ -151,7 +151,7 @@ Whichever path built the change, its commit and PR carry fable-advisor's markers
 
 ```
 ---
-Created with LLM: <executor model> | high | Harness: Claude Code | fable-advisor
+Created with LLM: <executor model> | high | Harness: <harness> | fable-advisor
 ```
 
 ### 9. Post the review verdict to the GitHub issue (only if one was resolved in step 1)
@@ -160,7 +160,7 @@ After the PR is open, post a short closing comment on the issue recording the bi
 
 ```
 ---
-Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-advisor
+Validated with LLM: Fable 5 | high | Harness: <harness> | fable-advisor
 ```
 
 ### 10. Report to the user

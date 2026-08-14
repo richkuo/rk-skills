@@ -60,7 +60,7 @@ Before filing, spot-check the draft's load-bearing `file:line` citations against
 
 File per new-issue step 6: `gh issue create --title "[C<score>] <title>" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
 
-Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: Claude Code | fable-new-issue`. A repo CLAUDE.md footer format overrides.
+Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: <harness> | fable-new-issue`, where `<harness>` names the harness actually running per `fable-dispatch` section 6 and the model names the one that actually served the dispatch. A repo CLAUDE.md footer format overrides.
 
 ### 6. Report
 

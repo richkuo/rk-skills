@@ -63,7 +63,7 @@ Present the vetted verdict in the validate-issue step-8 format, noting it was pr
 
 Handle the user's reply per the validate-issue procedure — these are main-agent actions, never re-delegated:
 
-- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate` (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
+- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: <harness> | fable-validate`, where `<harness>` names the harness actually running per `fable-dispatch` section 6, and the model names the one that actually served the dispatch (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → file the proposed parts per validate-issue step 7, each fully specified.
 
