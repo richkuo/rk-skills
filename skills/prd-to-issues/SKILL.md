@@ -24,7 +24,7 @@ Break a refined PRD into milestones and fully-specified GitHub issues that cold 
 
 ### 3. Write the issues
 
-Per `github-issue-format`: `[C<score>]` plain-language title, complexity rationale first line, then **Problem** (with PRD § references), **Goal**, **Approach**, **Acceptance criteria**, attribution footer.
+Per `github-issue-format`: `[C<score>]` plain-language title, complexity rationale first line, then **Problem** (with PRD § references), **Goal**, **Approach**, **Acceptance criteria**, **Plain simple English** (mandatory, under 55 words, ASD-STE100), attribution footer. The step 4 Execution block is appended between that last section and the footer.
 
 Issue-quality rules learned the hard way:
 

@@ -1,16 +1,18 @@
 ---
 name: github-issue-format
-description: Required format for creating or editing any GitHub issue — [C<score>] title convention, complexity rationale line, complete-body rule, attribution footer. Load BEFORE creating or editing a GitHub issue.
+description: Required format for creating or editing any GitHub issue — [C<score>] title convention, complexity rationale line, complete-body rule, mandatory Plain simple English section, attribution footer. Load BEFORE creating or editing a GitHub issue.
 ---
 
 # GitHub issue format
 
-- **Never create a placeholder, stub, or empty-bodied issue.** Every issue gets a complete body at creation — complexity rationale line, concrete problem statement, goal, approach/acceptance criteria — even in a batch. If a follow-up isn't ready to spec, track it in the parent issue or notes until it is.
+- **Never create a placeholder, stub, or empty-bodied issue.** Every issue gets a complete body at creation — complexity rationale line, concrete problem statement, goal, approach/acceptance criteria, `## Plain simple English` — even in a batch. If a follow-up isn't ready to spec, track it in the parent issue or notes until it is.
 - Title format: `[C<score>] <title>` — a clear plain-simple-English sentence in ASD-STE100, precise about component and behavior, e.g. `[C95] Orders can be filled twice when two fills arrive at the same moment`.
 - **Complexity score (0–100)** is a **model + effort routing signal**. It is not a time estimate. Load the canonical formula, axes, and routing table from `validate-issue` step 6; do not restate or approximate them here.
 - First line of the body is a one-line rationale matching the title prefix, ending with an explicit **fableplan signal**:
   `**Complexity: 95/100** — Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh · fableplan: yes`
   (Fable 5 never pairs with `xhigh` — high is Fable's ceiling; xhigh is legal only on Opus/Sonnet-class builds.)
 - **fableplan signal:** `· fableplan: yes` **when the score is ≥ 61** (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); scores below 61 are `· fableplan: no` (they don't need a separate plan). Always write it explicitly — absence is ambiguous, not "no".
+- **Body section order:** complexity rationale line, `## Problem`, `## Goal`, `## Approach`, `## Acceptance criteria`, `## Plain simple English`, then any Execution block, then the attribution footer. `Plain simple English` is the last prose section a human reads; an Execution block is machine metadata and keeps its place between that section and the footer.
+- **`## Plain simple English` is mandatory on every issue.** One short paragraph under 55 words in ASD-STE100 (Simplified Technical English) per the CLAUDE.md/AGENTS.md Response Style rules, with no unexplained acronyms. State what is wrong or missing and why it matters, in everyday language, so a reader who knows the product but not the code understands the issue without reading the technical sections. Never restate the approach there, never list file paths or symbols, and never put a time or effort estimate in it. When you edit an issue that lacks the section, add it.
 - End the body with the **LLM Attribution Footer** — `Created` (or `Updated` when editing).
 - **Project precedence:** a repo CLAUDE.md issue/footer format overrides this default.
