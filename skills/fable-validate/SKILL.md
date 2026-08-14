@@ -31,7 +31,7 @@ If the user referenced an issue, note the number/repo but do NOT fetch or pre-va
 
 ### 2. Dispatch the Fable 5 validation subagent
 
-Do not validate the issue yourself first — the subagent owns the validation. Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then call the Agent tool with:
+Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps validation side-effect-free)
 - `model`: `fable` (the whole point — the validation must come from Fable 5)
@@ -63,13 +63,13 @@ Present the vetted verdict in the validate-issue step-8 format, noting it was pr
 
 Handle the user's reply per the validate-issue procedure — these are main-agent actions, never re-delegated:
 
-- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate` (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
+- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: <harness> | fable-validate`, where `<harness>` names the harness actually running per `fable-dispatch` section 6, and the model names the one that actually served the dispatch (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → file the proposed parts per validate-issue step 7, each fully specified.
 
 ## Notes
 
 - The validation subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
-- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent validates, main agent acts) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
+- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.

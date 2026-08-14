@@ -59,7 +59,7 @@ Integration is your job — the merge proving clean is not the same as the piece
 
 ### 6. Binding final review (fresh reviewer — you don't grade your own decomposition)
 
-You wrote the specs, so you are anchored on them. Spawn a **new one-shot** Fable 5 reviewer:
+You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Spawn a **new one-shot** Fable 5 reviewer; on the Agent-tool path:
 
 - `subagent_type`: `Plan`, `model`: `fable`, `run_in_background`: `false`
 - `prompt`: the original task, **the spec map** — the full decomposition as spec → files → worker result → disposition (accepted / re-dispatched / taken over), so it can review piece-by-piece plus the seams rather than one unreviewable blob — the pinned interfaces, the full merged diff, and the integration verification results. It must return a verdict — **approve**, or **blocked** with numbered blocking findings (each with file:line and a concrete failure scenario) — plus non-blocking suggestions kept separate.
@@ -72,11 +72,11 @@ The verdict is **binding**: do not commit while blocking findings stand.
 
 ### 7. Commit, push, PR
 
-On approval, commit and push the task branch and open one PR per the repo's conventions. The PR body includes an **Orchestration log**: the decomposition (pieces → workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the review verdict trail. Footer per convention, naming the session model actually in use:
+On approval, commit and push the task branch and open one PR per the repo's conventions. The PR body includes an **Orchestration log**: the decomposition (pieces → workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the review verdict trail. Footer per convention, naming the session model and the harness actually in use (`<harness>` per `fable-dispatch` section 6):
 
 ```
 ---
-Created with LLM: <session model> | high | Harness: Claude Code | fable-orchestrate
+Created with LLM: <session model> | high | Harness: <harness> | fable-orchestrate
 ```
 
 ### 8. Report to the user
@@ -85,7 +85,7 @@ Final message: what was built, the decomposition and per-piece dispositions in b
 
 ## Notes
 
-- Workers run on Sonnet 5 via `model: 'sonnet'` regardless of defaults; the final reviewer on Fable via `model: fable`. **If a model id is unavailable** (the call errors on it), fall back to the closest available tier, and name the models that actually ran in the footer and report.
+- Workers run on Sonnet 5 via `model: 'sonnet'` regardless of defaults; if the worker call errors on the `sonnet` id, use the closest available tier for workers and name it in the footer and report. The final reviewer runs on Fable via `model: fable` — **harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill**; load it before dispatching the reviewer, and name the model that actually ran.
 - Companion to `fable-advisor`, inverted: there the cheap model executes and Fable advises; here Fable directs and the cheap model executes. Both end with the same fresh-reviewer binding gate — an author never grades its own work.
 - Cost shape: Sonnet burns the bulk implementation tokens; Fable spends on decomposition, per-piece review, integration, and takeovers. If takeovers dominate, the task was a poor fit for delegation — say so in the report.
 - For issue-based milestone work with Execution blocks, use `milestone-workflow` instead — this skill is for ad-hoc tasks.

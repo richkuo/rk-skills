@@ -30,7 +30,7 @@ If the input is conversation-derived, write the scratchpad summary now (see Inpu
 
 ### 2. Dispatch the Fable 5 drafting subagent
 
-Snapshot `git status --porcelain` before dispatching, then call the Agent tool with:
+**Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching, then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps drafting side-effect-free)
 - `model`: `fable` (the whole point — the draft must come from Fable 5)
@@ -60,7 +60,7 @@ Before filing, spot-check the draft's load-bearing `file:line` citations against
 
 File per new-issue step 6: `gh issue create --title "[C<score>] <title>" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
 
-Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: Claude Code | fable-new-issue`. A repo CLAUDE.md footer format overrides.
+Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: <harness> | fable-new-issue`, where `<harness>` names the harness actually running per `fable-dispatch` section 6 and the model names the one that actually served the dispatch. A repo CLAUDE.md footer format overrides.
 
 ### 6. Report
 
@@ -69,6 +69,6 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 ## Notes
 
 - The drafting subagent runs on Fable 5 regardless of the main agent's model — `model: fable` forces it.
-- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent drafts, main agent files) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
+- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

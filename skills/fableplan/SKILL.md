@@ -34,12 +34,12 @@ Also record the **Plan effort** if the fetched body has an `## Execution` block 
 
 ### 2. Dispatch the Fable 5 Plan subagent
 
-Do not re-plan the task yourself first — the subagent owns the plan. Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then call the Agent tool with:
+Do not re-plan the task yourself first — the subagent owns the plan. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan`
 - `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5)
 - `run_in_background`: `false` — every later step depends on the plan, so wait for it synchronously instead of doing other work first
-- `effort`: the issue's stamped **Plan effort** from step 1 when there is one, otherwise `high`. Pass it explicitly even in the unstamped case rather than omitting it — an omitted parameter leaves the subagent on the session's own tier, which the footer cannot name honestly and which may be *below* `high`; passing it makes the footer's value the one that actually ran. **Not every harness's Agent tool accepts `effort`.** Before passing it, check the Agent tool's own parameter schema in this harness: if it exposes no `effort` property, don't construct the argument — dispatch without it and note that the tier could not be honored. If the schema check is inconclusive and the call fails input validation on the parameter, re-dispatch once without `effort` rather than treating it as the step-2 failure below; a plan at session effort beats no plan. Either way this is a degradation, not an error — never abort the step over it, and report it to the user in step 5.
+- `effort`: the issue's stamped **Plan effort** from step 1 when there is one, otherwise `high`. Pass it explicitly even in the unstamped case rather than omitting it — an omitted parameter leaves the subagent on the session's own tier, which the footer cannot name honestly and which may be *below* `high`; passing it makes the footer's value the one that actually ran. **Not every harness's Agent tool accepts `effort`.** Before passing it, check the Agent tool's own parameter schema in this harness: if it exposes no `effort` property, don't construct the argument — dispatch without it and note that the tier could not be honored. If the schema check is inconclusive and the call fails input validation on the parameter, re-dispatch once without `effort` rather than treating it as the step-2 failure below; a plan at session effort beats no plan. Either way this is a degradation, not an error — never abort the step over it, and report it to the user in step 5. This degradation is Agent-tool-only: on `fable-dispatch`'s CLI-shim path, `--effort` carries the tier directly.
 - `description`: `Plan <short task name>`
 - `prompt`: Hand the subagent everything it needs to plan independently — the full task description, the issue title/body if one was fetched, the working directory, and any constraints the user stated. Tell it explicitly:
   - Produce a concrete, ordered implementation plan (files to create/modify, the approach, build sequence, risks/edge cases, and how to verify).
@@ -72,10 +72,10 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 
 ```
 ---
-Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: Claude Code | fableplan
+Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: <harness> | fableplan
 ```
 
-Fill both fields from the values recorded at the end of step 2 — **never a constant**. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes. (A stamped `xhigh` Plan effort is itself illegal — the planner is always Fable 5, and Fable never runs at xhigh; honor it as `high` and note the clamp.)
+Fill the model and effort fields from the values recorded at the end of step 2 — **never a constant**. `<harness>` names the harness actually running the session (`Claude Code`, `Cursor`, `Codex`, …), per `fable-dispatch` section 6. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes. (A stamped `xhigh` Plan effort is itself illegal — the planner is always Fable 5, and Fable never runs at xhigh; honor it as `high` and note the clamp.)
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 
@@ -121,5 +121,5 @@ In the worktree from step 7, the main agent builds the task per the plan. Confir
 ## Notes
 
 - The Plan subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
-- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (Plan subagent plans, main agent builds) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
+- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - If the user did not reference an issue, never invent one or post anywhere — just plan and build.
