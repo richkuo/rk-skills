@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review
-description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh re-review from the selected review bot (@claude by default, @codex when selected).
+description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR) and an optional `codex` argument, in either order, to select Codex as the review bot (e.g. "/fix-pr-review 123 codex"). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh re-review from the selected review bot (@claude by default, @codex when selected).
 ---
 
 # fix-pr-review
@@ -11,9 +11,9 @@ Take all unaddressed review feedback on a pull request and resolve it fully and 
 
 ## Input
 
-The user provides one of:
-- Nothing — **default to the PR for the current branch** (`gh pr view`).
-- `#<N>` / `<N>` / full URL / `owner/repo#N`.
+The user provides, in any order:
+- An optional PR reference: `#<N>` / `<N>` / full URL / `owner/repo#N`. Omit it to **default to the PR for the current branch** (`gh pr view`).
+- An optional literal bot token, `codex` (case-insensitive), selecting Codex as this cycle's re-review bot (step 10). A token that is neither a PR reference nor `codex` is not a bot selection — treat it as an unrecognized argument, not as Codex selection.
 
 If the current branch has no PR and none was given, say so and stop — there's nothing to fix.
 
@@ -156,7 +156,7 @@ Post one comment that tells the reviewer exactly what happened to each finding �
 
 ### 10. Trigger the re-review
 
-**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
+**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), the invocation included the literal `codex` argument (Input section above), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
 
 Then route by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
 
