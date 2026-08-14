@@ -217,6 +217,13 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
+  test('work-on-issue stays under 200 lines with whole-number step headings', () => {
+    const text = texts[PLAN_DEVIATION_OWNER]
+    expect(text.split('\n').length - 1, PLAN_DEVIATION_OWNER).toBeLessThan(200)
+    // Fractional step labels (0.1, 1.1, 1.2) must not come back as headings.
+    expect(procedureBody(text), PLAN_DEVIATION_OWNER).not.toMatch(/^#+ \d+\.\d+/m)
+  })
+
   test('work-on-issue owns one plan-deviation policy and no caller narrows it', () => {
     const owner = procedureBody(texts[PLAN_DEVIATION_OWNER])
     // All three overrides, plus the marker that a caller cannot narrow them.

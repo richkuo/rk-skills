@@ -7,7 +7,7 @@ description: Use when the user says "work on issue", "work on this issue", "impl
 
 Take a GitHub issue from "validated" to "PR open", autonomously and end-to-end: isolate the work in a fresh worktree, implement the fix to the codebase's conventions, verify it really works, commit and push, then open a pull request that closes the issue. The skill ends with the open PR — requesting review is the caller's job (work-on-issue-loop does it; standalone, the user decides). Don't stop to ask the user between steps — do the work and report at the end.
 
-**This is the natural follow-on to validate-issue.** When validate-issue ends with `→ Reply "work on issue"`, the user replying "work on issue" lands here. The skill is also valid standalone — invoke it when the user asks to implement an issue without a prior validation pass.
+**This is the natural follow-on to validate-issue** — when it ends with `→ Reply "work on issue"`, the user replying "work on issue" lands here. The skill is also valid standalone, without a prior validation pass.
 
 **Implement the issue, not your memory of it.** Re-read the issue and any validation findings before writing code; the description can be stale or wrong (that's what validate-issue exists to catch). Build the fix the traced code supports, not the one the prose suggests.
 
@@ -22,7 +22,7 @@ The steps assume the issue belongs to the repo of the current checkout. If `owne
 
 ## Steps
 
-### 0. Resolve the issue and gate-check it
+### 0. Resolve the issue, gate-check it, and detect a plan
 
 Resolve which issue to work (per Input above), then fetch it — before creating any worktree, both because the gates below may end the run and because the worktree slug needs the issue title:
 
@@ -34,47 +34,31 @@ gh pr list --state open --search "#<N> in:title,body"
 Two gates, checked while no worktree or code exists yet:
 
 - **The issue must still be open.** If it's closed, stop and report — don't implement a resolved issue.
-- **No existing PR may already address it** — discovering one later wastes the entire cycle, splits review, and orphans a branch. Inspect any search hit: a PR that merely mentions `#<N>` in passing doesn't count, one that fixes it does. If a genuine PR exists, surface it and stop (or, if it's this session's own branch, continue on it).
+- **No existing PR may already address it** — discovering one later wastes the entire cycle, splits review, and orphans a branch. A PR that merely mentions `#<N>` in passing doesn't count; one that fixes it does. If a genuine PR exists, surface it and stop (or, if it's this session's own branch, continue on it).
 
-### 0.1 Detect an implementation plan in the comment thread
+Then scan the fetched comments for an implementation plan: `fableplan` and every chain that wraps it post one under the heading `## Implementation plan (Fable 5)`, and maintainers sometimes paste their own. A posted plan was produced with more deliberation than a fresh read of the issue, so **it must be found before any code is written, never discovered afterwards.**
 
-The thread often already carries a vetted plan: `fableplan` and every chain that wraps it post one under the heading `## Implementation plan (Fable 5)`, and maintainers sometimes paste their own. That plan was produced with more deliberation than a fresh read of the issue, so **it must be found before any code is written, never discovered afterwards.** Scan the comments fetched in step 0:
-
-- **Match on the heading first** — a comment starting with `## Implementation plan` (any parenthetical model tag) is a plan. Also treat a comment a maintainer clearly frames as the implementation plan for this issue as one, even without the heading.
-- **If several exist, the newest wins.** Earlier ones are superseded drafts; do not merge them.
+- **Match on the heading first** — a comment starting with `## Implementation plan` (any parenthetical model tag) is a plan; so is a comment a maintainer clearly frames as this issue's implementation plan, even without the heading. **If several exist, the newest wins** — earlier ones are superseded drafts; do not merge them.
 - **A caller-supplied plan does not end the scan.** When the caller (`fableplan-work-on-issue`, `fableplan-loop`, the loop chains) points you at a plan file, still check the thread — a plan comment newer than the caller's copy supersedes it. The same plan in both places is one artifact, not two competing ones.
 - **Record what you adopted** — the comment author, its URL, its date, and **whether a Fable model authored it** (the heading names one, e.g. `## Implementation plan (Fable 5)` / `(Fable 5 advisor)`, or the comment's footer names Fable 5 as the model). A maintainer's hand-written plan is adopted the same way, but it is not Fable-authored; step 6 keys the `, fableplan` title marker off this flag.
 
 Finding no plan is normal: proceed with the issue body and validation findings alone.
 
-### 1. Resolve and verify the worktree base
+### 1. Create the isolated worktree on a verified base
 
-All implementation happens in a fresh worktree — never on the default branch itself or a divergent checked-out branch. Detect and fetch the default branch even when dependencies are supplied because it remains the pull request base:
+All implementation happens in a fresh worktree — never on the default branch itself or a divergent checked-out branch. Detect and fetch the default branch even when dependencies are supplied because it remains the pull request base: `DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)`, then `git fetch origin "$DEFAULT_BRANCH"`, and `git branch --show-current` to see where you are now.
 
-```bash
-DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
-git fetch origin "$DEFAULT_BRANCH"
-git branch --show-current   # where am I now?
-```
-
-If `baseRefs` is absent, the resolved worktree base is `origin/<default>` as before. If it is present, validate the complete list **before creating a worktree**:
+**Resolve the base.** If `baseRefs` is absent, the resolved worktree base is `origin/<default>`. If it is present, validate the complete list **before creating a worktree**:
 
 - Reject an empty list; duplicate PR numbers, refs, or SHAs; non-positive integer PR numbers; and SHAs that are not 40–64 hexadecimal characters. Before any field reaches a shell command, validate each ref as plain data against `^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`; this rejects leading-dash values (`-h`, `--normalize`), whitespace, semicolons, quotes, backticks, and shell expansions. Only after that static allowlist passes, reject the default branch and refs that fail `git check-ref-format --branch "$ref"`.
 - Preserve caller order. For each entry, verify `gh pr view <pr> --json headRefName,headRefOid,headRepository` belongs to this repository and exactly matches both `ref` and `sha`. Any mismatch means the reviewed head changed after readiness and is a blocker; never silently use the new head.
 - Fetch the pull request's GitHub ref explicitly into a namespaced local ref (`pull/<pr>/head:refs/rk-skills/dependencies/pr-<pr>`), verify that fetched ref resolves exactly to `sha`, and record that commit. A missing, ambiguous, cross-repository, or changed head is a blocker; never fall back to the default branch.
 - The first verified SHA is the initial worktree base. Remaining SHAs are integrated in caller order after worktree creation.
 
-### 1.1 Create the isolated worktree
+**Create and enter the worktree.**
 
-- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one.
-- **On Claude Code**, create and switch into one with the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the session cwd in one step):
-
-```
-EnterWorktree(name: "cc/issue-<N>-<slug>")
-```
-
-Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. EnterWorktree starts from its configured base; when `baseRefs` is present, immediately move the brand-new, commit-free branch to the first verified SHA with an anchored `git -C <worktree-path> reset --hard <resolved-first-sha>`. Never do this to a re-entered worktree.
-
+- **If validate-issue already entered a worktree for this issue this session** (cwd is under `.claude/worktrees/<prefix>/issue-<N>-…`), confirm with `pwd` / `git branch --show-current` and proceed — do not create a second one. Likewise, if a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex) instead of creating a duplicate.
+- **On Claude Code**, create and switch into one in a single step with the native `EnterWorktree` tool, which creates under `.claude/worktrees/`: `EnterWorktree(name: "cc/issue-<N>-<slug>")`. Pass the name **with** the `cc/` prefix — `EnterWorktree` uses it verbatim as the branch/worktree name, it does not add one itself. `<slug>` = the issue title kebab-cased to ≤5 words (drop filler, strip punctuation) — e.g. issue 873 "Scale-in / pyramiding support for open positions" → `cc/issue-873-scale-in-pyramiding`. EnterWorktree starts from its configured base; when `baseRefs` is present, immediately move the brand-new, commit-free branch to the first verified SHA with an anchored `git -C <worktree-path> reset --hard <resolved-first-sha>`. Never do this to a re-entered worktree.
 - **On Cursor or Codex** (no `EnterWorktree` tool available), create the worktree with a raw `git worktree add`, prefixing the branch by hand — `cursor/` or `codex/` respectively:
 
 ```bash
@@ -83,17 +67,9 @@ git worktree add .claude/worktrees/cursor/issue-<N>-<slug> -b cursor/issue-<N>-<
 
 (swap `cursor/` for `codex/` on Codex), then `cd` into it — remember the session's tracked cwd doesn't follow a bare `cd`, so re-verify `pwd` before later steps.
 
-If a worktree for this issue already exists, enter it by `path` (Claude Code) or `cd` into it (Cursor/Codex).
+After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and verify that `HEAD` exactly matches the resolved base commit: `git -C <worktree-path> rev-parse HEAD <resolved-base-sha>` — the two SHAs must match. Anchor every command with `-C <worktree-path>` because shell state does not persist. If a brand-new worktree differs, reset only that commit-free worktree to the resolved base; never reset a re-entered worktree.
 
-After the call, confirm the switch (`pwd` / `git branch --show-current`), state the path, and verify that `HEAD` exactly matches the resolved base commit. Anchor every command with `-C <worktree-path>` because shell state does not persist. If a brand-new worktree differs, reset only that commit-free worktree to the resolved base; never reset a re-entered worktree.
-
-```bash
-git -C <worktree-path> rev-parse HEAD <resolved-base-sha>   # the two SHAs must match
-```
-
-### 1.2 Integrate multiple hard prerequisites
-
-When `baseRefs` contains more than one ref, create one deterministic integration base **before reading or changing product files**:
+**Integrate multiple hard prerequisites.** When `baseRefs` contains more than one ref, create one deterministic integration base **before reading or changing product files**:
 
 1. From the worktree based on the first ref, merge all remaining recorded remote-tracking commits in caller order with one `git merge --no-commit --no-ff` invocation.
 2. If Git reports any conflict or cannot form the integration, abort the merge and return blocked with the conflicting refs. Do not resolve product conflicts speculatively, implement the issue, or open a pull request.
@@ -106,7 +82,7 @@ The resulting `HEAD` is the only authorized base for validation and implementati
 
 Read the issue body **and its comment thread**, already fetched in step 0 (maintainer clarifications and prior validation reports often live in comments), the validation findings if validate-issue produced them this session, and the repo's `CLAUDE.md` / architecture docs for the subsystem you're about to touch. Establish: which files change, what the correct fix is (per the traced code, not the prose), what tests prove it, and which conventions/invariants govern the area. If the issue's proposed sketch was marked ⚠️/❌ during validation, implement the **optimal direction for this repo**, not the original sketch — correctness and the codebase's patterns outrank issue loyalty.
 
-**An adopted plan is the blueprint.** If step 0.1 found one, implement to it rather than re-deriving an approach — the plan already cost a planning pass. Three things override it, in this order:
+**An adopted plan is the blueprint.** If step 0 found one, implement to it rather than re-deriving an approach — the plan already cost a planning pass. Three things override it, in this order:
 
 1. **The traced code.** Where the plan contradicts what the code actually does, follow the code.
 2. **Anything newer on the issue.** A maintainer comment or an issue edit posted after the plan supersedes the part it touches.
@@ -154,17 +130,15 @@ Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). `<har
 
 ### 6. Open the PR
 
-The duplicate-PR gate already ran in step 0; if significant time has passed since, re-run the `gh pr list` search cheaply before creating.
-
-Shell state does **not** persist between Bash commands, so `$DEFAULT_BRANCH` from step 1 is gone here — re-detect it inline rather than assuming the variable survived:
+The duplicate-PR gate already ran in step 0; if significant time has passed since, re-run the `gh pr list` search cheaply before creating. Shell state does **not** persist between Bash commands, so `$DEFAULT_BRANCH` from step 1 is gone here — re-detect it inline rather than assuming the variable survived:
 
 ```bash
 gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)" --head <branch> --title "<title>" --body-file <body-file>
 ```
 
-- **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket only when a **Fable** plan drove the build — one produced this session, or a Fable-authored plan adopted in step 0.1, which counts the same. An adopted plan a maintainer wrote earns no marker, because `, fableplan` asserts that a Fable 5 plan was posted before the build). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
+- **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket only when a **Fable** plan drove the build — one produced this session, or a Fable-authored plan adopted in step 0, which counts the same. An adopted plan a maintainer wrote earns no marker, because `, fableplan` asserts that a Fable 5 plan was posted before the build). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
 - **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified under `## Summary` / verification headings first; keep it scannable, don't restate the whole issue. **End with `## Plain simple English`** — one short paragraph under 55 words in ASD-STE100 (Simplified Technical English) per the CLAUDE.md/AGENTS.md Response Style rules, no unexplained acronyms — stating what changed and why it matters, so a human can understand the PR without reading the technical summary.
-- **Adopted plan:** when step 0.1 found a plan, link the comment and state that the diff follows it, then list every deviation with its reason (or state that there were none). A reviewer compares the diff against that plan.
+- **Adopted plan:** when step 0 found a plan, link the comment and state that the diff follows it, then list every deviation with its reason (or state that there were none). A reviewer compares the diff against that plan.
 - **Dependency base:** when `baseRefs` was supplied, list every predecessor pull request and verified head in integration order, state that they must merge first, and keep the PR base set to the repository's default branch.
 - **Footer:** same convention as the commit — **Created** verb, repo footer format (global default `Created with LLM: <current model> | <effort> | Harness: <harness>`, harness resolved per step 5: `Claude Code` interactively, the Action identifier in CI). No `Co-authored-by` trailer.
 
@@ -185,23 +159,18 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Situation | Action |
 |-----------|--------|
 | About to implement on the default branch or a divergent checked-out branch | Stop — enter the isolated worktree first (step 1) |
-| Caller supplies invalid, duplicate, missing, ambiguous, cross-repository, or changed `baseRefs` | Stop blocked — never fall back to the default branch or guess a replacement |
+| Caller supplies invalid, duplicate, missing, ambiguous, cross-repository, or changed `baseRefs`; multiple bases conflict; or a verified predecessor is not an ancestor of the integration base | Stop blocked, aborting any pending merge first — never fall back to the default branch or guess a replacement |
 | Fresh worktree's HEAD doesn't match the resolved base | Reset only the just-created, commit-free worktree to the verified base; never reset a re-entered worktree |
-| Multiple bases conflict or any verified predecessor is not an ancestor of the integration base | Abort the merge and return blocked before product changes |
 | Worktree for this issue already exists | Enter it by `path`; don't create a duplicate |
 | Issue lives in a different repo than the current checkout | Stop — work in a clone of that repo, or tell the user which repo to check out |
-| Issue is already closed | Stop and report — don't implement a resolved issue |
-| An open PR already addresses the issue | Don't start a duplicate — catch this in step 0, before a worktree exists; surface it (or continue on it if it's this session's branch) |
-| Issue thread already carries an implementation plan | Adopt the newest one (step 0.1) and build to it; name every deviation in the PR body, and add `, fableplan` to the title bracket only when that plan is Fable-authored |
-| Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Follow the code / the newer instruction / the safe design, and state the deviation in the PR body |
-| Tempted to re-derive an approach although a plan comment exists | Don't — the plan was already vetted; deviate only for the three reasons in step 2 |
-| Issue description conflicts with what the code actually does | Trust the traced code; implement the real fix, note the discrepancy in the PR body |
-| Issue's proposed sketch was ⚠️/❌ in validation | Implement the optimal direction for this repo, not the original sketch |
+| Issue is already closed, or an open PR already addresses it | Stop at step 0, before a worktree exists — report the closed issue or surface the PR; continue only when that PR is this session's own branch |
+| Issue thread already carries an implementation plan | Adopt the newest one (step 0) and build to it — never re-derive an approach the plan already settled; name every deviation in the PR body, and add `, fableplan` to the title bracket only when that plan is Fable-authored |
+| Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Follow the code / the newer instruction / the safe design — only step 2's three overrides justify deviating — and state the deviation in the PR body |
+| Issue description conflicts with what the code actually does, or its sketch was ⚠️/❌ in validation | Trust the traced code and implement the optimal direction for this repo, not the original sketch; note the discrepancy in the PR body |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
 | Anywhere the default branch is needed (fetch or PR `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
 | Writing the PR body | `## Summary` / verification first; include `Closes #<N>` (without it the merge doesn't resolve the issue); end with `## Plain simple English` (≤55 words, ASD-STE100, per the CLAUDE.md/AGENTS.md Response Style rules), then the repo's footer convention — **Created** verb, no `Co-authored-by` |
-| Tempted to trigger an `@claude` review or wait on CI after opening the PR | Don't — the skill ends with the open PR; review requests are the caller's job |
-| Tempted to pause and ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report |
+| Tempted to trigger an `@claude` review, wait on CI, or pause to ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report; the skill ends with the open PR, and review requests belong to the caller |
