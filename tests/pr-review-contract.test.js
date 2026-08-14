@@ -256,8 +256,8 @@ describe('PR review contract', () => {
 
   test('fix-pr-review step-label consumers use surviving whole-number labels', async () => {
     const consumers = [
-      ['skills/fix-pr-review-loop/SKILL.md', ['1', '5', '7', '10']],
-      ['skills/work-on-issue-loop/SKILL.md', ['5']],
+      ['skills/fix-pr-review-loop/SKILL.md', ['1', '3', '5', '7', '10']],
+      ['skills/work-on-issue-loop/SKILL.md', ['1', '3', '5', '10']],
       ['workflows/milestone-pipeline.js', ['10']],
     ]
     for (const [path, labels] of consumers) {

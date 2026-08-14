@@ -52,7 +52,7 @@ Run this as a background until-loop (e.g. via the Monitor tool) so you're notifi
 
 ### 3. Check the review against the stop conditions
 
-Fetch the latest review and classify it exactly like fix-pr-review steps 1–2: verdict (`LGTM` / `Needs Updates`) and which sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`).
+Fetch the latest review and classify it exactly like fix-pr-review step 1 and step 3: verdict (`LGTM` / `Needs Updates`) and which sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`).
 
 Evaluate in this order:
 
@@ -62,7 +62,7 @@ Evaluate in this order:
 
 ### 4. Resolve the review and loop
 
-Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 7).
+Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 10).
 
 fix-pr-review also decides its own delegation (its step 5): it always validates the findings inline, then either implements inline or hands steps 6–11 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
 
@@ -117,4 +117,4 @@ After that narrative, name each unverified source from any `**Verification limit
 - **Hard-stopping a `Needs Updates` PR once `review_count` passes 5.** There's no such rule — the cap only lowers the bar for what counts as "done" once an LGTM shows up; it never stops the loop on its own.
 - **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
 - **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.
-- **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 7) — don't add a second one here.
+- **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 10) — don't add a second one here.

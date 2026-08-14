@@ -52,7 +52,7 @@ Run this as a background until-loop (e.g. via the Monitor tool) so you're notifi
 
 ### 3. Check the review against the stop conditions
 
-Fetch the latest review and classify it exactly like fix-pr-review steps 1 and 3: verdict (`LGTM` / `Needs Updates`) and which sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`).
+Fetch the latest review and classify it exactly like fix-pr-review step 1 and step 3: verdict (`LGTM` / `Needs Updates`) and which sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`).
 
 Evaluate in this order:
 
