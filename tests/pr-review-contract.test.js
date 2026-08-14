@@ -4,7 +4,7 @@ const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
 const CONTRACT_COPIES = [
-  'skills/pr-review-format/SKILL.md',
+  'skills/pr-review/SKILL.md',
   'templates/claude-workflow/prompts/pr-review-format.md',
   'templates/claude-review.yml',
 ]
@@ -145,7 +145,7 @@ describe('PR review contract', () => {
 
   test('milestone-pipeline review prompt aligns with the skill CI policy', async () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
-    const skill = normalized['skills/pr-review-format/SKILL.md']
+    const skill = normalized['skills/pr-review/SKILL.md']
 
     expect(skill).toMatch(/do not gate the verdict on CI status/i)
     expect(pipeline).toMatch(

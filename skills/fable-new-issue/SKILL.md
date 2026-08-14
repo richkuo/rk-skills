@@ -54,7 +54,7 @@ If the subagent reported a duplicate, stop and surface it — offer to update/co
 
 ### 4. Spot-check the draft
 
-Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title prefix, Problem/Goal/Approach/Acceptance criteria all concrete, no time/effort estimates, plain-simple-English (ASD-STE100) title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch — tell the user what's off and let them decide.
+Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title prefix, Problem/Goal/Approach/Acceptance criteria all concrete, a `## Plain simple English` section after the criteria (under 55 words, ASD-STE100, no paths or symbols), no time/effort estimates, plain-simple-English (ASD-STE100) title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch — tell the user what's off and let them decide.
 
 ### 5. File it (main agent)
 

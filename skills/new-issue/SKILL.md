@@ -5,7 +5,7 @@ description: Use when the user says "new issue", "create an issue", "file an iss
 
 # new-issue
 
-Create a fully-specified GitHub issue from the user's prompt — or, when nothing is prompted, from what was just discussed in the conversation. The deliverable is a filed issue that someone (human or agent) could pick up cold and implement correctly: concrete problem statement, goal, approach, acceptance criteria, complexity score, attribution footer. **Never file a placeholder, stub, or empty-bodied issue — no exceptions.**
+Create a fully-specified GitHub issue from the user's prompt — or, when nothing is prompted, from what was just discussed in the conversation. The deliverable is a filed issue that someone (human or agent) could pick up cold and implement correctly: concrete problem statement, goal, approach, acceptance criteria, complexity score, plain-language summary, attribution footer. **Never file a placeholder, stub, or empty-bodied issue — no exceptions.**
 
 **Spec the absolute-best solution — full stop.** When the issue proposes an approach, derive it from first principles as if cost, compute, time, effort, manpower, token spend, code volume, and blast radius were unlimited — none of these are factors and none may narrow the option space. The only constraints that override "best" are correctness and safety (money, data integrity, security, auto-protective mechanisms — safety-class gaps are never acceptable, however "low-risk"). Don't spec the tidier/less-code design when it leaves a correctness or safety gap, and don't scope the issue down to what seems cheap to build.
 
@@ -78,9 +78,14 @@ Body structure:
 - <observable behavior / test that must pass>
 - <…>
 
+## Plain simple English
+<One short paragraph under 55 words, ASD-STE100: what is wrong or missing and why it matters, in everyday language.>
+
 ---
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
+
+`## Plain simple English` is mandatory and is the **last prose section**, after the acceptance criteria — the full rule lives in `github-issue-format`, including where an Execution block sits when one is stamped. Write it for a reader who knows the product but not the code: state what is wrong or missing and why it matters. Do not restate the Approach there, do not list file paths or symbols, and never put a time or effort estimate in it.
 
 The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`), and always ends with the explicit fableplan signal from step 4 (`· fableplan: yes` iff score ≥ 61). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (or `low` when a Fable build actually ran at that discretionary tier; default `high`), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
 
@@ -110,4 +115,6 @@ Terse: issue URL, number, one-line summary of what it covers, complexity score, 
 | The cheap design and the correct design diverge | Spec the correct one; cost, effort, and blast radius are not factors — only correctness and safety constrain |
 | Touches money / data integrity / security / auto-protective logic | Spec the safest correct design from first principles; surface the risk in the body and Risk axis |
 | Tempted to include a time/effort estimate | Don't — complexity score only (Capability band + Volume), described via the axes |
+| Tempted to skip `## Plain simple English` because the body already explains it | Don't — it is mandatory on every issue; the technical sections are written for a specialist, that one is not |
+| The plain-language section only repeats the Approach or names files | Rewrite it — it states what is wrong and why it matters in everyday language, under 55 words, no paths or symbols |
 | Repo has its own issue template or `CLAUDE.md` issue format | Follow the repo's format; it overrides this default |

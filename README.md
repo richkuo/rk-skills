@@ -27,10 +27,10 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 
 | Skill | What it does |
 |-------|--------------|
-| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks the claims against the actual code first, adds a complexity score and an explicit `fableplan` signal, and never files a half-empty stub. |
+| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks the claims against the actual code first, adds a complexity score, an explicit `fableplan` signal, and a short plain-language summary anyone can read, and never files a half-empty stub. |
 | `new-issue-loop` | Runs `new-issue`, then automatically validates the new issue, implements it, and drives the PR through review — one command from idea to reviewed PR. Stops early if it finds a duplicate issue. |
 | `validate-issue` | Fact-checks an existing issue: verifies every claim against the real code (with file and line references), and checks that the proposed approach is feasible and self-consistent. When the issue's `fableplan` signal is `yes`, it offers a Fable 5 plan as one of the reply options and leaves the call to you. |
-| `github-issue-format` | Reference skill: the required format for creating or editing any GitHub issue (`[C<score>]` title, complexity rationale line ending in an explicit `fableplan: yes\|no` signal, complete-body rule). Loaded automatically before an issue is filed or edited. |
+| `github-issue-format` | Reference skill: the required format for creating or editing any GitHub issue (`[C<score>]` title, complexity rationale line ending in an explicit `fableplan: yes\|no` signal, complete-body rule, and a mandatory plain-language summary section every reader can understand). Loaded automatically before an issue is filed or edited. |
 | `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
 | `work-on-issue` | Implements an issue end-to-end: scans the issue thread for a posted implementation plan and builds to it (newest wins; deviations must be named in the PR), in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. |
 | `work-on-issue-loop` | Runs `work-on-issue`, requests a code review, then keeps fixing whatever the review finds until the PR gets an approval ("LGTM" — looks good to me). |
@@ -42,7 +42,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 |-------|--------------|
 | `fix-pr-review` | Reads all unaddressed feedback on a PR — review comments, inline threads, and any failing CI checks — re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review. |
 | `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved, and won't stop on an approval while the PR is still unmergeable. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
-| `pr-review-format` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out, verification method that gates `LGTM`). Every finding must include an ASD-STE100 plain-simple-English summary under 55 words; `Requires Human Review` items must also include a recommended proposed solution under 55 words. Loaded automatically before a review is written. |
+| `pr-review` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out, verification method that gates `LGTM`). Every finding must include an ASD-STE100 plain-simple-English summary under 55 words; `Requires Human Review` items must also include a recommended proposed solution under 55 words. Loaded automatically before a review is written. |
 
 ### Docs & release skills
 

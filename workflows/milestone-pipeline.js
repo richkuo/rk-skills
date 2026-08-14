@@ -105,7 +105,7 @@ const REVIEW_LOOP = ARGS.reviewLoop ?? true
 // 'github' (default): reviews run through the repo's @claude Action, so the
 // review history lives on GitHub under the same bot used outside pipeline
 // runs. 'subagent' reviews in-session — a reviewer agent posts a
-// pr-review-format comment, a fixer agent resolves it — the fallback when the
+// pr-review comment, a fixer agent resolves it — the fallback when the
 // repo lacks the Action or GitHub Actions is unavailable.
 const REVIEW_MODE = ARGS.reviewMode ?? 'github'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
@@ -286,7 +286,7 @@ const SUBAGENT_REVIEW_SCHEMA = {
   type: 'object',
   required: ['verdict', 'blocking_count', 'nonblocking_count', 'head_ref', 'head_sha', 'comment_url', 'summary'],
   properties: {
-    verdict: { type: 'string', enum: ['lgtm', 'needs_updates'], description: 'The pr-review-format verdict line of the posted review' },
+    verdict: { type: 'string', enum: ['lgtm', 'needs_updates'], description: 'The pr-review verdict line of the posted review' },
     blocking_count: { type: 'integer', description: 'Items under ### Needs Fixing plus ### Requires Human Review' },
     nonblocking_count: { type: 'integer', description: 'Items under ### Recommended Optional plus ### Create Follow-up Issue' },
     head_ref: { type: 'string', description: 'Exact pull request head branch that was reviewed' },
@@ -506,14 +506,14 @@ function subagentReviewPrompt(issue, prNumber, cycle) {
   const reReview = cycle > 1
     ? ` This is re-review cycle ${cycle}: a fix pass addressed the previous review and posted a per-finding disposition comment — verify each disposition against the actual code rather than taking it on faith, and review any new commits in full.`
     : ''
-  return `You are an independent pull-request review agent in this repo — you did not write this code; review it cold. Load the \`pr-review-format\` skill BEFORE composing anything (mandatory): its verdict line, section structure, materiality filter, and safety carve-out are the contract.${reReview}
+  return `You are an independent pull-request review agent in this repo — you did not write this code; review it cold. Load the \`pr-review\` skill BEFORE composing anything (mandatory): its verdict line, section structure, materiality filter, and safety carve-out are the contract.${reReview}
 
 Review PR #${prNumber}, which closes issue #${issue}:
 1. \`gh pr view ${prNumber} --json headRefName,headRefOid,baseRefName,url,state\` — record the exact head you review.
-2. \`git fetch origin\`, then read the full diff against the base AND every changed file in full at that head commit — the LGTM precondition requires completing every applicable Before you write item from the pr-review-format skill (including full-file reads, self-consistency, primary sourcing, and no charitable reading), from a detached checkout or worktree of the head commit, never the main checkout's working tree.
+2. \`git fetch origin\`, then read the full diff against the base AND every changed file in full at that head commit — the LGTM precondition requires completing every applicable Before you write item from the pr-review skill (including full-file reads, self-consistency, primary sourcing, and no charitable reading), from a detached checkout or worktree of the head commit, never the main checkout's working tree.
 3. Read issue #${issue} (\`gh issue view ${issue}\`): its Acceptance criteria are the contract the PR must meet.
 4. Take one CI snapshot (\`gh pr checks ${prNumber}\`): a failed check that traces to this PR's diff is evidence of a code defect — report the defect from the failing assertion/code, not the check status itself; pending checks are never waited on.
-5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review-format structure (footer verb Validated, harness milestone-pipeline).
+5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review structure (footer verb Validated, harness milestone-pipeline).
 
 Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` review comment.
 
@@ -535,7 +535,7 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 }
 
 // Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
-// pr-review-format comment and returns its verdict; a fixer resolves it; repeat.
+// pr-review comment and returns its verdict; a fixer resolves it; repeat.
 // First review runs on the issue's "PR review:" model/effort when one is
 // stamped, else on the [C..] band's review default;
 // a re-review after a fix pass that addressed only non-blocking findings drops

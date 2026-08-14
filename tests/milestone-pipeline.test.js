@@ -1256,7 +1256,8 @@ describe('milestone-pipeline subagent review mode', () => {
     const reReviewPrompt = promptFor(events, 'review:PR#1002 c2 (claude/high)')
     const fixPrompt = promptFor(events, 'fix:PR#1002 c1 (fable/high)')
 
-    expect(reviewPrompt).toContain('pr-review-format')
+    expect(reviewPrompt).toContain('Load the `pr-review` skill')
+    expect(reviewPrompt).not.toContain('pr-review-format')
     expect(reviewPrompt).toContain('do NOT trigger any `@claude` review comment')
     expect(reviewPrompt).not.toContain('re-review cycle')
     expect(reReviewPrompt).toContain('re-review cycle 2')

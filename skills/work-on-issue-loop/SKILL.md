@@ -73,7 +73,7 @@ Increment `review_count`, record the new trigger timestamp from that comment, an
 On either "Done" terminal state (before step 5), sweep the deliverables for follow-on work the implementation itself named — this is separate from the review's `Create Follow-up Issue` section (fix-pr-review handles those) and is routinely missed without an explicit pass:
 
 - Scan the **PR body**, **commit message(s)**, and **any docs/READMEs the diff added or changed** for phrases like "follow-on", "own issue", "future work", "next step", "not yet wired/deployed", "needs a follow-up".
-- For each named item: file a **fully-specced** issue per the repo's issue conventions (complexity-prefixed title, complete body — problem, goal, approach, acceptance — attribution footer). Never file a stub; if an item genuinely can't be specced yet, don't file it — name it in the step 5 report as **deliberately unfiled** instead.
+- For each named item: file a **fully-specced** issue per the repo's issue conventions (complexity-prefixed title, complete body — problem, goal, approach, acceptance, a `## Plain simple English` section under 55 words — attribution footer; `github-issue-format` owns the full rule). Never file a stub; if an item genuinely can't be specced yet, don't file it — name it in the step 5 report as **deliberately unfiled** instead.
 - Skip items that already have an issue (search first: `gh issue list --search "<keywords>" --state all`).
 - Include every filed issue URL (and any deliberately-unfiled item) in the step 5 report.
 
