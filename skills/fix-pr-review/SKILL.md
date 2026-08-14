@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review
-description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh re-review from the selected review bot (@claude by default, @codex when selected).
+description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "address the review comments", "/fix-pr-review". Takes an optional PR number/URL (defaults to the current branch's PR) and an optional `codex` argument, in either order, to select Codex as the review bot (e.g. "/fix-pr-review 123 codex"). Fetches all unaddressed review feedback on the PR (formal reviews, review-style issue comments, inline diff comments, and any already-failed CI checks), RE-VALIDATES every finding against the actual code before touching anything (never blind-implements), fixes the findings that survive validation, and for judgment calls and optional improvements derives and implements the absolute-best solution autonomously without pausing, resolves any merge conflicts with the base branch, then commits and pushes, posts a per-finding disposition comment back to the PR, and triggers a fresh re-review from the selected review bot (@claude by default, @codex when selected).
 ---
 
 # fix-pr-review
@@ -11,9 +11,11 @@ Take all unaddressed review feedback on a pull request and resolve it fully and 
 
 ## Input
 
-The user provides one of:
-- Nothing — **default to the PR for the current branch** (`gh pr view`).
-- `#<N>` / `<N>` / full URL / `owner/repo#N`.
+The user provides, in any order:
+- An optional PR reference: `#<N>` / `<N>` / full URL / `owner/repo#N`. Omit it to **default to the PR for the current branch** (`gh pr view`).
+- An optional literal bot token, `codex` (case-insensitive), selecting Codex as this cycle's re-review bot (step 10). A token that is neither a PR reference nor `codex` is not a bot selection.
+
+A token matching neither category (a typo like `codexx`, a malformed reference like `#abc`, a stray extra word) doesn't block resolution: ignore it for parsing — fall back to the current-branch PR if no valid reference was given, and to `@claude` if `codex` wasn't given — but name it in the step 11 report as an unrecognized argument, so a mistyped intent doesn't silently produce the wrong outcome.
 
 If the current branch has no PR and none was given, say so and stop — there's nothing to fix.
 
@@ -156,7 +158,7 @@ Post one comment that tells the reviewer exactly what happened to each finding �
 
 ### 10. Trigger the re-review
 
-**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
+**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), the invocation included the literal `codex` argument (Input section above), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
 
 Then route by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
 
@@ -181,7 +183,7 @@ gh pr comment <N> --body "@codex luna review"
 
 ### 11. Report to the user
 
-Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). When the review carried any `**Verification limitation:**` lines, name each unverified source in the report even though they are not findings — omit that field when none. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
+Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). When the review carried any `**Verification limitation:**` lines, name each unverified source in the report even though they are not findings — omit that field when none. When the invocation carried an unrecognized argument (Input section), name it too — omit that field when none. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
 
 ## Red Flags — STOP
 
