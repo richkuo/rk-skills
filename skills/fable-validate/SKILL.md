@@ -27,7 +27,7 @@ Locate the `validate-issue` SKILL.md the subagent must follow — prefer the pro
 
 Record the absolute path. If none of these resolves, stop and tell the user.
 
-If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–7 of the procedure, including fetching. If no issue was referenced, the subagent resolves the latest open issue itself per the procedure.
+If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–8 of the procedure, including fetching. If no issue was referenced, the subagent resolves the latest open issue itself per the procedure.
 
 ### 2. Dispatch the Fable 5 validation subagent
 
