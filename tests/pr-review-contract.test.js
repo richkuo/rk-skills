@@ -227,6 +227,52 @@ describe('PR review contract', () => {
     }
   })
 
+  test('the fix-pr-review core stays small and delegates complete procedures', async () => {
+    const [skill, recipes, disposition, flags] = await Promise.all([
+      read('skills/fix-pr-review/SKILL.md'),
+      read('skills/fix-pr-review/fetch-recipes.md'),
+      read('skills/fix-pr-review/disposition-comment.md'),
+      read('skills/fix-pr-review/red-flags-and-mistakes.md'),
+    ])
+
+    expect(skill.split('\n').length - 1).toBeLessThan(200)
+    for (const reference of [
+      'fetch-recipes.md',
+      'disposition-comment.md',
+      'red-flags-and-mistakes.md',
+    ]) {
+      expect(skill, reference).toContain(`](${reference})`)
+    }
+
+    expect(recipes).toContain('reviewThreads(first:100)')
+    expect(recipes).toContain('--log-failed')
+    expect(recipes).toMatch(/`bucket: cancel`/)
+    expect(disposition).toContain('Resolved judgment calls (was Requires Human Review)')
+    expect(disposition).toContain('/replies')
+    expect(flags).toContain('Red Flags — STOP')
+    expect(flags).toContain('Common Mistakes')
+    expect(flags).toContain('Blind-implementing the review')
+  })
+
+  test('fix-pr-review step-label consumers use surviving whole-number labels', async () => {
+    const consumers = [
+      ['skills/fix-pr-review-loop/SKILL.md', ['1', '5', '7', '10']],
+      ['skills/work-on-issue-loop/SKILL.md', ['5']],
+      ['workflows/milestone-pipeline.js', ['10']],
+    ]
+    for (const [path, labels] of consumers) {
+      const body = await read(path)
+      expect(body, path).not.toMatch(
+        /fix-pr-review[^\n]{0,500}step(?:s|-)?\s*(?:1\.5|3\.5|4\.5)/i,
+      )
+      for (const label of labels) {
+        expect(body, `${path}: step ${label}`).toMatch(
+          new RegExp(`fix-pr-review[^\\n]{0,500}step(?:s|-)?\\s*${label}\\b`, 'i'),
+        )
+      }
+    }
+  })
+
   test('contract inventory states finding-section stop semantics and both guards', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/no remaining \*\*finding\*\* sections/i)

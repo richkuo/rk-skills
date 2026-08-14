@@ -64,7 +64,7 @@ Evaluate in this order:
 
 Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh `@claude` review itself (routed to Sonnet when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 7).
 
-fix-pr-review also decides its own delegation (its step 3.5): it always validates the findings inline, then either implements inline or hands steps 4–8 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
+fix-pr-review also decides its own delegation (its step 5): it always validates the findings inline, then either implements inline or hands steps 6–11 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
 
 Increment `review_count`, record the new trigger timestamp from that comment, and go back to step 2.
 
