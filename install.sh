@@ -1,24 +1,56 @@
 #!/usr/bin/env bash
 # Recreate the ~/.claude (and ~/.codex) symlinks that point into this repo.
-# Safe: backs up any existing real file or directory to <name>.bak. The only
-# outright deletions are symlinks for the skills and agents this repo itself
-# retired, listed by name below — a symlink holds no data of its own.
+# Safe: backs up any existing real file or directory to <name>.bak, and never
+# destroys a backup an earlier run wrote — a taken name falls through to
+# <name>.bak.2, .bak.3, and so on. The only outright deletions are symlinks for
+# the skills and agents this repo itself retired, listed by name below — a
+# symlink holds no data of its own.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE="${HOME}/.claude"
 CODEX="${HOME}/.codex"
+# Backup names tried per target before the script gives up and keeps the file.
+BACKUP_LIMIT=99
+
+exists() {
+  # exists <path> — true for anything on disk, including a dangling symlink,
+  # which -e alone reports as absent.
+  [ -e "$1" ] || [ -L "$1" ]
+}
+
+free_backup_path() {
+  # free_backup_path <absolute-target> — echo the first unused backup name for
+  # <target>, or nothing when every candidate is taken. `mv` onto a taken name
+  # replaces a file backup outright and nests one directory backup inside
+  # another, so a name is only free when nothing is there at all.
+  local target="$1" candidate="$1.bak" n=2
+  while exists "$candidate"; do
+    # An explicit `return 0` — a bare `return` would carry the failed test's
+    # status out through the caller's `$(...)` and trip `set -e`.
+    if [ "$n" -gt "$BACKUP_LIMIT" ]; then return 0; fi
+    candidate="$target.bak.$n"
+    n=$((n + 1))
+  done
+  echo "$candidate"
+}
 
 link() {
   # link <repo-relative-source> <absolute-target>
-  local src="$REPO/$1" target="$2"
+  local src="$REPO/$1" target="$2" backup
   [ -e "$src" ] || { echo "SKIP (missing in repo): $1"; return; }
   mkdir -p "$(dirname "$target")"
   if [ -L "$target" ]; then
     rm "$target"                       # stale/other symlink: replace
   elif [ -e "$target" ]; then
-    mv "$target" "$target.bak"         # real file: preserve it
-    echo "backed up existing $target -> $target.bak"
+    backup="$(free_backup_path "$target")"
+    if [ -z "$backup" ]; then
+      # Refusing to link loses nothing; clobbering a backup loses a file.
+      echo "kept $target (no free backup name after $BACKUP_LIMIT tries), not linked"
+      return
+    fi
+    mv "$target" "$backup"             # real file: preserve it
+    echo "backed up existing $target -> $backup"
   fi
   ln -s "$src" "$target"
   echo "linked $target -> $src"
