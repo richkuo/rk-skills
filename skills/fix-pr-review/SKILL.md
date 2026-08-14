@@ -47,7 +47,7 @@ State what you picked (authors + timestamps) so the user can confirm it's the ri
 
 **Note whether the collected set contains any blocking finding** — a `Needs Fixing` or `Requires Human Review` item from any review, an inline thread asserting a real defect (classified in step 3), or any failing CI check from step 2. This drives the re-review routing in step 10.
 
-**If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 6), and file each `Create Follow-up Issue` item as a GitHub issue. Don't invent work the review never raised; if the feedback is a bare `LGTM` with no finding items at all and no open inline threads — a `**Verification limitation:**` line is not a finding and does not count — report that the PR is approved and stop, naming every `**Verification limitation:**` line from that review in the step-11 report (omit the field when none) — unless step 0 flagged merge conflicts, in which case still run step 7 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
+**If the only new feedback is `LGTM` with no blocking sections:** there's nothing blocking, but still address any non-blocking items the review raised — implement each `Recommended Optional` item with the absolute-best-solution standard (step 6), and file each `Create Follow-up Issue` item as a GitHub issue (complete body per its step 3 bar — never a stub). Don't invent work the review never raised; if the feedback is a bare `LGTM` with no finding items at all and no open inline threads — a `**Verification limitation:**` line is not a finding and does not count — report that the PR is approved and stop, naming every `**Verification limitation:**` line from that review in the step-11 report (omit the field when none) — unless step 0 flagged merge conflicts, in which case still run step 7 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
 
 ### 2. Fetch failing CI checks
 
@@ -65,7 +65,7 @@ Parse all collected feedback — structured reviews, inline diff threads, and fa
 - **Needs Fixing** — blocking; reviewer asserts a real defect. Every CI Failure from step 2 starts here by default — a red check is real until step 4 proves otherwise.
 - **Requires Human Review** — blocking; reviewer couldn't decide (a genuine tradeoff or missing context).
 - **Recommended Optional** — non-blocking improvement.
-- **Create Follow-up Issue** — out-of-scope, track separately.
+- **Create Follow-up Issue** — out-of-scope, track separately. Wherever this run files one (the LGTM-only path in step 1, or the disposition's deferred section), the issue gets a complete body per the repo's issue conventions — complexity-prefixed title, problem, goal, approach, acceptance criteria, a `## Plain simple English` section under 55 words, attribution footer; `github-issue-format` owns the full rule. Never file a stub.
 
 A `**Verification limitation:**` line is **not a finding.** Skip every such line when classifying — do not bucket it, dispose it, rebut it, or treat it as remaining work. It does not block the approved-and-stop path and does not count toward "findings still listed."
 
