@@ -10,6 +10,7 @@ const ISSUE_BODY_CONSUMERS = [
   'skills/prd-to-issues/SKILL.md',
   'skills/fable-new-issue/SKILL.md',
   'skills/work-on-issue-loop/SKILL.md',
+  'skills/fix-pr-review/SKILL.md',
   'skills/validate-issue/issue-editing.md',
   'templates/claude-workflow/prompts/fix-pr.md',
   'templates/claude-workflow/prompts/issue-workflow.md',
@@ -42,8 +43,10 @@ describe('Issue-body Plain simple English contract', () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
       const source = normalized[path]
       expect(source, path).toMatch(/Plain simple English/)
+      // Anchor the cap to the section heading itself (case-sensitive, with `##`),
+      // so an unrelated lowercase report-cap sentence can never satisfy this check.
       expect(source, path).toMatch(
-        /Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}Plain simple English/i,
+        /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
     }
   })
@@ -66,6 +69,10 @@ describe('Issue-body Plain simple English contract', () => {
     // The section is for a human reader, never a second copy of the approach.
     expect(owner).toMatch(/Never restate the approach there/i)
     expect(owner).toMatch(/never put a time or effort estimate in it/i)
+    // The backfill fires only on prose-rewriting edits; a metadata-only edit
+    // (Execution block, title prefix) must leave every prose section unchanged.
+    expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
+    expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
   })
 
   test('the new-issue body template places the section after the criteria and before the footer', () => {
