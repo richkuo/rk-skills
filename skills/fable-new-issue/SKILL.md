@@ -30,7 +30,7 @@ If the input is conversation-derived, write the scratchpad summary now (see Inpu
 
 ### 2. Dispatch the Fable 5 drafting subagent
 
-Snapshot `git status --porcelain` before dispatching, then call the Agent tool with:
+**Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching, then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps drafting side-effect-free)
 - `model`: `fable` (the whole point — the draft must come from Fable 5)
@@ -69,6 +69,6 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 ## Notes
 
 - The drafting subagent runs on Fable 5 regardless of the main agent's model — `model: fable` forces it.
-- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent drafts, main agent files) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
+- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

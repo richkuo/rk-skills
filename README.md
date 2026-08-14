@@ -68,6 +68,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 | `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
 | `fable-advisor` | Runs on your session's own model (Sonnet, typically). A persistent Fable 5 advisor writes the plan and stays available for mid-build consults (hard-to-reverse decisions, stuck signals, plan deviations); a separate fresh Fable 5 reviewer issues a binding pre-commit verdict. When a GitHub issue is referenced, it gates the issue and runs `work-on-issue`'s build-and-ship pipeline under the advisor instead of a duplicate flow. |
 | `fable-orchestrate` | Runs on Fable 5. Decomposes the task into self-contained worker specs, dispatches Sonnet 5 workers to implement them, reviews each result inline, integrates everything into one branch, and gets a binding verdict from a fresh Fable 5 reviewer before opening the PR. |
+| `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5 on the current harness — detects Claude Code positively, shells out to the Claude Code CLI on other harnesses (still Fable 5 at the intended effort, read-only), and only as a last resort falls back to another model with the downgrade reported. Loaded automatically before a Fable subagent is dispatched. |
 
 ### App pipeline skills
 

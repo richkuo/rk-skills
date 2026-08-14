@@ -55,7 +55,7 @@ If no issue was resolved in step 1, skip this step.
 
 ### 3. Spawn the advisor and get the plan
 
-Do not plan the task yourself — the advisor owns the plan. Call the Agent tool with:
+Do not plan the task yourself — the advisor owns the plan. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere); it governs the reviewer dispatch in step 7 too. On the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only — no Edit/Write; it advises, it never touches files)
 - `model`: `fable`
@@ -169,7 +169,7 @@ Final message: what was built, verification results, the consult/review trail in
 
 ## Notes
 
-- The advisor and reviewer run on Fable 5 regardless of the session model — `model: fable` forces it. **If `fable` is unavailable** (the Agent call errors on the model id), fall back to the most capable model available, name the model that actually ran in the footer and report, never "Fable 5".
+- The advisor and reviewer run on Fable 5 regardless of the session model — `model: fable` forces it. **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching. Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - The advisor persists for the whole task; the reviewer is fresh by design. Never merge the two roles — anchoring is the failure mode this split exists to prevent.
 - If SendMessage to the advisor fails because the agent is gone (context expired, session summarized), spawn a replacement advisor with the plan and a recap of consults so far, and tell the user the advisor was restarted.
 - Cost shape: the executor burns the bulk tokens; Fable fires only on the plan, checkpoint consults, and the review.

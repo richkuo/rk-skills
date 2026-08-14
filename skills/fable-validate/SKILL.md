@@ -31,7 +31,7 @@ If the user referenced an issue, note the number/repo but do NOT fetch or pre-va
 
 ### 2. Dispatch the Fable 5 validation subagent
 
-Do not validate the issue yourself first — the subagent owns the validation. Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then call the Agent tool with:
+Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps validation side-effect-free)
 - `model`: `fable` (the whole point — the validation must come from Fable 5)
@@ -70,6 +70,6 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 ## Notes
 
 - The validation subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
-- **If the `fable` model is unavailable in this harness** (the Agent call errors on the model id), fall back to the most capable model available and proceed — the isolation pattern (read-only subagent validates, main agent acts) is what matters. Name the model that actually ran in the footer and report, never "Fable 5".
+- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.
