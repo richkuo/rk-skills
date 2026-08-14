@@ -12,5 +12,5 @@ description: Required format for creating or editing any GitHub issue — [C<sco
   `**Complexity: 95/100** — Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh · fableplan: yes`
   (Fable 5 never pairs with `xhigh` — high is Fable's ceiling; xhigh is legal only on Opus/Sonnet-class builds.)
 - **fableplan signal:** `· fableplan: yes` **when the score is ≥ 61** (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); scores below 61 are `· fableplan: no` (they don't need a separate plan). Always write it explicitly — absence is ambiguous, not "no".
-- End the body with the **LLM Attribution Footer** — `Created` for a new issue, `Validated` when a validation pass produced the edit (`validate-issue` and its wrappers), `Updated` for any other edit. Stack the new line under the existing ones; never replace them.
+- End the body with the **LLM Attribution Footer** — `Created` for a new issue, `Validated` when a validation pass produced the edit (`validate-issue` and its wrappers), `Updated` for any other edit. Stack the new line under the existing ones; never replace them, and never append a line that exactly duplicates one already there.
 - **Project precedence:** a repo CLAUDE.md issue/footer format overrides this default.

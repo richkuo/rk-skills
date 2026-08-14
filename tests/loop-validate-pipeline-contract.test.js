@@ -286,6 +286,9 @@ describe('loop/validate pipeline contract', () => {
     expect(owner, `${EDIT_VERB_OWNER}: stack never replace`).toMatch(
       /Preserve prior attribution lines/,
     )
+    expect(owner, `${EDIT_VERB_OWNER}: duplicate collapse`).toMatch(
+      /Collapse exact duplicates only/,
+    )
 
     for (const path of EDIT_VERB_CONSUMERS) {
       const body = procedureBody(texts[path])
@@ -298,6 +301,10 @@ describe('loop/validate pipeline contract', () => {
     expect(format, EDIT_VERB_FORMAT).toMatch(
       /`Created`[\s\S]{0,200}`Validated`[\s\S]{0,200}`Updated`/,
     )
+    // Every file that states the stacking rule states the same duplicate handling.
+    // The milestone workflow prompt mandates only this skill, so an editor that
+    // reads it alone would otherwise stack identical footer lines on a replay.
+    expect(format, `${EDIT_VERB_FORMAT}: duplicate handling`).toMatch(/duplicate/i)
 
     // The milestone workflow prompt applies the same validation corrections to an
     // issue body, so it carries the same verb.
