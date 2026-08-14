@@ -42,7 +42,7 @@ Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already a
 
 ### 3. Apply the update-issue edits, if called for
 
-If the verdict says **Update issue description? Yes**, apply validate-issue's step 11 now — the suggested title/body edits plus the stacked `Updated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
+If the verdict says **Update issue description? Yes**, apply validate-issue's step 11 now — the suggested title/body edits plus the stacked `Validated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
 
 If **No**, skip straight to step 4.
 

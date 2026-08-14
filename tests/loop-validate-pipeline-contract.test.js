@@ -75,6 +75,24 @@ const PLAN_DEVIATION_CALLERS = [
   'skills/validate-fableplan-loop/SKILL.md',
 ]
 
+// validate-issue's issue-editing procedure owns the attribution verb for a
+// validation-driven issue edit. That edit is review/verification output, so the
+// appended footer line is `Validated`; `Updated` there would report a validation
+// pass as an ordinary revision. Every validate-family skill that names the line
+// must agree — there is no generator between these files.
+const EDIT_VERB_OWNER = 'skills/validate-issue/issue-editing.md'
+const EDIT_VERB_CONSUMERS = [
+  'skills/validate-issue-loop/SKILL.md',
+  'skills/validate-fableplan-loop/SKILL.md',
+  'skills/fable-validate/SKILL.md',
+  'skills/fable-validate-loop/SKILL.md',
+  'skills/fable-validate-fableplan/SKILL.md',
+  'skills/fable-validate-fableplan-loop/SKILL.md',
+]
+const EDIT_VERB_FORMAT = 'skills/github-issue-format/SKILL.md'
+// The milestone workflow hands the same issue-correction job to an agent prompt.
+const EDIT_VERB_WORKFLOW = 'workflows/milestone-pipeline.js'
+
 const INVENTORY = 'docs/contract-inventory.md'
 
 /** Strip YAML frontmatter so description: keywords cannot satisfy procedure rules. */
@@ -112,6 +130,10 @@ const texts = Object.fromEntries(
         ...REPORT_CAP,
         PLAN_DEVIATION_OWNER,
         ...PLAN_DEVIATION_CALLERS,
+        EDIT_VERB_OWNER,
+        ...EDIT_VERB_CONSUMERS,
+        EDIT_VERB_FORMAT,
+        EDIT_VERB_WORKFLOW,
         INVENTORY,
       ]),
     ].map(async (path) => [path, await read(path)]),
@@ -250,6 +272,63 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
+  test('validation-driven issue edits stamp Validated, never Updated', () => {
+    const owner = procedureBody(texts[EDIT_VERB_OWNER])
+    expect(owner, `${EDIT_VERB_OWNER}: appended Validated line`).toMatch(
+      /^Validated with LLM: <current model> \| <effort> \| Harness: <harness>$/m,
+    )
+    // The appended stamp must never be an `Updated` line again.
+    expect(owner, `${EDIT_VERB_OWNER}: Updated stamp`).not.toMatch(/^Updated with LLM:/m)
+    expect(owner, `${EDIT_VERB_OWNER}: append the current Updated line`).not.toMatch(
+      /append the current `Updated` line/,
+    )
+    // Stacking survives the verb change: prior lines are kept, never replaced.
+    expect(owner, `${EDIT_VERB_OWNER}: stack never replace`).toMatch(
+      /Preserve prior attribution lines/,
+    )
+    expect(owner, `${EDIT_VERB_OWNER}: duplicate collapse`).toMatch(
+      /Collapse exact duplicates only/,
+    )
+
+    for (const path of EDIT_VERB_CONSUMERS) {
+      const body = procedureBody(texts[path])
+      expect(body, `${path}: Validated attribution line`).toMatch(/Validated with LLM/)
+      expect(body, `${path}: Updated attribution line`).not.toMatch(/Updated with LLM/)
+    }
+
+    // The format skill every editor loads must list the third verb, in verb order.
+    const format = procedureBody(texts[EDIT_VERB_FORMAT])
+    expect(format, EDIT_VERB_FORMAT).toMatch(
+      /`Created`[\s\S]{0,200}`Validated`[\s\S]{0,200}`Updated`/,
+    )
+    // Every file that states the stacking rule states the same duplicate handling.
+    // The milestone workflow prompt mandates only this skill, so an editor that
+    // reads it alone would otherwise stack identical footer lines on a replay.
+    expect(format, `${EDIT_VERB_FORMAT}: duplicate handling`).toMatch(/duplicate/i)
+
+    // The milestone workflow prompt applies the same validation corrections to an
+    // issue body, so it carries the same verb.
+    const workflowLines = texts[EDIT_VERB_WORKFLOW].split('\n')
+    const correctionLine = workflowLines.find((line) =>
+      line.includes('apply these validation corrections'),
+    )
+    expect(correctionLine, `${EDIT_VERB_WORKFLOW}: issue-correction prompt`).toBeDefined()
+    expect(correctionLine, `${EDIT_VERB_WORKFLOW}: Validated footer`).toContain(
+      'Validated with LLM',
+    )
+    expect(correctionLine, `${EDIT_VERB_WORKFLOW}: Updated footer`).not.toContain(
+      'Updated with LLM',
+    )
+    // Its PR-fix prompts stay `Updated` — those commits are revisions, not review
+    // output. A blanket rename of the verb would break this half of the contract.
+    expect(
+      workflowLines.some(
+        (line) => line.includes('fix-pr-review') && line.includes('Updated with LLM'),
+      ),
+      `${EDIT_VERB_WORKFLOW}: PR-fix commits keep Updated`,
+    ).toBe(true)
+  })
+
   test('inventory documents always-plan exceptions and maxReviewCycles out of scope', () => {
     const inventory = texts[INVENTORY]
     expect(inventory).toContain('fable-validate-fableplan-loop')
@@ -259,5 +338,13 @@ describe('loop/validate pipeline contract', () => {
     expect(inventory).toMatch(/Out of scope/i)
     expect(inventory).toContain('tests/loop-validate-pipeline-contract.test.js')
     expect(inventory).toMatch(/procedure body|frontmatter/i)
+    // Issue-edit attribution verb row: owner plus the six consumers it guards.
+    expect(inventory).toContain('skills/validate-issue/issue-editing.md')
+    expect(inventory).toContain('Validated with LLM')
+    for (const path of EDIT_VERB_CONSUMERS) {
+      expect(inventory, `${path}: inventory consumer row`).toContain(
+        path.replace(/^skills\/|\/SKILL\.md$/g, ''),
+      )
+    }
   })
 })
