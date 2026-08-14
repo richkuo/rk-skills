@@ -7,7 +7,7 @@ description: Required format for creating or editing any GitHub issue — [C<sco
 
 - **Never create a placeholder, stub, or empty-bodied issue.** Every issue gets a complete body at creation — complexity rationale line, concrete problem statement, goal, approach/acceptance criteria — even in a batch. If a follow-up isn't ready to spec, track it in the parent issue or notes until it is.
 - Title format: `[C<score>] <title>` — a clear plain-simple-English sentence in ASD-STE100, precise about component and behavior, e.g. `[C95] Orders can be filled twice when two fills arrive at the same moment`.
-- **Complexity score (0–100)** is a **model + effort routing signal**, not a time estimate. Canonical formula lives in `validate-issue` step 6: five axes → **Capability** band (which LLM / whether fableplan) + **Volume** (effort inside the band) → `score = 25 × Capability + Volume`. Axes: Scope, Coupling, Risk, Uncertainty, Verification.
+- **Complexity score (0–100)** is a **model + effort routing signal**. It is not a time estimate. Load the canonical formula, axes, and routing table from `validate-issue` step 6; do not restate or approximate them here.
 - First line of the body is a one-line rationale matching the title prefix, ending with an explicit **fableplan signal**:
   `**Complexity: 95/100** — Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh · fableplan: yes`
   (Fable 5 never pairs with `xhigh` — high is Fable's ceiling; xhigh is legal only on Opus/Sonnet-class builds.)

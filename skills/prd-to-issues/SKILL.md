@@ -56,7 +56,7 @@ Ordering-field rules:
 - **Runs after** means the issues must not overlap but the later issue does not need the earlier issue's code; for example, two otherwise-independent issues editing the same package.
 - A same-package exclusion is `Runs after`, not `Depends on`. If an edge is genuinely hard, record it only in `Depends on`; never list one predecessor in both fields.
 
-Assignment — **derive from the complexity score band** (canonical formula in `validate-issue` step 6: `score = 25 × Capability + Volume`). Score each issue with that formula first, then stamp Execution from the band:
+Assignment — **derive from the complexity score band**. Load the canonical formula and band table from `validate-issue` step 6, score each issue there, then stamp Execution from that band:
 
 | Band | Score band | Build model | fableplan first | Effort |
 |---|---|---|---|---|

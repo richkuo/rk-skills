@@ -44,7 +44,7 @@ Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already a
 
 ### 3. Apply the update-issue edits, if called for
 
-If the verdict says **Update issue description? Yes**, apply the suggested title/body edits now per fable-validate step 5 / validate-issue step 8 — claim-verification gate, final consistency pass, and the stacked attribution line (`Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate-fableplan`) — from the current checkout (no worktree for issue edits).
+If the verdict says **Update issue description? Yes**, apply the suggested title/body edits now per fable-validate step 5 / validate-issue step 11 — claim-verification gate, final consistency pass, and the stacked attribution line (`Validated with LLM: Fable 5 | high | Harness: Claude Code | fable-validate-fableplan`) — from the current checkout (no worktree for issue edits).
 
 If **No**, skip straight to step 4.
 
@@ -56,7 +56,7 @@ Invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fabl
 
 **Do NOT execute fableplan's steps 7–8 (worktree + build), and do not answer its "build now?" prompt with anything but stop.** This skill ends at the posted plan. Building here would take the run past its scope without the user asking.
 
-Give the planning subagent the validation verdict and report (the scratchpad copies from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5b concerns).
+Give the planning subagent the validation verdict and report (the scratchpad copies from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns).
 
 If fableplan's sanity-check finds the plan structurally wrong, or fableplan fails after its internal retry, **stop and report** — don't post a broken plan, and don't fall back to planning yourself.
 
