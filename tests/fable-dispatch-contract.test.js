@@ -118,8 +118,11 @@ describe('fable dispatch contract', () => {
     expect(skill).toMatch(/footer[\s\S]{0,160}\.?modelUsage/i)
     expect(skill).toMatch(/harness[\s\S]{0,120}actually running/i)
 
-    // The allowedTools list comes from the calling skill and stays read-only.
+    // The allowedTools list derives from the calling skill's procedure and
+    // stays read-only — plan mode is never claimed as a write backstop.
     expect(skill).toMatch(/allowedTools[\s\S]{0,400}read-only/i)
+    expect(skill).toMatch(/plan mode does not block an allow-listed/i)
+    expect(skill).not.toMatch(/plan mode keeps blocking writes/i)
 
     // A completed-but-substituted shim result is adopted, never re-run.
     expect(skill).toMatch(/adopt[\s\S]{0,120}step-?\s?3/i)
@@ -130,8 +133,9 @@ describe('fable dispatch contract', () => {
     expect(skill).toMatch(/`max`[\s\S]{0,120}becomes `high`/i)
   })
 
-  test('no dispatcher hardcodes the harness field in its footer template', () => {
-    for (const path of KNOWN_DISPATCHERS) {
+  test('no fable-family skill hardcodes the harness field in a footer', () => {
+    const fableSkills = Object.keys(skillTexts).filter((path) => path.startsWith('skills/fable'))
+    for (const path of new Set([...KNOWN_DISPATCHERS, ...fableSkills])) {
       expect(skillTexts[path], path).not.toContain('Harness: Claude Code')
     }
   })
