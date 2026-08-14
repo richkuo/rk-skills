@@ -14,6 +14,8 @@ const ISSUE_BODY_CONSUMERS = [
   'skills/validate-issue/issue-editing.md',
   'templates/claude-workflow/prompts/fix-pr.md',
   'templates/claude-workflow/prompts/issue-workflow.md',
+  'templates/codex-workflow/prompts/fix-pr.md',
+  'templates/codex-workflow/prompts/issue-workflow.md',
 ]
 
 /** Files that state the canonical section order. */
@@ -27,6 +29,7 @@ const ORDER_STATERS = [
 const BACKFILL_CONSUMERS = [
   'skills/validate-issue/issue-editing.md',
   'templates/claude-workflow/prompts/issue-workflow.md',
+  'templates/codex-workflow/prompts/issue-workflow.md',
 ]
 
 const ALL = [...new Set([...ISSUE_BODY_CONSUMERS, ...ORDER_STATERS, ...BACKFILL_CONSUMERS])]

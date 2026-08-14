@@ -1,13 +1,13 @@
 export const meta = {
   name: 'milestone-pipeline',
   description: 'Implement a dependency graph of Execution-block-stamped GitHub issues — validate, plan, build from verified prerequisite heads, review each pull request to a stable readiness boundary, record orchestrator in-session merges at LGTM plus green CI, pause awaiting each unmerged one, and defer the release to the orchestrator when every issue merges',
-  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, merged?: [{issue, pr, merge_sha, issue_state}] }',
+  whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', reviewBot?: \'claude\' | \'codex\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, merged?: [{issue, pr, merge_sha, issue_state}] }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model and effort derived from its [C..] score band, never stamped' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
-    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger @claude review only in github review mode' },
-    { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the @claude Action (default github mode) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode' },
+    { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
     { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
   ],
@@ -108,6 +108,11 @@ const REVIEW_LOOP = ARGS.reviewLoop ?? true
 // pr-review comment, a fixer agent resolves it — the fallback when the
 // repo lacks the Action or GitHub Actions is unavailable.
 const REVIEW_MODE = ARGS.reviewMode ?? 'github'
+// Which GitHub review bot the default github review mode talks to. Claude
+// unless the caller explicitly names Codex — a repo having codex.yml installed
+// does not select it. Ignored entirely in subagent review mode, which posts no
+// GitHub trigger at all.
+const REVIEW_BOT = ARGS.reviewBot ?? 'claude'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
 // Only enforced when the turn has a token target (budget.total set); below the
 // floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
@@ -128,6 +133,7 @@ const MERGE = ARGS.merge ?? REVIEW_LOOP
 const RELEASE = ARGS.release ?? MERGE
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (REVIEW_MODE !== 'subagent' && REVIEW_MODE !== 'github') throw new Error("reviewMode must be 'subagent' or 'github'")
+if (REVIEW_BOT !== 'claude' && REVIEW_BOT !== 'codex') throw new Error("reviewBot must be 'claude' or 'codex'")
 if (!Number.isInteger(MAX_REVIEW_CYCLES) || MAX_REVIEW_CYCLES <= 0) throw new Error('maxReviewCycles must be a positive integer')
 if (!Number.isInteger(BUDGET_FLOOR) || BUDGET_FLOOR <= 0) throw new Error('budgetFloor must be a positive integer')
 if (typeof MERGE !== 'boolean') throw new Error('merge must be a boolean')
@@ -197,13 +203,28 @@ function bandFor(complexity) {
   return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
 }
 
+// Codex exposes one flagship, so the two heavy Claude reviewer tiers (opus and
+// fable) collapse onto its bare default trigger; only the cheap re-review tier
+// has a distinct shorthand. A null entry means "no shorthand — bare trigger".
+const CODEX_REVIEW_SHORTHAND = { fable: null, opus: null, sonnet: 'luna', haiku: 'luna' }
+
+// The cheaper re-review shorthand after a pass that addressed nothing blocking,
+// per fix-pr-review step 10.
+const NONBLOCKING_RETRIGGER = { claude: '@claude sonnet review', codex: '@codex luna review' }
+
 // The github-mode cycle-1 trigger comment, derived from the band unless the
-// issue stamps its own `@claude <model> review …` line. Band 0 is the bare
+// issue stamps its own `@<bot> <model> review …` line. Band 0 is the bare
 // standard trigger; the Action picks its configured default model.
 function firstReviewTrigger(ex) {
   const stamped = MODEL_IDS[ex.first_review_model]
-  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
   const review = bandFor(ex.effective_complexity ?? ex.complexity).review
+  if (REVIEW_BOT === 'codex') {
+    const source = stamped || review.model
+    const shorthand = source ? CODEX_REVIEW_SHORTHAND[source] : null
+    const effort = stamped ? ex.first_review_effort : null
+    return `@codex${shorthand ? ` ${shorthand}` : ''} review${effort ? ` effort:${effort}` : ''}`
+  }
+  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
   if (!review.model) return '@claude review'
   if (review.model === 'opus') return '@claude opus review'
   return `@claude ${review.model} review effort:${review.effort}`
@@ -402,14 +423,14 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
     ? '\n\nThis run has reviewLoop disabled: do not request or trigger any pull request review. Return github_review_status not_run, github_review_nonblocking_remaining 0, and an empty github_review_summary.'
     : REVIEW_MODE === 'github'
       ? `\n\nAfter the PR is open, handle github review cycle 1 yourself:
-1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/claude.yml uses a different trigger phrase, match it.)
+1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/${REVIEW_BOT}.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
-4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing (never repeat the \`@claude fable review\` trigger — fable reviews the first cycle only, so a blocking re-trigger is the standard \`@claude review\`), and wait for that re-review verdict.
+4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot${REVIEW_BOT === 'claude' ? ' (never repeat the `@claude fable review` trigger — fable reviews the first cycle only, so a blocking re-trigger is the standard `@claude review`)' : ' (never switch to @claude — this run selected Codex, so a blocking re-trigger is `@codex review`)'}, and wait for that re-review verdict.
 5. Stop after that verdict. Do not fix the re-review's findings; the pipeline gives later cycles to another agent.
 
 Return the standing verdict as github_review_status, the remaining non-blocking count, and a github_review_summary. If cycle 1 cannot finish, return github_review_status blocked and github_review_blocker.`
-      : '\n\nThis run reviews pull requests with in-session subagents: do not trigger, request, or comment any `@claude` review — the pipeline dispatches its own reviewer against the open PR. Return github_review_status not_run, github_review_nonblocking_remaining 0, and an empty github_review_summary.'
+      : '\n\nThis run reviews pull requests with in-session subagents: do not trigger, request, or comment any `@claude` or `@codex` review — the pipeline dispatches its own reviewer against the open PR. Return github_review_status not_run, github_review_nonblocking_remaining 0, and an empty github_review_summary.'
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
@@ -426,9 +447,9 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
   return `You are a PR review-resolution agent in this repo. You own review cycles ${startCycle} through ${endCycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}. Read all state from the PR itself; do not assume anything a previous agent did. Run at most ${cycleLimit} cycle${cycleLimit === 1 ? '' : 's'}, and stop early on a bare LGTM or blocker.
 
 For each assigned cycle:
-1. Fetch the latest @claude review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
+1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing (\`@claude review\`, or \`@claude sonnet review\` when only non-blocking items were addressed — its own one-line comment, no footer; never repeat the \`@claude fable review\` trigger, which is first-cycle-only).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (\`@${REVIEW_BOT} review\`, or \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed — its own one-line comment, no footer${REVIEW_BOT === 'claude' ? '; never repeat the `@claude fable review` trigger, which is first-cycle-only' : '; never switch to @claude, which this run did not select'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -515,7 +536,7 @@ Review PR #${prNumber}, which closes issue #${issue}:
 4. Take one CI snapshot (\`gh pr checks ${prNumber}\`): a failed check that traces to this PR's diff is evidence of a code defect — report the defect from the failing assertion/code, not the check status itself; pending checks are never waited on.
 5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review structure (footer verb Validated, harness milestone-pipeline).
 
-Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` review comment.
+Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` or \`@codex\` review comment.
 
 Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted verdict line), blocking_count (### Needs Fixing + ### Requires Human Review items), nonblocking_count (### Recommended Optional + ### Create Follow-up Issue items), the exact head_ref and head_sha you reviewed, comment_url, and a one-paragraph summary.`
 }
@@ -523,7 +544,7 @@ Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted 
 function subagentFixPrompt(issue, prNumber, ex, validation, plan, commentUrl) {
   const footerModel = MODEL_NAMES[ex.model]
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
-  return `You are a PR review-resolution agent in this repo. A fresh review was just posted on PR #${prNumber} (${commentUrl}). Invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: do NOT trigger, post, or wait for any \`@claude\` re-review — this run re-reviews with an in-session subagent after you finish, so stop after pushing your fixes and posting the per-finding disposition comment.
+  return `You are a PR review-resolution agent in this repo. A fresh review was just posted on PR #${prNumber} (${commentUrl}). Invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: do NOT trigger, post, or wait for any \`@claude\` or \`@codex\` re-review — this run re-reviews with an in-session subagent after you finish, so stop after pushing your fixes and posting the per-finding disposition comment.
 
 RE-VALIDATE every finding against the actual code before changing anything; fix what survives validation (including filing any ### Create Follow-up Issue items per that skill), refute on the record what doesn't, resolve any merge conflicts with the base branch, run the full test and build suites, then commit and push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`).
 
@@ -903,7 +924,7 @@ async function executeTrack(trackIndex) {
     if (rescore) record.rescore = rescore
     addResult(record)
     const reviewNote = REVIEW_LOOP
-      ? REVIEW_MODE === 'subagent' ? ', dispatching subagent review; waiting for review readiness' : ', @claude review triggered; waiting for review readiness'
+      ? REVIEW_MODE === 'subagent' ? ', dispatching subagent review; waiting for review readiness' : `, @${REVIEW_BOT} review triggered; waiting for review readiness`
       : ''
     log(`#${issue}: PR #${impl.pr_number} open on ${impl.head_ref}${reviewNote}`)
 

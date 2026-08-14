@@ -7,6 +7,8 @@ const CONTRACT_COPIES = [
   'skills/pr-review/SKILL.md',
   'templates/claude-workflow/prompts/pr-review-format.md',
   'templates/claude-review.yml',
+  'templates/codex-workflow/prompts/pr-review-format.md',
+  'templates/codex-review.yml',
 ]
 
 const texts = Object.fromEntries(
@@ -143,6 +145,17 @@ describe('PR review contract', () => {
     expect(workflow).toMatch(/extra_allowed_tools/)
   })
 
+  test('the Codex review route selects the same guarded prompt, read-only', async () => {
+    const workflow = await read('.github/workflows/codex-run.yml')
+    expect(workflow).toContain('PROMPT_FILE="$PROMPTS_DIR/pr-review-format.md"')
+    // The read-only sandbox is what denies the review agent writes AND network;
+    // the job token carries no push right either. Both must survive edits.
+    expect(workflow).toMatch(
+      /sandbox:\s*\$\{\{\s*inputs\.mode == 'review' && 'read-only'/,
+    )
+    expect(workflow).not.toMatch(/^\s*id-token:\s*write/m)
+  })
+
   test('milestone-pipeline review prompt aligns with the skill CI policy', async () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
     const skill = normalized['skills/pr-review/SKILL.md']
@@ -170,9 +183,12 @@ describe('PR review contract', () => {
     }
   })
 
-  test('fixer consumers treat Verification limitation as not a finding', async () => {
+  test.each([
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ])('%s treats Verification limitation as not a finding', async (promptPath) => {
     const skill = await read('skills/fix-pr-review/SKILL.md')
-    const prompt = await read('templates/claude-workflow/prompts/fix-pr.md')
+    const prompt = await read(promptPath)
 
     expect(skill).toMatch(/Verification limitation[\s\S]{0,80}is not a finding/i)
     expect(skill).toMatch(
@@ -206,6 +222,7 @@ describe('PR review contract', () => {
       'skills/fix-pr-review-loop/SKILL.md',
       'skills/work-on-issue-loop/SKILL.md',
       'templates/claude-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
     ]) {
       const body = await read(path)
       expect(body, path).toMatch(

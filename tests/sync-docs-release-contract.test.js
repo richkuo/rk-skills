@@ -16,15 +16,20 @@ const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
 const CI_PROMPT = 'templates/claude-workflow/prompts/sync-docs-release.md'
+const CODEX_CI_PROMPT = 'templates/codex-workflow/prompts/sync-docs-release.md'
 const SYNC_SKILL = 'skills/sync-docs/SKILL.md'
 const RELEASE_SKILL = 'skills/create-release/SKILL.md'
 
-const SYNC_COPIES = [CI_PROMPT, SYNC_SKILL]
-const RELEASE_COPIES = [CI_PROMPT, RELEASE_SKILL]
+const CI_PROMPTS = [CI_PROMPT, CODEX_CI_PROMPT]
+const SYNC_COPIES = [...CI_PROMPTS, SYNC_SKILL]
+const RELEASE_COPIES = [...CI_PROMPTS, RELEASE_SKILL]
 
 const texts = Object.fromEntries(
   await Promise.all(
-    [CI_PROMPT, SYNC_SKILL, RELEASE_SKILL].map(async (path) => [path, await read(path)]),
+    [CI_PROMPT, CODEX_CI_PROMPT, SYNC_SKILL, RELEASE_SKILL].map(async (path) => [
+      path,
+      await read(path),
+    ]),
   ),
 )
 const normalized = Object.fromEntries(
@@ -72,10 +77,12 @@ describe('sync-docs / release contract', () => {
     }
   })
 
-  test('CI prompt completes history and tags before any range analysis', () => {
-    // CI checkouts are shallow; the local skills never need this.
-    const text = normalized[CI_PROMPT]
-    expect(text).toMatch(/--unshallow/)
-    expect(text).toMatch(/--tags/)
+  test('CI prompts complete history and tags before any range analysis', () => {
+    // CI checkouts can be shallow; the local skills never need this.
+    for (const path of CI_PROMPTS) {
+      const text = normalized[path]
+      expect(text, path).toMatch(/--unshallow/)
+      expect(text, path).toMatch(/--tags/)
+    }
   })
 })
