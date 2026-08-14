@@ -76,7 +76,7 @@
 
 ### PR review format
 
-- **Before writing any PR review comment, load the `pr-review-format` skill** — it defines the mandatory verdict line, section structure, materiality filter, safety carve-out, and the verification method that must finish before `LGTM`. Every finding must include **Plain simple English:** (under 55 words, ASD-STE100); `Requires Human Review` items must also include **Recommended proposed solution:** (also ASD-STE100 plain simple English, under 55 words). `LGTM` only when blocking sections are empty **and** the verification method is complete; an incomplete method → `Needs Updates` or `Requires Human Review` per the skill. A `**Verification limitation:**` line is not a finding. Never compose a review without it.
+- **Before writing any PR review comment, load the `pr-review` skill** — it defines the mandatory verdict line, section structure, materiality filter, safety carve-out, and the verification method that must finish before `LGTM`. Every finding must include **Plain simple English:** (under 55 words, ASD-STE100); `Requires Human Review` items must also include **Recommended proposed solution:** (also ASD-STE100 plain simple English, under 55 words). `LGTM` only when blocking sections are empty **and** the verification method is complete; an incomplete method → `Needs Updates` or `Requires Human Review` per the skill. A `**Verification limitation:**` line is not a finding. Never compose a review without it.
 
 ## GitHub Issues
 

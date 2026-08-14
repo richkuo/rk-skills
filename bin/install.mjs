@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,20 @@ for (const name of skills) {
 	cpSync(join(skillsSrc, name), join(skillsDir, name), { recursive: true });
 }
 
+// pr-review-format was renamed to pr-review. The copy loop above never deletes
+// a skill that left the repo, so an earlier install keeps the retired name — and
+// its stale copy of the review contract — invokable. Drop it, but never a name
+// the repo still ships, so re-adding one of these later cannot delete it.
+const retiredSkills = ['pr-review-format'].filter((name) => !skills.includes(name));
+const removedSkills = retiredSkills.filter(
+	// lstat, not existsSync: install.sh leaves a symlink here, and the rename
+	// makes that symlink dangle, which existsSync reports as absent.
+	(name) => lstatSync(join(skillsDir, name), { throwIfNoEntry: false }) !== undefined,
+);
+for (const name of removedSkills) {
+	rmSync(join(skillsDir, name), { recursive: true, force: true });
+}
+
 // sync-docs and create-release used to dispatch to runner subagents; they now
 // carry their workflows inline. Remove the stale runner files this installer
 // wrote in earlier versions so they cannot be dispatched to by mistake.
@@ -62,6 +76,11 @@ const scope = project ? 'this project' : 'your personal skills';
 console.log(`rk-skills installed ${skills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
 console.log(`  ${skills.join(', ')}`);
+if (removedSkills.length > 0) {
+	console.log(`\nRemoved ${removedSkills.length} renamed skills from:`);
+	console.log(`  ${skillsDir}`);
+	console.log(`  ${removedSkills.join(', ')}`);
+}
 if (removedAgents.length > 0) {
 	console.log(`\nRemoved ${removedAgents.length} retired subagents from:`);
 	console.log(`  ${agentsDir}`);
