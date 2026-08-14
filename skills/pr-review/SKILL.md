@@ -1,5 +1,5 @@
 ---
-name: pr-review-format
+name: pr-review
 description: Required format and rules for writing any pull request (PR) review comment — verdict line, section structure, materiality filter, safety carve-out. Load BEFORE composing or posting a PR review.
 ---
 
