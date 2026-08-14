@@ -13,7 +13,9 @@ Take all unaddressed review feedback on a pull request and resolve it fully and 
 
 The user provides, in any order:
 - An optional PR reference: `#<N>` / `<N>` / full URL / `owner/repo#N`. Omit it to **default to the PR for the current branch** (`gh pr view`).
-- An optional literal bot token, `codex` (case-insensitive), selecting Codex as this cycle's re-review bot (step 10). A token that is neither a PR reference nor `codex` is not a bot selection — treat it as an unrecognized argument, not as Codex selection.
+- An optional literal bot token, `codex` (case-insensitive), selecting Codex as this cycle's re-review bot (step 10). A token that is neither a PR reference nor `codex` is not a bot selection.
+
+A token matching neither category (a typo like `codexx`, a malformed reference like `#abc`, a stray extra word) doesn't block resolution: ignore it for parsing — fall back to the current-branch PR if no valid reference was given, and to `@claude` if `codex` wasn't given — but name it in the step 11 report as an unrecognized argument, so a mistyped intent doesn't silently produce the wrong outcome.
 
 If the current branch has no PR and none was given, say so and stop — there's nothing to fix.
 
@@ -181,7 +183,7 @@ gh pr comment <N> --body "@codex luna review"
 
 ### 11. Report to the user
 
-Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). When the review carried any `**Verification limitation:**` lines, name each unverified source in the report even though they are not findings — omit that field when none. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
+Terse summary: which reviews/threads you acted on, counts per disposition (fixed / partial / refuted / judgment-resolved / optional / deferred), the commit SHA, verification result, and that a re-review was requested (note which model it was routed to). When the review carried any `**Verification limitation:**` lines, name each unverified source in the report even though they are not findings — omit that field when none. When the invocation carried an unrecognized argument (Input section), name it too — omit that field when none. Flag the resolved judgment calls so the user can override if they disagree — but the work is already done, not waiting on them.
 
 ## Red Flags — STOP
 
