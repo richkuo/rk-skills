@@ -48,7 +48,7 @@
 - Prefer editing existing files over creating new ones.
 - Press `#` in a session to incorporate learnings into CLAUDE.md.
 - Never proactively invoke `superpowers:*` skills — only on explicit `/` trigger.
-- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. In a harness with no skill list, read the skill files directly — `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills repo checkout.
+- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. The `superpowers:*` ban above still wins: never auto-load that namespace. In a harness with no skill list, read the skill files directly — `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills repo checkout.
 
 ### Local CI via `act`
 
