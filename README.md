@@ -40,7 +40,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 
 | Skill | What it does |
 |-------|--------------|
-| `fix-pr-review` | Reads all unaddressed feedback on a PR — review comments, inline threads, and any failing CI checks — re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review. |
+| `fix-pr-review` | Reads all unaddressed feedback on a PR — review comments, inline threads, and any failing CI checks — re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review from `@claude` by default or from `@codex` when you pass a `codex` argument (e.g. `/fix-pr-review 123 codex`). |
 | `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved, and won't stop on an approval while the PR is still unmergeable. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. |
 | `pr-review` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out, verification method that gates `LGTM`). Every finding must include an ASD-STE100 plain-simple-English summary under 55 words; `Requires Human Review` items must also include a recommended proposed solution under 55 words. Loaded automatically before a review is written. |
 
@@ -108,7 +108,7 @@ The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automa
 
 Claude and Codex are independent: separate workflow files, separate concurrency groups, separate secrets, and installing one changes nothing about the other.
 
-**The skills default to Claude.** `fix-pr-review`, the `-loop` skills, and `milestone-workflow`'s github review mode post `@claude` even when `codex.yml` is installed. They post `@codex` only when Codex is explicitly selected — you say so, a caller argument names it (`reviewBot: 'codex'`), or the run itself was started by an `@codex` GitHub comment. Once a cycle picks a bot, every re-review in that cycle stays on it.
+**The skills default to Claude.** `fix-pr-review`, the `-loop` skills, and `milestone-workflow`'s github review mode post `@claude` even when `codex.yml` is installed. They post `@codex` only when Codex is explicitly selected — you say so, you pass `codex` to `/fix-pr-review`, a caller argument names it (`reviewBot: 'codex'`), or the run itself was started by an `@codex` GitHub comment. Once a cycle picks a bot, every re-review in that cycle stays on it.
 
 Without a review bot, the loop skills detect its absence and stop instead of waiting for a review that never arrives.
 
@@ -126,6 +126,14 @@ Also included:
 - `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
 - `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently.
 
+## Install (from a clone)
+
+If you work from a checkout of this repo, `install.sh` symlinks every skill into `~/.claude/skills` and, when `~/.codex` already exists on the machine, into `~/.codex/skills` as well. It also links `CLAUDE.md`, `AGENTS.md` (as `~/.codex/AGENTS.md`), workflows, and the `/commit` command into `~/.claude` only. Re-run after pulling to pick up new or renamed skills.
+
+```sh
+./install.sh
+```
+
 ## Install (with npx)
 
 Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
@@ -134,7 +142,7 @@ Copy every skill into your personal `~/.claude/skills/` with one command — no 
 npx rk-skills
 ```
 
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and any dynamic workflow scripts** (the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/`); it does not install `CLAUDE.md` (the example global config) or the `/commit` command.
+Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and any dynamic workflow scripts** (the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/`) into Claude destinations only; it does not link into `~/.codex`, install `CLAUDE.md` (the example global config), or the `/commit` command.
 
 ## Install (as a plugin)
 
