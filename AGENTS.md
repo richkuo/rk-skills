@@ -20,8 +20,8 @@
   - **No litotes and no litotes-adjacent hedging.** Keep the claim and the uncertainty in separate clauses. Never make a claim through a negated opposite ("not unlikely", "not without risk", "no small task", "it would not be wrong to say"). State the claim directly. State your confidence directly beside it, in its own clause or sentence. If confidence is low, say so plainly ("I am not sure", "I have not measured this", "this is a guess"). Never soften or blur the claim itself to carry the doubt.
   - **No verbal irony.** Never say the opposite of what you mean for sarcasm, mock praise, or dry inversion. Write the intended meaning in plain words. Write "This design is fragile." Do not write "Oh great, another rock-solid design."
   - **No metacommentary.** Never narrate your own response or process ("Good question", "To answer this", "Let me explain", "In short", "As mentioned above", "It's worth noting"). Never describe what the response will do or just did. State the content itself.
-- **Plain simple English block — one definition for all communication:** one short paragraph (or line) under 55 words, in ASD-STE100, no jargon, no unexplained acronyms, stating what changed or what is wrong and why it matters, so a human understands it without reading the technical sections. Every place that requires a `## Plain simple English` section or a **Plain simple English:** line (PR bodies, issue bodies, review findings, skills) uses this definition; issue bodies additionally allow no file paths.
-- **Skills and templates:** point at this Response Style section for shared rules; do not restate them in skill prose. Skill-specific caps (e.g. 55-word Plain simple English) stay local.
+- **Plain simple English block — one definition for all communication:** one short paragraph (or line) under 55 words, in ASD-STE100, no jargon, no unexplained acronyms, stating what changed or what is wrong and why it matters, so a human understands it without reading the technical sections. Every place that requires a `## Plain simple English` section or a **Plain simple English:** line (PR bodies, issue bodies, review findings, skills) uses this definition; issue bodies also forbid file paths.
+- **Skills and templates:** point at this Response Style section for shared rules; do not restate them in skill prose. A limit that exists in only one skill stays in that skill.
 - Never give time/effort estimates ("2–4 days"). A complexity score is a model + effort routing signal (Capability band + Volume). It gives no duration.
 - No follow-up-question menus; ask at most one, only when needed to proceed.
 
@@ -48,7 +48,7 @@
 - Prefer editing existing files over creating new ones.
 - Press `#` in a session to incorporate learnings into CLAUDE.md.
 - Never proactively invoke `superpowers:*` skills — only on explicit `/` trigger.
-- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. In a harness with no skill list, follow the format sections in this file.
+- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. In a harness with no skill list, read the skill files directly — `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills repo checkout.
 
 ### Local CI via `act`
 
