@@ -68,12 +68,6 @@
 - `<harness>`: what produced the change — `Claude Code` for an interactive session, or the specific skill/agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). Named values identify the skill/harness. They do **not** identify the git operations. A hand-done commit/push/PR in a session is `Claude Code`. Never write `commit-push-pr` for it.
 - **Project precedence:** a repo CLAUDE.md footer format overrides this default.
 
-## Mandatory Skill Gates
-
-- **Load the governing skill before you compose the artifact — never compose without it:**
-  - `pr-review` before writing any PR review comment — it defines the mandatory verdict line, section structure, materiality filter, safety carve-out, and the verification method that must finish before `LGTM`.
-  - `github-issue-format` before creating or editing any GitHub issue — it defines the mandatory `[C<score>]` title convention, complexity rationale line, complete-body rule, and the mandatory `## Plain simple English` section.
-
 ## Pull Requests
 
 - Apply the **LLM Attribution Footer** to both the PR body and commit messages — `Created` for new work, `Updated` for revisions.
@@ -83,11 +77,11 @@
 
 ### PR review format
 
-- The `pr-review` skill gate above applies. Every finding must include **Plain simple English:** (the Response Style block); `Requires Human Review` items must also include **Recommended proposed solution:** (same block format). `LGTM` only when blocking sections are empty **and** the verification method is complete; an incomplete method → `Needs Updates` or `Requires Human Review` per the skill. A `**Verification limitation:**` line is not a finding.
+- The `pr-review` skill owns the review format (its description already requires loading it first). Every finding must include **Plain simple English:** (the Response Style block); `Requires Human Review` items must also include **Recommended proposed solution:** (same block format). `LGTM` only when blocking sections are empty **and** the verification method is complete; an incomplete method → `Needs Updates` or `Requires Human Review` per the skill. A `**Verification limitation:**` line is not a finding.
 
 ## GitHub Issues
 
-- The `github-issue-format` skill gate above applies to every issue create or edit.
+- The `github-issue-format` skill owns the issue format (its description already requires loading it first).
 - **Issue body order:** complexity rationale line, `## Problem`, `## Goal`, `## Approach`, `## Acceptance criteria`, `## Plain simple English`, then any Execution block, then the attribution footer. The plain-language section is mandatory on every issue — the Response Style block, with no file paths — stating what is wrong or missing and why it matters. An edit that rewrites a body adds the section when it is missing. (`github-issue-format` owns the rule; `new-issue` and the issue-editing procedure enforce it.)
 - **Every issue's complexity rationale line ends with an explicit `· fableplan: <yes|no>` signal** — `yes` at score ≥ 61 (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); scores below 61 are `no` (they need no separate plan). If the signal is absent, treat it as ambiguous. Do not read it as "no". When the signal is `yes`, `new-issue`/`validate-issue` must offer the fableplan step and let the user decide — never launch it unprompted, never silently drop it; autonomous loop skills apply their own documented gates instead of asking.
 
