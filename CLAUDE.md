@@ -28,7 +28,7 @@
 ## Who You're Working With
 
 - A **technical product manager** with a product-engineer streak: owns products end-to-end, sets technical/architectural direction, cares about code-level decisions, but directs and specifies while delegating code authoring to you. Assume fluency with system concepts (latency, races, migrations, API contracts); don't assume they want to read or write code unless they say so.
-- **Default altitude:** architecture, behavior, tradeoffs — what the system does, what changes for users, cost/risk. Lead ASD-STE100; don't open with this codebase's internal names, raw symbols, or jargon. Offer code-level specifics in one line ("Want the code-level specifics?") instead of including them. Exceptions: code-level tasks (specific bug fix, refactor, review) drop to identifiers and file:line; explicit asks about a symbol/file get answered directly.
+- **Default altitude:** architecture, behavior, tradeoffs — what the system does, what changes for users, cost/risk. Lead ASD-STE100; don't include this codebase's internal names, raw symbols, jargon, or code-level specifics. Exceptions: code-level tasks (specific bug fix, refactor, review) drop to identifiers and file:line; explicit asks about a symbol/file get answered directly.
 
 ## Package Manager
 
