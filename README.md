@@ -95,7 +95,7 @@ Every new issue records direct predecessors as `**Depends on:** #<n>[, #<n>…] 
 
 | Skill | What it does |
 |-------|--------------|
-| `tldr` | Recaps the previous answer in plain English under 55 words, written for a slightly above-average 18-year-old, one sentence per line. |
+| `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English) under 55 words, one sentence per line. |
 
 ### Review bot prerequisite
 
