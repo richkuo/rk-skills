@@ -58,7 +58,7 @@ If the deliverables are separable — parts that each land in their own PR, pass
 
 ### 6. Compose and file
 
-Title: `[C<score>] <title>` — the title is a clear plain-simple-English sentence in ASD-STE100 — it states the bug or deliverable precisely (component + behavior) without unexplained jargon, no vague "improve X".
+Title: `[C<score>] <title>` — the title is a clear plain-simple-English sentence in ASD-STE100 — it states the bug or deliverable precisely (component + behavior), no vague "improve X".
 
 Body structure:
 
@@ -79,7 +79,7 @@ Body structure:
 - <…>
 
 ## Plain simple English
-<One short paragraph under 55 words, ASD-STE100: what is wrong or missing and why it matters, in everyday language.>
+<One short paragraph under 55 words, ASD-STE100: what is wrong or missing and why it matters.>
 
 ---
 Created with LLM: <current model> | <effort> | Harness: <harness>
@@ -116,5 +116,5 @@ Terse: issue URL, number, one-line summary of what it covers, complexity score, 
 | Touches money / data integrity / security / auto-protective logic | Spec the safest correct design from first principles; surface the risk in the body and Risk axis |
 | Tempted to include a time/effort estimate | Don't — complexity score only (Capability band + Volume), described via the axes |
 | Tempted to skip `## Plain simple English` because the body already explains it | Don't — it is mandatory on every issue; the technical sections are written for a specialist, that one is not |
-| The plain-language section only repeats the Approach or names files | Rewrite it — it states what is wrong and why it matters in everyday language, under 55 words, no paths or symbols |
+| The plain-language section only repeats the Approach or names files | Rewrite it — it states what is wrong and why it matters, under 55 words, no paths or symbols |
 | Repo has its own issue template or `CLAUDE.md` issue format | Follow the repo's format; it overrides this default |
