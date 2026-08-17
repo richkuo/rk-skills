@@ -50,7 +50,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Load and apply the canonical score formula and routing table in `validate-issue` step 6. Do not restate or approximate them here. The score is a **model + effort routing signal**. It is not a time estimate; never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
-From the score, also fix the **fableplan signal**: `fableplan: yes` when the score is ≥ 61 (a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+); `no` below 61, which needs no separate plan. It goes on the rationale line in step 6 — always explicit, never omitted.
+From the score, set the **fableplan signal** per the fableplan rule in `github-issue-format`. It goes on the rationale line in step 6 and is always written explicitly.
 
 ### 5. Scope check — one issue or several?
 
@@ -58,36 +58,13 @@ If the deliverables are separable — parts that each land in their own PR, pass
 
 ### 6. Compose and file
 
-Title: `[C<score>] <title>` — the title is a clear plain-simple-English sentence in ASD-STE100 — it states the bug or deliverable precisely (component + behavior), no vague "improve X".
+Compose the title and body per `github-issue-format`. That skill owns the title convention, the complexity rationale line (which carries the score and the fableplan signal from step 4), the body section order, the `## Plain simple English` rule, and the attribution footer (full footer format: the `LLM Attribution Footer` section of CLAUDE.md; verb `Created`). Fill each section from the steps above:
 
-Body structure:
-
-```
-**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band> · fableplan: <yes|no>
-
-## Problem
-<Current behavior, grounded with file:line citations from step 2. What's wrong or missing and why it matters.>
-
-## Goal
-<The outcome in plain language — what's true after this lands.>
-
-## Approach
-<The optimal design from step 3: placement, touch-set, key decisions. Explicit that correctness/safety outrank diff size.>
-
-## Acceptance criteria
-- <observable behavior / test that must pass>
-- <…>
-
-## Plain simple English
-<One short paragraph under 55 words, ASD-STE100: what is wrong or missing and why it matters.>
-
----
-Created with LLM: <current model> | <effort> | Harness: <harness>
-```
-
-`## Plain simple English` is mandatory and is the **last prose section**, after the acceptance criteria — the full rule lives in `github-issue-format`, including where an Execution block sits when one is stamped. Write it for a reader who knows the product but not the code: state what is wrong or missing and why it matters. Do not restate the Approach there, do not list file paths or symbols, and never put a time or effort estimate in it.
-
-The complexity rationale is the **first line** of the body and matches the title prefix — same Capability/Volume form as `github-issue-format` (round-trips with the `[C<score>]` band, e.g. `[C58]` → `Capability 2 (…); Volume 8`), and always ends with the explicit fableplan signal from step 4 (`· fableplan: yes` iff score ≥ 61). The footer is the final lines, preceded by `---` on its own line — **Created** verb, `<effort>` one of `medium`/`high`/`xhigh` (or `low` when a Fable build actually ran at that discretionary tier; default `high`), `<harness>` = `Claude Code` for an interactive session. No `Co-authored-by`. **Project precedence:** a repo `CLAUDE.md` that defines its own issue/footer format overrides this default.
+- `## Problem` — current behavior, grounded with the file:line citations from step 2; what is wrong or missing and why it matters.
+- `## Goal` — the outcome in plain language; what is true after this lands.
+- `## Approach` — the optimal design from step 3: placement, touch-set, key decisions. State explicitly that correctness and safety outrank diff size.
+- `## Acceptance criteria` — the observable behaviors and required tests from step 3.
+- `## Plain simple English` — write it per the `github-issue-format` rule.
 
 File it:
 
@@ -112,9 +89,9 @@ Terse: issue URL, number, one-line summary of what it covers, complexity score, 
 | A claim about current behavior you haven't traced | Trace it or phrase it as unverified — never state a guess as fact |
 | Issue derived from conversation memory | Re-verify load-bearing file:line citations against the actual code before filing |
 | An existing open issue/PR already covers it | Stop; surface it and offer to update/comment instead |
-| The cheap design and the correct design diverge | Spec the correct one; cost, effort, and blast radius are not factors — only correctness and safety constrain |
+| The cheap design and the correct design diverge | Spec the correct one, per the best-solution principle at the top of this skill |
 | Touches money / data integrity / security / auto-protective logic | Spec the safest correct design from first principles; surface the risk in the body and Risk axis |
 | Tempted to include a time/effort estimate | Don't — complexity score only (Capability band + Volume), described via the axes |
-| Tempted to skip `## Plain simple English` because the body already explains it | Don't — it is mandatory on every issue; the technical sections are written for a specialist, that one is not |
-| The plain-language section only repeats the Approach or names files | Rewrite it — it states what is wrong and why it matters, under 55 words, no paths or symbols |
+| Tempted to skip `## Plain simple English` because the body already explains it | Don't — the section is mandatory per `github-issue-format` |
+| The plain-language section only repeats the Approach or names files | Rewrite it per the `github-issue-format` rule |
 | Repo has its own issue template or `CLAUDE.md` issue format | Follow the repo's format; it overrides this default |
