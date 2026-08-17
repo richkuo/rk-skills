@@ -5,7 +5,7 @@ description: Use when the user asks to fix a PR review and drive it to approval 
 
 # fix-pr-review-loop
 
-Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. This skill owns the convergence loop; work-on-issue-loop delegates to steps 2 through 5 here after it opens a PR.
+Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. This skill owns the convergence loop; work-on-issue-loop delegates to steps 2 through 4 here after it opens a PR, then writes its own report step that reuses step 5's terminal-state table with two named deltas (its own "no PR" row, plus the follow-on issue URLs it files). An edit to step 5's table therefore needs a matching edit in work-on-issue-loop step 4.
 
 ## Input
 

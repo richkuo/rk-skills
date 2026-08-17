@@ -148,7 +148,7 @@ The skill ends here — do **not** trigger an `@claude` review or wait on CI; re
 
 Terse summary: the worktree/branch, what you implemented (one or two lines), the verification result, the commit SHA, the PR URL, and that it closes #<N>. The work is done and the PR is open — not waiting on the user.
 
-**Follow-on work named in the deliverables must not silently drop.** If the PR body, commit message, or any doc the diff adds names follow-on work ("own issue", "future work", "not yet wired"), state it in the report as **unfiled** — under work-on-issue-loop, its step 4.5 files these once review converges; standalone, tell the user the issues still need filing.
+**Follow-on work named in the deliverables must not silently drop.** If the PR body, commit message, or any doc the diff adds names follow-on work ("own issue", "future work", "not yet wired"), state it in the report as **unfiled** — under work-on-issue-loop, its step 3 files these once review converges; standalone, tell the user the issues still need filing.
 
 **Cap this report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
 
