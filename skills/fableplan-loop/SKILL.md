@@ -28,9 +28,9 @@ If the issue is closed, or a merged/open PR already addresses it, **do not plan 
 
 ### 1. Run fableplan — planning phase only
 
-Invoke the `fableplan` skill for the target issue (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. Instruct fableplan to use the harness suffix `fableplan-loop` (not `fableplan`) in the posted comment's attribution footer, so the comment records the actual entry point. **Do NOT execute fableplan's steps 7–8 (worktree + build)** — implementation belongs to work-on-issue-loop in step 2, which owns the implement → PR → review chain; building here would duplicate it outside that chain and in the wrong worktree location.
+Invoke the `fableplan` skill for the target issue (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 2. Instruct fableplan to use the harness suffix `fableplan-loop` in the posted comment's attribution footer.
 
-Keep the vetted plan's scratchpad file — step 2 passes it through. If fableplan's sanity-check finds the plan structurally wrong, or fableplan fails after its internal retry, **stop and report** — don't hand a broken plan to work-on-issue-loop, and don't fall back to planning yourself or implementing unplanned.
+Keep the vetted plan's scratchpad file — step 2 passes it through. On a structurally wrong plan or a fableplan failure after its internal retry, **stop and report** per that section; don't hand a broken plan to work-on-issue-loop, and don't implement unplanned.
 
 ### 2. Hand off to work-on-issue-loop
 
@@ -48,7 +48,7 @@ Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final
 
 | Situation | Action |
 |---|---|
-| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill; there is no score gate, fableplan always runs |
+| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill |
 | Tempted to run validate-issue first | Not part of this skill — that's validate-fableplan-loop; this variant deliberately skips validation |
 | fableplan about to enter its build steps (7–8) | Don't — stop it at step 5; work-on-issue-loop owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't hand a broken plan to work-on-issue-loop, and don't silently re-plan |
