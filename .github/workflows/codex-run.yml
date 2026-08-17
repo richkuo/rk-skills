@@ -490,7 +490,7 @@ jobs:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt: "Review the changes made in this session (use git log and git diff to inspect them) and update AGENTS.md with any new patterns, conventions, or important context learned. When the repository also ships a CLAUDE.md kept in sync with AGENTS.md, apply the identical edit to both files. If you modified either file, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
+          prompt: "Review the changes made in this session (use git log and git diff to inspect them) and update AGENTS.md with any new patterns, conventions, or important context learned. Before editing, run readlink AGENTS.md to see what it is. When it reports CLAUDE.md, the two paths are one file: apply the edit exactly once through CLAUDE.md and make no second edit through AGENTS.md, because repeating it would double-insert the same block into the canonical file. When AGENTS.md is a real file and the repository also ships a separate CLAUDE.md kept in sync with it, apply the identical edit to both files. If you modified either file, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
           codex-home: ${{ runner.temp }}/codex-home
           model: ${{ inputs.model_id }}
           effort: ${{ inputs.effort }}

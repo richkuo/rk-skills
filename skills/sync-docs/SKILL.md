@@ -11,7 +11,7 @@ Adapt to the repo you're in. The doc set below is the common shape, not a requir
 
 Audience split:
 - **CLAUDE.md** — agent-facing dense reference (architecture, symbol/file names, `file:line` cues). Describes **current behavior**; not a history log.
-- **AGENTS.md** *(only if the repo already has one — check `ls AGENTS.md` first)* — the counterpart agent doc for other tools (e.g. Codex). Same body content (architecture, commands, conventions); only the intro line stays tool-specific. When present, mirror every CLAUDE.md body edit into it so the two stay in lockstep — see step 5.
+- **AGENTS.md** *(only if the repo already has one — check `ls -l AGENTS.md` first)* — the counterpart agent doc for other tools (e.g. Codex). A repo keeps it in one of two shapes. As a symlink to CLAUDE.md it holds no content of its own, so it needs no edit. As a real file it carries the same body content (architecture, commands, conventions) with a tool-specific intro line, so every CLAUDE.md body edit gets mirrored into it — see step 5.
 - **SKILL.md** *(only if the repo has one)* — operator-facing imperative guide (config knobs, setup prompts, CLI flows).
 - **README.md** — public/newcomer-facing (setup, supported features, headline config). Lowest churn — update only when public surface changes.
 - **CHANGELOG.md** *(only if the repo already has one — check `ls CHANGELOG.md` first)* — per-issue/PR history, rationale, and migration archaeology. When present it is the home for the "why" and resolved-migration detail, so CLAUDE.md stays lean. Never create one as part of a sync.
@@ -76,7 +76,10 @@ Commit-driven updates catch what changed; they miss docs that silently went stal
 - Keep bullets concise — CLAUDE.md is dense reference, not narrative.
 - Update any config/schema version constant the project maintains if a migration bumped it.
 - If a new opt-in field was added and the repo has a SKILL.md, add it to the relevant operator table there (see step 6).
-- **Mirror into AGENTS.md if it exists.** Run `ls AGENTS.md`; if present, apply every body edit you just made to CLAUDE.md to AGENTS.md verbatim (architecture, commands, conventions, schema — same content). The only thing that differs is the intro/header line, which stays tool-specific — do not overwrite it with CLAUDE.md's Claude-facing line. Also audit AGENTS.md for the same staleness patterns as step 4: it drifts silently because commit-driven edits target CLAUDE.md by name. If AGENTS.md doesn't exist, skip it — never create one during a sync.
+- **Mirror into AGENTS.md if it exists.** Run `ls -l AGENTS.md` and branch on what it is.
+  - **A symlink to CLAUDE.md** (this repo's shape): skip it. The CLAUDE.md edits you just made are already the AGENTS.md content. Never open AGENTS.md for writing here — the write resolves through the link and edits CLAUDE.md, so a tool-specific intro line would land in the canonical file.
+  - **A real file**: apply every body edit you just made to CLAUDE.md to AGENTS.md verbatim (architecture, commands, conventions, schema — same content). The only thing that differs is the intro/header line, which stays tool-specific — do not overwrite it with CLAUDE.md's Claude-facing line. Also audit AGENTS.md for the same staleness patterns as step 4: it drifts silently because commit-driven edits target CLAUDE.md by name.
+  - **Absent**: skip it — never create one during a sync.
 
 ### 6. Edit SKILL.md (only if the repo has one)
 

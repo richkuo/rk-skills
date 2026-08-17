@@ -112,8 +112,8 @@ link "CLAUDE.md"          "$CLAUDE/CLAUDE.md"
 link "commands/commit.md" "$CLAUDE/commands/commit.md"
 
 # Codex reads the same skills from ~/.codex/skills and its global instructions
-# from ~/.codex/AGENTS.md (the byte-identical twin of CLAUDE.md this repo keeps
-# in sync). Only link when ~/.codex already exists — creating it would plant a
+# from ~/.codex/AGENTS.md (a symlink to CLAUDE.md in this repo, so both harnesses
+# read one file). Only link when ~/.codex already exists — creating it would plant a
 # config directory for a tool the machine does not run. Workflows and the
 # /commit command stay Claude-only: they are Claude Code formats.
 if [ -d "$CODEX" ]; then
