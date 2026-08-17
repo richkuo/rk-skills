@@ -50,7 +50,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Load and apply the canonical score formula and routing table in `validate-issue` step 6. Do not restate or approximate them here. The score is a **model + effort routing signal**. It is not a time estimate; never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
-From the score, set the **fableplan signal** per the fableplan rule in `github-issue-format`. It goes on the rationale line in step 6 and is always written explicitly.
+From the score, set the **fableplan signal** per the fableplan rule in `github-issue-format` (`yes` when the score is ≥ 61). It goes on the rationale line in step 6 and is always written explicitly.
 
 ### 5. Scope check — one issue or several?
 
@@ -58,13 +58,29 @@ If the deliverables are separable — parts that each land in their own PR, pass
 
 ### 6. Compose and file
 
-Compose the title and body per `github-issue-format`. That skill owns the title convention, the complexity rationale line (which carries the score and the fableplan signal from step 4), the body section order, the `## Plain simple English` rule, and the attribution footer (full footer format: the `LLM Attribution Footer` section of CLAUDE.md; verb `Created`). Fill each section from the steps above:
+Compose the title and body per `github-issue-format`. That skill owns the title convention, the complexity rationale line (which carries the score and the fableplan signal from step 4), the body section order, the plain-language section rule, and the attribution footer (full footer format: the `LLM Attribution Footer` section of CLAUDE.md; verb `Created`). Fill each section from the steps above:
 
-- `## Problem` — current behavior, grounded with the file:line citations from step 2; what is wrong or missing and why it matters.
-- `## Goal` — the outcome in plain language; what is true after this lands.
-- `## Approach` — the optimal design from step 3: placement, touch-set, key decisions. State explicitly that correctness and safety outrank diff size.
-- `## Acceptance criteria` — the observable behaviors and required tests from step 3.
-- `## Plain simple English` — write it per the `github-issue-format` rule.
+```
+**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band> · fableplan: <yes|no>
+
+## Problem
+<Current behavior, grounded with the file:line citations from step 2 — what is wrong or missing and why it matters.>
+
+## Goal
+<The outcome in plain language — what is true after this lands.>
+
+## Approach
+<The optimal design from step 3: placement, touch-set, key decisions. State explicitly that correctness and safety outrank diff size.>
+
+## Acceptance criteria
+- <observable behavior / test that must pass>
+
+## Plain simple English
+<One short paragraph under 55 words, per the `github-issue-format` rule.>
+
+---
+Created with LLM: <current model> | <effort> | Harness: <harness>
+```
 
 File it:
 

@@ -12,7 +12,13 @@ Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5
 ## Deltas from new-issue-loop
 
 - **Step 1, front of the chain.** Invoke the `fable-new-issue` skill (Skill tool, `skill: fable-new-issue`) in place of `new-issue`. Let it run its full process (Fable 5 subagent draft, duplicate gate, spot-check, filing) and capture the created issue number from its report.
-- **Step 2, one extra stop row.** If the draft was structurally wrong and fable-new-issue paused for a human decision: **STOP.** Relay what is off. Do not file or re-dispatch on your own.
+- **Step 2, stop gate.** new-issue-loop's stop gate applies with one extra row for the Fable draft; the effective table:
+
+| Condition | Action |
+|---|---|
+| The subagent found an existing open issue/PR already covering it (no issue filed) | **STOP.** Report the duplicate and the offer to update/comment instead — merging scopes is a human call. |
+| The conversation held several distinct candidates and none clearly converged | **STOP.** Report the candidates and ask which to file — never bundle, never auto-file the extras. |
+| The draft was structurally wrong and fable-new-issue paused for a human decision | **STOP.** Relay what is off. Do not file or re-dispatch on your own. |
 - **Step 3, why validation still runs.** Validating an issue this chain just filed stays useful: validate-issue re-traces the claims against the code independently and catches anything the Fable draft or the spot-check got wrong.
-- **Step 4, report.** Mark the issue line as drafted by Fable 5.
+- **Step 4, report.** Mark the issue line as drafted by Fable 5. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
 - **One extra Red Flag.** Tempted to skip the Fable subagent and draft or file the issue yourself to go faster: never. The draft coming from Fable 5 is the point of this skill.
