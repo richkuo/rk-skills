@@ -33,7 +33,7 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 | `github-issue-format` | Reference skill: the required format for creating or editing any GitHub issue (`[C<score>]` title, complexity rationale line ending in an explicit `fableplan: yes\|no` signal, complete-body rule, and a mandatory plain-language summary section every reader can understand). Loaded automatically before an issue is filed or edited. |
 | `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
 | `work-on-issue` | Implements an issue end-to-end: scans the issue thread for a posted implementation plan and builds to it (newest wins; deviations must be named in the PR), in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. |
-| `work-on-issue-loop` | Runs `work-on-issue`, requests a code review, then keeps fixing whatever the review finds until the PR gets an approval ("LGTM" — looks good to me). |
+| `work-on-issue-loop` | Runs `work-on-issue` to implement and open the PR, triggers the first review, then delegates the review cycle to `fix-pr-review-loop` until the PR gets an approval ("LGTM" — looks good to me). |
 | `issueplan` | Uses the current session's LLM to plan and build a task without a subagent. For an issue, it posts the plan and asks whether to build. A prose task proceeds to implementation and a PR after the plan. |
 
 ### PR review skills
@@ -122,13 +122,13 @@ mkdir -p .github/workflows && \
 
 Also included:
 
-- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). Use it as a reference for your own `~/.claude/CLAUDE.md`.
+- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). `AGENTS.md` is a symlink to it in this repo, so both files are one source of truth. Use it as a reference for your own `~/.claude/CLAUDE.md`.
 - `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
 - `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently.
 
 ## Install (from a clone)
 
-If you work from a checkout of this repo, `install.sh` symlinks every skill into `~/.claude/skills` and, when `~/.codex` already exists on the machine, into `~/.codex/skills` as well. It also links `CLAUDE.md`, `AGENTS.md` (as `~/.codex/AGENTS.md`), workflows, and the `/commit` command into `~/.claude` only. Re-run after pulling to pick up new or renamed skills.
+If you work from a checkout of this repo, `install.sh` symlinks every skill into `~/.claude/skills` and, when `~/.codex` already exists on the machine, into `~/.codex/skills` as well. It also links `CLAUDE.md` into `~/.claude` and `AGENTS.md` into `~/.codex/AGENTS.md` (both point at the same file in this repo), plus workflows and the `/commit` command into `~/.claude` only. Re-run after pulling to pick up new or renamed skills.
 
 ```sh
 ./install.sh
