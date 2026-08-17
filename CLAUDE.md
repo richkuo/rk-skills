@@ -41,7 +41,7 @@
 - Comment only where logic isn't self-evident.
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface — always.** Never pick the tidier design if it leaves any correctness/safety gap (money, data integrity, security, auto-protective mechanisms); weigh gaps against the realistic worst case, and ignore the average. Derive the right solution from first principles even if it means more code.
-- **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best."
+- **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow unless I override it, verifying claims against code, destructive-action safety) override "best."
 - **Tests are a correctness floor.** They are never an obstacle. "Best solution" never means weakening, deleting, or skipping a test to make a change pass — fix the code, or if the test itself is wrong, say so and get explicit sign-off before touching it.
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
@@ -84,5 +84,5 @@
 
 ## Git Workflow (all repos)
 
-- **All changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
+- **Unless otherwise specified, all changes land via git worktree + pull request — never commit directly to main, never work in the main checkout.** An explicit instruction from me (e.g. "commit directly to main") overrides this for that change only. Create a worktree off the latest `origin/main` for every change (the `EnterWorktree` tool, or `git worktree add`), do the work there, then open a PR from that branch.
 - **Worktree/branch names carry a coding-agent prefix**: `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — e.g. `cc/issue-873-scale-in-pyramiding`. On Claude Code, use the native `EnterWorktree` tool and pass the `cc/`-prefixed name directly (the tool uses it verbatim, it does not add a prefix itself). On Cursor/Codex (no `EnterWorktree` tool), use `git worktree add` and add the `cursor/`/`codex/` prefix by hand.
