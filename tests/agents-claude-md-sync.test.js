@@ -1,50 +1,30 @@
 import { describe, expect, test } from 'bun:test'
+import { lstatSync, readlinkSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-// AGENTS.md is the Codex-harness rendition of CLAUDE.md. The two files must be
-// line-for-line identical except for these harness substitutions. Any other
-// difference is drift: a rule landed in one file and not the other.
-const SUBSTITUTIONS = [
-  { from: 'CLAUDE.md', to: 'AGENTS.md' },
-  { from: 'Claude Code', to: 'Codex' },
-  { from: '`cc/issue-', to: '`codex/issue-' },
-]
+// AGENTS.md is a symlink to CLAUDE.md, so the Codex-facing doc and the
+// Claude-facing doc are one file and cannot drift apart. These tests guard the
+// link itself: replacing it with a copy would let a rule land in one file and
+// not the other again.
+const agentsPath = fileURLToPath(new URL('AGENTS.md', root))
 
-const applyCombo = (line, combo) =>
-  combo.reduce((acc, { from, to }) => acc.replaceAll(from, to), line)
-
-// Every subset of SUBSTITUTIONS, so each differing line may use any mix of them.
-const combos = SUBSTITUTIONS.reduce(
-  (acc, sub) => acc.concat(acc.map((combo) => [...combo, sub])),
-  [[]],
-).filter((combo) => combo.length > 0)
-
-const [claudeLines, agentsLines] = await Promise.all([
-  read('CLAUDE.md').then((t) => t.split('\n')),
-  read('AGENTS.md').then((t) => t.split('\n')),
-])
-
-describe('AGENTS.md stays in sync with CLAUDE.md', () => {
-  test('same line count', () => {
-    expect(agentsLines.length).toBe(claudeLines.length)
+describe('AGENTS.md is a symlink to CLAUDE.md', () => {
+  test('AGENTS.md is a symbolic link', () => {
+    expect(lstatSync(agentsPath).isSymbolicLink()).toBe(true)
   })
 
-  test('every line is identical or an allowed harness substitution', () => {
-    const drifted = []
-    claudeLines.forEach((claudeLine, i) => {
-      const agentsLine = agentsLines[i]
-      if (agentsLine === undefined || claudeLine === agentsLine) return
-      const explained = combos.some(
-        (combo) => applyCombo(claudeLine, combo) === agentsLine,
-      )
-      if (!explained) {
-        drifted.push(
-          `line ${i + 1}:\n  CLAUDE.md: ${claudeLine}\n  AGENTS.md: ${agentsLine}`,
-        )
-      }
-    })
-    expect(drifted).toEqual([])
+  test('the link target is CLAUDE.md', () => {
+    expect(readlinkSync(agentsPath)).toBe('CLAUDE.md')
+  })
+
+  test('reading AGENTS.md returns the CLAUDE.md content', async () => {
+    const [claude, agents] = await Promise.all([
+      read('CLAUDE.md'),
+      read('AGENTS.md'),
+    ])
+    expect(agents).toBe(claude)
   })
 })
