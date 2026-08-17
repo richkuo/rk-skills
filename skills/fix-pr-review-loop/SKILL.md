@@ -5,7 +5,7 @@ description: Use when the user asks to fix a PR review and drive it to approval 
 
 # fix-pr-review-loop
 
-Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. This is the same convergence loop work-on-issue-loop runs after it opens a PR, factored out so it can be pointed at any PR directly.
+Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. This skill owns the convergence loop; work-on-issue-loop delegates to steps 2 through 5 here after it opens a PR.
 
 ## Input
 
@@ -97,16 +97,16 @@ After that narrative, name each unverified source from any `**Verification limit
 | Situation | Action |
 |---|---|
 | `review_count > 5` and the latest verdict is `LGTM` | Stop per step 3 rule 2; report per step 5 |
-| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going per step 3 rule 3 — the cap never force-stops a `Needs Updates` PR |
+| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going per step 3 rule 3 |
 | Latest "review" is your own prior fix-pr-review disposition comment or a review trigger comment (`@claude review` / `@codex review`), not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
-| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — step 3 rule 3 sends it through fix-pr-review. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
+| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't terminal — step 3 rule 3 sends it through fix-pr-review; step 3 rule 1 defines the only clean pass |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
 | PR already has unaddressed feedback when the skill starts | Don't post a redundant review trigger — step 1 evaluates existing feedback first and only triggers when none exists |
 
 ## Common Mistakes
 
-- **Misapplying the cycle cap.** Step 3 owns the rules: below the cap only a *bare* LGTM (a `**Verification limitation:**` line alone is still bare) stops the loop; past it the first LGTM wins; a `Needs Updates` verdict never stops the loop by cycle count.
+- **Misapplying the cycle cap.** Step 3 rules 1–3 own the cap and the `**Verification limitation:**` handling; apply them as written.
 - **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
 - **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.
 - **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 10) — don't add a second one here.

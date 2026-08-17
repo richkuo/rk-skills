@@ -5,7 +5,7 @@ description: Use when the user asks to implement a GitHub issue and drive it thr
 
 # work-on-issue-loop
 
-Drive an issue from "validated" to "PR reviewed to convergence" without stopping in between: implement (work-on-issue), wait for the review bot, resolve what it finds (fix-pr-review), and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. Steps 2–5 below are this same convergence loop that `fix-pr-review-loop` runs standalone against any already-open PR — use that skill directly when there's no issue to implement first, just an existing PR to drive to approval.
+Drive an issue from "validated" to "PR reviewed to convergence" without stopping in between. Step 1 implements the issue and opens the PR. The review cycle after that is fix-pr-review-loop's convergence loop, run against the new PR. fix-pr-review-loop owns the loop mechanics (bot selection, preflight, wait procedure, stop conditions, cycle cap, resolution); this skill adds the implementation step, the follow-on issue sweep, and its own terminal state for a run that never produces a PR. Use fix-pr-review-loop directly when there is no issue to implement first, just an existing PR to drive to approval.
 
 ## Input
 
@@ -16,7 +16,7 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ### 1. Implement, open the PR, and trigger the first review
 
-Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issue`). It implements the fix in an isolated worktree, verifies it, commits, pushes, and opens the PR (`Closes #<N>`) — it does **not** request review; that's this loop's job.
+Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issue`). It implements the fix in an isolated worktree, verifies it, commits, pushes, and opens the PR (`Closes #<N>`). It does **not** request review; that is this loop's job.
 
 **Gate on its outcome before continuing — work-on-issue can legitimately stop early:**
 
@@ -27,97 +27,49 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 gh pr comment <PR-number> --body "@claude review"
 ```
 
-**Review bot selection — Claude by default.** The trigger phrase above, the preflight below, and every re-review in this loop use `@claude` unless Codex was **explicitly** selected: the user said so ("review with Codex"), a caller argument named it (`reviewBot: codex`), or this run was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does not select Codex. When Codex is selected, post `@codex review` instead, preflight for `codex.yml` plus the `OPENAI_API_KEY` secret (and, for the write routes the fixer needs, `CODEX_APP_ID` / `CODEX_APP_PRIVATE_KEY` and the `CODEX_BOT_LOGIN` repository variable), and keep `@codex` for every re-review in this cycle. Never switch bots mid-cycle.
-
-**Preflight — confirm a review bot exists before waiting on one.** This loop assumes an automated reviewer that answers `@claude review` comments (or `@codex review` when Codex is selected). Before entering the wait, check the repo for one: `gh api repos/{owner}/{repo}/contents/.github/workflows --jq '.[].name'` and look for a workflow that responds to the selected bot (e.g. `claude.yml`, or `codex.yml`), or confirm the Claude GitHub App is installed. If you find none, don't sink 30 minutes into a review that will never come — tell the user the PR is pushed but no review bot is configured, and point them at `templates/claude-review.yml` in this repo (copy it to `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret), or `templates/codex-review.yml` for the Codex equivalent. Proceed into the wait only if a reviewer is present or the user confirms one is configured elsewhere.
+**Review bot selection and preflight:** apply fix-pr-review-loop step 1's two rules to this first trigger. Bot selection: `@claude` by default, `@codex` only on explicit selection, and never switch bots mid-cycle. Preflight: before you enter the wait, confirm a review workflow for the selected bot exists, with the Codex secret and variable checks when Codex is selected.
 
 Record the timestamp of the trigger comment and set `review_count = 1` — that review is #1 in flight.
 
-### 2. Wait for the review to land
+### 2. Run the convergence loop
 
-Poll the PR for a new review or issue comment posted **after** the last trigger you sent — reviews can land as a formal PR review or as an issue comment (the `@claude` bot usually posts as an issue comment; see fix-pr-review step 1 for the `gh` calls to check — it also fetches inline diff threads, which matter when a human reviewer weighs in). An until-loop is the right shape here — you want to be notified once the condition is true, not to busy-poll inline:
+Run fix-pr-review-loop steps 2 through 4 against the PR:
 
-```bash
-until gh pr view <N> --json comments,reviews --jq '
-  ([.comments[] | select(.createdAt > "<trigger_ts>")] |
-   any(.body | test("(^|\\n)(LGTM|Needs Updates)"))) or
-  ([.reviews[] | select(.submittedAt > "<trigger_ts>")] | length > 0)
-' | grep -q true; do sleep 60; done
-```
+- **fix-pr-review-loop step 2** — wait for the review to land, with both jq gotchas, the background until-loop, and the ~30-minute wait cap.
+- **fix-pr-review-loop step 3** — check the review against the merge-conflict check and the stop conditions (clean pass, past-the-cap LGTM, otherwise keep going).
+- **fix-pr-review-loop step 4** — resolve the review with fix-pr-review, increment `review_count`, and loop back to its step 2.
 
-Two load-bearing details in that condition (both have silently broken monitors before — a wrong filter here reads as "no review yet" forever):
+Carry the `review_count` and trigger timestamp from step 1 into that loop. When the loop reaches a "Done" terminal state, continue with step 3 below; on any other terminal state go to step 4.
 
-- **Match the verdict with `(^|\\n)`, not `^` + the `m` flag.** In jq's regex (Oniguruma), `m` means dot-matches-newline, NOT multiline anchoring — `^` only matches the very start of the body. The `@claude` GitHub Action buries its verdict below a `**Claude finished …**` header and a `---`, so an anchored-at-start pattern never matches. (The bot also *edits* its placeholder comment in place rather than posting a new one; `createdAt` stays at placeholder time, which is still after your trigger, so the timestamp filter is fine.)
-- **Pipe through `grep -q true`.** `gh --jq` prints `true`/`false` but exits 0 either way, so a bare `until gh …; do` would exit the loop on the first poll regardless of the value.
+### 3. File named follow-on issues — MANDATORY before reporting success
 
-The same condition works for a Codex review, which lands as a plain `github-actions[bot]` issue comment whose body starts with the verdict and ends with a link to `/actions/runs/<run-id>` — there is no placeholder comment and no edit-in-place, so `createdAt` is the real post time.
-
-Run this as a background until-loop (e.g. via the Monitor tool) so you're notified on completion instead of blocking synchronously. Cap the wait at roughly 30 minutes; if no review appears in that window, stop and report to the user that the review bot didn't respond — don't loop indefinitely on a bot that may be down or misconfigured. Before trusting a freshly armed monitor, sanity-check its condition once inline against the live PR — if a review is already present it must print `true`.
-
-### 3. Check the review against the stop conditions
-
-Fetch the latest review and classify it exactly like fix-pr-review step 1 and step 3: verdict (`LGTM` / `Needs Updates`) and which sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`).
-
-Evaluate in this order:
-
-1. **Clean pass — stop, success.** Verdict is `LGTM` and **no finding sections at all** — nothing under Recommended Optional or Create Follow-up Issue either. A `**Verification limitation:**` line is not a finding and does not prevent a clean pass. Nothing left to fix, at any `review_count`. Go to step 5.
-2. **Past the cap and it's an LGTM — stop, first one wins.** `review_count > 5` **and** verdict is `LGTM` (even with Recommended Optional / Create Follow-up Issue items still listed). Once the loop has run more than 5 cycles, the first LGTM it sees ends it — don't spend a 6th+ fix-pr-review cycle chasing non-blocking findings. Go to step 5.
-3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM does, per rules 1–2), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
-
-### 4. Resolve the review and loop
-
-Invoke the `fix-pr-review` skill for the PR (Skill tool, `skill: fix-pr-review`). It re-validates every finding against the code, fixes what's real, implements the judgment calls and optional improvements to the best-solution standard, commits, pushes, posts the disposition comment, and triggers a fresh review from the selected review bot itself (routed to the cheap model shorthand when it addressed only non-blocking items, otherwise to the repo default, per fix-pr-review step 10).
-
-fix-pr-review also decides its own delegation (its step 5): it always validates the findings inline, then either implements inline or hands steps 6–11 to a subagent on the same session model — open judgment calls and safety-class findings always stay inline. It decides from the validated findings itself, so don't override its choice.
-
-Increment `review_count`, record the new trigger timestamp from that comment, and go back to step 2.
-
-### 4.5. File named follow-on issues — MANDATORY before reporting success
-
-On either "Done" terminal state (before step 5), sweep the deliverables for follow-on work the implementation itself named — this is separate from the review's `Create Follow-up Issue` section (fix-pr-review handles those) and is routinely missed without an explicit pass:
+On either "Done" terminal state (before step 4), sweep the deliverables for follow-on work the implementation itself named — this is separate from the review's `Create Follow-up Issue` section (fix-pr-review handles those) and is routinely missed without an explicit pass:
 
 - Scan the **PR body**, **commit message(s)**, and **any docs/READMEs the diff added or changed** for phrases like "follow-on", "own issue", "future work", "next step", "not yet wired/deployed", "needs a follow-up".
-- For each named item: file a **fully-specced** issue per the repo's issue conventions (complexity-prefixed title, complete body — problem, goal, approach, acceptance, a `## Plain simple English` section under 55 words — attribution footer; `github-issue-format` owns the full rule). Never file a stub; if an item genuinely can't be specced yet, don't file it — name it in the step 5 report as **deliberately unfiled** instead.
+- For each named item: file a **fully-specced** issue per the repo's issue conventions (complexity-prefixed title, complete body — problem, goal, approach, acceptance, a `## Plain simple English` section under 55 words — attribution footer; `github-issue-format` owns the full rule). Never file a stub; if an item genuinely can't be specced yet, don't file it — name it in the step 4 report as **deliberately unfiled** instead.
 - Skip items that already have an issue (search first: `gh issue list --search "<keywords>" --state all`).
-- Include every filed issue URL (and any deliberately-unfiled item) in the step 5 report.
+- Include every filed issue URL (and any deliberately-unfiled item) in the step 4 report.
 
 The failure mode this prevents: a PR merges with follow-ons named only in prose, everyone moves on, and the work silently evaporates.
 
-### 5. Report
+### 4. Report
 
-Stop the loop and report the terminal state — don't claim blanket success:
+Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. Apply two deltas:
 
-| Terminal state | Report as |
-|---|---|
-| Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
-| `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
-| Bot never responded within the wait window | **Escalate.** Report that the PR is implemented and pushed but review never landed; the user should check the selected review bot's GitHub Action status. |
-| work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) | **Nothing to drive.** Relay its report; zero review cycles ran. |
-
-There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
-
-In every case, give: PR URL, number of review cycles run, final verdict, any follow-on issues filed in step 4.5 (URLs) or deliberately left unfiled, and (if escalating) exactly what's left.
-
-**Cap the report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
-
-After that narrative, name each unverified source from any `**Verification limitation:**` lines in the terminal review (source names only, omit when none) — that list sits outside the word cap.
+- Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) → **Nothing to drive.** Relay its report; zero review cycles ran.
+- Add to the report contents: every follow-on issue filed in step 3 (URLs) and any item deliberately left unfiled.
 
 ## Red Flags — STOP
 
+Every row in fix-pr-review-loop's Red Flags table applies while the loop runs. These rows are additional:
+
 | Situation | Action |
 |---|---|
-| `review_count > 5` and the latest verdict is `LGTM` | Stop per step 3 rule 2; report per step 5 |
-| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going per step 3 rule 3 — the cap never force-stops a `Needs Updates` PR |
-| Latest "review" is your own prior fix-pr-review disposition comment or a review trigger comment (`@claude review` / `@codex review`), not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
-| Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
-| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — step 3 rule 3 sends it through fix-pr-review. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
-| PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
-| work-on-issue stopped with no PR | Don't trigger a review or enter the wait loop — gate on its outcome in step 1 and report per step 5 |
-| About to report "Done" while the PR/README names follow-on work with no issue filed | Stop — run step 4.5 first; a named follow-on with no issue and no "deliberately unfiled" note in the report is a silent drop |
+| work-on-issue stopped with no PR | Don't trigger a review or enter the wait loop — gate on its outcome in step 1 and report per step 4 |
+| About to report "Done" while the PR/README names follow-on work with no issue filed | Stop — run step 3 first; a named follow-on with no issue and no "deliberately unfiled" note in the report is a silent drop |
 
 ## Common Mistakes
 
-- **Misapplying the cycle cap.** Step 3 owns the rules: below the cap only a *bare* LGTM (a `**Verification limitation:**` line alone is still bare) stops the loop; past it the first LGTM wins; a `Needs Updates` verdict never stops the loop by cycle count.
-- **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
-- **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.
-- **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 10) — don't add a second one here.
+fix-pr-review-loop's Common Mistakes list applies unchanged, including the cycle-cap rules its step 3 owns. One addition:
+
+- **Skipping the follow-on sweep.** Step 3 runs before any "Done" report; without it, follow-on work named only in prose gets dropped.
