@@ -91,9 +91,9 @@ Validation discipline (this is where fixing a review goes wrong):
 - **Safety carve-out:** any finding touching money, data integrity, security, or an auto-protective mechanism gets fixed or escalated to the user even at low confidence — never silently dropped as Refuted unless you can prove from code it's a non-issue.
 - **CI Failures validate differently — there's no reviewer to be wrong, only the log to explain.** Read the failing step's actual error/assertion, not just the job name. ✅ Confirmed if the failure traces to this PR's diff — fix it (and reproduce the exact failing command locally where feasible, so step 6's verification actually exercises it). ❌ Refuted only with evidence it's *not* this PR's doing — pre-existing on `<baseRefName>` (check CI history / reproduce on base) or a one-off infra flake (timeout/network blip unrelated to any path this PR touches) — don't patch around it; note it in the disposition and flag it to the user, since a flaky or broken base branch is worth knowing about independent of this PR.
 
-**For every ❓ Judgment finding, do the analysis the reviewer couldn't and implement the result — don't hand the tradeoff back.** Trace the code, enumerate the viable approaches, and derive the **absolute-best solution**, evaluated as if cost, effort, time, resources, token spend, and code volume were unlimited — they are *not* factors and must never narrow the option space. The only things that can override "best" are correctness and safety. Choose the most correct, most robust design even when it's far more work, then implement it (step 6) in this same run. Do **not** pause to ask the user. Record the decision in the disposition comment — the chosen solution, the code-grounded reasoning (`file:line`), and the rejected alternatives in one line each — so the human can override after the fact if they disagree.
+**For every ❓ Judgment finding, do the analysis the reviewer couldn't and implement the result — don't hand the tradeoff back.** Trace the code, enumerate the viable approaches, and derive the **absolute-best solution** per the global "absolute best solution" rule in CLAUDE.md/AGENTS.md, then implement it (step 6) in this same run. Do **not** pause to ask the user. Record the decision in the disposition comment — the chosen solution, the code-grounded reasoning (`file:line`), and the rejected alternatives in one line each — so the human can override after the fact if they disagree.
 
-This same absolute-best-solution standard governs `Recommended Optional` improvements: implement them too, choosing the best design with cost/effort/time/resources treated as non-factors.
+The same standard governs `Recommended Optional` improvements: implement them too.
 
 ### 5. Decide whether to delegate implementation
 
@@ -109,7 +109,7 @@ Otherwise, delegate **only when the session is already long** — enough context
 Implement every finding that calls for a change: ✅ Confirmed, ⚠️ Partial (the true part), ❓ Judgment (the absolute-best solution you derived), and `Recommended Optional` (best-solution standard). Skip only ❌ Refuted and `Create Follow-up Issue` items.
 
 - Read the surrounding code and follow existing conventions before editing.
-- Keep each fix scoped to its finding; don't smuggle in unrelated refactors. (Scope ≠ minimalism: for Judgment and Optional items, pick the *best* design, not the smallest diff — correctness and robustness outrank brevity.)
+- Keep each fix scoped to its finding; don't smuggle in unrelated refactors. (Scope ≠ minimalism: the step 4 best-solution standard still applies to Judgment and Optional items.)
 - After all fixes, **verify**: run the project's tests/build/lint (check the repo's `CLAUDE.md` / `package.json` / Makefile for the commands — e.g. `bun test`, `go test -race ./...`, `bun run build`). Evidence before assertions: do not claim a fix works without running verification, and report any failures honestly rather than papering over them.
 - If a fix turns out infeasible or reveals the finding was actually Refuted, move it to the Refuted bucket with the reason.
 
@@ -150,7 +150,7 @@ Commit message: a concise summary of what review findings were addressed (refere
 Updated with LLM: <current model> | <effort> | Harness: Claude Code
 ```
 
-Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). Per the user's workflow, never include time/effort estimates in the message body.
+The global LLM Attribution Footer rule in CLAUDE.md/AGENTS.md owns the field values; this skill only fixes the verb to **Updated**.
 
 ### 9. Post the disposition comment back to the PR
 
