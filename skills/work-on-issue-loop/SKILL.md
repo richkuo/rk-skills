@@ -106,19 +106,18 @@ After that narrative, name each unverified source from any `**Verification limit
 
 | Situation | Action |
 |---|---|
-| `review_count > 5` and the latest verdict is `LGTM` | Stop right there — don't invoke fix-pr-review again just because non-blocking findings remain; report per step 5 |
-| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going — invoke fix-pr-review and loop again; the cap only changes what counts as "done" on an LGTM, it never force-stops a `Needs Updates` PR |
+| `review_count > 5` and the latest verdict is `LGTM` | Stop per step 3 rule 2; report per step 5 |
+| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going per step 3 rule 3 — the cap never force-stops a `Needs Updates` PR |
 | Latest "review" is your own prior fix-pr-review disposition comment or a review trigger comment (`@claude review` / `@codex review`), not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
-| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — below the cap, LGTM-with-findings still goes through fix-pr-review; only past the cap does the first LGTM end it regardless of findings. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
+| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't — step 3 rule 3 sends it through fix-pr-review. A lone `**Verification limitation:**` line is not a finding and *is* a clean pass |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
 | work-on-issue stopped with no PR | Don't trigger a review or enter the wait loop — gate on its outcome in step 1 and report per step 5 |
 | About to report "Done" while the PR/README names follow-on work with no issue filed | Stop — run step 4.5 first; a named follow-on with no issue and no "deliberately unfiled" note in the report is a silent drop |
 
 ## Common Mistakes
 
-- **Treating any LGTM at or below `review_count` 5 as terminal.** Below the cap, only a *bare* LGTM (no finding sections; a `**Verification limitation:**` line alone is still bare) stops the loop; an LGTM with leftover optional/follow-up findings still goes through another fix-pr-review cycle.
-- **Hard-stopping a `Needs Updates` PR once `review_count` passes 5.** There's no such rule — the cap only lowers the bar for what counts as "done" once an LGTM shows up; it never stops the loop on its own.
+- **Misapplying the cycle cap.** Step 3 owns the rules: below the cap only a *bare* LGTM (a `**Verification limitation:**` line alone is still bare) stops the loop; past it the first LGTM wins; a `Needs Updates` verdict never stops the loop by cycle count.
 - **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
 - **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.
 - **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 10) — don't add a second one here.
