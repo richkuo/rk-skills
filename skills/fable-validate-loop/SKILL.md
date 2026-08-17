@@ -52,7 +52,7 @@ If **No**, skip straight to step 4.
 
 **Top-band note:** this gate runs fableplan for band-5 issues (score ≥ 81), and their verdict line reads `fableplan: yes` — the signal is `yes` for all of score ≥ 61. This loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a top-band issue here — skipping it would drop Fable from the hardest issues entirely.
 
-Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 5 of this skill.
+Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 5 of this skill. Instruct fableplan to use the harness suffix `fable-validate-loop` in the posted comment's attribution footer, so the comment records the actual entry point (a delta skill that reuses this step overrides the suffix with its own name).
 
 Give the planning subagent the validation verdict (the scratchpad copy from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns).
 

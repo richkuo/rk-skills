@@ -46,7 +46,7 @@ Report, in order: scope gate passed, issue updated or not, plan posted (comment 
 
 ## Red Flags — STOP
 
-fable-validate-loop's Red Flags rows for the scope gate, waiting on prompts, the update-before-plan order, fableplan's build steps (7–8), and a structurally wrong plan apply unchanged, with "post a broken plan" read for "hand a broken plan to work-on-issue-loop". In addition:
+fable-validate-loop's Red Flags rows for the scope gate, waiting on prompts, the update-before-plan order, fableplan's build steps (7–8), and a structurally wrong plan apply, with two substitutions — this chain never invokes `work-on-issue-loop`, so neither row may name it as the owner of what happens next. In the build-steps row, read "stop it at step 5; this skill ends at the posted plan and owns no implementation" for "stop it at step 5; work-on-issue-loop owns implementation". In the structurally-wrong-plan row, read "post a broken plan" for "hand a broken plan to work-on-issue-loop". In addition:
 
 | Situation | Action |
 |---|---|
