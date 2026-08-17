@@ -19,10 +19,30 @@ Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 Follow **fable-validate-loop steps 1 through 6** with these changes:
 
-- **Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process, steps 0 through 8; it produces the same verdict block. Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue number; every later step targets exactly this issue.
-- **Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5` model string in fable-validate-loop's step 3 does not apply here.
-- **Step 4 (fableplan):** the score gate, safety carve-out, and top-band note apply unchanged (skip fableplan below a validated score of 61 unless a safety flag is set). When fableplan runs, give the planning subagent the validation findings, the verdict block and validate-issue's report, alongside the issue.
-- **Steps 2, 5, and 6** apply unchanged.
+**Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process — steps 0 through 8 — and produce the standard verdict block:
+
+```
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+```
+
+Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue number; every later step targets exactly this issue.
+
+**Step 2 (scope gate):** the same four STOP conditions apply, sourced from the plain validation (the already-addressing PR comes from validate-issue's step 1 linked-PR check; `too large` from validate-issue step 7):
+
+| Condition | Action |
+|---|---|
+| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
+| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
+| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
+
+**Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5` model string in fable-validate-loop's step 3 does not apply here.
+
+**Step 4 (fableplan):** **Score gate:** a validated complexity score **below 61** skips fableplan — go straight to step 5. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue.
+
+**Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
+
+**Step 6 (report)** applies unchanged. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
 
 ## Red Flags — STOP
 

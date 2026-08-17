@@ -19,9 +19,28 @@ Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 Follow **fable-validate-loop steps 1 through 6** with these changes:
 
-- **Step 3 (update-issue edits):** the stacked attribution line uses the harness suffix `fable-validate-fableplan-loop`.
-- **Step 4 (fableplan):** fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score. Instruct fableplan to use the harness suffix `fable-validate-fableplan-loop` in the posted comment's attribution footer, so the comment records the actual entry point. The rest of the step (fableplan's planning-phase-only invocation, the validation verdict handed to the planner, the scratchpad kept for step 5) applies unchanged.
-- **Steps 1, 2, 5, and 6** apply unchanged.
+**Step 1 (fable-validate)** applies unchanged; it produces the standard verdict block:
+
+```
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+```
+
+**Step 2 (scope gate)** applies unchanged — the same four STOP conditions:
+
+| Condition | Action |
+|---|---|
+| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
+| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
+| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
+
+**Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan-loop`.
+
+**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score. Instruct fableplan to use the harness suffix `fable-validate-fableplan-loop` in the posted comment's attribution footer, so the comment records the actual entry point. The rest of the step applies unchanged: fableplan's planning-phase-only invocation, and the validation verdict handed to the planner (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns), with the scratchpad kept for step 5.
+
+**Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
+
+**Step 6 (report)** applies unchanged. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
 
 ## Red Flags — STOP
 

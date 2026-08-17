@@ -19,10 +19,24 @@ Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 Follow **fable-validate-loop steps 1 through 4** with the changes below, then run this skill's step 5 in place of fable-validate-loop's steps 5 and 6:
 
-- **Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner.
-- **Step 2 (scope gate):** the same four STOP conditions apply; the cost here is a wasted or wrong plan rather than a wrong PR.
-- **Step 3 (update-issue edits):** the stacked attribution line uses the harness suffix `fable-validate-fableplan`.
-- **Step 4 (fableplan):** fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the scope gate, whatever the validated score. Producing the plan is this skill's product, so gating it away would leave the run with no output; this matches fable-validate-fableplan-loop and is the deliberate difference from fable-validate-loop and validate-fableplan-loop. Instruct fableplan to use the harness suffix `fable-validate-fableplan` in the posted comment's attribution footer, so the comment records the actual entry point. This skill ends at the posted plan: do not answer fableplan's step-6 "build now?" question with anything but stop, and there is no scratchpad pass-through to an implementation stage.
+**Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner. It produces the standard verdict block:
+
+```
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+```
+
+**Step 2 (scope gate):** the same four STOP conditions apply; the cost here is a wasted or wrong plan rather than a wrong PR:
+
+| Condition | Action |
+|---|---|
+| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
+| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
+| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
+
+**Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan`.
+
+**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the scope gate, whatever the validated score. Producing the plan is this skill's product, so gating it away would leave the run with no output; this matches fable-validate-fableplan-loop and is the deliberate difference from fable-validate-loop and validate-fableplan-loop. Hand the planner the verdict block and validation report from step 1 — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns). Instruct fableplan to use the harness suffix `fable-validate-fableplan` in the posted comment's attribution footer, so the comment records the actual entry point. This skill ends at the posted plan: do not answer fableplan's step-6 "build now?" question with anything but stop, and there is no scratchpad pass-through to an implementation stage.
 
 ### 5. Report
 
