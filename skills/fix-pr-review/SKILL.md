@@ -69,7 +69,7 @@ Parse all collected feedback — structured reviews, inline diff threads, and fa
 - **Recommended Optional** — non-blocking improvement.
 - **Create Follow-up Issue** — out-of-scope, track separately. Wherever this run files one (the LGTM-only path in step 1, or the disposition's deferred section), the issue gets a complete body per the repo's issue conventions — complexity-prefixed title, problem, goal, approach, acceptance criteria, a `## Plain simple English` section under 55 words, attribution footer; `github-issue-format` owns the full rule. Never file a stub.
 
-A `**Verification limitation:**` line is **not a finding.** Skip every such line when classifying — do not bucket it, dispose it, rebut it, or treat it as remaining work. It does not block the approved-and-stop path and does not count toward "findings still listed."
+A `**Verification limitation:**` line is not a finding. Skip every such line when classifying — do not bucket it, dispose it, rebut it, or treat it as remaining work. It does not block the approved-and-stop path and does not count toward "findings still listed."
 
 For free-form feedback with no sections — including inline diff comments — classify each point yourself into the same four buckets by its substance. Keep each finding atomic — split compound feedback ("fix X and also Y") into separate findings so each gets its own verdict. When the same defect is raised by more than one source — reviewer, thread, *or* a CI Failure finding from step 2 (e.g. a reviewer flags "this breaks the type check" while the type-check job is already `bucket: fail`) — merge into one finding and note all sources, including the check name alongside the reviewer(s).
 
