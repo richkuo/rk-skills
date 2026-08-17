@@ -16,8 +16,9 @@ Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5
 
 | Condition | Action |
 |---|---|
-| The subagent found an existing open issue/PR already covering it (no issue filed) | **STOP.** Report the duplicate and the offer to update/comment instead — merging scopes is a human call. |
-| The conversation held several distinct candidates and none clearly converged | **STOP.** Report the candidates and ask which to file — never bundle, never auto-file the extras. |
+| fable-new-issue found an existing open issue/PR already covering it (no issue filed) | **STOP.** Report the duplicate and the offer to update/comment instead — merging scopes is a human call. |
+| The conversation held several distinct candidates | If one clearly converged, file it and **continue the chain with it**; the unfiled candidates go in the final report. If none clearly converged, **STOP** — report the candidates and ask which to file. Never bundle, never auto-file the extras. |
+| fable-new-issue split the work and named unfiled follow-ups | Continue with the **core issue only**; relay the unfiled follow-ups in the final report. |
 | The draft was structurally wrong and fable-new-issue paused for a human decision | **STOP.** Relay what is off. Do not file or re-dispatch on your own. |
 - **Step 3, why validation still runs.** Validating an issue this chain just filed stays useful: validate-issue re-traces the claims against the code independently and catches anything the Fable draft or the spot-check got wrong.
 - **Step 4, report.** Mark the issue line as drafted by Fable 5. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
