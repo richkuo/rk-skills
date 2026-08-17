@@ -62,7 +62,7 @@ Integration is your job — the merge proving clean is not the same as the piece
 You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Spawn a **new one-shot** Fable 5 reviewer; on the Agent-tool path:
 
 - `subagent_type`: `Plan`, `model`: `fable`, `run_in_background`: `false`
-- `prompt`: the original task, **the spec map** — the full decomposition as spec → files → worker result → disposition (accepted / re-dispatched / taken over), so it can review piece-by-piece plus the seams rather than one unreviewable blob — the pinned interfaces, the full merged diff, and the integration verification results. It must return a verdict — **approve**, or **blocked** with numbered blocking findings (each with file:line and a concrete failure scenario) — plus non-blocking suggestions kept separate.
+- `prompt`: the original task, **the spec map** — the full decomposition as spec → files → worker result → disposition (accepted / re-dispatched / taken over), so it can review piece-by-piece plus the seams rather than one unreviewable blob — the pinned interfaces, the full merged diff, and the integration verification results. It must return a verdict — **approve**, or **blocked** with numbered blocking findings (each with file:line and a concrete failure scenario) — plus non-blocking suggestions kept separate. It reviews only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
 
 The verdict is **binding**: do not commit while blocking findings stand.
 
