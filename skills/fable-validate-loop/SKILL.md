@@ -52,11 +52,11 @@ If **No**, skip straight to step 4.
 
 **Top-band note:** this gate runs fableplan for band-5 issues (score ≥ 81), and their verdict line reads `fableplan: yes` — the signal is `yes` for all of score ≥ 61. This loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a top-band issue here — skipping it would drop Fable from the hardest issues entirely.
 
-Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. **Do NOT execute fableplan's steps 7–8 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
+Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 5 of this skill.
 
 Give the planning subagent the validation verdict (the scratchpad copy from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns).
 
-Keep the vetted plan's scratchpad file — step 5 passes it through. If fableplan fails after its internal retry, stop and report; don't fall back to planning yourself or implementing unplanned.
+Keep the vetted plan's scratchpad file — step 5 passes it through. On a structurally wrong plan or a fableplan failure after its internal retry, stop and report per that section; don't implement unplanned.
 
 ### 5. Hand off to work-on-issue-loop
 

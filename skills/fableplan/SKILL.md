@@ -34,7 +34,7 @@ Also record the **Plan effort** if the fetched body has an `## Execution` block 
 
 ### 2. Dispatch the Fable 5 Plan subagent
 
-Do not re-plan the task yourself first — the subagent owns the plan. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
+Do not re-plan the task yourself first — the subagent owns the plan. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan`
 - `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5)
@@ -117,6 +117,16 @@ Do all of step 8's building inside that worktree. When the build is done, follow
 ### 8. Build
 
 In the worktree from step 7, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
+
+## Planning-phase-only invocation
+
+Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`) invoke this skill for planning only. In that mode:
+
+- Run **steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it.
+- **Do NOT execute steps 7–8** (worktree + build), and do not act on step 6's build question. The caller owns implementation; a build here would duplicate the caller's implement chain in the wrong worktree location.
+- When the caller supplies a harness suffix, use it in place of `fableplan` in step 4's posted-comment attribution footer, so the comment records the actual entry point.
+- Keep the vetted plan's scratchpad file; the caller passes it to its implementation or report stage.
+- If the step-3 sanity-check finds the plan structurally wrong, or the dispatch fails after its internal retry, stop and report to the caller. Never post a broken plan, and never plan the task yourself in fableplan's place.
 
 ## Notes
 
