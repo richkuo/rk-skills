@@ -112,12 +112,10 @@ Only after verification passes:
 
 ```bash
 git status                    # review BEFORE staging — any stray artifacts, logs, local config?
-git add -A                    # only if status showed nothing unrelated; otherwise stage files explicitly
+git add -A                    # only if status showed nothing unrelated; otherwise stage the intended files by name and leave the strays out
 git commit -F <msg-file>
 git push -u origin <branch>   # the worktree's <prefix>/issue-<N>-<slug> branch
 ```
-
-If `git status` shows anything unrelated to the change, don't `add -A` — stage the intended files by name and leave the strays out.
 
 Commit message: a concise summary of the change, referencing the issue (match the repo's commit-title convention — e.g. `feat(#<N>): …` / `fix(#<N>): …` if the repo uses it). This is new work, so the footer uses the **Created** verb. **Honor the repo's footer convention (its `CLAUDE.md` takes precedence over this default)**:
 
@@ -160,17 +158,17 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 |-----------|--------|
 | About to implement on the default branch or a divergent checked-out branch | Stop — enter the isolated worktree first (step 1) |
 | Caller supplies invalid, duplicate, missing, ambiguous, cross-repository, or changed `baseRefs`; multiple bases conflict; or a verified predecessor is not an ancestor of the integration base | Stop blocked, aborting any pending merge first — never fall back to the default branch or guess a replacement |
-| Fresh worktree's HEAD doesn't match the resolved base | Reset only the just-created, commit-free worktree to the verified base; never reset a re-entered worktree |
+| Fresh worktree's HEAD doesn't match the resolved base | Reset per step 1 — only the just-created, commit-free worktree, never a re-entered one |
 | Worktree for this issue already exists | Enter it by `path`; don't create a duplicate |
 | Issue lives in a different repo than the current checkout | Stop — work in a clone of that repo, or tell the user which repo to check out |
 | Issue is already closed, or an open PR already addresses it | Stop at step 0, before a worktree exists — report the closed issue or surface the PR; continue only when that PR is this session's own branch |
-| Issue thread already carries an implementation plan | Adopt the newest one (step 0) and build to it — never re-derive an approach the plan already settled; name every deviation in the PR body, and add `, fableplan` to the title bracket only when that plan is Fable-authored |
-| Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Follow the code / the newer instruction / the safe design — only step 2's three overrides justify deviating — and state the deviation in the PR body |
+| Issue thread already carries an implementation plan | Adopt the newest one (step 0) and build to it (step 2) — never re-derive an approach the plan already settled |
+| Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Deviate per step 2's three overrides — nothing else justifies it — and state the deviation in the PR body |
 | Issue description conflicts with what the code actually does, or its sketch was ⚠️/❌ in validation | Trust the traced code and implement the optimal direction for this repo, not the original sketch; note the discrepancy in the PR body |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
 | Anywhere the default branch is needed (fetch or PR `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
-| Writing the PR body | Follow step 6 — `## Summary` / verification first, `Closes #<N>` (without it the merge doesn't resolve the issue), `## Plain simple English`, footer |
-| Tempted to trigger an `@claude` review, wait on CI, or pause to ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report; the skill ends with the open PR, and review requests belong to the caller |
+| Writing the PR body | Follow step 6 — `Closes #<N>` is what makes the merge resolve the issue |
+| Tempted to trigger an `@claude` review, wait on CI, or pause to ask the user mid-flow | Don't — the skill ends with the open PR, and review requests belong to the caller (step 7) |
