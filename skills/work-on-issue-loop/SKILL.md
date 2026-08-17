@@ -27,7 +27,7 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 gh pr comment <PR-number> --body "@claude review"
 ```
 
-**Review bot selection and preflight:** apply fix-pr-review-loop step 1's two rules to this first trigger. Bot selection: `@claude` by default, `@codex` only on explicit selection, and never switch bots mid-cycle. Preflight: before you enter the wait, confirm a review workflow for the selected bot exists, with the Codex secret and variable checks when Codex is selected.
+**Review bot selection and preflight:** apply fix-pr-review-loop step 1's two rules to this first trigger (the selection logic itself is fix-pr-review step 10's rule). Bot selection: `@claude` by default, `@codex` only on explicit selection, and never switch bots mid-cycle. Preflight: before you enter the wait, confirm a review workflow for the selected bot exists, with the Codex secret and variable checks when Codex is selected.
 
 Record the timestamp of the trigger comment and set `review_count = 1` — that review is #1 in flight.
 
@@ -36,7 +36,7 @@ Record the timestamp of the trigger comment and set `review_count = 1` — that 
 Run fix-pr-review-loop steps 2 through 4 against the PR:
 
 - **fix-pr-review-loop step 2** — wait for the review to land, with both jq gotchas, the background until-loop, and the ~30-minute wait cap.
-- **fix-pr-review-loop step 3** — check the review against the merge-conflict check and the stop conditions (clean pass, past-the-cap LGTM, otherwise keep going).
+- **fix-pr-review-loop step 3** — check the review against the merge-conflict check and the stop conditions: a bare LGTM with nothing left to fix stops the loop; when `review_count > 5`, stop at the first LGTM even if non-blocking findings remain; a `Needs Updates` verdict never stops the loop by cycle count alone.
 - **fix-pr-review-loop step 4** — resolve the review with fix-pr-review, increment `review_count`, and loop back to its step 2.
 
 Carry the `review_count` and trigger timestamp from step 1 into that loop. When the loop reaches a "Done" terminal state, continue with step 3 below; on any other terminal state go to step 4.
@@ -54,7 +54,7 @@ The failure mode this prevents: a PR merges with follow-ons named only in prose,
 
 ### 4. Report
 
-Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. Apply two deltas:
+Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. A `Verification limitation` line is not a finding and does not prevent a clean pass; in the report, name each unverified source in that list, outside the word cap, and omit the field when none. Apply two deltas:
 
 - Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) → **Nothing to drive.** Relay its report; zero review cycles ran.
 - Add to the report contents: every follow-on issue filed in step 3 (URLs) and any item deliberately left unfiled.
