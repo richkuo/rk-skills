@@ -112,18 +112,9 @@ Ask first only when the plan exposes a required product decision or unsafe ambig
 
 Keep all changes out of the user's current checkout. Stop and ask how to proceed when the directory is not a git repository.
 
-Fetch the remote default branch. Create a worktree and branch from the fetched commit.
+Create the worktree and branch per `work-on-issue` step 1, "Create the isolated worktree on a verified base". Use the name `<agent-prefix>/issueplan/<short-task-name>`. Supply no `baseRefs`; the base is the fetched `origin/<default-branch>`.
 
-Prefix both names with the current coding agent identifier. Use `cc/`, `cursor/`, or `codex/` before `issueplan/<short-task-name>`.
-
-Use the harness worktree tool when available. On Codex or Cursor, use:
-
-```
-git fetch origin <default-branch>
-git worktree add ../<repo>-issueplan-<agent>-<short-task-name> -b <agent>/issueplan/<short-task-name> origin/<default-branch>
-```
-
-Verify that the new worktree starts at `origin/<default-branch>`. Verify the working directory before every later write.
+Verify the working directory before every later write.
 
 ### 8. Build from the plan
 

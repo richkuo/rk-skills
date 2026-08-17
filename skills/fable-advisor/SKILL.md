@@ -23,7 +23,7 @@ This skill assumes the session model is NOT Fable 5 — the point is cheap execu
 
 ## Steps
 
-Steps 1–4 are shared. **Step 5 forks**: an **issue path** that delegates the whole build-and-ship pipeline to `work-on-issue`, and a lighter **prose path** for issue-less tasks. Steps 6 (checkpoint consults) and 7 (binding review) define the advisor mechanics both paths use; steps 8–10 close out. `work-on-issue` stays the single source of truth for the pipeline — the issue path loads and executes it rather than copying its text here.
+Steps 1–4 are shared. **Step 5 forks**: an **issue path** that delegates the whole build-and-ship pipeline to `work-on-issue`, and a lighter **prose path** for issue-less tasks. Steps 6 (checkpoint consults) and 7 (binding review) define the advisor mechanics both paths use; steps 8–10 close out.
 
 ### 1. Resolve the GitHub issue (only if one is referenced)
 
@@ -55,7 +55,7 @@ If no issue was resolved in step 1, skip this step.
 
 ### 3. Spawn the advisor and get the plan
 
-Do not plan the task yourself — the advisor owns the plan. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere); it governs the reviewer dispatch in step 7 too. On the Agent-tool path, call the Agent tool with:
+Do not plan the task yourself — the advisor owns the plan. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report); it governs the reviewer dispatch in step 7 too. On the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only — no Edit/Write; it advises, it never touches files)
 - `model`: `fable`
@@ -64,9 +64,9 @@ Do not plan the task yourself — the advisor owns the plan. **Load the `fable-d
 - `prompt`: Brief it as a standing advisor, not a one-shot planner. Include: the full task description (for a bare issue reference, the issue title/body from step 1 *is* the task description), the issue title/body if one was fetched in step 1, the working directory, any constraints the user stated, and its charter:
   - First deliverable: a concrete, ordered implementation plan (files to create/modify, approach, build sequence, risks/edge cases, verification steps). Plan the absolute-best solution — cost, effort, time, and token spend never narrow the option space; only correctness and safety override "best".
   - It will be consulted again mid-task via follow-up messages. Each consult reply must be structured as: **recommendation**, **rationale**, **confidence** (high/medium/low), and a flag — **advisory** (executor may overrule with a stated reason) or **blocking** (must be resolved before commit).
-  - It is read-only — it must NOT make code edits, including via Bash (no writing/modifying files, no commits). It still has Bash, so state this explicitly.
+  - It is read-only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
 
-Record the agent's ID/name — every later consult goes to this same agent via SendMessage so it accumulates the full task history. If the call returns null or errors, retry once; if it fails again, report the failure to the user instead of proceeding unadvised.
+Record the agent's ID/name — every later consult goes to this same agent via SendMessage so it accumulates the full task history.
 
 Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
 
@@ -95,7 +95,7 @@ Give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventi
 
 **Issue path (an issue was resolved in step 1) — delegate to `work-on-issue`.**
 
-Load `skills/work-on-issue/SKILL.md` and execute its **steps 1–6** as the authoritative build-and-ship procedure — worktree `cc/issue-<N>-<slug>`, implement, verify, commit/push, and a PR that includes `Closes #<N>` (fully-qualified `Closes owner/repo#N` cross-repo). Its **step 0 gates already ran in step 2** above; its **step 7 report is replaced** by this skill's steps 9–10. Do not duplicate its pipeline text here. Layer in three injections, each located against work-on-issue's own step numbers:
+Load `skills/work-on-issue/SKILL.md` and execute its **steps 1–6** as the build-and-ship procedure — worktree `cc/issue-<N>-<slug>`, implement, verify, commit/push, and a PR that includes `Closes #<N>` (fully-qualified `Closes owner/repo#N` cross-repo). Its **step 0 gates already ran in step 2** above; its **step 7 report is replaced** by this skill's steps 9–10. Layer in three injections, each located against work-on-issue's own step numbers:
 
 - **Plan authorship — work-on-issue step 2.** The advisor's vetted plan from step 3 replaces the executor's own planning: build per the plan, and route deviations through the checkpoint protocol (step 6) rather than silently re-planning.
 - **Checkpoint consults — throughout work-on-issue step 3.** The advisor consult triggers defined in step 6 stay active for the whole implementation — consult on a hard-to-reverse decision, a stuck signal, or a plan deviation exactly as step 6 specifies.
@@ -107,7 +107,7 @@ Preserve fable-advisor's own surfaces on this path: the plan comment (step 4) an
 
 For an issue-less prose task, build and ship directly:
 
-1. **Isolated worktree.** Never build in the user's checkout. Run `git fetch origin <default-branch>` first — the staleness check below compares against the local `origin/<default-branch>` ref, so skipping the fetch makes the check pass on two equally stale copies — then create a fresh worktree/branch off `origin/<default>` named `cc/fable-advisor/<short-task-name>` (via `EnterWorktree`, name passed verbatim; verify the worktree HEAD matches `origin/<default>` with `git -C <worktree-path> rev-parse HEAD origin/<default-branch>`; if the SHAs differ on the worktree you just created, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits, and always anchored with `-C <worktree-path>` so it can never touch the original checkout). If the directory isn't a git repo, ask the user how to proceed. All later prose-path work happens inside the worktree.
+1. **Isolated worktree.** Never build in the user's checkout. Create the worktree and branch per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"), named `cc/fable-advisor/<short-task-name>`; this path supplies no `baseRefs`. If the directory isn't a git repo, ask the user how to proceed. All later prose-path work happens inside the worktree.
 2. **Build** per the plan, consulting the advisor at the step 6 checkpoints.
 3. **Verify** — run the repo's tests/verification relevant to the change and confirm the task's acceptance criteria are met. For a bug fix, prove the regression test is real (**red → green**): run the new test against the unfixed code first and watch it fail — a test that never failed proves nothing. Do not request the binding review on a build you haven't verified yourself; the reviewer judges correctness, it is not your test runner.
 4. **Binding pre-commit review** — the step 7 gate. Nothing commits while blocking findings stand.
@@ -169,7 +169,7 @@ Final message: what was built, verification results, the consult/review trail in
 
 ## Notes
 
-- The advisor and reviewer run on Fable 5 regardless of the session model — `model: fable` forces it. **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching. Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
+- The advisor and reviewer run on Fable 5 regardless of the session model — `model: fable` forces it.
 - The advisor persists for the whole task; the reviewer is fresh by design. Never merge the two roles — anchoring is the failure mode this split exists to prevent.
 - If SendMessage to the advisor fails because the agent is gone (context expired, session summarized), spawn a replacement advisor with the plan and a recap of consults so far, and tell the user the advisor was restarted.
 - Cost shape: the executor burns the bulk tokens; Fable fires only on the plan, checkpoint consults, and the review.

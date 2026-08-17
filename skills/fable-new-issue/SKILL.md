@@ -30,7 +30,7 @@ If the input is conversation-derived, write the scratchpad summary now (see Inpu
 
 ### 2. Dispatch the Fable 5 drafting subagent
 
-**Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching, then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
+**Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps drafting side-effect-free)
 - `model`: `fable` (the whole point — the draft must come from Fable 5)
@@ -39,14 +39,10 @@ If the input is conversation-derived, write the scratchpad summary now (see Inpu
 - `prompt`: hand it everything needed to draft independently:
   - The user's description verbatim (or the scratchpad summary path), the working directory, and the target repo if not the current checkout.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 1 through 6 exactly** — repo/duplicate check, claim grounding with `file:line` citations traced against the correct baseline, approach design, complexity score, scope check, and full body composition per the step-6 template.
-  - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — including via Bash (it lacks Edit/Write but still has Bash, so state this explicitly). Read-only `gh` calls (`gh issue list`, `gh pr list`, `gh repo view`, `gh label list`) are expected and allowed.
+  - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7. Read-only `gh` calls (`gh issue list`, `gh pr list`, `gh repo view`, `gh label list`) are expected and allowed.
   - Return as its final message: (a) any duplicate found (URL + why it matches) — in which case no draft; (b) otherwise the complete issue draft — exact title with `[C<score>]` prefix and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
 
-If the call returns null or errors, retry once; if it fails again, report the failure to the user instead of drafting yourself.
-
-When the result arrives:
-- Diff `git status --porcelain` against the snapshot to confirm no file changes; if changed, tell the user and ask whether to revert before continuing.
-- Save the draft verbatim to a scratchpad file immediately, so it survives context summarization.
+When the result arrives, save the draft verbatim to a scratchpad file immediately, so it survives context summarization.
 
 ### 3. Duplicate gate
 
@@ -69,6 +65,5 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 ## Notes
 
 - The drafting subagent runs on Fable 5 regardless of the main agent's model — `model: fable` forces it.
-- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

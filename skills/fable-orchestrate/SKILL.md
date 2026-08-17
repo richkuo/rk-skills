@@ -29,7 +29,7 @@ Present the decomposition to the user briefly (pieces, ordering, what runs in pa
 
 ### 2. Set up the task worktree
 
-Never build in the user's checkout. Run `git fetch origin <default-branch>` first — the staleness check below compares against the local `origin/<default-branch>` ref, so skipping the fetch makes the check pass on two equally stale copies — then create the task branch/worktree `cc/fable-orchestrate/<short-task-name>` off `origin/<default>` (via `EnterWorktree`, name passed verbatim; verify the worktree HEAD matches `origin/<default-branch>` with `git -C <worktree-path> rev-parse HEAD origin/<default-branch>`; if the SHAs differ on the worktree you just created, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits, and always anchored with `-C <worktree-path>` so it can never touch the original checkout). If the directory isn't a git repo, ask the user how to proceed. Everything lands on this one branch — a single PR is the deliverable regardless of worker count.
+Never build in the user's checkout. Create the task branch/worktree per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"), named `cc/fable-orchestrate/<short-task-name>`; this skill supplies no `baseRefs`, so the base is always the fetched `origin/<default-branch>`. If the directory isn't a git repo, ask the user how to proceed. Everything lands on this one branch — a single PR is the deliverable regardless of worker count.
 
 ### 3. Dispatch workers
 
@@ -59,7 +59,7 @@ Integration is your job — the merge proving clean is not the same as the piece
 
 ### 6. Binding final review (fresh reviewer — you don't grade your own decomposition)
 
-You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Spawn a **new one-shot** Fable 5 reviewer; on the Agent-tool path:
+You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Spawn a **new one-shot** Fable 5 reviewer; on the Agent-tool path:
 
 - `subagent_type`: `Plan`, `model`: `fable`, `run_in_background`: `false`
 - `prompt`: the original task, **the spec map** — the full decomposition as spec → files → worker result → disposition (accepted / re-dispatched / taken over), so it can review piece-by-piece plus the seams rather than one unreviewable blob — the pinned interfaces, the full merged diff, and the integration verification results. It must return a verdict — **approve**, or **blocked** with numbered blocking findings (each with file:line and a concrete failure scenario) — plus non-blocking suggestions kept separate.
@@ -85,7 +85,7 @@ Final message: what was built, the decomposition and per-piece dispositions in b
 
 ## Notes
 
-- Workers run on Sonnet 5 via `model: 'sonnet'` regardless of defaults; if the worker call errors on the `sonnet` id, use the closest available tier for workers and name it in the footer and report. The final reviewer runs on Fable via `model: fable` — **harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill**; load it before dispatching the reviewer, and name the model that actually ran.
+- Workers run on Sonnet 5 via `model: 'sonnet'` regardless of defaults; if the worker call errors on the `sonnet` id, use the closest available tier for workers and name it in the footer and report. The final reviewer runs on Fable via `model: fable`, dispatched per the `fable-dispatch` skill (step 6 loads it).
 - Companion to `fable-advisor`, inverted: there the cheap model executes and Fable advises; here Fable directs and the cheap model executes. Both end with the same fresh-reviewer binding gate — an author never grades its own work.
 - Cost shape: Sonnet burns the bulk implementation tokens; Fable spends on decomposition, per-piece review, integration, and takeovers. If takeovers dominate, the task was a poor fit for delegation — say so in the report.
 - For issue-based milestone work with Execution blocks, use `milestone-workflow` instead — this skill is for ad-hoc tasks.
