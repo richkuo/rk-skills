@@ -94,7 +94,7 @@ Every deviation is deliberate and must be named in the PR body (step 6) with its
 
 ### 3. Implement the fix
 
-Build the absolute-best solution the issue calls for, evaluated as if cost, effort, time, token spend, and code volume were unlimited — they are not factors. The only constraints that override "best" are correctness and safety.
+Build the absolute-best solution the issue calls for, per the global "absolute best solution" rule in CLAUDE.md/AGENTS.md.
 
 - **Follow existing conventions.** Read the surrounding code first; match its patterns, naming, error handling, and the repo's `CLAUDE.md` guardrails. Reuse existing helpers over new infrastructure.
 - **Respect invariants.** Grep `CLAUDE.md`/guardrails and nearby comments for any invariant governing the values you write (ownership, single-source-of-truth, fail-closed, "X never into Y"). Route values through their authorized path, not the convenient one.
@@ -126,7 +126,7 @@ Commit message: a concise summary of the change, referencing the issue (match th
 Created with LLM: <current model> | <effort> | Harness: <harness>
 ```
 
-Fill `<current model>` (e.g. `Opus 5`) and `<effort>` (`high` by default). `<harness>` is whatever actually produced the change — `Claude Code` for an interactive session, or the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session). Never put time/effort estimates in the message body. No `Co-authored-by` trailer.
+The global LLM Attribution Footer rule in CLAUDE.md/AGENTS.md owns the field values. This skill adds one resolution rule: `<harness>` is whatever actually produced the change — `Claude Code` for an interactive session, or the GitHub Action identifier when running in CI (e.g. `anthropics/claude-code-action@v1`; the workflow states this identifier in your system prompt — use that value, and treat its absence as an interactive session).
 
 ### 6. Open the PR
 
@@ -137,10 +137,10 @@ gh pr create --base "$(gh repo view --json defaultBranchRef -q .defaultBranchRef
 ```
 
 - **Title:** match the repo's PR-title convention (the commit-title style is usually right) — global default is `type(#<N>): summary [C<score>, <model>, <effort>]` (Conventional Commits type, `#<N>` as scope, then the trailing bracket reusing the issue's `[C<score>]` prefix paired with the model/effort actually used to build the PR; append `, fableplan` inside the bracket only when a **Fable** plan drove the build — one produced this session, or a Fable-authored plan adopted in step 0, which counts the same. An adopted plan a maintainer wrote earns no marker, because `, fableplan` asserts that a Fable 5 plan was posted before the build). **Project precedence:** a repo `CLAUDE.md`/`AGENTS.md` that defines its own PR-title convention overrides this default.
-- **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified under `## Summary` / verification headings first; keep it scannable, don't restate the whole issue. **End with `## Plain simple English`** — one short paragraph under 55 words in ASD-STE100 (Simplified Technical English) per the CLAUDE.md/AGENTS.md Response Style rules — stating what changed and why it matters, so a human can understand the PR without reading the technical summary.
+- **Body must close the issue:** include `Closes #<N>` so merging the PR resolves it. Summarize what changed and how it was verified under `## Summary` / verification headings first; keep it scannable, don't restate the whole issue. **End with `## Plain simple English`** — the Plain simple English block per the CLAUDE.md/AGENTS.md Response Style rules — stating what changed and why it matters.
 - **Adopted plan:** when step 0 found a plan, link the comment and state that the diff follows it, then list every deviation with its reason (or state that there were none). A reviewer compares the diff against that plan.
 - **Dependency base:** when `baseRefs` was supplied, list every predecessor pull request and verified head in integration order, state that they must merge first, and keep the PR base set to the repository's default branch.
-- **Footer:** same convention as the commit — **Created** verb, repo footer format (global default `Created with LLM: <current model> | <effort> | Harness: <harness>`, harness resolved per step 5: `Claude Code` interactively, the Action identifier in CI). No `Co-authored-by` trailer.
+- **Footer:** same convention as the commit — **Created** verb, harness resolved per step 5.
 
 Capture the PR number/URL from the command output.
 
@@ -172,5 +172,5 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Tempted to skip or soften tests because "it's a small change" | Small changes break too; write the regression test and watch it fail on the unfixed code (red → green) |
 | Tests/build/lint fail locally | Fix or surface it — never commit, push, or claim success on a failing tree |
 | `git status` shows files unrelated to the change | Don't `git add -A` — stage the intended files by name |
-| Writing the PR body | `## Summary` / verification first; include `Closes #<N>` (without it the merge doesn't resolve the issue); end with `## Plain simple English` (≤55 words, ASD-STE100, per the CLAUDE.md/AGENTS.md Response Style rules), then the repo's footer convention — **Created** verb, no `Co-authored-by` |
+| Writing the PR body | Follow step 6 — `## Summary` / verification first, `Closes #<N>` (without it the merge doesn't resolve the issue), `## Plain simple English`, footer |
 | Tempted to trigger an `@claude` review, wait on CI, or pause to ask the user mid-flow | Don't — implement, verify, commit, push, open the PR, then report; the skill ends with the open PR, and review requests belong to the caller |
