@@ -7,9 +7,9 @@ description: Use when the user asks to validate a GitHub issue (without Fable), 
 
 Chain validate-issue → (conditional) update issue → (conditional) fableplan → work-on-issue-loop into one autonomous run: your session model validates the issue against the code, the main agent fixes the issue description if needed, Fable 5 plans the implementation for non-trivial issues (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence.
 
-This is **validate-issue-loop with a Fable 5 planning phase inserted before implementation** — identical to fable-validate-loop except validation runs through the plain `validate-issue` (your session model) instead of a Fable 5 subagent. Only the *planning* is delegated to Fable 5, and only when the issue is complex enough to warrant it. Reach for this over fable-validate-loop when you want cheaper, session-model validation but still want a Fable-vetted plan for the harder issues.
+This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5 subagent. Only the *planning* is delegated to Fable 5, and only when the issue is complex enough to warrant it. Reach for this over fable-validate-loop when you want cheaper, session-model validation but still want a Fable-vetted plan for the harder issues.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 61 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
+**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 61 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -17,69 +17,33 @@ Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 ## Steps
 
-### 1. Run validate-issue
+Follow **fable-validate-loop steps 1 through 6** with these changes:
 
-Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 8 — and produce its verdict block:
+**Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process — steps 0 through 8 — and produce the standard verdict block:
 
 ```
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
-Treat the verdict block as structured output to parse yourself, not the interactive `→ Reply "work on issue"` prompt to wait on. Don't ask the user to confirm; decide from the table in step 2. Record the resolved issue number — every later step targets exactly this issue.
+Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue number; every later step targets exactly this issue.
 
-### 2. Scope gate — stop if the issue is unsafe to auto-implement
-
-Check the verdict's **Scope** field, **Architecture** section, and **Concerns** (for an already-addressing PR from validate-issue's step 1 linked-PR check) before doing anything else:
+**Step 2 (scope gate):** the same four STOP conditions apply, sourced from the plain validation (the already-addressing PR comes from validate-issue's step 1 linked-PR check; `too large` from validate-issue step 7):
 
 | Condition | Action |
 |---|---|
-| `Scope: too large` (validate-issue step 7 flagged split / umbrella / narrow) | **STOP.** Report the disposition and proposed parts; do not proceed to planning or work-on-issue-loop. Implementing a multi-part issue as one PR reproduces the scope problem in the diff — that needs a human call on how to split it. |
-| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; planning and implementing a design the validation itself rejected would ship the wrong fix. |
-| A **merged** PR already implements the fix (verdict recommends closing/repurposing the issue) | **STOP.** Report the PR and the close/repurpose recommendation — there's nothing left to implement. |
-| An **open** PR is already addressing the issue (named under Concerns) | **STOP.** Report the overlapping PR; whether to supersede, join, or wait on in-flight work is a human call — auto-implementing duplicates it. |
+| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
+| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
+| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
 
-Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already addressing it), continue.
+**Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5` model string in fable-validate-loop's step 3 does not apply here.
 
-### 3. Apply the update-issue edits, if called for
+**Step 4 (fableplan):** **Score gate:** a validated complexity score **below 61** skips fableplan — go straight to step 5. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
 
-If the verdict says **Update issue description? Yes**, apply validate-issue's step 11 now — the suggested title/body edits plus the stacked `Validated with LLM: …` attribution line (harness suffix `validate-fableplan-loop`) — from the current checkout (no worktree for issue edits, per validate-issue step 0).
+**Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 
-If **No**, skip straight to step 4.
-
-**Order matters:** the edits land before fableplan runs, so the Fable 5 planner fetches and plans against the corrected issue, not the flawed original.
-
-### 4. Run fableplan — planning phase only (skip when the score is below 61)
-
-**Score gate:** if the verdict's validated complexity score is **below 61**, skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for lower-band changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score.
-
-**Top-band note:** this gate runs fableplan for band-5 issues (score ≥ 81), and their verdict line reads `fableplan: yes` — the signal is `yes` for all of score ≥ 61. This loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a top-band issue here — skipping it would drop Fable from the hardest issues entirely.
-
-Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. **Do NOT execute fableplan's steps 7–8 (worktree + build)** — implementation belongs to work-on-issue-loop in step 5, which owns the implement → PR → review chain; building here would duplicate it outside that chain.
-
-Give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, and any concerns it raised).
-
-Keep the vetted plan's scratchpad file — step 5 passes it through. If fableplan fails after its internal retry, stop and report; don't fall back to planning yourself or implementing unplanned.
-
-### 5. Hand off to work-on-issue-loop
-
-Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations follow `work-on-issue` step 2's plan-deviation policy — the traced code, anything posted on the issue after the plan, then correctness and safety — and must each be named in the PR body. Don't narrow that policy here. (If step 4 was skipped by the score gate, there is no plan — hand off the issue alone and note the skip.)
-
-It runs its full loop: work-on-issue implements in a worktree and opens the PR, the loop triggers `@claude` review, and fix-pr-review cycles until convergence.
-
-### 6. Report
-
-Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line covering the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate.
-
-**Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
+**Step 6 (report)** applies unchanged. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
 
 ## Red Flags — STOP
 
-| Situation | Action |
-|---|---|
-| Tempted to skip validation or planning and jump to implementation | Never reorder — validate-then-plan-then-build is the point of this skill; the only sanctioned skip is the step-4 score gate (score < 61, no safety flags) |
-| `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — the cases the loop can't safely auto-resolve |
-| Tempted to wait for a literal user reply to validate-issue's or fableplan's prompt | Parse the output yourself and proceed per the step rules |
-| Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, so the plan targets the corrected issue |
-| fableplan about to enter its build steps (7–8) | Don't — stop it at step 5; work-on-issue-loop owns implementation |
-| fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't hand a broken plan to work-on-issue-loop, and don't silently re-plan |
-| Issue scored below 61 with no safety flags | Skip fableplan and hand the issue straight to work-on-issue-loop — note the skip in the report |
+fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate".

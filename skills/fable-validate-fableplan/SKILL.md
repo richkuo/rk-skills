@@ -9,9 +9,7 @@ Chain fable-validate → (conditional) update issue → fableplan into one auton
 
 This is **fable-validate-fableplan-loop with the implementation stage removed** — the head of that chain is identical (same validation, same scope gate, same issue edits, same unconditional Fable plan), but the handoff to `work-on-issue-loop` is dropped. Reach for this when you want the issue fact-checked, corrected, and planned so a human (or a later run) can decide what to do with the plan. When the plan should be built and driven through review in the same run, use `fable-validate-fableplan-loop` instead.
 
-**Do not skip or reorder the chain.** Validation gates planning — a plan built on refuted claims is wrong. There is **no sanctioned skip**: every step runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
-
-**No score gate.** fableplan **always runs** for every issue that passes the scope gate, whatever the validated complexity score. There is no "skip when the score is below 61" rule in this skill — producing the plan is the product, so gating it away would leave the run with no output. This matches `fable-validate-fableplan-loop`; it is the deliberate difference from `fable-validate-loop` / `validate-fableplan-loop`.
+**Do not skip or reorder the chain.** Validation gates planning; a plan built on refuted claims is wrong. There is no sanctioned skip: every step runs, and only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -19,46 +17,26 @@ Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or 
 
 ## Steps
 
-### 1. Run fable-validate
+Follow **fable-validate-loop steps 1 through 4** with the changes below, then run this skill's step 5 in place of fable-validate-loop's steps 5 and 6:
 
-Invoke the `fable-validate` skill for the target issue (Skill tool, `skill: fable-validate`). Let it run fully — Fable 5 subagent validation, spot-check, verdict — producing the standard verdict block:
+**Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner. It produces the standard verdict block:
 
 ```
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
-Treat the verdict as structured output to parse yourself, not a prompt to wait on. Record the resolved issue number — every later step targets exactly this issue. Keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner.
-
-### 2. Scope gate — stop if the issue is not worth planning
-
-Check the verdict's **Scope** field, **Architecture** section, and **Concerns** (for an already-addressing PR) before doing anything else:
+**Step 2 (scope gate):** the same four STOP conditions apply; the cost here is a wasted or wrong plan rather than a wrong PR:
 
 | Condition | Action |
 |---|---|
-| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts. One plan for a multi-part issue reproduces the scope problem in the plan — splitting is a human call. |
-| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; planning a design the validation rejected would post the wrong plan. |
-| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation — nothing left to plan. |
+| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
+| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
 | An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
 
-Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already addressing it), continue.
+**Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan`.
 
-### 3. Apply the update-issue edits, if called for
-
-If the verdict says **Update issue description? Yes**, apply the suggested title/body edits now per fable-validate step 5 / validate-issue step 11 — claim-verification gate, final consistency pass, and the stacked attribution line (`Validated with LLM: Fable 5 | high | Harness: <harness> | fable-validate-fableplan`, `<harness>` per `fable-dispatch` section 6) — from the current checkout (no worktree for issue edits).
-
-If **No**, skip straight to step 4.
-
-**Order matters:** the edits land before fableplan runs, so the Fable 5 planner fetches and plans against the corrected issue, not the flawed original.
-
-### 4. Run fableplan — planning phase only, always
-
-Invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`), and **scope it to its planning phase — steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it. Instruct fableplan to use the harness suffix `fable-validate-fableplan` (not `fableplan`) in the posted comment's attribution footer, so the comment records the actual entry point.
-
-**Do NOT execute fableplan's steps 7–8 (worktree + build), and do not answer its "build now?" prompt with anything but stop.** This skill ends at the posted plan. Building here would take the run past its scope without the user asking.
-
-Give the planning subagent the validation verdict and report (the scratchpad copies from step 1) alongside the issue — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns).
-
-If fableplan's sanity-check finds the plan structurally wrong, or fableplan fails after its internal retry, **stop and report** — don't post a broken plan, and don't fall back to planning yourself.
+**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the scope gate, whatever the validated score. Producing the plan is this skill's product, so gating it away would leave the run with no output; this matches fable-validate-fableplan-loop and is the deliberate difference from fable-validate-loop and validate-fableplan-loop. Hand the planner the verdict block and validation report from step 1 — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was ⚠️, 5c concerns). Instruct fableplan to use the harness suffix `fable-validate-fableplan` in the posted comment's attribution footer, so the comment records the actual entry point. This skill ends at the posted plan: do not answer fableplan's step-6 "build now?" question with anything but stop, and there is no scratchpad pass-through to an implementation stage.
 
 ### 5. Report
 
@@ -68,13 +46,9 @@ Report, in order: scope gate passed, issue updated or not, plan posted (comment 
 
 ## Red Flags — STOP
 
+fable-validate-loop's Red Flags rows for the scope gate, waiting on prompts, the update-before-plan order, fableplan's build steps (7–8), and a structurally wrong plan apply, with two substitutions — this chain never invokes `work-on-issue-loop`, so neither row may name it as the owner of what happens next. In the build-steps row, read "stop it at step 5; this skill ends at the posted plan and owns no implementation" for "stop it at step 5; work-on-issue-loop owns implementation". In the structurally-wrong-plan row, read "post a broken plan" for "hand a broken plan to work-on-issue-loop". In addition:
+
 | Situation | Action |
 |---|---|
 | Tempted to implement the plan, open a worktree, or open a PR | Out of scope — this skill ends at the posted plan; name `work-on-issue` / `work-on-issue-loop` / `fable-validate-fableplan-loop` as the follow-on instead of starting one |
 | Tempted to skip validation and go straight to planning | Never reorder — validate-then-plan is the point of this skill, and there is no sanctioned skip |
-| Tempted to skip fableplan because the issue scored below 61 | Don't — there is no score gate here; fableplan always runs, and the plan is this skill's only output |
-| `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — planning is wasted or wrong in those cases |
-| Tempted to wait for a literal user reply to fable-validate's or fableplan's prompt | Parse the output yourself and proceed per the step rules |
-| Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, so the plan targets the corrected issue |
-| fableplan about to enter its build steps (7–8) | Don't — stop it at step 5; nothing in this skill builds |
-| fableplan's sanity-check finds the plan structurally wrong | Stop and report — don't post a broken plan, and don't silently re-plan |
