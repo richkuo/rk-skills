@@ -18,7 +18,7 @@ Reference for SKILL.md: the stop conditions and the failure patterns this skill 
 | Branch can't fast-forward to its upstream head | Stop — the branch diverged; surface to the user, don't force anything |
 | PR is from a fork | Check out with `gh pr checkout` and push to the tracked upstream — `origin` is the wrong remote for the head branch |
 | All findings refuted | Still post the disposition comment with the rebuttals and request re-review — don't silently no-op |
-| `Requires Human Review` item | Prefer the item's **Recommended proposed solution:** when present; still verify against absolute-best (cost/effort/time/resources ignored; only correctness and safety override). Implement the chosen solution; document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
+| `Requires Human Review` item | Prefer the item's **Recommended proposed solution:** when present; still verify against the step 4 best-solution standard. Implement the chosen solution; document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
 | Tests/build fail after fixes | Report the failure; don't push or claim success |
 | PR is `CONFLICTING` with the base branch | Resolve via step 7 (merge base into head, reconcile intent of both sides, re-verify) — never rebase a pushed PR branch, never resolve by blanket `ours`/`theirs`, never leave an approved PR unmergeable |
 | Conflict sides are irreconcilable in intent (esp. money/data/security/auto-protective code) | Stop and surface to the user instead of guessing a resolution |
@@ -36,7 +36,7 @@ Reference for SKILL.md: the stop conditions and the failure patterns this skill 
 - **Dropping a refuted finding silently.** Push back on the record in the comment with a code-grounded reason — that's how the reviewer learns it was wrong.
 - **Committing to the base branch.** Fixes land on the PR head branch only.
 - **Skipping verification before push.** Run the tests/build; report real results.
-- **Pausing or punting on a judgment call.** Do the analysis the reviewer couldn't and *implement* the absolute-best solution (cost/effort/time/resources are not factors; only correctness and safety override it); document it for override. Don't stop to ask, don't relay the bare tradeoff, don't guess blindly.
-- **Skipping the optional improvements.** `Recommended Optional` items get implemented to the same best-solution standard, not deferred.
+- **Pausing or punting on a judgment call.** Do the analysis the reviewer couldn't and *implement* the absolute-best solution (step 4 standard); document it for override. Don't stop to ask, don't relay the bare tradeoff, don't guess blindly.
+- **Skipping the optional improvements.** `Recommended Optional` items get implemented to the same standard, not deferred.
 - **Ignoring merge conflicts because "the review is addressed".** An unmergeable PR isn't done — check `mergeable` in step 0 and resolve conflicts in step 7, with the same verification and safety discipline as findings.
 - **Bundling the re-review trigger into the disposition comment.** Keep `@claude review` as its own comment so the bot fires reliably.
