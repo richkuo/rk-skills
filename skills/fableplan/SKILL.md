@@ -45,16 +45,13 @@ Do not re-plan the task yourself first — the subagent owns the plan. **Load th
   - Produce a concrete, ordered implementation plan (files to create/modify, the approach, build sequence, risks/edge cases, and how to verify).
   - Plan the absolute-best solution the task calls for, evaluated as if cost, effort, time, token spend, and code volume were unlimited — they are not factors and must never narrow the option space. The only constraints that override "best" are correctness and safety.
   - Return the plan as its final message in clean Markdown suitable to (a) act on directly and (b) post verbatim as a GitHub issue comment.
-  - It is planning only — it must NOT make code edits, including via Bash (no writing/modifying files, no commits). The subagent lacks Edit/Write, but still has Bash, so this must be stated explicitly.
+  - It is planning only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
 
 The Plan subagent's final message is returned to you as the tool result; it is not shown to the user.
 
-If the call returns null or errors (user skip, terminal API failure), retry once; if it fails again, report the failure to the user instead of planning yourself.
-
 When the result arrives:
-- Run `git status --porcelain` and compare against the pre-dispatch snapshot to confirm the subagent made no file changes despite the no-edit instruction. If it did, tell the user and ask whether to revert before continuing.
 - Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
-- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the Notes fallback substituted another, and the effort is whatever tier was actually passed and accepted: the stamped **Plan effort**, or `high` when nothing was stamped. Only when the harness accepted no `effort` at all does the recorded value become a convention rather than an observation — then record the repo attribution default `high` and **do not try to name the session's own tier**, which an agent cannot observe; guessing it would put an invented value in the very slot this footer exists to keep honest. Also record *whether* the tier was honored — step 5 tells the user when a stamped one was not. Step 4's footer names these recorded values, so resolve them now rather than assuming the stamped tier took effect.
+- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the `fable-dispatch` fallback ladder substituted another, and the effort is whatever tier was actually passed and accepted: the stamped **Plan effort**, or `high` when nothing was stamped. Only when the harness accepted no `effort` at all does the recorded value become a convention rather than an observation — then record the repo attribution default `high` and **do not try to name the session's own tier**, which an agent cannot observe; guessing it would put an invented value in the very slot this footer exists to keep honest. Also record *whether* the tier was honored — step 5 tells the user when a stamped one was not. Step 4's footer names these recorded values, so resolve them now rather than assuming the stamped tier took effect.
 
 ### 3. Sanity-check the plan against the code
 
@@ -75,7 +72,7 @@ Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the
 Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: <harness> | fableplan
 ```
 
-Fill the model and effort fields from the values recorded at the end of step 2 — **never a constant**. `<harness>` names the harness actually running the session (`Claude Code`, `Cursor`, `Codex`, …), per `fable-dispatch` section 6. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the Notes fallback fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes. (A stamped `xhigh` Plan effort is itself illegal — the planner is always Fable 5, and Fable never runs at xhigh; honor it as `high` and note the clamp.)
+Fill the model and effort fields from the values recorded at the end of step 2 — **never a constant**. `<harness>` names the harness actually running the session (`Claude Code`, `Cursor`, `Codex`, …), per `fable-dispatch` section 6. Normally that is `Fable 5 | <the issue's stamped Plan effort>`; it falls back to the repo attribution default `high` when no `Plan effort` was stamped or the harness could not honor one, and to the substituted model name when the `fable-dispatch` fallback ladder fired. Never invent a tier the run cannot account for: `high` here is a documented default, not a guess at the session's own effort. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes. (A stamped `xhigh` Plan effort is itself illegal — the planner is always Fable 5, and Fable never runs at xhigh; honor it as `high` and note the clamp.)
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 
@@ -91,26 +88,7 @@ The plan is now safely posted to the issue regardless of what happens next — d
 
 ### 7. Set up an isolated git worktree
 
-Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Otherwise create a fresh branch and worktree for the task, prefixed with the coding-agent identifier — `cc/` for Claude Code, `cursor/` for Cursor, `codex/` for Codex — ahead of the `fableplan/` segment.
-
-**On Claude Code**, use the native `EnterWorktree` tool (it creates under `.claude/worktrees/` and switches the tracked cwd; it uses the name verbatim, adding no prefix itself). It branches from `origin/<default>` only when the `worktree.baseRef` setting is `fresh` (its default) — set to `head` it branches from the local HEAD, which may be stale — so fetch first and verify the base after:
-
-```
-git fetch origin <default-branch>
-EnterWorktree(name: "cc/fableplan/<short-task-name>")
-git -C .claude/worktrees/cc/fableplan/<short-task-name> rev-parse HEAD origin/<default-branch>   # the two SHAs must match
-```
-
-Anchor the check (and any reset) with `-C <worktree-path>` — cwd doesn't reliably persist between Bash calls, and an unanchored command in the original checkout would misreport or, worse, destroy uncommitted work there. If the SHAs differ on the worktree you **just created**, move it onto the fetched default with `git -C <worktree-path> reset --hard origin/<default-branch>` — safe only because the brand-new branch carries no commits; never reset a worktree that already has work on it.
-
-**On Cursor or Codex** (no `EnterWorktree` tool), create it by hand — the coding-agent prefix goes on both the directory and the branch so concurrent agents on the same task name never collide:
-
-```
-git fetch origin <default-branch>
-git worktree add ../<repo>-fableplan-cursor-<short-task-name> -b cursor/fableplan/<short-task-name> origin/<default-branch>
-```
-
-(swap `cursor` for `codex` on Codex), then `cd` into it and re-verify `pwd` before later steps — shell state doesn't persist between Bash calls.
+Before making any code changes, move the build into its own git worktree so it never touches the user's current workspace. If the directory isn't a git repository, tell the user and ask how to proceed rather than building in place. Create the worktree and branch per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"): it owns the fetch-first rule, the base verification, the reset rule for a brand-new worktree, and the `-C` anchoring. Deltas for this skill: the name is `<agent-prefix>/fableplan/<short-task-name>` (e.g. `cc/fableplan/<short-task-name>`), and there is no `baseRefs` input — the base is always the fetched `origin/<default-branch>`.
 
 Do all of step 8's building inside that worktree. When the build is done, follow the repo's usual conventions for merging or opening a PR from the branch, and remove the worktree once it's no longer needed (`git worktree remove <path>`).
 
@@ -126,10 +104,9 @@ Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`
 - **Do NOT execute steps 7–8** (worktree + build), and do not act on step 6's build question. The caller owns implementation; a build here would duplicate the caller's implement chain in the wrong worktree location.
 - When the caller supplies a harness suffix, use it in place of `fableplan` in step 4's posted-comment attribution footer, so the comment records the actual entry point.
 - Keep the vetted plan's scratchpad file; the caller passes it to its implementation or report stage.
-- If the step-3 sanity-check finds the plan structurally wrong, or the dispatch fails after its internal retry, stop and report to the caller. Never post a broken plan, and never plan the task yourself in fableplan's place.
+- If the step-3 sanity-check finds the plan structurally wrong, or the dispatch fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan, and never plan the task yourself in fableplan's place.
 
 ## Notes
 
 - The Plan subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
-- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - If the user did not reference an issue, never invent one or post anywhere — just plan and build.

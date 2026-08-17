@@ -31,7 +31,7 @@ If the user referenced an issue, note the number/repo but do NOT fetch or pre-va
 
 ### 2. Dispatch the Fable 5 validation subagent
 
-Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching** — it owns harness detection and the dispatch path (Agent tool on Claude Code, Claude Code CLI shim elsewhere). Snapshot `git status --porcelain` before dispatching (the tree may already be dirty), then dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
+Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps validation side-effect-free)
 - `model`: `fable` (the whole point — the validation must come from Fable 5)
@@ -40,16 +40,12 @@ Do not validate the issue yourself first — the subagent owns the validation. *
 - `prompt`: hand it everything needed to validate independently:
   - The issue reference exactly as the user gave it (or "no issue referenced — resolve the latest open issue per the procedure"), plus the working directory.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, fetch with `--comments` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
-  - It must STOP at step 8: no step 9/10/11 actions, no `gh issue edit`, no comments posted, no file edits — including via Bash (it lacks Edit/Write but still has Bash, so state this explicitly).
+  - It must STOP at step 8: no step 9/10/11 actions, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
   - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against.
 
 The subagent's final message comes back as the tool result; it is not shown to the user.
 
-If the call returns null or errors (user skip, terminal API failure), retry once; if it fails again, report the failure to the user instead of validating yourself.
-
-When the result arrives:
-- Run `git status --porcelain` and diff against the pre-dispatch snapshot to confirm the subagent made no file changes. If it did, tell the user and ask whether to revert before continuing.
-- Save the verdict verbatim to a scratchpad file immediately, so it survives context summarization and later steps can quote it exactly.
+When the result arrives, save the verdict verbatim to a scratchpad file immediately, so it survives context summarization and later steps can quote it exactly.
 
 ### 3. Spot-check the verdict
 
@@ -70,6 +66,5 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 ## Notes
 
 - The validation subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
-- **Harness detection, the CLI shim, and the model-fallback ladder live in the `fable-dispatch` skill** — load it before dispatching (step 2). Downgrading to another model is its last resort, and the footer and report name the model that actually ran, never "Fable 5" when another model served the call.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.

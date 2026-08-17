@@ -1,6 +1,6 @@
 ---
 name: fable-dispatch
-description: Required dispatch procedure for running a subagent on Fable 5 — positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, and the attribution rule. Load BEFORE dispatching any `model: fable` subagent.
+description: Required dispatch procedure for running a subagent on Fable 5 — positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, the attribution rule, and the caller dispatch-hygiene rules (read-only prompt, snapshot/diff, retry). Load BEFORE dispatching any `model: fable` subagent.
 ---
 
 # Fable dispatch
@@ -57,3 +57,11 @@ A shim call counts as failed when the CLI exits non-zero or `.is_error` is `true
 ## 6. Attribution
 
 The footer and the report name the model `.modelUsage` reports (on the Agent path: Fable 5, unless ladder step 3 substituted another model — then that model's name, never "Fable 5"). The effort named is the tier that was actually passed and accepted. The harness field names the harness actually running the session — `Claude Code` only when `$CLAUDECODE` is set; on another harness, that harness's name (e.g. `Cursor`, `Codex`), on the shim path included. A footer claiming a model, tier, or harness that did not serve the call is a false attribution.
+
+## 7. Dispatch hygiene — every caller
+
+Three rules apply to every dispatch this skill governs. Callers cite this section at their dispatch step and add only their own deltas.
+
+- **State read-only explicitly in the prompt.** A `Plan` subagent lacks Edit and Write, but it still has Bash, so the prompt must say explicitly that the subagent makes no file edits and no commits, including through Bash. The tool restriction alone does not close the Bash path.
+- **Snapshot before, diff after.** Snapshot `git status --porcelain` before dispatching (the tree may already be dirty). When the result arrives, run it again and diff against the snapshot to confirm the subagent made no file changes. If it did, tell the user and ask whether to revert before continuing.
+- **Retry once, then report.** If the call returns null or errors (user skip, terminal API failure), retry once. If it fails again, report the failure to the user. Never perform the delegated work yourself in the subagent's place.
