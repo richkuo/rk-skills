@@ -111,6 +111,26 @@ describe('numbered plan steps with verify points', () => {
     )
   })
 
+  test('an item that borrowed a later step\'s verify point re-homes when that step is overridden', () => {
+    const body = procedureBody(texts[MIRROR_OWNER])
+    // Every borrower re-homes, not just one.
+    expect(body, `${MIRROR_OWNER}: every borrower re-homes`).toMatch(
+      /every[\s\S]{0,60}borrowed it[\s\S]{0,40}re-homes/i,
+    )
+    // A replaced step hands its borrowers the replacement's check.
+    expect(body, `${MIRROR_OWNER}: borrowed check follows a replacement`).toMatch(
+      /re-homes[\s\S]{0,200}replacement step's verify point/i,
+    )
+    // With no replacement the borrower still terminates: own check, else a deviation.
+    expect(body, `${MIRROR_OWNER}: borrower terminates without a replacement`).toMatch(
+      /own observable check[\s\S]{0,200}closes? as a recorded deviation of its own/i,
+    )
+    // No borrower is left waiting on a check that can never run.
+    expect(body, `${MIRROR_OWNER}: no borrower left unreachable`).toMatch(
+      /never left waiting on a check that can never run/i,
+    )
+  })
+
   test('the guardrail row states the same trigger scope as step 2', () => {
     const body = procedureBody(texts[MIRROR_OWNER])
     const row = body
