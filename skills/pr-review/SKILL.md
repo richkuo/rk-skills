@@ -16,6 +16,13 @@ The format below is worthless on top of a shallow read. Satisfy all of these fir
 - **Do not resolve ambiguity in the artifact's favor.** "A reasonable reader would understand it", "the strict wording is stricter than the mechanism, so it's fail-safe", and "this predates the PR" are not reasons to drop or downgrade a finding on a file the PR is changing. The reader may be an agent that cannot ask for clarification, and a PR that touches a file is where its ambiguity gets closed. When you catch yourself constructing a charitable reading to dismiss a conflict, that conflict is the finding — file it and let the disposition sections decide whether it blocks.
 - When the review has findings, state what you verified and how inside each relevant finding's description. With no findings, the required bare `LGTM` itself asserts that this method was completed; do not add verification prose outside the format.
 
+### Completeness passes
+
+- **Sweep the full diff once per dimension before drafting.** Check correctness and logic; error paths and failure handling; state and lifecycle; resource cost and scaling; concurrency and locking; security and input handling. Collect every material finding. The first finding is a lead that starts a wider search through the same bug class.
+- **Build an event-state matrix for stateful or asynchronous changes.** Enumerate states and transitions, ownership scopes, and every asynchronous boundary. For each callback, task, notification, or completion, identify every identity or generation that can become stale. Exercise out-of-order delivery, repetition, cancellation, replacement, reset, re-entry, and same-object/new-generation cases.
+- **Expand every finding through its full bug class.** A stale callback, missing guard, or incorrect failure path requires checking every sibling producer and consumer plus inverse and compound transitions. Confirm that the proposed invariant covers all material variants before moving to another dimension.
+- **Run a counterfactual closure pass after drafting.** Assume each drafted fix is applied exactly as written. Re-read every changed file and the full diff from the beginning under that assumption. Add each material defect that still survives. Stop only after a complete pass adds zero material findings.
+
 ## Format
 
 Review comments contain **nothing outside this structure** — no preamble, header, or emoji — except the footer:

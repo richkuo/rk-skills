@@ -68,6 +68,26 @@ const VERIFICATION_INSTRUCTIONS = [
     /LGTM-precondition gap[\s\S]{0,120}(?:Before you write|verification method)/i,
     'LGTM-precondition gap covers the full verification method',
   ],
+  [
+    /sweep the full diff once per dimension/i,
+    'sweep every review dimension before drafting',
+  ],
+  [
+    /correctness and logic[\s\S]{0,500}security and input handling/i,
+    'cover all six review dimensions',
+  ],
+  [
+    /event-state matrix[\s\S]{0,500}same-object\/new-generation/i,
+    'enumerate asynchronous states and stale identities',
+  ],
+  [
+    /every sibling producer and consumer[\s\S]{0,160}inverse and compound transitions/i,
+    'expand each finding through its bug class',
+  ],
+  [
+    /counterfactual closure pass[\s\S]{0,300}zero material findings/i,
+    'repeat from the beginning with drafted fixes applied',
+  ],
 ]
 
 describe('PR review contract', () => {

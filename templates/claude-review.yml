@@ -105,19 +105,32 @@ jobs:
               required bare LGTM itself asserts that this method was completed;
               do not add verification prose outside the format.
 
-            Before writing the comment, sweep the FULL diff once per dimension
-            and collect every finding — do not stop at the first or most
-            salient issue. Dimensions: (1) correctness and logic (including
-            shadowed/dead code and wrong-scope declarations); (2) error paths
-            and failure handling (swallowed errors, fail-open vs fail-closed,
-            error states indistinguishable from empty states); (3) state and
-            lifecycle (stale UI/cache state, residual mutations, ordering);
-            (4) resource cost and scaling (unbounded queries or scans on
-            polled/hot paths, missing indexes, per-call cost growing with
-            history); (5) concurrency and locking; (6) security and input
-            handling (injection, unescaped output, authz). Report ALL findings
-            that survive the materiality filter in this single comment, not
-            one per round.
+            Before writing the comment, sweep the full diff once per dimension
+            and collect every material finding. Check correctness and logic;
+            error paths and failure handling; state and lifecycle; resource
+            cost and scaling; concurrency and locking; security and input
+            handling. The first finding starts a wider search through the same
+            bug class.
+
+            For stateful or asynchronous changes, build an event-state matrix.
+            Enumerate states and transitions, ownership scopes, and every
+            asynchronous boundary. For each callback, task, notification, or
+            completion, identify every identity or generation that can become
+            stale. Exercise out-of-order delivery, repetition, cancellation,
+            replacement, reset, re-entry, and same-object/new-generation cases.
+
+            Expand every finding through its full bug class. A stale callback,
+            missing guard, or incorrect failure path requires checking every
+            sibling producer and consumer plus inverse and compound transitions.
+            Confirm that the proposed invariant covers all material variants
+            before moving to another dimension.
+
+            Run a counterfactual closure pass after drafting. Assume each
+            drafted fix is applied exactly as written. Re-read every changed
+            file and the full diff from the beginning under that assumption.
+            Add each material defect that still survives. Stop only after a
+            complete pass adds zero material findings. Report all surviving
+            findings in this single comment.
 
             Post exactly ONE comment containing nothing except the structure
             that follows — no preamble, summary, intro, header, emoji, or
