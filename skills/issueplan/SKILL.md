@@ -122,6 +122,8 @@ Verify the working directory before every later write.
 
 Implement the checked plan in the worktree with the current session LLM. Do not delegate implementation to a subagent.
 
+Before you write any code, copy the plan's numbered steps into the task tracker per `work-on-issue` step 2, "Mirror the plan's steps into the task tracker". That step owns the rule, the two fallbacks, and what to do with a step that an override cancels.
+
 Follow repository test, commit, push, and pull request rules. Record any plan deviation in the pull request.
 
 Remove the worktree only after repository rules permit removal.

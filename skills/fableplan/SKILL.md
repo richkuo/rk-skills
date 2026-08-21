@@ -95,7 +95,7 @@ Do all of step 8's building inside that worktree. When the build is done, follow
 
 ### 8. Build
 
-In the worktree from step 7, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
+In the worktree from step 7, the main agent builds the task per the plan. **Before writing any code, mirror the plan's numbered steps into the task tracker per `work-on-issue` step 2 ("Mirror the plan's steps into the task tracker")** — it owns the mirroring rule, the two fallbacks (a plan with no numbers or verify points, a harness with no tracker), and the disposition for a step an override cancels. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
 
 ## Planning-phase-only invocation
 

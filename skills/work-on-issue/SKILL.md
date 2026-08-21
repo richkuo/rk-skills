@@ -90,9 +90,16 @@ Read the issue body **and its comment thread**, already fetched in step 0 (maint
 
 Every deviation is deliberate and must be named in the PR body (step 6) with its reason. Silent divergence from a posted plan is a defect, because a reviewer reads the plan and expects the diff to match it.
 
-**Mirror the plan's steps into the task tracker.** Before writing any code, copy the adopted plan's numbered steps into the session's task tracker (TodoWrite / TaskCreate or the harness equivalent), one item per step, and mark an item complete only when its verify point passes. If the plan's steps carry no numbers or verify points (e.g. a maintainer's hand-written plan), derive a numbered checklist from it first and use that. This keeps a long build anchored to the plan across context summarization, and makes a skipped step visible instead of silently dropped.
-
 **This is the single plan-deviation policy.** A caller chain (`fableplan-work-on-issue`, `fableplan-loop`, the validate/fableplan loops) may restate it, but it never narrows it — a caller sentence that permits only one of the three overrides does not remove the other two. Following a stale plan against a newer maintainer comment, or against safety, is wrong under every caller.
+
+**Mirror the plan's steps into the task tracker.** Before writing any code, for **every** adopted plan regardless of length, copy its numbered steps into the session's task tracker (`TodoWrite` / `TaskCreate` or the harness equivalent), one item per step, and mark an item complete only when its verify point passes. Fallbacks, both mandatory:
+
+- **The plan carries no numbers or verify points** (a maintainer's hand-written plan, or prose paragraphs with no steps at all): derive **both** — number the steps, and give each one an observable check (a command to run, a test that passes, a file state to confirm). A step whose check cannot run until a later step lands adopts that later check and stays open until then; never leave an item with no verify point, because completion keys on one.
+- **The harness exposes no task tracker** (`TodoWrite`/`TaskCreate` absent, as in the GitHub Action path of step 5): write the same numbered checklist to a scratchpad file and update each item's state there — reuse the plan scratchpad when a caller passed one down, otherwise create one. Keep that file **outside the repository working tree** (the harness scratchpad directory) so step 5's staging never sweeps it into the commit. Surviving context summarization is the reason this rule exists, so the checklist must live in a file, never only in the conversation.
+
+This keeps a long build anchored to the plan across context summarization, and makes a skipped step visible instead of silently dropped.
+
+**An overridden step closes as a recorded deviation.** When one of the three overrides above cancels or replaces a plan step, that step's own verify point can never pass, so the item is neither completable as planned nor safe to leave open — an open item reads as a skipped step. Close it as a deviation carrying its own verify point: the observable check that proves the replacement is correct, or, for a step a newer issue comment deleted outright, the comment itself as the record that it closed as removed. Name the same deviation in the PR body per step 6. Two overrides firing on one step still produce one disposition and one PR-body entry. Nothing in this mirroring rule ever justifies building a step the traced code, a newer issue comment, or safety has overridden.
 
 ### 3. Implement the fix
 
@@ -166,7 +173,7 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Issue is already closed, or an open PR already addresses it | Stop at step 0, before a worktree exists — report the closed issue or surface the PR; continue only when that PR is this session's own branch |
 | Issue thread already carries an implementation plan | Adopt the newest one (step 0) and build to it (step 2) — never re-derive an approach the plan already settled |
 | Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Deviate per step 2's three overrides — nothing else justifies it — and state the deviation in the PR body |
-| Adopted plan is long or many-part | Mirror its numbered steps into the task tracker (step 2) and complete each item only at its verify point — never build a big plan from memory |
+| Adopted plan of any length, long or short | Mirror its numbered steps into the task tracker (step 2) — or into the plan scratchpad file when the harness has no tracker — and complete each item only at its verify point; an overridden step closes as a recorded deviation, never as done and never left open |
 | Issue description conflicts with what the code actually does, or its sketch was ⚠️/❌ in validation | Trust the traced code and implement the optimal direction for this repo, not the original sketch; note the discrepancy in the PR body |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
 | Anywhere the default branch is needed (fetch or PR `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |
