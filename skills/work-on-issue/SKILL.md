@@ -90,6 +90,8 @@ Read the issue body **and its comment thread**, already fetched in step 0 (maint
 
 Every deviation is deliberate and must be named in the PR body (step 6) with its reason. Silent divergence from a posted plan is a defect, because a reviewer reads the plan and expects the diff to match it.
 
+**Mirror the plan's steps into the task tracker.** Before writing any code, copy the adopted plan's numbered steps into the session's task tracker (TodoWrite / TaskCreate or the harness equivalent), one item per step, and mark an item complete only when its verify point passes. If the plan's steps carry no numbers or verify points (e.g. a maintainer's hand-written plan), derive a numbered checklist from it first and use that. This keeps a long build anchored to the plan across context summarization, and makes a skipped step visible instead of silently dropped.
+
 **This is the single plan-deviation policy.** A caller chain (`fableplan-work-on-issue`, `fableplan-loop`, the validate/fableplan loops) may restate it, but it never narrows it — a caller sentence that permits only one of the three overrides does not remove the other two. Following a stale plan against a newer maintainer comment, or against safety, is wrong under every caller.
 
 ### 3. Implement the fix
@@ -164,6 +166,7 @@ Terse summary: the worktree/branch, what you implemented (one or two lines), the
 | Issue is already closed, or an open PR already addresses it | Stop at step 0, before a worktree exists — report the closed issue or surface the PR; continue only when that PR is this session's own branch |
 | Issue thread already carries an implementation plan | Adopt the newest one (step 0) and build to it (step 2) — never re-derive an approach the plan already settled |
 | Adopted plan conflicts with the traced code, a newer maintainer comment, or an invariant | Deviate per step 2's three overrides — nothing else justifies it — and state the deviation in the PR body |
+| Adopted plan is long or many-part | Mirror its numbered steps into the task tracker (step 2) and complete each item only at its verify point — never build a big plan from memory |
 | Issue description conflicts with what the code actually does, or its sketch was ⚠️/❌ in validation | Trust the traced code and implement the optimal direction for this repo, not the original sketch; note the discrepancy in the PR body |
 | Fix touches money / data integrity / security / auto-protective logic | Implement the safest correct design from first principles; verify the invariant isn't violated |
 | Anywhere the default branch is needed (fetch or PR `--base`) | Detect it (`gh repo view --json defaultBranchRef`), re-detecting inline where used — shell variables don't persist between commands |

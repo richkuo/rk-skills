@@ -62,7 +62,7 @@ Do not plan the task yourself — the advisor owns the plan. **Load the `fable-d
 - `run_in_background`: `false` — the plan gates everything downstream
 - `description`: `Advise on <short task name>`
 - `prompt`: Brief it as a standing advisor, not a one-shot planner. Include: the full task description (for a bare issue reference, the issue title/body from step 1 *is* the task description), the issue title/body if one was fetched in step 1, the working directory, any constraints the user stated, and its charter:
-  - First deliverable: a concrete, ordered implementation plan (files to create/modify, approach, build sequence, risks/edge cases, verification steps). Plan the absolute-best solution — cost, effort, time, and token spend never narrow the option space; only correctness and safety override "best".
+  - First deliverable: a concrete, ordered implementation plan (files to create/modify, approach, build sequence, risks/edge cases, verification steps), with the implementation steps numbered (`1.`, `2.`, …) and each step ending in a verify point — the observable check that proves the step is done. Plan the absolute-best solution — cost, effort, time, and token spend never narrow the option space; only correctness and safety override "best".
   - It will be consulted again mid-task via follow-up messages. Each consult reply must be structured as: **recommendation**, **rationale**, **confidence** (high/medium/low), and a flag — **advisory** (executor may overrule with a stated reason) or **blocking** (must be resolved before commit).
   - It is read-only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
 

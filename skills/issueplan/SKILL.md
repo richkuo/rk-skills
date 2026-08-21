@@ -49,6 +49,8 @@ Produce a concrete, ordered implementation plan. Include:
 - Correctness risks, safety risks, and edge cases.
 - Tests and other verification.
 
+Number the implementation steps (`1.`, `2.`, …). End each step with a verify point: the observable check that proves the step is done (a command to run, a test that passes, a file state to confirm). Builders mirror these steps into their progress tracker during long builds.
+
 Select the best solution for correctness and safety. Ignore cost, time, token use, and code volume during solution selection.
 
 Keep the plan in clean Markdown. Make it suitable for direct use and for a GitHub issue comment.
