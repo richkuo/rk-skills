@@ -7,7 +7,7 @@ description: Use when the user says "work on issue", "work on this issue", "impl
 
 Take a GitHub issue from "validated" to "PR open", autonomously and end-to-end: isolate the work in a fresh worktree, implement the fix to the codebase's conventions, verify it really works, commit and push, then open a pull request that closes the issue. The skill ends with the open PR — requesting review is the caller's job (work-on-issue-loop does it; standalone, the user decides). Don't stop to ask the user between steps — do the work and report at the end.
 
-**This is the natural follow-on to validate-issue** — when it ends with `→ Reply "work on issue"`, the user replying "work on issue" lands here. The skill is also valid standalone, without a prior validation pass.
+**This is the natural follow-on to validate-issue** — when its next-step line offers or recommends "work on issue", the user replying "work on issue" lands here. The skill is also valid standalone, without a prior validation pass.
 
 **Implement the issue, not your memory of it.** Re-read the issue and any validation findings before writing code; the description can be stale or wrong (that's what validate-issue exists to catch). Build the fix the traced code supports, not the one the prose suggests.
 

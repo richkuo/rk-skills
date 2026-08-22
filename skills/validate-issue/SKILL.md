@@ -124,10 +124,18 @@ Scope:                                # only when too large or checklist restruc
 - <disposition> — <reason and parts>
 **#<N>: Update issue description? <Yes | No>** · Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no> · Scope: <OK | too large — split/umbrella/narrow>
 <specific edits when Yes>
-→ Reply "work on issue" to proceed, "update issue" to edit, "fableplan" when offered, or "split issue" when flagged.
+→ <next-step line — see the rule below>
 ```
 
 Set Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, or required checklist restructure. Set No only when the issue is accurate, feasible, consistent, complete, and ready. Always offer `fableplan` when its signal is yes; if the user chooses work first, ask once whether to plan or build directly.
+
+**Next-step line.** The line always leads with the action this verdict recommends, then lists the other options. Pick the recommendation in this order:
+
+1. Scope disposition is split or umbrella → `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "fableplan" when offered.`
+2. Update issue description is Yes → `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "fableplan" when offered.`
+3. Otherwise → `→ Reply "work on issue" to proceed, "update issue" to edit, or "fableplan" when offered.`
+
+Drop `"fableplan" when offered` from the line when the fableplan signal is no.
 
 ### 9. Handle "work on issue"
 
