@@ -328,8 +328,8 @@ describe('PR review contract', () => {
     ])
     for (const path of consumers) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: C21–C80 opus tier`).toMatch(/@claude opus review/)
-      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C20/)
+      expect(body, `${path}: C31–C70 opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C30/)
       if (FIRST_REVIEW_SITES.has(path)) {
         expect(body, `${path}: C81+ fable tier`).toMatch(/@claude fable review effort:high/)
       } else {

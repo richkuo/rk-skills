@@ -19,7 +19,8 @@ export const meta = {
 // is not explicit. The full graph is validated before any agent starts.
 // Build model/effort/fableplan/plan effort come from each issue's ## Execution
 // block (stamped by prd-to-issues, revised by execution-plan-review); validation
-// and the first-review default derive from the [C..] score band (see BANDS).
+// and the first-review default derive from the [C..] score band (see BANDS for
+// build and validation, REVIEW_BANDS for the reviewer).
 // Prep preserves representable stale combinations so the runtime can normalize
 // and log them before dispatch.
 // Validation still runs as the first step of every issue. Predecessor PRs change
@@ -181,26 +182,41 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // so no issue can carry a stale validate line that nothing reads. A score of 0
 // means "no [C..] prefix", which is unknown, not small: it routes as the top
 // band. Fable never runs at xhigh, so the Fable rows cap at high.
-// The reviewer is always a fresh agent — sharing the builder's model family
-// is accepted; the fresh context is the isolation that matters. Bands 0–1's
-// first review is the standard bare-@claude reviewer: model null means "no
-// override — inherit the session default". Sonnet never takes a first
-// review: it appears only as the cheaper re-review after a pass that
-// addressed nothing blocking (see runSubagentReviewLoop). Fable also reviews
-// only cycle 1: after a fable first review, every blocking re-review runs the
-// standard bare-@claude reviewer (see runSubagentReviewLoop).
 const BANDS = [
-  { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } },
-  { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } },
-  { name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
-  { name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } },
-  { name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } },
-  { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } },
+  { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
+  { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } },
+  { name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
+  { name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' } },
+  { name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } },
+  { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } },
+]
+
+// The reviewer escalates on its own, coarser scale, so these boundaries (30 and
+// 70) deliberately do not line up with the build/validate bands above. The
+// reviewer is always a fresh agent — sharing the builder's model family is
+// accepted; the fresh context is the isolation that matters. The first band's
+// review is the standard bare-@claude reviewer: model null means "no override —
+// inherit the session default". Sonnet never takes a first review: it appears
+// only as the cheaper re-review after a pass that addressed nothing blocking
+// (see runSubagentReviewLoop). Fable reviews only cycle 1: after a fable first
+// review, the blocking re-reviews step down one rung at a time, opus and then
+// the standard bare-@claude reviewer (see runSubagentReviewLoop).
+const REVIEW_BANDS = [
+  { name: '0–30', min: 0, max: 30, review: { model: null, effort: 'high' } },
+  { name: '31–70', min: 31, max: 70, review: { model: 'opus', effort: 'high' } },
+  { name: '71+', min: 71, max: Infinity, review: { model: 'fable', effort: 'high' } },
 ]
 
 function bandFor(complexity) {
   if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
   return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
+}
+
+// A score of 0 (no [C..] prefix) is unknown, not small — it reviews on the top
+// band, exactly as bandFor routes an unknown score to the top build band.
+function reviewBandFor(complexity) {
+  if (!Number.isInteger(complexity) || complexity <= 0) return REVIEW_BANDS[REVIEW_BANDS.length - 1]
+  return REVIEW_BANDS.find((band) => complexity >= band.min && complexity <= band.max) || REVIEW_BANDS[REVIEW_BANDS.length - 1]
 }
 
 // Codex exposes one flagship, so the two heavy Claude reviewer tiers (opus and
@@ -212,12 +228,12 @@ const CODEX_REVIEW_SHORTHAND = { fable: null, opus: null, sonnet: 'luna', haiku:
 // per fix-pr-review step 10.
 const NONBLOCKING_RETRIGGER = { claude: '@claude sonnet review', codex: '@codex luna review' }
 
-// The github-mode cycle-1 trigger comment, derived from the band unless the
-// issue stamps its own `@<bot> <model> review …` line. Band 0 is the bare
-// standard trigger; the Action picks its configured default model.
+// The github-mode cycle-1 trigger comment, derived from the review band unless
+// the issue stamps its own `@<bot> <model> review …` line. The C0–C30 band is
+// the bare standard trigger; the Action picks its configured default model.
 function firstReviewTrigger(ex) {
   const stamped = MODEL_IDS[ex.first_review_model]
-  const review = bandFor(ex.effective_complexity ?? ex.complexity).review
+  const review = reviewBandFor(ex.effective_complexity ?? ex.complexity).review
   if (REVIEW_BOT === 'codex') {
     const source = stamped || review.model
     const shorthand = source ? CODEX_REVIEW_SHORTHAND[source] : null
@@ -449,7 +465,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger that skill's band and step-down rules give you${REVIEW_BOT === 'claude' ? ' — `@claude opus review` in the C21–C80 band and for the FIRST blocking re-review after a `@claude fable review` first review, `@claude review` otherwise; never repeat the fable trigger, which is first-cycle-only' : ' — a bare `@codex review`, since both heavy tiers collapse onto it; never switch to @claude, which this run did not select'}).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger that skill's band and step-down rules give you${REVIEW_BOT === 'claude' ? ' — `@claude opus review` in the C31–C70 band and for the FIRST blocking re-review after a `@claude fable review` first review, `@claude review` otherwise; never repeat the fable trigger, which is first-cycle-only' : ' — a bare `@codex review`, since both heavy tiers collapse onto it; never switch to @claude, which this run did not select'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -558,7 +574,7 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 // Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
 // pr-review comment and returns its verdict; a fixer resolves it; repeat.
 // First review runs on the issue's "PR review:" model/effort when one is
-// stamped, else on the [C..] band's review default;
+// stamped, else on the [C..] score's REVIEW_BANDS default;
 // a re-review after a fix pass that addressed only non-blocking findings drops
 // to sonnet/high, mirroring the fix-pr-review skill's @claude-sonnet routing.
 // A fable first review is first-review-only, and the blocking re-reviews after
@@ -570,7 +586,7 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
   // model null means "no override — inherit the session default", the
   // subagent equivalent of the bare @claude trigger (band 0).
-  const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review
+  const bandReview = reviewBandFor(ex.effective_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
   // Fable reviews the first cycle only, then the reviewer steps down one rung
   // per blocking re-review: opus for the first, the standard bare-@claude

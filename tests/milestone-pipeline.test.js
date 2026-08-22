@@ -363,7 +363,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
     // The dispatch-side band defaults are what make omission safe.
-    expect(source).toContain('const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review')
+    expect(source).toContain('const bandReview = reviewBandFor(ex.effective_complexity ?? ex.complexity).review')
     // Fable is never a build fallback — unknown or unmapped models dispatch on Opus.
     expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
     expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
@@ -983,17 +983,18 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewMode: 'subagent' }, {
       Prep: () => ({
         issues: [
-          prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 3, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 4, complexity: 80, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 5, complexity: 90, first_review_model: undefined, first_review_effort: undefined }),
+          // Each pair straddles a review-scale boundary: 30/31 and 70/71.
+          prepIssue({ number: 2, complexity: 30, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 3, complexity: 31, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 4, complexity: 70, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 5, complexity: 71, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 6, complexity: 0, first_review_model: undefined, first_review_effort: undefined }),
         ],
       }),
     })
 
-    // Bands 0–1 are the bare-@claude equivalent: no model override, the
-    // reviewer inherits the session default.
+    // The C0–C30 review band is the bare-@claude equivalent: no model override,
+    // the reviewer inherits the session default.
     const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
     expect(bandZeroReview).toBeTruthy()
     expect(bandZeroReview.model).toBeUndefined()

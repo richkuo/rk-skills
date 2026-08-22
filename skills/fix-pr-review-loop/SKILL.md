@@ -29,15 +29,15 @@ gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,
   ```
   Record the trigger timestamp, set `review_count = 1`, and go to step 2 to wait for it.
 
-**First-review trigger — derived from the complexity score.** A heavier change earns a more capable reviewer, on the same bands that route validation in `validate-issue` step 6 (that table is authoritative; this is its review column):
+**First-review trigger — derived from the complexity score.** A heavier change earns a more capable reviewer, on the first-review table in `validate-issue` step 6 (that table is authoritative; its boundaries are coarser than the validate/build bands and deliberately do not line up with them):
 
 | Score | First-review trigger |
 |---|---|
-| C0–C20 | `@claude review` (standard trigger, no pinned model) |
-| C21–C80 | `@claude opus review` |
-| C81+, or no score found | `@claude fable review effort:high` |
+| C0–C30 | `@claude review` (standard trigger, no pinned model) |
+| C31–C70 | `@claude opus review` |
+| C71+, or no score found | `@claude fable review effort:high` |
 
-Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top band because the complexity is unknown. Fable never runs at xhigh, and it reviews the first cycle only: the blocking re-reviews after it step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that (fix-pr-review step 10 owns the re-review routing). A first review at C21–C80 keeps `@claude opus review` for every blocking re-review; only the fable band steps down.
+Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top band because the complexity is unknown. Fable never runs at xhigh, and it reviews the first cycle only: the blocking re-reviews after it step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that (fix-pr-review step 10 owns the re-review routing). A first review at C31–C70 keeps `@claude opus review` for every blocking re-review; only the fable band steps down.
 
 With Codex selected, the two heavy tiers collapse onto its single flagship: every band posts a bare `@codex review`, and only the cheap re-review tier keeps a shorthand (`@codex luna review`).
 
