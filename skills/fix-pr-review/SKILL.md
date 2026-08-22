@@ -158,33 +158,9 @@ Post one comment that tells the reviewer exactly what happened to each finding �
 
 ### 10. Trigger the re-review
 
-**Pick the bot first, then the model.** The re-review goes to the review bot of the **current cycle**, and the default is `@claude`. Use `@codex` only when this cycle selected Codex — one of: the user said so ("review with Codex", "use Codex"), a caller argument named it (`reviewBot: codex`), the invocation included the literal `codex` argument (Input section above), or this run itself was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does **not** select Codex. Once a cycle has a bot, every re-review in that cycle stays on it — never switch mid-cycle.
+Post one trigger comment asking the selected review bot for a fresh review. Compose and post it per [rereview-routing.md](rereview-routing.md) — read it completely; it holds the bot-selection rule, the complexity-band table, the C81+ step-down ladder and its floor, the non-blocking shorthand, and the posting commands for both bots.
 
-Then route by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
-
-- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 2 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): re-review on the PR's complexity band — `@claude review` at C0–C30, `@claude opus review` at C31–C70. Read the score with fix-pr-review-loop step 1's source order (stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix). At C71+ or with no score the reviewer **steps down one rung per blocking re-review**, because fable reviews the first cycle only: post `@claude opus review` for the first blocking re-review after the fable one, and `@claude review` for every blocking re-review after that. Decide which rung you are on from the PR's own trigger comments — a prior `@claude opus review` posted after the `@claude fable review` one means the next rung is `@claude review`. A non-blocking cycle routes to sonnet and consumes no rung. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
-- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to the cheap model shorthand instead — `@claude sonnet` on Claude, `@codex luna` on Codex. The band does not apply here.
-
-Post a **separate** comment so the bot triggers cleanly on its own line:
-
-```bash
-# blocking findings were addressed, C0–C30 — and every blocking re-review
-# after the first one at C71+ (fable steps down to opus, then to this)
-gh pr comment <N> --body "@claude review"
-
-# blocking findings were addressed, C31–C70 — and the FIRST blocking
-# re-review after a fable first review at C71+
-gh pr comment <N> --body "@claude opus review"
-
-# only non-blocking items were addressed
-gh pr comment <N> --body "@claude sonnet review"
-
-# the same cases when this cycle selected Codex — both heavy tiers collapse onto the bare trigger
-gh pr comment <N> --body "@codex review"
-gh pr comment <N> --body "@codex luna review"
-```
-
-(If this repo uses a different review trigger phrase or model-shorthand syntax, match it — check the repo's `.github/workflows/claude.yml` or `codex.yml` for how it resolves the shorthand, and recent PR comments for the convention.) A trigger comment is a one-line mention, not authored content — no footer.
+Two rules that decide everything there: route by whether the addressed set contained **any blocking finding** (noted in step 1), never by the newest review's verdict alone; and post the trigger as its **own** comment, never bundled into the disposition comment.
 
 ### 11. Report to the user
 

@@ -33,13 +33,14 @@ gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,
 
 | Score | First-review trigger |
 |---|---|
-| C0–C30 | `@claude review` (standard trigger, no pinned model) |
-| C31–C70 | `@claude opus review` |
-| C71+, or no score found | `@claude fable review effort:high` |
+| C0–C10 | `@claude sonnet review` |
+| C11–C40 | `@claude review` (standard trigger, no pinned model) |
+| C41–C80 | `@claude opus review` |
+| C81+, or no score found | `@claude fable review effort:high` |
 
-Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top band because the complexity is unknown. Fable never runs at xhigh, and it reviews the first cycle only: the blocking re-reviews after it step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that (fix-pr-review step 10 owns the re-review routing). A first review at C31–C70 keeps `@claude opus review` for every blocking re-review; only the fable band steps down.
+Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top band because the complexity is unknown. Fable never runs at xhigh, and it reviews the first cycle only: the blocking re-reviews after it step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that, and the ladder stops there rather than dropping to sonnet (fix-pr-review step 10 owns the re-review routing). A first review in any other band keeps its own trigger for every blocking re-review; only the fable band steps down.
 
-With Codex selected, the two heavy tiers collapse onto its single flagship: every band posts a bare `@codex review`, and only the cheap re-review tier keeps a shorthand (`@codex luna review`).
+With Codex selected, the heavier bands collapse onto its single flagship: C11 and above posts a bare `@codex review`, while the cheap tier keeps a shorthand (`@codex luna review`) for both the C0–C10 first review and the non-blocking re-review.
 
 **Review bot selection — Claude by default.** The trigger phrase above, the preflight below, and every re-review in this loop use `@claude` unless Codex was **explicitly** selected: the user said so ("review with Codex"), a caller argument named it (`reviewBot: codex`), or this run was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does not select Codex. When Codex is selected, post `@codex review` instead, preflight for `codex.yml` plus the `OPENAI_API_KEY` secret (and, for the write routes the fixer needs, `CODEX_APP_ID` / `CODEX_APP_PRIVATE_KEY` and the `CODEX_BOT_LOGIN` repository variable), and keep `@codex` for every re-review in this cycle. Never switch bots mid-cycle.
 

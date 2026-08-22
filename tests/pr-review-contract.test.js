@@ -265,11 +265,12 @@ describe('PR review contract', () => {
   })
 
   test('the fix-pr-review core stays small and delegates complete procedures', async () => {
-    const [skill, recipes, disposition, flags] = await Promise.all([
+    const [skill, recipes, disposition, flags, routing] = await Promise.all([
       read('skills/fix-pr-review/SKILL.md'),
       read('skills/fix-pr-review/fetch-recipes.md'),
       read('skills/fix-pr-review/disposition-comment.md'),
       read('skills/fix-pr-review/red-flags-and-mistakes.md'),
+      read('skills/fix-pr-review/rereview-routing.md'),
     ])
 
     expect(skill.split('\n').length - 1).toBeLessThan(200)
@@ -277,6 +278,7 @@ describe('PR review contract', () => {
       'fetch-recipes.md',
       'disposition-comment.md',
       'red-flags-and-mistakes.md',
+      'rereview-routing.md',
     ]) {
       expect(skill, reference).toContain(`](${reference})`)
     }
@@ -289,6 +291,14 @@ describe('PR review contract', () => {
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
     expect(flags).toContain('Blind-implementing the review')
+    // Step 10's procedure moved wholesale into the routing reference: the band
+    // table, the C81+ ladder and its floor, and the posting commands.
+    expect(routing).toMatch(/C0.{0,4}C10/)
+    expect(routing).toContain('@claude sonnet review')
+    expect(routing).toContain('@claude opus review')
+    expect(routing).toContain('@claude fable review effort:high')
+    expect(routing).toMatch(/never steps down to sonnet/i)
+    expect(routing).toContain('@codex luna review')
   })
 
   test('fix-pr-review step-label consumers use surviving whole-number labels', async () => {
@@ -314,7 +324,7 @@ describe('PR review contract', () => {
     const consumers = [
       'skills/fix-pr-review-loop/SKILL.md',
       'skills/work-on-issue-loop/SKILL.md',
-      'skills/fix-pr-review/SKILL.md',
+      'skills/fix-pr-review/rereview-routing.md',
       'templates/claude-workflow/prompts/issue-workflow.md',
       'templates/claude-workflow/prompts/fix-pr.md',
     ]
@@ -328,8 +338,9 @@ describe('PR review contract', () => {
     ])
     for (const path of consumers) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: C31–C70 opus tier`).toMatch(/@claude opus review/)
-      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C30/)
+      expect(body, `${path}: C41–C80 opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: C0–C10 sonnet tier`).toMatch(/@claude sonnet review/)
+      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C10/)
       if (FIRST_REVIEW_SITES.has(path)) {
         expect(body, `${path}: C81+ fable tier`).toMatch(/@claude fable review effort:high/)
       } else {
@@ -342,6 +353,11 @@ describe('PR review contract', () => {
         expect(body, `${path}: fable steps down`).toMatch(/steps? down|step-down/i)
         expect(body, `${path}: fable never repeats`).toMatch(
           /only ever runs once|reviews the first cycle only|first cycle only/i,
+        )
+        // The C81+ ladder floors at the standard trigger. Sonnet is a band tier
+        // and the non-blocking tier; it is never a C81+ blocking rung.
+        expect(body, `${path}: ladder floors above sonnet`).toMatch(
+          /never (?:steps? down|drops?) to (?:`?@claude )?sonnet|stops (?:there|at `@claude review`)[^.]{0,80}sonnet/i,
         )
       }
     }
@@ -372,5 +388,6 @@ describe('PR review contract', () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Band-derived review trigger/)
     expect(inventory).toMatch(/@claude opus review.{0,120}@claude fable review effort:high/)
+    expect(inventory).toMatch(/@claude sonnet review.{0,120}@claude review/)
   })
 })

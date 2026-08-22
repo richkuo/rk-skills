@@ -27,7 +27,7 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 gh pr comment <PR-number> --body "<band-derived trigger>"
 ```
 
-**Which trigger to post:** derive it from the issue's complexity score with fix-pr-review-loop step 1's band table — `@claude review` at C0–C30, `@claude opus review` at C31–C70, `@claude fable review effort:high` at C71+ or when no score is discoverable. The issue you just implemented is the score source: its `[C<score>]` title prefix, or a stamped `PR review:` line in its Execution block, which overrides the band.
+**Which trigger to post:** derive it from the issue's complexity score with fix-pr-review-loop step 1's band table — `@claude sonnet review` at C0–C10, `@claude review` at C11–C40, `@claude opus review` at C41–C80, `@claude fable review effort:high` at C81+ or when no score is discoverable. The issue you just implemented is the score source: its `[C<score>]` title prefix, or a stamped `PR review:` line in its Execution block, which overrides the band.
 
 **Review bot selection and preflight:** apply fix-pr-review-loop step 1's two rules to this first trigger (the selection logic itself is fix-pr-review step 10's rule). Bot selection: `@claude` by default, `@codex` only on explicit selection, and never switch bots mid-cycle. Preflight: before you enter the wait, confirm a review workflow for the selected bot exists, with the Codex secret and variable checks when Codex is selected.
 

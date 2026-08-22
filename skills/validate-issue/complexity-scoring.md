@@ -34,7 +34,7 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 
 - Fable 5 has a high-effort ceiling and never runs at xhigh.
 - Fable is never the default builder. A Fable build requires explicit user direction.
-- Derive the first-review trigger and model from the main skill's first-review table, whose boundaries (30 and 70) differ from the band table's.
+- Derive the first-review trigger and model from the main skill's first-review table, whose boundaries (10, 40 and 80) differ from the band table's.
 - After a Fable first review, the blocking re-reviews step down one rung each — Opus first, then the standard reviewer. Fable does not repeat.
 - In subagent mode, bands with the standard trigger inherit the session reviewer; Sonnet appears only for a cheaper non-blocking re-review.
 - A missing score routes as the highest band because its complexity is unknown.
