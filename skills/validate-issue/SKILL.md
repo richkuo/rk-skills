@@ -124,10 +124,22 @@ Scope:                                # only when too large or checklist restruc
 - <disposition> — <reason and parts>
 **#<N>: Update issue description? <Yes | No>** · Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no> · Scope: <OK | too large — split/umbrella/narrow>
 <specific edits when Yes>
-→ Reply "work on issue" to proceed, "update issue" to edit, "fableplan" when offered, or "split issue" when flagged.
+<next-step line — see the rule below; it carries its own leading arrow>
 ```
 
 Set Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, or required checklist restructure. Set No only when the issue is accurate, feasible, consistent, complete, and ready. Always offer `fableplan` when its signal is yes; if the user chooses work first, ask once whether to plan or build directly.
+
+**Next-step line.** The line always leads with the action this verdict recommends, then lists the other options. Match the first case that applies, then take the variant for the fableplan signal, and post that line verbatim — each one already carries its leading `→` and is complete as written. Never assemble the line by deleting words from another variant.
+
+1. Scope disposition is split or umbrella:
+   - fableplan yes → `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "fableplan" to plan first.`
+   - fableplan no → `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is.`
+2. Update issue description is Yes:
+   - fableplan yes → `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "fableplan" to plan first.`
+   - fableplan no → `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is.`
+3. Otherwise:
+   - fableplan yes → `→ Reply "work on issue" to proceed, "update issue" to edit, or "fableplan" to plan first.`
+   - fableplan no → `→ Reply "work on issue" to proceed, or "update issue" to edit.`
 
 ### 9. Handle "work on issue"
 

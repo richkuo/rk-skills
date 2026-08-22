@@ -5,7 +5,7 @@ description: Use when the user asks to validate a GitHub issue and then autonomo
 
 # validate-issue-loop
 
-Chain validate-issue → (conditional) update issue → work-on-issue-loop into one autonomous run, so an issue goes from "reported" to "PR through N rounds of review" without a human in the loop between steps. This is validate-issue's normal interactive handoff (`→ Reply "work on issue"`) made unattended: the loop reads its own verdict and decides what to do next, instead of waiting for the user to type a reply.
+Chain validate-issue → (conditional) update issue → work-on-issue-loop into one autonomous run, so an issue goes from "reported" to "PR through N rounds of review" without a human in the loop between steps. This is validate-issue's normal interactive handoff (its `→` next-step line) made unattended: the loop reads its own verdict and decides what to do next, instead of waiting for the user to type a reply.
 
 **Do not skip validation.** Auto-implementing an issue whose factual claims or proposal you haven't traced against the code just reproduces the issue's own mistakes in a PR. Every step of validate-issue still runs; only the "wait for the user's reply" step is replaced by a decision table.
 
@@ -23,7 +23,7 @@ Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: vali
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
-Its final `→ Reply "work on issue"...` line is written for interactive use — in this loop, treat the verdict block as structured output to parse yourself, not a prompt to wait on. Don't ask the user to confirm; decide from the table in step 2.
+Its final `→` next-step line is written for interactive use — in this loop, treat the verdict block as structured output to parse yourself, not a prompt to wait on. Don't ask the user to confirm; decide from the table in step 2.
 
 ### 2. Scope gate — stop if the issue is unsafe to auto-implement
 
