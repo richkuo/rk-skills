@@ -129,6 +129,35 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: no borrower left unreachable`).toMatch(
       /never left waiting on a check that can never run/i,
     )
+    // The trigger is the cross-reference, not how it arose: a compliant plan may
+    // author a verify point that keys on a later step, and the mirroring agent
+    // copies it verbatim, so the derived-check fallback never fires.
+    expect(body, `${MIRROR_OWNER}: re-homing is origin-agnostic`).toMatch(
+      /derived by the mirroring agent[\s\S]{0,80}or written by the plan's own author/i,
+    )
+    expect(body, `${MIRROR_OWNER}: re-homing not scoped to the derived fallback`).not.toMatch(
+      /adopted a later step's check \*\*under the first fallback above\*\*/i,
+    )
+    // Chains resolve: overriding step 8 must reach step 3, which borrowed step 5,
+    // which borrowed step 8 — not only the direct borrower.
+    expect(body, `${MIRROR_OWNER}: re-homing cascades through chains`).toMatch(
+      /[Rr]e-homing cascades[\s\S]{0,400}repeats until no open item keys on a check that cannot run/i,
+    )
+  })
+
+  test('the guardrail table signals that a borrowing item cannot simply close', () => {
+    const body = procedureBody(texts[MIRROR_OWNER])
+    const row = body
+      .split('\n')
+      .find((line) => line.startsWith('|') && /verify point keys on a later step/i.test(line))
+    expect(row, `${MIRROR_OWNER}: borrowing guardrail row present`).toBeDefined()
+    expect(row, `${MIRROR_OWNER}: borrowing row names re-homing`).toMatch(/[Rr]e-home/)
+    expect(row, `${MIRROR_OWNER}: borrowing row is origin-agnostic`).toMatch(
+      /whether the mirroring agent derived the cross-reference or the plan's author wrote it/i,
+    )
+    expect(row, `${MIRROR_OWNER}: borrowing row forbids a bare close`).toMatch(
+      /never close it as done and never leave it waiting/i,
+    )
   })
 
   test('the guardrail row states the same trigger scope as step 2', () => {
