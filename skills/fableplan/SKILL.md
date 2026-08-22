@@ -43,6 +43,7 @@ Do not re-plan the task yourself first — the subagent owns the plan. **Load th
 - `description`: `Plan <short task name>`
 - `prompt`: Hand the subagent everything it needs to plan independently — the full task description, the issue title/body if one was fetched, the working directory, and any constraints the user stated. Tell it explicitly:
   - Produce a concrete, ordered implementation plan (files to create/modify, the approach, build sequence, risks/edge cases, and how to verify).
+  - Number the implementation steps (`1.`, `2.`, …) and end each step with a **verify point** — the observable check that proves the step is done (a command to run, a test that passes, a file state to confirm). Builders mirror these numbered steps into their progress tracker during long builds, so a step without a number or a verify point loses its anchor.
   - Plan the absolute-best solution the task calls for, evaluated as if cost, effort, time, token spend, and code volume were unlimited — they are not factors and must never narrow the option space. The only constraints that override "best" are correctness and safety.
   - Return the plan as its final message in clean Markdown suitable to (a) act on directly and (b) post verbatim as a GitHub issue comment.
   - It is planning only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
@@ -94,7 +95,7 @@ Do all of step 8's building inside that worktree. When the build is done, follow
 
 ### 8. Build
 
-In the worktree from step 7, the main agent builds the task per the plan. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
+In the worktree from step 7, the main agent builds the task per the plan. **Before writing any code, mirror the plan's numbered steps into the task tracker per `work-on-issue` step 2 ("Mirror the plan's steps into the task tracker")** — it owns the mirroring rule, the two fallbacks (a plan with no numbers or verify points, a harness with no tracker), and the disposition for a step an override cancels. Confirm with the user first only if the plan reveals ambiguity or a decision the user must make; otherwise proceed.
 
 ## Planning-phase-only invocation
 

@@ -49,6 +49,8 @@ Produce a concrete, ordered implementation plan. Include:
 - Correctness risks, safety risks, and edge cases.
 - Tests and other verification.
 
+Number the implementation steps (`1.`, `2.`, …). End each step with a verify point: the observable check that proves the step is done (a command to run, a test that passes, a file state to confirm). Builders mirror these steps into their progress tracker during long builds.
+
 Select the best solution for correctness and safety. Ignore cost, time, token use, and code volume during solution selection.
 
 Keep the plan in clean Markdown. Make it suitable for direct use and for a GitHub issue comment.
@@ -119,6 +121,8 @@ Verify the working directory before every later write.
 ### 8. Build from the plan
 
 Implement the checked plan in the worktree with the current session LLM. Do not delegate implementation to a subagent.
+
+Before you write any code, copy the plan's numbered steps into the task tracker per `work-on-issue` step 2, "Mirror the plan's steps into the task tracker". That step owns the rule, the two fallbacks, and what to do with a step that an override cancels.
 
 Follow repository test, commit, push, and pull request rules. Record any plan deviation in the pull request.
 

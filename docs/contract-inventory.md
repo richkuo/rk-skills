@@ -1,6 +1,6 @@
 # Contract inventory — loop / validate pipeline rules
 
-Scoped to the loop/validate skill families ([#64](https://github.com/richkuo/rk-skills/issues/64)). Broader duplicated-contract tracking from superseded [#57](https://github.com/richkuo/rk-skills/issues/57) is out of scope here.
+Scoped to the loop/validate skill families ([#64](https://github.com/richkuo/rk-skills/issues/64)), plus the plan-producer/plan-consumer family that hands those chains their plans. Broader duplicated-contract tracking from superseded [#57](https://github.com/richkuo/rk-skills/issues/57) is out of scope here.
 
 This inventory records every shared pipeline rule those families restate in prose: who owns it, who restates it, what must stay aligned, what may diverge, and how CI guards it. Guards check **required shared semantics** (key thresholds and stop conditions), not exact string equality — wording may differ by harness ("Fable subagent" vs "session model") when the numbers and decisions match. Markers must appear in the **procedure body** (after YAML frontmatter); a `description:` line that only mentions the words is not enough. Stop rules are anchored to decision-table rows that co-locate `STOP` with the rule terms.
 
@@ -8,7 +8,7 @@ This inventory records every shared pipeline rule those families restate in pros
 
 1. Edit every **consumer** listed for that row in the same change (there is no generator for `SKILL.md` prose). Keep the procedural wording in the body/decision table — do not rely on frontmatter alone.
 2. If the change is an intentional divergence, record it under **Allowed divergence** / the exception section below and update the guard's exception list.
-3. Run `bun test` — `tests/loop-validate-pipeline-contract.test.js` fails when a required marker is missing or contradicted.
+3. Run `bun test` — the row's **Guard** column names the test file that fails when a required marker is missing or contradicted (`tests/loop-validate-pipeline-contract.test.js` for most rows).
 4. Keep this inventory row in sync with the guard's consumer lists.
 
 ## Inventoried skill files
@@ -28,7 +28,10 @@ This inventory records every shared pipeline rule those families restate in pros
 | `skills/validate-issue/SKILL.md` | Base validator — inventored; does **not** restate loop pipeline stop rules |
 | `skills/fable-validate/SKILL.md` | Fable wrapper for validate-issue — inventored; does **not** restate loop pipeline stop rules |
 | `skills/fix-pr-review/SKILL.md` | Fixer classifier — states the `**Verification limitation:**` not-a-finding carve-out |
-| `skills/work-on-issue/SKILL.md` | Canonical owner of the adopted-plan deviation policy the plan-handoff chains restate |
+| `skills/work-on-issue/SKILL.md` | Canonical owner of the adopted-plan deviation policy the plan-handoff chains restate, and of the plan-step mirror rule its step 2 states |
+| `skills/fableplan/SKILL.md` | Plan producer (Fable 5 subagent); its step 8 builds outside `work-on-issue` step 2 |
+| `skills/issueplan/SKILL.md` | Plan producer (session model, no subagent); its step 8 builds outside `work-on-issue` step 2 |
+| `skills/fable-advisor/SKILL.md` | Plan producer (Fable 5 advisor); its issue path inherits `work-on-issue` steps 1–6, its prose path builds outside them |
 | `skills/fableplan-work-on-issue/SKILL.md` | Plan handoff — restates the deviation policy; no loop stage |
 | `skills/validate-issue/issue-editing.md` | Canonical owner of the issue-edit attribution verb |
 | `skills/github-issue-format/SKILL.md` | Format skill every issue editor loads — lists the three footer verbs |
@@ -48,6 +51,7 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md` and its 
 | Final-report 55-word plain-simple-English cap | Shared presentation rule of the autonomous chains | `validate-issue-loop`, `fable-validate-loop`, `validate-fableplan-loop`, `fable-validate-fableplan-loop`, `fable-validate-fableplan`, `fableplan-loop`, `fableplan-work-on-issue`, `new-issue-loop`, `fable-new-issue-loop` | Bold "Cap the whole report … 55 words, plain simple English in ASD-STE100" instruction in the report step, followed on the same line by "apply the Response Style rules in CLAUDE.md/AGENTS.md" | Parenthetical scope notes ("prefix + relayed summary") and trailing phrasing | same |
 | Issue-edit attribution verb | `skills/validate-issue/issue-editing.md` | `validate-issue-loop`, `validate-fableplan-loop`, `fable-validate`, `fable-validate-loop`, `fable-validate-fableplan`, `fable-validate-fableplan-loop` (each names the appended footer line); `github-issue-format` lists the verb set; `workflows/milestone-pipeline.js` issue-correction prompt | A validation-driven issue edit appends `Validated with LLM: <model> \| <effort> \| Harness: <harness>` — never `Updated` on that path, because the edit is review output. Prior `Created` / `Updated` lines are preserved, never replaced, and an exact duplicate is never appended — every file that states the stacking rule states the same duplicate handling | Harness suffix per wrapper (`fable-validate`, `validate-fableplan-loop`, …); which model authored the validation | same |
 | Issue-body `Plain simple English` section | `github-issue-format` | `new-issue`, `prd-to-issues`, `fable-new-issue`, `work-on-issue-loop` (step 3 follow-on issues), `fix-pr-review` (follow-up issues), `validate-issue/issue-editing.md`, the Action prompts `templates/claude-workflow/prompts/fix-pr.md`, `templates/claude-workflow/prompts/issue-workflow.md`, `templates/codex-workflow/prompts/fix-pr.md`, and `templates/codex-workflow/prompts/issue-workflow.md`, plus the `CLAUDE.md` / `AGENTS.md` GitHub Issues section | Every filed or rewritten issue body carries `## Plain simple English` after the acceptance criteria and before any Execution block: one paragraph under 55 words in ASD-STE100, no paths or symbols, no time or effort estimate. An edit that rewrites body prose adds the section when it is missing; a metadata-only edit (Execution block, title prefix) leaves every prose section unchanged | Whether the file shows the body template or only names the section; pointer wording | `tests/issue-plain-simple-english-contract.test.js` |
+| Numbered plan steps with verify points | `work-on-issue` step 2 (the mirror rule) | Producers that must ask for the format: `fableplan`, `issueplan`, `fable-advisor`, and `workflows/milestone-pipeline.js` (`planPrompt`). Build paths that consume a plan outside `work-on-issue` step 2 and must point at the owner: `fableplan` step 8, `issueplan` step 8, `fable-advisor`'s prose path | Every plan handed to a separate builder numbers its implementation steps (`1.`, `2.`, …) and ends each step with a **verify point** — the observable check that proves the step is done. Every producer that posts its plan as an issue comment prefixes it with a `## Implementation plan (<model>)` heading, because `work-on-issue` step 0 matches on that heading to find a posted plan. `work-on-issue` step 2 mirrors those steps into the task tracker before any code is written, for an adopted plan of **any** length; an item completes only when its verify point passes; a plan missing its numbers, its verify points, or both gets the missing element(s) derived — either absence alone triggers the fallback, and no mirrored item is ever left without a verify point; a harness with no tracker carries the checklist in a scratchpad file outside the working tree; a step cancelled by one of the three overrides closes as a **recorded deviation** with its own verify point and a PR-body entry, never as done and never left open; and every open item whose verify point borrowed a cancelled step's check — whether the mirroring agent derived that cross-reference or the plan's own author wrote it — re-homes its check to the replacement, to its own observable check, or closes as a deviation of its own, cascading to any item that borrowed *that* item's check | Whether a producer spells out the verify-point examples or the builder-mirror reason; whether a build path restates the rule or points at `work-on-issue` step 2; `fable-advisor`'s issue path inherits the rule instead of stating it | `tests/plan-steps-contract.test.js` |
 | Adopted-plan deviation policy | `work-on-issue` step 2 | `fableplan-work-on-issue`, `fableplan-loop`, `fable-validate-loop`, `fable-validate-fableplan-loop`, `validate-fableplan-loop` (each hands a plan down) | A plan adopted from the issue thread is the blueprint; it is overridden only by the traced code, anything posted on the issue after the plan, then correctness and safety. Callers may restate the policy but must never narrow it back to "only when the code contradicts the plan"; every deviation is named in the PR body | Caller phrasing and whether the handoff targets `work-on-issue` or `work-on-issue-loop`; the score-gated chains add their "no plan was produced" note | same |
 
 ## Intentional exceptions
@@ -68,6 +72,8 @@ Non-skill consumers (e.g. `templates/claude-workflow/prompts/fix-pr.md` and its 
 | `skills/milestone-workflow/SKILL.md` mentions of `maxReviewCycles` | Documents the workflow arg and planning bounds; not a restatement of the fix-pr-review-loop stop procedure. |
 | `tests/milestone-pipeline.test.js` | Exercises the workflow harness, not skill `SKILL.md` contracts. |
 
+This table scopes `tests/loop-validate-pipeline-contract.test.js` only. `workflows/milestone-pipeline.js` is still an in-scope consumer of the rows that name it: the issue-edit attribution verb row, and the numbered-plan-steps row (its `planPrompt` produces a plan for a separate builder), guarded by `tests/plan-steps-contract.test.js`.
+
 If the skill review-cycle threshold and the workflow default must stay locked together later, that is a separate contract — not covered by `tests/loop-validate-pipeline-contract.test.js`.
 
 ## Related partial coverage
@@ -82,3 +88,4 @@ Updated with LLM: Opus 5 | high | Harness: Claude Code
 Updated with LLM: Fable 5 | high | Harness: Claude Code
 Updated with LLM: Fable 5 | high | Harness: Claude Code
 Updated with LLM: Opus 5 | high | Harness: work-on-issue
+Updated with LLM: Opus 5 | high | Harness: fix-pr-review
