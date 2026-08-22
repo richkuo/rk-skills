@@ -79,9 +79,24 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: completion keys on the verify point`).toMatch(
       /complete only when its verify point passes/i,
     )
-    // Fallback 1 — a plan with neither numbers nor verify points derives BOTH.
-    expect(body, `${MIRROR_OWNER}: derive numbers and checks`).toMatch(
-      /no numbers or verify points[\s\S]{0,400}derive \*\*both\*\*/i,
+    // Fallback 1 — the trigger fires on EITHER element missing, not only both.
+    // A numbered plan with no per-step checks must still get checks derived,
+    // because the same bullet forbids an item with no verify point.
+    expect(body, `${MIRROR_OWNER}: fallback trigger covers either element`).toMatch(
+      /missing its numbers, its verify points, or both/i,
+    )
+    expect(body, `${MIRROR_OWNER}: either absence alone triggers the fallback`).toMatch(
+      /[Ee]ither element missing on its own triggers this fallback/,
+    )
+    expect(body, `${MIRROR_OWNER}: derive whichever element is missing`).toMatch(
+      /derive whichever element is missing[\s\S]{0,400}missing both gets \*\*both\*\* derived/i,
+    )
+    // The superseded AND-only trigger must not come back.
+    expect(body, `${MIRROR_OWNER}: fallback not scoped to both-missing`).not.toMatch(
+      /plan carries no numbers or verify points/i,
+    )
+    expect(body, `${MIRROR_OWNER}: no item without a verify point`).toMatch(
+      /never leave an item with no verify point/i,
     )
     // Fallback 2 — no tracker in the harness still has a compliant action.
     expect(body, `${MIRROR_OWNER}: no-tracker fallback`).toMatch(
@@ -143,6 +158,15 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: re-homing cascades through chains`).toMatch(
       /[Rr]e-homing cascades[\s\S]{0,400}repeats until no open item keys on a check that cannot run/i,
     )
+    // The fallback's forward pointer must name the re-homing paragraph, not the
+    // overridden-step disposition — the latter governs the cancelled step's own
+    // item and omits the replacement-check-first ordering.
+    expect(body, `${MIRROR_OWNER}: fallback points at the re-homing rule`).toMatch(
+      /the borrowed check re-homes[\s\S]{0,120}A borrowed verify point re-homes when its source step is overridden/,
+    )
+    expect(body, `${MIRROR_OWNER}: pointer distinguishes the two dispositions`).toMatch(
+      /overridden-step disposition[\s\S]{0,120}governs the \*cancelled step's own\* item, not its borrowers/i,
+    )
   })
 
   test('the guardrail table signals that a borrowing item cannot simply close', () => {
@@ -184,6 +208,20 @@ describe('numbered plan steps with verify points', () => {
         /[Bb]efore (?:writing any code|you write any code)[\s\S]{0,240}`work-on-issue` step 2/,
       )
     }
+  })
+
+  test('every producer posts its plan under the heading work-on-issue step 0 matches', () => {
+    // step 0 matches on `## Implementation plan` first; the fallback ("a maintainer
+    // clearly frames it") is a weaker bar for an automated bot comment, so a
+    // producer that omits the heading risks a later standalone run finding no plan.
+    for (const path of PRODUCERS) {
+      const body = procedureBody(texts[path])
+      expect(body, `${path}: plan-comment heading`).toMatch(/## Implementation plan \(/)
+    }
+    const owner = procedureBody(texts[MIRROR_OWNER])
+    expect(owner, `${MIRROR_OWNER}: step 0 matches on the heading`).toMatch(
+      /comment starting with `## Implementation plan`/,
+    )
   })
 
   test('fableplan planning-phase-only mode still forbids the build step', () => {
