@@ -127,7 +127,7 @@ of keyword.
 | (none) | `gpt-5.6-sol` | Flagship; the default, paired with the default `xhigh` effort. |
 | `sol` | `gpt-5.6-sol` | |
 | `terra` | `gpt-5.6-terra` | Balanced everyday model. |
-| `luna` / `mini` | `gpt-5.6-luna` | Fast and affordable; the cheap re-review shorthand, and Codex's counterpart to `@claude sonnet review`. |
+| `luna` / `mini` | `gpt-5.6-luna` | Fast and affordable; Codex's counterpart to `@claude sonnet review`, used for the C0–C10 band and for the cheap non-blocking re-review. |
 | `codex` / `spark` | `gpt-5.3-codex-spark` | Text-only fast coding preview. |
 
 An unrecognized shorthand falls through to the default, matching the Claude

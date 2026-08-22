@@ -363,6 +363,34 @@ describe('PR review contract', () => {
     }
   })
 
+  // The Codex prompts are band consumers too, but they must never name a
+  // @claude trigger, so they get their own assertions rather than a row in the
+  // list above. Codex has one flagship: every band above C10 collapses onto the
+  // bare trigger, and only the C0–C10 band and the non-blocking re-review keep
+  // the cheap `luna` shorthand.
+  test('the Codex Action prompts route the cheap band to @codex luna review', async () => {
+    const CODEX_CONSUMERS = [
+      'templates/codex-workflow/prompts/issue-workflow.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+    ]
+    for (const path of CODEX_CONSUMERS) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: C0–C10 cheap tier`).toMatch(/@codex luna review/)
+      expect(body, `${path}: band read from a C score`).toMatch(/C0 to C10/)
+      expect(body, `${path}: C11+ collapses onto the bare trigger`).toMatch(
+        /@codex review at C11 and above/,
+      )
+      // Codex is this cycle's bot; naming a @claude trigger would switch bots.
+      expect(body, `${path}: never posts a @claude trigger`).not.toMatch(
+        /body[^.]{0,40}@claude|--body "@claude/,
+      )
+    }
+    // The fixer's C81+ ladder stays on the flagship at every cycle; stepping it
+    // down to luna would review the heaviest PR on the cheapest model.
+    const fixer = (await read('templates/codex-workflow/prompts/fix-pr.md')).replace(/\s+/g, ' ')
+    expect(fixer, 'C81+ ladder never reaches luna').toMatch(/never reaches luna/i)
+  })
+
   test('the standalone review workflow resolves every band shorthand it is sent', async () => {
     const workflow = texts['templates/claude-review.yml']
     for (const [shorthand, modelId] of [
