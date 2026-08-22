@@ -310,11 +310,60 @@ describe('PR review contract', () => {
     }
   })
 
+  test('every review-trigger site routes the reviewer by complexity band', async () => {
+    const consumers = [
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/work-on-issue-loop/SKILL.md',
+      'skills/fix-pr-review/SKILL.md',
+      'templates/claude-workflow/prompts/issue-workflow.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+    ]
+    // The heavy tier every site must name, and the tier only a first review may
+    // name — fable reviews cycle 1 and never repeats, so the two fixer sites
+    // must fall back to the standard trigger instead.
+    const FIRST_REVIEW_SITES = new Set([
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/work-on-issue-loop/SKILL.md',
+      'templates/claude-workflow/prompts/issue-workflow.md',
+    ])
+    for (const path of consumers) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: C21–C80 opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C20/)
+      if (FIRST_REVIEW_SITES.has(path)) {
+        expect(body, `${path}: C81+ fable tier`).toMatch(/@claude fable review effort:high/)
+      } else {
+        // A fixer re-review never pins fable — it reviews cycle 1 only.
+        expect(body, `${path}: fixer must not pin fable`).not.toMatch(/@claude fable review/)
+        expect(body, `${path}: fable never repeats`).toMatch(/never repeats|first cycle only/i)
+      }
+    }
+  })
+
+  test('the standalone review workflow resolves every band shorthand it is sent', async () => {
+    const workflow = texts['templates/claude-review.yml']
+    for (const [shorthand, modelId] of [
+      ['sonnet', 'claude-sonnet-5'],
+      ['opus', 'claude-opus-5'],
+      ['fable', 'claude-fable-5'],
+    ]) {
+      expect(workflow, `${shorthand} shorthand`).toMatch(
+        new RegExp(`@claude ${shorthand}'\\)\\s*&&\\s*'${modelId}'`),
+      )
+    }
+  })
+
   test('contract inventory states finding-section stop semantics and both guards', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/no remaining \*\*finding\*\* sections/i)
     expect(inventory).toMatch(/Verification limitation[\s\S]{0,120}not a finding/i)
     expect(inventory).toMatch(/tests\/loop-validate-pipeline-contract\.test\.js/)
     expect(inventory).toMatch(/tests\/pr-review-contract\.test\.js/)
+  })
+
+  test('contract inventory carries the band-derived review trigger row', async () => {
+    const inventory = await read('docs/contract-inventory.md')
+    expect(inventory).toMatch(/Band-derived review trigger/)
+    expect(inventory).toMatch(/@claude opus review.{0,120}@claude fable review effort:high/)
   })
 })

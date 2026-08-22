@@ -23,11 +23,23 @@ gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,
 - If the PR is already `merged` or `closed`, stop and report — there's nothing to drive.
 - Fetch the current review feedback using fix-pr-review step 1's three-channel query (formal reviews, issue comments, inline diff threads) to see what has already landed.
 - **Unaddressed feedback is already present** (a review/comment newer than any prior disposition comment, or an unresolved inline thread): treat it as the first landed review. Set `review_count = 1`, note its timestamp, and skip straight to step 3 — don't wait for a review that already arrived.
-- **No review feedback at all yet** (fresh PR, or every existing comment is your own prior disposition/trigger): trigger one yourself:
+- **No review feedback at all yet** (fresh PR, or every existing comment is your own prior disposition/trigger): trigger one yourself with the band-derived trigger below:
   ```bash
-  gh pr comment <N> --body "@claude review"
+  gh pr comment <N> --body "<band-derived trigger>"
   ```
   Record the trigger timestamp, set `review_count = 1`, and go to step 2 to wait for it.
+
+**First-review trigger — derived from the complexity score.** A heavier change earns a more capable reviewer, on the same bands that route validation in `validate-issue` step 6 (that table is authoritative; this is its review column):
+
+| Score | First-review trigger |
+|---|---|
+| C0–C20 | `@claude review` (standard trigger, no pinned model) |
+| C21–C80 | `@claude opus review` |
+| C81+, or no score found | `@claude fable review effort:high` |
+
+Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top band because the complexity is unknown. Fable never runs at xhigh, and it reviews the first cycle only — every blocking re-review after a fable first review is the standard `@claude review` (fix-pr-review step 10 owns the re-review routing).
+
+With Codex selected, the two heavy tiers collapse onto its single flagship: every band posts a bare `@codex review`, and only the cheap re-review tier keeps a shorthand (`@codex luna review`).
 
 **Review bot selection — Claude by default.** The trigger phrase above, the preflight below, and every re-review in this loop use `@claude` unless Codex was **explicitly** selected: the user said so ("review with Codex"), a caller argument named it (`reviewBot: codex`), or this run was started by an `@codex` GitHub comment. A `codex.yml` merely existing in the repo does not select Codex. When Codex is selected, post `@codex review` instead, preflight for `codex.yml` plus the `OPENAI_API_KEY` secret (and, for the write routes the fixer needs, `CODEX_APP_ID` / `CODEX_APP_PRIVATE_KEY` and the `CODEX_BOT_LOGIN` repository variable), and keep `@codex` for every re-review in this cycle. Never switch bots mid-cycle.
 

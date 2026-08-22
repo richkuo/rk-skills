@@ -162,19 +162,22 @@ Post one comment that tells the reviewer exactly what happened to each finding �
 
 Then route by whether the set you addressed contained **any blocking finding** (noted in step 1) — never by the newest review's verdict alone: with multiple reviewers, a later `LGTM` from one does not erase another's `Needs Updates`.
 
-- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 2 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): trigger plain — the repo's default model reviews the fix. A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
-- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to the cheap model shorthand instead — `@claude sonnet` on Claude, `@codex luna` on Codex.
+- **Any blocking finding addressed** (`Needs Fixing` / `Requires Human Review` from any review, an inline thread that validated as a real defect, or any CI Failure finding from step 2 — **counted regardless of its verdict**, i.e. whether you fixed it or refuted it as pre-existing/flaky, exactly as the reviewer clauses count regardless of verdict): re-review on the PR's complexity band — `@claude review` at C0–C20, `@claude opus review` at C21–C80, and `@claude review` at C81+ or with no score, because a fable first review never repeats. Read the score with fix-pr-review-loop step 1's source order (stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix). A CI failure you refuted still routes here on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
+- **Only non-blocking items** (optional improvements / follow-ups): the PR was already in good shape, so route the re-review to the cheap model shorthand instead — `@claude sonnet` on Claude, `@codex luna` on Codex. The band does not apply here.
 
 Post a **separate** comment so the bot triggers cleanly on its own line:
 
 ```bash
-# blocking findings were addressed
+# blocking findings were addressed, C0–C20 or C81+ (fable never repeats)
 gh pr comment <N> --body "@claude review"
+
+# blocking findings were addressed, C21–C80
+gh pr comment <N> --body "@claude opus review"
 
 # only non-blocking items were addressed
 gh pr comment <N> --body "@claude sonnet review"
 
-# same two cases when this cycle selected Codex
+# the same cases when this cycle selected Codex — both heavy tiers collapse onto the bare trigger
 gh pr comment <N> --body "@codex review"
 gh pr comment <N> --body "@codex luna review"
 ```

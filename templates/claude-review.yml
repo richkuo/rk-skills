@@ -7,7 +7,13 @@
 #      Alternatively, install the Claude GitHub App and use OAuth
 #      (see https://github.com/anthropics/claude-code-action for options).
 #   3. Trigger a review by commenting "@claude review" on any PR.
-#      "@claude sonnet review" routes the review to Sonnet (cheaper re-checks).
+#      A model shorthand right after "@claude" pins the reviewer:
+#      "@claude sonnet review" for cheaper re-checks, "@claude opus review"
+#      and "@claude fable review" for the heavier tiers the skills route to
+#      by complexity band. Any other body uses the action's default model.
+#      This lightweight template routes the model only — it ignores an
+#      "effort:<tier>" suffix. Use templates/claude-workflow for effort
+#      parsing and the rest of the full workflow.
 #
 # The review prompt below enforces the exact output format the fix-pr-review
 # and *-loop skills parse: an LGTM / Needs Updates verdict on the first line,
@@ -44,8 +50,11 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Route "@claude sonnet ..." to Sonnet; anything else uses the default model.
-          model: ${{ contains(github.event.comment.body, 'sonnet') && 'claude-sonnet-5' || '' }}
+          # Route the model shorthand that follows "@claude"; any other body
+          # uses the action's default model. The shorthand must sit directly
+          # after the mention, so the word "opus" inside review prose cannot
+          # re-route a plain "@claude review".
+          model: ${{ contains(github.event.comment.body, '@claude sonnet') && 'claude-sonnet-5' || contains(github.event.comment.body, '@claude fable') && 'claude-fable-5' || contains(github.event.comment.body, '@claude opus') && 'claude-opus-5' || '' }}
           prompt: |
             Review this pull request. Inspect every changed file in the diff.
 
