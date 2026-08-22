@@ -333,9 +333,16 @@ describe('PR review contract', () => {
       if (FIRST_REVIEW_SITES.has(path)) {
         expect(body, `${path}: C81+ fable tier`).toMatch(/@claude fable review effort:high/)
       } else {
-        // A fixer re-review never pins fable — it reviews cycle 1 only.
-        expect(body, `${path}: fixer must not pin fable`).not.toMatch(/@claude fable review/)
-        expect(body, `${path}: fable never repeats`).toMatch(/never repeats|first cycle only/i)
+        // A fixer never posts a fable trigger — fable reviews cycle 1 only, and
+        // its blocking re-reviews step down to opus and then to the standard
+        // reviewer. Prose may still name the fable trigger it steps down from.
+        expect(body, `${path}: fixer must not post a fable trigger`).not.toMatch(
+          /--body "@claude fable review|body the .{0,20}words @claude fable review/,
+        )
+        expect(body, `${path}: fable steps down`).toMatch(/steps? down|step-down/i)
+        expect(body, `${path}: fable never repeats`).toMatch(
+          /only ever runs once|reviews the first cycle only|first cycle only/i,
+        )
       }
     }
   })
