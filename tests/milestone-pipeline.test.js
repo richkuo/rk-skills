@@ -363,7 +363,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
     // The dispatch-side band defaults are what make omission safe.
-    expect(source).toContain('const bandReview = bandFor(ex.effective_complexity ?? ex.complexity).review')
+    expect(source).toContain('const bandReview = reviewBandFor(ex.effective_complexity ?? ex.complexity).review')
     // Fable is never a build fallback — unknown or unmapped models dispatch on Opus.
     expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
     expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
@@ -983,17 +983,18 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewMode: 'subagent' }, {
       Prep: () => ({
         issues: [
-          prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 3, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 4, complexity: 80, first_review_model: undefined, first_review_effort: undefined }),
-          prepIssue({ number: 5, complexity: 90, first_review_model: undefined, first_review_effort: undefined }),
+          // Each pair straddles a review-scale boundary: 30/31 and 70/71.
+          prepIssue({ number: 2, complexity: 30, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 3, complexity: 31, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 4, complexity: 70, first_review_model: undefined, first_review_effort: undefined }),
+          prepIssue({ number: 5, complexity: 71, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 6, complexity: 0, first_review_model: undefined, first_review_effort: undefined }),
         ],
       }),
     })
 
-    // Bands 0–1 are the bare-@claude equivalent: no model override, the
-    // reviewer inherits the session default.
+    // The C0–C30 review band is the bare-@claude equivalent: no model override,
+    // the reviewer inherits the session default.
     const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
     expect(bandZeroReview).toBeTruthy()
     expect(bandZeroReview.model).toBeUndefined()
@@ -1172,7 +1173,7 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(record?.head_sha).toBe(headSha(2, 'c'))
   })
 
-  test('a fable first review never repeats: blocking re-reviews all run the standard reviewer', async () => {
+  test('a fable first review never repeats: blocking re-reviews step down to opus, then to the standard reviewer', async () => {
     let reviewCycle = 0
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
       Prep: () => ({ issues: [prepIssue({ first_review_model: 'fable', first_review_effort: 'high' })] }),
@@ -1189,13 +1190,35 @@ describe('milestone-pipeline subagent review mode', () => {
     const record = output.results.find((result) => result.issue === 2)
 
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c2 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c3 (claude/high)')).toBeTrue()
     expect(record?.status).toBe('merged')
     expect(record?.review.final_status).toBe('lgtm')
   })
 
-  test('a fable first review with only non-blocking findings drops to sonnet, then to the standard reviewer once blocking returns', async () => {
+  test('the fable step-down bottoms out at the standard reviewer and never climbs back', async () => {
+    let reviewCycle = 0
+    const { output, events } = await executeWorkflow({ tracks: [[2]], maxReviewCycles: 4, reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
+      Prep: () => ({ issues: [prepIssue({ first_review_model: 'fable', first_review_effort: 'high' })] }),
+      'Review Loop': (event) => {
+        if (event.label.startsWith('fix:')) {
+          return { fixed_count: 1, refuted_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), summary: 'fixed' }
+        }
+        reviewCycle += 1
+        return reviewCycle <= 3
+          ? { verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: `https://example.test/pr/1002#r${reviewCycle}`, summary: 'blocking finding' }
+          : { verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2, 'c'), comment_url: 'https://example.test/pr/1002#r4', summary: 'clean' }
+      },
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'review:PR#1002 c2 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c3 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c4 (claude/high)')).toBeTrue()
+    expect(record?.review.final_status).toBe('lgtm')
+  })
+
+  test('a fable first review with only non-blocking findings drops to sonnet, then takes the first step-down rung once blocking returns', async () => {
     let reviewCycle = 0
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
       Prep: () => ({ issues: [prepIssue({ first_review_model: 'fable', first_review_effort: 'high' })] }),
@@ -1216,7 +1239,9 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c2 (sonnet/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c3 (claude/high)')).toBeTrue()
+    // The sonnet cycle consumes no rung, so the first blocking re-review still
+    // lands on the top step-down rung.
+    expect(started(events, 'review:PR#1002 c3 (opus/high)')).toBeTrue()
     expect(record?.review.final_status).toBe('lgtm')
   })
 
@@ -1292,10 +1317,10 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepIssue()] }),
       'review:PR#1002 c1 (fable/high)': () => ({ verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r1', summary: 'blocking' }),
-      'review:PR#1002 c2 (claude/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }),
+      'review:PR#1002 c2 (opus/high)': () => ({ verdict: 'lgtm', blocking_count: 0, nonblocking_count: 0, head_ref: 'codex/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#r2', summary: 'clean' }),
     })
     const reviewPrompt = promptFor(events, 'review:PR#1002 c1 (fable/high)')
-    const reReviewPrompt = promptFor(events, 'review:PR#1002 c2 (claude/high)')
+    const reReviewPrompt = promptFor(events, 'review:PR#1002 c2 (opus/high)')
     const fixPrompt = promptFor(events, 'fix:PR#1002 c1 (fable/high)')
 
     expect(reviewPrompt).toContain('Load the `pr-review` skill')

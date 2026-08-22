@@ -208,12 +208,12 @@ describe('complexity score band encoding', () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
     // validate-issue holds the canonical matrix.
-    expect(validateIssue).toContain('| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high | `@claude` (standard trigger, no pinned model) |')
-    expect(validateIssue).toContain('| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh | `@claude` (standard trigger, no pinned model) |')
-    expect(validateIssue).toContain('| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high | Opus 5 · high |')
-    expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh | Opus 5 · high |')
-    expect(validateIssue).toContain('| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high | Opus 5 · high |')
-    expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |')
+    expect(validateIssue).toContain('| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |')
+    expect(validateIssue).toContain('| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |')
+    expect(validateIssue).toContain('| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high |')
+    expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |')
+    expect(validateIssue).toContain('| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high |')
+    expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |')
     // Escalation is part of the canonical statement.
     expect(validateIssueScoring).toMatch(/Never lower routing from a validator rescore/)
 
@@ -227,12 +227,21 @@ describe('complexity score band encoding', () => {
     expect(prdToIssues).toMatch(/Validation is fully derived from the score/)
 
     // The pipeline executes the same matrix.
-    expect(pipeline).toContain("{ name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' }, review: { model: null, effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' }, review: { model: null, effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' }, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' }, review: { model: 'fable', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } }")
+    expect(pipeline).toContain("{ name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' } }")
+    expect(pipeline).toContain("{ name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } }")
+
+    // The reviewer runs on its own coarser scale, whose boundaries (30, 70)
+    // deliberately do not line up with the six build/validate bands above.
+    expect(validateIssue).toContain('| 0–30 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) |')
+    expect(validateIssue).toContain('| 31–70 | Opus 5 · high | `@claude opus review` |')
+    expect(validateIssue).toContain('| 71–99, or no score | Fable 5 · high | `@claude fable review effort:high` |')
+    expect(pipeline).toContain("{ name: '0–30', min: 0, max: 30, review: { model: null, effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '31–70', min: 31, max: 70, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '71+', min: 71, max: Infinity, review: { model: 'fable', effort: 'high' } }")
 
     // fableplan is yes at score ≥ 61 everywhere the signal is defined,
     // and the worked example round-trips its own band through the rule.

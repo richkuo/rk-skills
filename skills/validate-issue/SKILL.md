@@ -82,16 +82,26 @@ Read [complexity-scoring.md](complexity-scoring.md) completely on every validati
 2. Volume is `(Scope + Coupling + Verification) × 2`.
 3. Score is `25 × Capability + Volume` (0–99 under current axis bounds).
 
-| Band | Score band | Validate | fableplan first | Build | First review |
-|---|---|---|---|---|---|
-| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high | `@claude` (standard trigger, no pinned model) |
-| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh | `@claude` (standard trigger, no pinned model) |
-| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high | Opus 5 · high |
-| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh | Opus 5 · high |
-| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high | Opus 5 · high |
-| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh | Fable 5 · high |
+| Band | Score band | Validate | fableplan first | Build |
+|---|---|---|---|---|
+| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |
+| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |
+| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high |
+| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |
+| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high |
+| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |
 
 The fableplan signal is yes when the score is 61 or higher. It is no below 61.
+
+The **first review** escalates on its own, coarser scale, so its boundaries do not line up with the bands above:
+
+| Score | First review | Trigger |
+|---|---|---|
+| 0–30 | the reviewer's default model | `@claude review` (standard trigger, no pinned model) |
+| 31–70 | Opus 5 · high | `@claude opus review` |
+| 71–99, or no score | Fable 5 · high | `@claude fable review effort:high` |
+
+A missing score reviews on the top row because the complexity is unknown. Fable reviews the first cycle only: after a Fable first review, the blocking re-reviews step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that. A 31–70 first review keeps Opus for every blocking re-review, and a pass that addressed only non-blocking findings drops to `@claude sonnet review` without consuming a rung.
 
 Report only `N/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>` plus the traced edit list.
 

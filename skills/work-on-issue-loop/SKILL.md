@@ -24,8 +24,10 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 - **PR opened** → capture the PR number/URL and the branch, then trigger the first review yourself. Don't wait on CI or poll `gh pr checks` — CI runs in parallel and the reviewer surfaces check failures itself. Post a **separate, one-line** comment so the bot fires cleanly (match the repo's trigger phrase if it differs — check recent PR comments; a trigger mention is not authored content — no footer):
 
 ```bash
-gh pr comment <PR-number> --body "@claude review"
+gh pr comment <PR-number> --body "<band-derived trigger>"
 ```
+
+**Which trigger to post:** derive it from the issue's complexity score with fix-pr-review-loop step 1's band table — `@claude review` at C0–C30, `@claude opus review` at C31–C70, `@claude fable review effort:high` at C71+ or when no score is discoverable. The issue you just implemented is the score source: its `[C<score>]` title prefix, or a stamped `PR review:` line in its Execution block, which overrides the band.
 
 **Review bot selection and preflight:** apply fix-pr-review-loop step 1's two rules to this first trigger (the selection logic itself is fix-pr-review step 10's rule). Bot selection: `@claude` by default, `@codex` only on explicit selection, and never switch bots mid-cycle. Preflight: before you enter the wait, confirm a review workflow for the selected bot exists, with the Codex secret and variable checks when Codex is selected.
 
