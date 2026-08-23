@@ -125,6 +125,48 @@ describe('PR review contract', () => {
     }
   })
 
+  test('anchors every file:line citation to the pull request head commit', () => {
+    for (const path of CONTRACT_COPIES) {
+      const source = normalized[path]
+      expect(source, `${path}: anchor citations to the head commit`).toMatch(
+        /Anchor every `?file:line`?[\s\S]{0,120}pull request head commit/i,
+      )
+      expect(source, `${path}: resolve against the reviewed head commit`).toMatch(
+        /Resolve each citation against the head commit you reviewed/i,
+      )
+      // The three wrong authorities a reviewer reaches for by default.
+      expect(source, `${path}: working tree is not the authority`).toMatch(
+        /working-tree copy[\s\S]{0,120}not the authority for a line number/i,
+      )
+      expect(source, `${path}: earlier push is not the authority`).toMatch(
+        /an earlier push[\s\S]{0,120}not the authority for a line number/i,
+      )
+      expect(source, `${path}: diff hunk header is not the authority`).toMatch(
+        /diff hunk header[\s\S]{0,80}not the authority for a line number/i,
+      )
+      expect(source, `${path}: name the short SHA when the head moved`).toMatch(
+        /head moved while you were reviewing[\s\S]{0,80}short SHA once in the review/i,
+      )
+    }
+  })
+
+  test('the citation-anchor rule sits with the finding-structure rules', () => {
+    const skill = texts['skills/pr-review/SKILL.md']
+    const format = skill.slice(skill.indexOf('\n## Format'))
+    expect(format, 'Format section found').toMatch(/^\n## Format/)
+    expect(format.replace(/\s+/g, ' ')).toMatch(
+      /Every finding goes under exactly one H3 section[\s\S]{0,400}Anchor every `file:line`[\s\S]{0,600}\*\*Invariant:\*\*/,
+    )
+  })
+
+  test('the fixer still re-derives every citation from current code', async () => {
+    const fixer = await read('skills/fix-pr-review/SKILL.md')
+    expect(fixer).toMatch(/### 4\. Re-validate each finding against the code/)
+    expect(fixer.replace(/\s+/g, ' ')).toMatch(
+      /trace the claim to current code[\s\S]{0,200}re-derive the finding from the code with your own `file:line`/i,
+    )
+  })
+
   test('keeps the same safety carve-out scope in every review contract copy', () => {
     for (const path of CONTRACT_COPIES) {
       const source = normalized[path]
