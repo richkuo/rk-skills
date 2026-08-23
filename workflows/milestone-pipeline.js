@@ -602,7 +602,7 @@ Review PR #${prNumber}, which closes issue #${issue}:
 2. \`git fetch origin\`, then read the full diff against the base AND every changed file in full at that head commit — the LGTM precondition requires completing every applicable Before you write item from the pr-review skill (including full-file reads, self-consistency, primary sourcing, and no charitable reading), from a detached checkout or worktree of the head commit, never the main checkout's working tree.
 3. Read issue #${issue} (\`gh issue view ${issue}\`): its Acceptance criteria are the contract the PR must meet.
 4. Take one CI snapshot (\`gh pr checks ${prNumber}\`): a failed check that traces to this PR's diff is evidence of a code defect — report the defect from the failing assertion/code, not the check status itself; pending checks are never waited on.
-5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review structure (footer verb Validated, harness milestone-pipeline).
+5. Post the review as ONE comment on PR #${prNumber} in the exact pr-review structure (footer verb Reviewed, harness milestone-pipeline).
 
 Do NOT modify any files, do NOT fix anything, and do NOT trigger any \`@claude\` or \`@codex\` review comment.
 
