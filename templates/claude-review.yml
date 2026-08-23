@@ -6,7 +6,9 @@
 #      → Actions). Reviews consume Claude API usage on your account.
 #      Alternatively, install the Claude GitHub App and use OAuth
 #      (see https://github.com/anthropics/claude-code-action for options).
-#   3. Trigger a review by commenting "@claude review" on any PR.
+#   3. Trigger a review by commenting "@claude review" on any PR. The comment
+#      author must be an owner, member, or collaborator — see the actor gate
+#      note below.
 #      A model shorthand right after "@claude" pins the reviewer:
 #      "@claude sonnet review" for cheaper re-checks, "@claude opus review"
 #      and "@claude fable review" for the heavier tiers the skills route to
@@ -24,6 +26,19 @@
 # Reviews never gate on or wait for CI — CI intentionally runs longer than the
 # review and is enforced separately by branch protection. The review judges the
 # code itself.
+#
+# Why this file stages the pull request head itself. Passing prompt: to
+# claude-code-action selects its agent mode, and agent mode performs no
+# checkout of its own — setupBranch, the action's only head-checkout path,
+# runs in tag mode alone. actions/checkout on an issue_comment event lands on
+# the default-branch tip, so without the staging step the reviewer would read
+# base-branch files while the format contract below tells it to anchor every
+# file:line to the head commit. The staging step is required.
+#
+# The actor gate on the job is part of that same change: staging
+# refs/pull/<n>/head places fork-authored code in the workspace of an agent
+# holding pull-requests: write, so only an owner, member, or collaborator may
+# start this job.
 
 name: Claude PR Review
 
@@ -33,10 +48,17 @@ on:
 
 jobs:
   review:
-    # Only run on PR comments that mention @claude
+    # Only run on PR comments by a trusted author that mention @claude. The
+    # actor gate is load-bearing: the staging step below puts pull-request
+    # code on disk — fork-authored included — for an agent that holds
+    # pull-requests: write, so only an owner, member, or collaborator may
+    # start this job. A bot-authored comment (author_association NONE) does
+    # not trigger it; the companion loop skills post triggers with the
+    # operator's own gh credentials, which pass.
     if: |
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@claude')
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,6 +68,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # The action's agent mode (selected by the prompt: input below) never
+      # checks out the pull request head, and actions/checkout on an
+      # issue_comment event lands on the default-branch tip. Stage the head
+      # explicitly so every file:line the review cites resolves against the
+      # code the PR actually contains. Fetching refs/pull/<n>/head also
+      # covers fork PRs. Do NOT remove this step as redundant with the
+      # action — the action performs no checkout on this route.
+      - name: Stage the pull request under review
+        id: pr_context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
+          git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-claude/pr-head"
+          git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-claude/pr-base"
+          git checkout --quiet --detach refs/rk-claude/pr-head
+          echo "base_sha=$(git merge-base refs/rk-claude/pr-base refs/rk-claude/pr-head)" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: anthropics/claude-code-action@v1
         with:
@@ -57,6 +100,17 @@ jobs:
           model: ${{ contains(github.event.comment.body, '@claude sonnet') && 'claude-sonnet-5' || contains(github.event.comment.body, '@claude fable') && 'claude-fable-5' || contains(github.event.comment.body, '@claude opus') && 'claude-opus-5' || '' }}
           prompt: |
             Review this pull request. Inspect every changed file in the diff.
+
+            The pull request head is checked out in this workspace already, as
+            a detached HEAD at commit
+            ${{ steps.pr_context.outputs.head_sha }}; its merge base with the
+            target branch is ${{ steps.pr_context.outputs.base_sha }}. Read
+            the changed files from this checkout and resolve every file:line
+            citation against that head commit — local git reads such as
+            `git diff ${{ steps.pr_context.outputs.base_sha }}...HEAD`,
+            `git show`, and `git log` work. Use `gh` for live pull request
+            state: the prior review cycles, and whether the head moved after
+            this run started.
 
             This is a static review: read the code only. Do NOT execute the
             project's code — never run test suites, backtests, builds,

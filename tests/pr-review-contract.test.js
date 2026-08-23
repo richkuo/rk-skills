@@ -298,6 +298,71 @@ describe('PR review contract', () => {
     )
   })
 
+  // Agent mode of anthropics/claude-code-action performs no checkout of the
+  // pull request head, and the issue_comment default checkout is the
+  // default-branch tip — each standalone review template must stage the head
+  // itself. Staging fork-authored code beside a pull-requests: write
+  // credential is what makes the trusted-actor gate a precondition, so both
+  // guards live and die together (issue 186).
+  const STANDALONE_REVIEW_TEMPLATES = [
+    'templates/claude-review.yml',
+    'templates/codex-review.yml',
+  ]
+
+  test('both standalone review templates stage the pull request head on disk', () => {
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      const workflow = texts[path]
+      expect(workflow, `${path}: full history for the merge base`).toContain('fetch-depth: 0')
+      expect(workflow, `${path}: resolves the base ref from the PR`).toMatch(
+        /gh pr view "\$PR_NUMBER" --repo "\$REPO" --json baseRefName/,
+      )
+      expect(workflow, `${path}: fetches the PR head ref (covers fork PRs)`).toMatch(
+        /git fetch --quiet origin "\+refs\/pull\/\$\{PR_NUMBER\}\/head:/,
+      )
+      expect(workflow, `${path}: fetches the base ref`).toMatch(
+        /git fetch --quiet origin "\+refs\/heads\/\$\{BASE_REF\}:/,
+      )
+      expect(workflow, `${path}: checks the head out detached`).toMatch(
+        /git checkout --quiet --detach refs\/rk-(?:claude|codex)\/pr-head/,
+      )
+      expect(workflow, `${path}: records the merge base`).toMatch(
+        /git merge-base refs\/rk-(?:claude|codex)\/pr-base refs\/rk-(?:claude|codex)\/pr-head/,
+      )
+    }
+  })
+
+  test('both standalone review templates gate the job on a trusted commenter', () => {
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      expect(texts[path], path).toContain(
+        `contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)`,
+      )
+    }
+  })
+
+  test('the staged head and merge base reach each reviewer prompt', () => {
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      const workflow = texts[path]
+      // Single-quoted on purpose: `${{` inside a template literal is JS
+      // interpolation syntax and would not survive as text.
+      expect(workflow, `${path}: staged head SHA named in the prompt`).toContain(
+        '${{ steps.pr_context.outputs.head_sha }}',
+      )
+      expect(workflow, `${path}: merge base named in the prompt`).toContain(
+        '${{ steps.pr_context.outputs.base_sha }}',
+      )
+    }
+  })
+
+  test('both standalone review templates parse as YAML', () => {
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      // Reads only jobs, never `on:` — a YAML-1.1-leaning parser keys that as
+      // boolean true.
+      const workflow = Bun.YAML.parse(texts[path])
+      expect(workflow?.jobs?.review, path).toBeTruthy()
+      expect(workflow.jobs.review.if, path).toMatch(/author_association/)
+    }
+  })
+
   test('dispositions carry the finding claim verbatim so a later review can match it', async () => {
     const disposition = await read('skills/fix-pr-review/disposition-comment.md')
     expect(disposition).toMatch(/verbatim from the review comment/i)
