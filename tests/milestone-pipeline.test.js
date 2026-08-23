@@ -371,6 +371,66 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(source).toContain('const validateBand = bandFor(ex.complexity)')
   })
 
+  test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          // A genuine zero: all five axes grade 0, so the step-6 formula reaches 0.
+          { number: 2, title: '[C0] Genuinely the smallest change', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          // No prefix at all — prep omits the field, per its schema.
+          { number: 3, title: 'No score anywhere in this title', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          // A malformed prefix is unknown, never zero.
+          { number: 4, title: '[Cx] Malformed prefix', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          // Fail-safe: prep slipped and sent 0 for an unprefixed title. The
+          // runtime reconciles against the title and routes it as unknown, so
+          // an agent slip can never downgrade an unscored issue to the
+          // cheapest band.
+          { number: 5, title: 'Prep slipped and reported zero', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
+    // (1) [C0] takes the bottom validate band and the C0-C10 first review.
+    expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
+    expect(promptFor(events, 'implement:#2 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
+    // (2) and (3) An absent or malformed prefix stays unknown and takes the top band.
+    for (const issue of [3, 4, 5]) {
+      expect(dispatch(`validate:#${issue}`), `#${issue}`).toMatchObject({ model: 'fable', effort: 'high' })
+      expect(promptFor(events, `implement:#${issue} (sonnet/high)`), `#${issue}`)
+        .toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    }
+    expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5 @ medium')
+    expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high')
+    expect(logs).toContain('#5: prep reported C0 but the title carries no [C0] prefix — routing as unscored (unknown), which takes the top band')
+    // The reconciliation only fires on the slip, never on a real [C0].
+    expect(logs.filter((m) => m.includes('the title carries no [C0] prefix'))).toHaveLength(1)
+  })
+
+  test('the prep contract tells a real zero from a missing prefix', async () => {
+    const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
+    // complexity is optional: absence is the "no prefix" signal.
+    expect(source).toContain("required: ['number', 'title', 'model', 'effort', 'fableplan'],")
+    const schemaLine = source.match(/^ +complexity: \{.*$/m)[0]
+    expect(schemaLine).toMatch(/OMIT this field entirely when the title carries no \[C\.\.\] prefix/)
+    const promptLine = source.match(/^- complexity: .*$/m)[0]
+    expect(promptLine).toMatch(/OMIT the field rather than sending 0/)
+    // Both band functions share one presence test, so build and review routing
+    // cannot disagree about what "unknown" means.
+    expect(source).toContain('function hasScore(complexity) {')
+    expect(source).toContain('  if (!hasScore(complexity)) return BANDS[BANDS.length - 1]')
+    expect(source).toContain('  if (!hasScore(complexity)) return REVIEW_BANDS[REVIEW_BANDS.length - 1]')
+    expect(source).not.toMatch(/complexity <= 0\) return (?:BANDS|REVIEW_BANDS)/)
+    expect(source).not.toMatch(/ex\.complexity > 0/)
+  })
+
   test('derives validation entirely from the [C..] score band', async () => {
     const { events, logs } = await executeWorkflow({
       tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13]],

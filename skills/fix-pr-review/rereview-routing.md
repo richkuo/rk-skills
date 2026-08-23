@@ -14,14 +14,16 @@ A finding is blocking when it is a `Needs Fixing` or `Requires Human Review` ite
 
 A CI failure you refuted still counts as blocking on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
 
-### Blocking — route on the PR's complexity band
+### Blocking — check what ran cycle 1, then route on the band
+
+**The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, look at the PR's own trigger comments: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder, not the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
 
 | Band | Claude trigger | Codex trigger |
 |---|---|---|
 | C0–C10 | `@claude sonnet review` | `@codex luna review` |
 | C11–C40 | `@claude review` | `@codex review` |
 | C41–C80 | `@claude opus review` | `@codex review` |
-| C81+, or no score | Step down one rung per blocking cycle (below) | `@codex review` at every cycle |
+| C81+, or no score | `@claude fable review effort:high` ran cycle 1, so step down one rung per blocking cycle (below) | `@codex review` at every cycle |
 
 Codex exposes one flagship, so all three bands above C10 collapse onto its bare
 trigger, and the C81+ ladder stays there — it never reaches `luna`. Only the
@@ -29,11 +31,9 @@ C0–C10 band and the non-blocking re-review use the cheap shorthand.
 
 Read the score with fix-pr-review-loop step 1's source order: a stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix. `validate-issue` step 6 owns the authoritative table.
 
-A first review in the C0–C10, C11–C40, or C41–C80 band keeps its own trigger for every blocking re-review. Only the C81+ band steps down.
+### After a Fable first review — the step-down ladder
 
-### C81+ — the step-down ladder
-
-Fable reviews the first cycle only, so the reviewer steps down one rung per blocking re-review:
+Fable reviews the first cycle only, so whenever cycle 1 ran on Fable — selected by the C81+ row or by a stamp at any score — the reviewer steps down one rung per blocking re-review:
 
 | Blocking cycle | Trigger |
 |---|---|
@@ -41,7 +41,7 @@ Fable reviews the first cycle only, so the reviewer steps down one rung per bloc
 | 2 | `@claude opus review` |
 | 3 and after | `@claude review` |
 
-The ladder **stops at `@claude review`**. A C81+ PR never steps down to sonnet, however many cycles it takes — a high-complexity change keeps a capable reviewer to the end.
+The ladder **stops at `@claude review`**. It never steps down to sonnet, however many cycles it takes — a change that earned a Fable first review keeps a capable reviewer to the end.
 
 Decide which rung you are on from the PR's own trigger comments: a prior `@claude opus review` posted after the `@claude fable review` one means the next rung is `@claude review`.
 
@@ -54,10 +54,10 @@ When the pass addressed only optional improvements or follow-ups, the PR was alr
 Post a **separate** comment so the bot triggers cleanly on its own line. Never bundle the trigger into the disposition comment — a trigger buried in a longer body does not fire.
 
 ```bash
-# blocking, C11–C40 — and every blocking re-review from cycle 3 on at C81+
+# blocking, C11–C40 — and every blocking re-review from cycle 3 on after a fable first review
 gh pr comment <N> --body "@claude review"
 
-# blocking, C41–C80 — and the FIRST blocking re-review after a fable first review at C81+
+# blocking, C41–C80 — and the FIRST blocking re-review after a fable first review
 gh pr comment <N> --body "@claude opus review"
 
 # blocking, C0–C10 — and any pass that addressed only non-blocking items, in any band

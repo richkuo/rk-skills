@@ -412,6 +412,115 @@ describe('PR review contract', () => {
     expect(inventory).toMatch(/tests\/pr-review-contract\.test\.js/)
   })
 
+  test('no site names a fixed Codex trigger that overrides the band', async () => {
+    // Every statement of the Codex trigger derives it from the one band table.
+    // A band-free "post @codex review instead" sends a C0-C10 PR to the
+    // flagship while the paragraph above it routes that band to luna.
+    const consumers = [
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/fix-pr-review/rereview-routing.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/issue-workflow.md',
+    ]
+    for (const path of consumers) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: names the cheap Codex tier`).toMatch(/@codex luna review/)
+      expect(body, `${path}: ties the cheap tier to C0-C10`).toMatch(
+        /@codex luna review[^.]{0,120}C0.{0,4}C10|C0.{0,4}C10[^.]{0,120}@codex luna review/,
+      )
+      expect(body, `${path}: no band-free "post @codex review instead"`).not.toMatch(
+        /post `?@codex review`? instead/i,
+      )
+    }
+  })
+
+  test('no site maps a @claude model shorthand onto @codex', async () => {
+    // codex.yml resolves only sol|terra|luna|mini|codex|spark, so a phrase like
+    // "@codex sonnet review" matches no trigger and the loop waits out its cap.
+    const consumers = [
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/work-on-issue-loop/SKILL.md',
+      'skills/fix-pr-review/rereview-routing.md',
+      'skills/fix-pr-review/SKILL.md',
+      'skills/milestone-workflow/SKILL.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/issue-workflow.md',
+      'workflows/milestone-pipeline.js',
+      'README.md',
+      'docs/contract-inventory.md',
+    ]
+    for (const path of consumers) {
+      const body = await read(path)
+      // Prose that WARNS against the phrase is the fix, so only posting
+       // forms are forbidden.
+      expect(body, `${path}: never posts a @claude shorthand on @codex`).not.toMatch(
+        /--body "@codex (?:sonnet|opus|fable|haiku)|words @codex (?:sonnet|opus|fable|haiku)|post `?@codex (?:sonnet|opus|fable|haiku)/,
+      )
+    }
+    // The shorthand set the Action actually admits, so the guard above is real.
+    for (const workflow of ['.github/workflows/codex.yml', 'templates/codex-workflow/workflows/codex.yml']) {
+      expect(await read(workflow), `${workflow}: shorthand set`).toMatch(
+        /sol\|terra\|luna\|mini\|codex\|spark/,
+      )
+    }
+  })
+
+  test('the loop skill warns that a @claude shorthand fires no Codex Action', async () => {
+    const body = (await read('skills/fix-pr-review-loop/SKILL.md')).replace(/\s+/g, ' ')
+    expect(body, 'names the phrase that fires nothing').toMatch(/@codex sonnet review/)
+    expect(body, 'says it matches no trigger').toMatch(/matches no trigger|no Action answers|never runs/i)
+  })
+
+  test('every step-down statement keys the ladder to a Fable first review, never to a band', async () => {
+    // The code keys the step-down to the reviewer that ran cycle 1
+    // (milestone-pipeline.js: firstReview.model !== 'fable'), so a stamped
+    // Fable trigger steps down at ANY score. A band-keyed restatement tells the
+    // fixer to repeat a Fable trigger the same page forbids.
+    const consumers = [
+      'skills/fix-pr-review/rereview-routing.md',
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/validate-issue/SKILL.md',
+      'skills/validate-issue/complexity-scoring.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+      'README.md',
+      'docs/contract-inventory.md',
+    ]
+    for (const path of consumers) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      // No site may say the step-down belongs to a band, or that a non-fable
+      // band is what keeps its own trigger.
+      expect(body, `${path}: ladder is not band-keyed`).not.toMatch(
+        /[Oo]nly the C81\+ band steps down|only the fable band steps down|first review in (?:any )?other band keeps/,
+      )
+      expect(body, `${path}: step-down keys to the cycle-1 reviewer`).toMatch(
+        /key(?:s|ed) to the reviewer that (?:actually )?ran cycle 1/i,
+      )
+    }
+    // The two normative fixer sites must also say a stamped Fable steps down at
+    // any score, and that a non-fable first review keeps its own trigger.
+    for (const path of ['skills/fix-pr-review/rereview-routing.md', 'templates/claude-workflow/prompts/fix-pr.md']) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: stamped fable steps down at any score`).toMatch(
+        /stamped[^.]{0,120}[Ff]able[^.]{0,120}any score|PR review[^.]{0,120}[Ff]able[^.]{0,140}any score/,
+      )
+      expect(body, `${path}: non-fable first review keeps its trigger`).toMatch(
+        /(?:any )?other (?:model|than Fable)[^.]{0,120}keeps its own trigger|first review on any model other than Fable keeps its own trigger/i,
+      )
+    }
+  })
+
+  test('the Codex first-review prompt honours a stamped PR review line', async () => {
+    // milestone-pipeline.js firstReviewTrigger maps a stamped model onto the
+    // Codex column, so the Action prompt must state the same override.
+    const body = (await read('templates/codex-workflow/prompts/issue-workflow.md')).replace(/\s+/g, ' ')
+    expect(body, 'stamped line overrides the band').toMatch(/stamped PR review:? line[^.]{0,120}overrides/i)
+    expect(body, 'sonnet/haiku map to luna').toMatch(/@codex luna review when it names sonnet or haiku/i)
+    expect(body, 'opus/fable map to the bare trigger').toMatch(/@codex review when it names opus or fable/i)
+    // Its Claude sibling states the same override — the two stay in step.
+    const claude = (await read('templates/claude-workflow/prompts/issue-workflow.md')).replace(/\s+/g, ' ')
+    expect(claude, 'claude sibling states the override').toMatch(/stamped PR review:? line[^.]{0,80}overrides/i)
+  })
+
   test('contract inventory carries the band-derived review trigger row', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Band-derived review trigger/)

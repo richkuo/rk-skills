@@ -179,9 +179,10 @@ const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haik
 // Every routing default derives from the [C<score>] band. Stamped Execution
 // fields (Build model, Effort, fableplan, Plan effort, PR review) override the
 // build/plan/first-review defaults; validation is derived only — never stamped,
-// so no issue can carry a stale validate line that nothing reads. A score of 0
-// means "no [C..] prefix", which is unknown, not small: it routes as the top
-// band. Fable never runs at xhigh, so the Fable rows cap at high.
+// so no issue can carry a stale validate line that nothing reads. An ABSENT score
+// (no [C..] prefix) is unknown, not small: it routes as the top band. A literal
+// [C0] is a real score and routes to the bottom band — see hasScore below.
+// Fable never runs at xhigh, so the Fable rows cap at high.
 const BANDS = [
   { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
   { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } },
@@ -209,15 +210,22 @@ const REVIEW_BANDS = [
   { name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } },
 ]
 
+// "No score" and a score of zero are distinct inputs. An absent [C..] prefix
+// arrives as undefined and routes to the top band because the complexity is
+// unknown; a literal [C0] is the smallest real score and routes to the bottom
+// band. The prep normalizer below reconciles the field against the title, so a
+// prep agent that fills in 0 for an unprefixed issue cannot downgrade routing.
+function hasScore(complexity) {
+  return Number.isInteger(complexity) && complexity >= 0
+}
+
 function bandFor(complexity) {
-  if (!Number.isInteger(complexity) || complexity <= 0) return BANDS[BANDS.length - 1]
+  if (!hasScore(complexity)) return BANDS[BANDS.length - 1]
   return BANDS.find((band) => complexity >= band.min && complexity <= band.max) || BANDS[BANDS.length - 1]
 }
 
-// A score of 0 (no [C..] prefix) is unknown, not small — it reviews on the top
-// band, exactly as bandFor routes an unknown score to the top build band.
 function reviewBandFor(complexity) {
-  if (!Number.isInteger(complexity) || complexity <= 0) return REVIEW_BANDS[REVIEW_BANDS.length - 1]
+  if (!hasScore(complexity)) return REVIEW_BANDS[REVIEW_BANDS.length - 1]
   return REVIEW_BANDS.find((band) => complexity >= band.min && complexity <= band.max) || REVIEW_BANDS[REVIEW_BANDS.length - 1]
 }
 
@@ -264,11 +272,11 @@ const PREP_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['number', 'title', 'complexity', 'model', 'effort', 'fableplan'],
+        required: ['number', 'title', 'model', 'effort', 'fableplan'],
         properties: {
           number: { type: 'integer' },
           title: { type: 'string' },
-          complexity: { type: 'integer', description: 'From the [C..] title prefix; 0 if absent' },
+          complexity: { type: 'integer', minimum: 0, description: 'The integer from the [C<score>] title prefix — a literal [C0] is a real score of 0; OMIT this field entirely when the title carries no [C..] prefix, because absence is how the runtime tells an unscored issue from a genuinely zero-scored one' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; OMIT this field entirely when the line is absent — the runtime defaults it to high, and its presence is how the runtime tells a stamped tier from an unstamped one. The planner is always Fable 5, so low/medium/high are legal; preserve a stamped xhigh verbatim so the runtime can clamp it to high and log (Fable never runs at xhigh). Ignored when fableplan is false' },
@@ -657,7 +665,7 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
 // ---- Prep: one agent reads every issue's Execution block ----
 const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
-- complexity: the integer from the [C<score>] title prefix (0 if absent)
+- complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
 - plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers; preserve a stamped xhigh verbatim so the runtime can clamp and log it (Fable never runs at xhigh). Only the effort is stampable — never read a model from this line
@@ -669,8 +677,19 @@ Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
 )
 if (!prep) throw new Error('prep agent failed — cannot resolve Execution blocks')
+const SCORE_PREFIX = /^\s*\[C(\d+)\]/
 const normalizedIssues = prep.issues.map((issue) => {
   const normalized = { ...issue }
+  // Prep is told to omit complexity for an unprefixed title, but a slip there
+  // would route an unknown-complexity issue to the CHEAPEST band. Reconcile the
+  // only ambiguous value against the title the runtime already has: a reported
+  // 0 stands only when the title really reads [C0]. This can escalate to
+  // unknown, never downgrade, so a title that does not match the convention
+  // behaves exactly as before.
+  if (normalized.complexity === 0 && !SCORE_PREFIX.test(normalized.title || '')) {
+    log(`#${normalized.number}: prep reported C0 but the title carries no [C0] prefix — routing as unscored (unknown), which takes the top band`)
+    delete normalized.complexity
+  }
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
@@ -807,14 +826,14 @@ async function executeTrack(trackIndex) {
       status = 'blocked'
       break
     }
-    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, complexity: 0, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
+    const ex = EX.get(issue) || { number: issue, title: `#${issue}`, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
 
     const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
     const validateBand = bandFor(ex.complexity)
     const validateRoute = validateBand.validate
-    log(`#${issue}: ${ex.complexity > 0 ? `C${ex.complexity} (band ${validateBand.name})` : 'no [C..] prefix — unknown routes as the top band'} — validating on ${MODEL_NAMES[validateRoute.model]} @ ${validateRoute.effort}`)
+    log(`#${issue}: ${hasScore(ex.complexity) ? `C${ex.complexity} (band ${validateBand.name})` : 'no [C..] prefix — unknown routes as the top band'} — validating on ${MODEL_NAMES[validateRoute.model]} @ ${validateRoute.effort}`)
     const validationOptions = {
       model: validateRoute.model,
       effort: validateRoute.effort,
@@ -838,12 +857,15 @@ async function executeTrack(trackIndex) {
     // one least likely to catch the under-score — so a higher rescored band
     // re-validates once on that band's stronger route before the verdict
     // stands. The escalated score also drives downstream band defaults.
-    const rescored = Number.isInteger(validation.rescored_complexity) ? validation.rescored_complexity : 0
-    let effectiveComplexity = ex.complexity > 0 ? ex.complexity : rescored
-    if (rescored > 0 && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
+    // The validator returns 0 both for "I scored it zero" and for "I could not
+    // score it", so an unscored issue with no usable rescore stays unknown
+    // rather than collapsing onto the bottom band.
+    const rescored = Number.isInteger(validation.rescored_complexity) && validation.rescored_complexity > 0 ? validation.rescored_complexity : undefined
+    let effectiveComplexity = hasScore(ex.complexity) ? ex.complexity : rescored
+    if (hasScore(rescored) && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
       effectiveComplexity = rescored
       const escalatedBand = bandFor(rescored)
-      log(`#${issue}: validator re-scored ${ex.complexity > 0 ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${MODEL_NAMES[escalatedBand.validate.model]} @ ${escalatedBand.validate.effort}`)
+      log(`#${issue}: validator re-scored ${hasScore(ex.complexity) ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${MODEL_NAMES[escalatedBand.validate.model]} @ ${escalatedBand.validate.effort}`)
       const escalatedDispatch = await validateWithRetry(issue, validationPrompt, { ...validationOptions, model: escalatedBand.validate.model, effort: escalatedBand.validate.effort })
       if (escalatedDispatch.validation) {
         validation = escalatedDispatch.validation
@@ -868,7 +890,7 @@ async function executeTrack(trackIndex) {
     // The rescore rides on the issue's result record so the orchestrator can
     // restamp the [C..] title and Execution block and tell the user.
     let rescore = null
-    if (!ex.missing_block && ex.complexity > 0 && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
+    if (!ex.missing_block && hasScore(ex.complexity) && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
       const derived = derivedBuild(effectiveComplexity)
       rescore = {
         from: ex.complexity,
@@ -915,7 +937,7 @@ async function executeTrack(trackIndex) {
       if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
     }
 
-    log(`#${issue} (C${ex.complexity}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ` (against Fable plan @ ${planEffort})` : ''}`)
+    log(`#${issue} (${hasScore(ex.complexity) ? `C${ex.complexity}` : 'unscored'}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ` (against Fable plan @ ${planEffort})` : ''}`)
     let impl
     try {
       impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP), {
