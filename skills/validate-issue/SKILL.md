@@ -97,11 +97,12 @@ The **first review** escalates on its own, coarser scale, so its boundaries do n
 
 | Score | First review | Trigger |
 |---|---|---|
-| 0–30 | the reviewer's default model | `@claude review` (standard trigger, no pinned model) |
-| 31–70 | Opus 5 · high | `@claude opus review` |
-| 71–99, or no score | Fable 5 · high | `@claude fable review effort:high` |
+| 0–10 | Sonnet 5 · high | `@claude sonnet review` |
+| 11–40 | the reviewer's default model | `@claude review` (standard trigger, no pinned model) |
+| 41–80 | Opus 5 · high | `@claude opus review` |
+| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` |
 
-A missing score reviews on the top row because the complexity is unknown. Fable reviews the first cycle only: after a Fable first review, the blocking re-reviews step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that. A 31–70 first review keeps Opus for every blocking re-review, and a pass that addressed only non-blocking findings drops to `@claude sonnet review` without consuming a rung.
+A missing score reviews on the heaviest row (Fable) because the complexity is unknown. "Missing" means the title carries no `[C<score>]` prefix at all. A literal `[C0]` is a real score — every axis graded 0 — so it takes the `0–9` build band and the `0–10` first-review row like any other score. Fable reviews the first cycle only: after a Fable first review, the blocking re-reviews step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that. The ladder stops at `@claude review`; it never steps down to Sonnet, because a C81+ change keeps a capable reviewer however many cycles it takes. The step-down is keyed to the reviewer that actually ran cycle 1, and the score band does not decide it: a Fable first review steps down however it was selected — the 81–99 row, or a stamped `PR review:` line naming Fable at any score — while a first review on any other model keeps its own model for every blocking re-review. A pass that addressed only non-blocking findings drops to `@claude sonnet review` without consuming a rung.
 
 Report only `N/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>` plus the traced edit list.
 
