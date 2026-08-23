@@ -1004,6 +1004,87 @@ describe('PR review contract', () => {
     )
   })
 
+  test('the scope test gates implementation and routes out-of-scope remedies to issues', async () => {
+    const skill = await read('skills/fix-pr-review/SKILL.md')
+
+    // Scope is decided per finding, alongside the verdict, before step 6 runs.
+    expect(skill).toMatch(/Scope: the second axis on every finding/i)
+    expect(skill).toMatch(/\*\*In scope\*\*[\s\S]{0,200}Implement it/i)
+    expect(skill).toMatch(/\*\*Out of scope\*\*[\s\S]{0,300}File a follow-up issue; do not implement/i)
+
+    // The test keys on where the defect lives, never on remedy size — the
+    // reading that lets "it is only a few lines" reopen the gate.
+    expect(skill).toMatch(
+      /the source of the defect decides scope, not its severity/i,
+    )
+
+    // A reviewer's optional carries no authority to enlarge the PR.
+    expect(skill).toMatch(
+      /Recommended Optional[\s\S]{0,120}suggestion, not a work order/i,
+    )
+
+    // Step 6 skips out-of-scope findings and files them instead of dropping them.
+    const step6 = skill.slice(skill.indexOf('### 6. Implement the fixes'), skill.indexOf('### 7.'))
+    expect(step6).toMatch(/every finding step 4's scope test put out of scope/i)
+    expect(step6).toMatch(/File each out-of-scope finding as an issue/i)
+    expect(step6).toMatch(/neither implement nor file is a finding you dropped/i)
+
+    // Safety overrides the gate only where this PR creates the hazard.
+    expect(skill).toMatch(
+      /safety carve-out overrides the out-of-scope class in one direction only[\s\S]{0,120}this PR itself creates the hazard/i,
+    )
+  })
+
+  test.each([
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ])('%s restates the scope test and files what it does not implement', async (promptPath) => {
+    const prompt = await read(promptPath)
+
+    expect(prompt).toMatch(/Scope is a second axis, decided per finding alongside the verdict/i)
+    expect(prompt).toMatch(
+      /out of scope when the issue the pull request closes does not ask for it/i,
+    )
+    expect(prompt).toMatch(/The source of the defect decides scope, never the size of the remedy/i)
+    expect(prompt).toMatch(
+      /Recommended Optional item is a suggestion, not a work order/i,
+    )
+    expect(prompt).toMatch(
+      /safety carve-out where THIS pull request creates the hazard/i,
+    )
+    expect(prompt).toMatch(
+      /File each out-of-scope finding as an issue instead of implementing it/i,
+    )
+    expect(prompt).toMatch(/neither implement nor file is a finding you dropped/i)
+  })
+
+  test('the contract inventory carries the scope-test row and the brake exception', async () => {
+    const inventory = await read('docs/contract-inventory.md')
+    expect(inventory).toMatch(/Review-remedy scope test/)
+    expect(inventory).toMatch(/the divergence brake stops the loop at `review_count >= 4`/)
+    expect(inventory).toMatch(
+      /divergence brake[\s\S]{0,160}only when[\s\S]{0,160}an earlier cycle added/i,
+    )
+  })
+
+  test('pr-review routes a new-mechanism remedy to a follow-up issue', async () => {
+    const skill = texts['skills/pr-review/SKILL.md']
+    const at = skill.indexOf('### Create Follow-up Issue` is the disposition of last resort')
+    expect(at).toBeGreaterThan(-1)
+    // Assert inside the disposition rules, not across the whole document.
+    const region = skill.slice(at, skill.indexOf('`### Requires Human Review` is the escalation', at))
+
+    expect(region).toMatch(/One case reverses that default/i)
+    expect(region).toMatch(
+      /Create Follow-up Issue`? rather than `?### Recommended Optional/i,
+    )
+    // Routed by where the defect lives, never by how small the patch looks.
+    expect(region).toMatch(/Route it by where the defect lives, never by how small the patch looks/i)
+    expect(region).toMatch(/a defect in code the PR adds stays in the PR/i)
+    // Safety carve-out still wins when the PR creates the hazard.
+    expect(region).toMatch(/safety carve-out where \*\*this PR\*\* creates the hazard/i)
+  })
+
   test('contract inventory carries the band-derived review trigger row', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Band-derived review trigger/)

@@ -94,9 +94,28 @@ Validation discipline (this is where fixing a review goes wrong):
 - **Safety carve-out** — money, data integrity, security, or an auto-protective mechanism. Such a finding gets fixed or escalated to the user even at low confidence; never silently dropped as Refuted unless you can prove from code it's a non-issue.
 - **CI Failures validate differently — there's no reviewer to be wrong, only the log to explain.** Read the failing step's actual error/assertion, not just the job name. ✅ Confirmed if the failure traces to this PR's diff — fix it (and reproduce the exact failing command locally where feasible, so step 6's verification actually exercises it). ❌ Refuted only with evidence it's *not* this PR's doing — pre-existing on `<baseRefName>` (check CI history / reproduce on base) or a one-off infra flake (timeout/network blip unrelated to any path this PR touches) — don't patch around it; note it in the disposition and flag it to the user, since a flaky or broken base branch is worth knowing about independent of this PR.
 
+#### Scope: the second axis on every finding
+
+A verdict says whether a finding is real. It does not say whether its remedy belongs in this pull request. Decide both, because a real finding whose remedy is a new subsystem is how a two-line fix becomes a thousand-line one, one justified round at a time.
+
+Classify each ✅/⚠️/❓ finding's **remedy** — not the defect:
+
+| Class | Test | Action |
+|---|---|---|
+| **In scope** | The remedy corrects code this PR already adds or changes, or wires what the PR already built | Implement it (step 6) |
+| **Out of scope** | The remedy introduces a mechanism the PR does not have — a new persistent store, a new lifecycle or generation scheme, a new cross-cutting invariant, a retry or recovery path, a new subsystem — **and** the issue this PR closes does not ask for it | File a follow-up issue; do not implement |
+
+Read the test as written: **the source of the defect decides scope, not its severity.** A defect in code this PR added is in scope however large its remedy, and a gap that predates the PR is out of scope however easy the patch looks. "It is only a few lines" is not the test; "does this PR already have this mechanism" is.
+
+**The safety carve-out overrides the out-of-scope class in one direction only: when this PR itself creates the hazard.** A PR that opens a new race, or hands existing callers a destructive power they did not have, fixes it here regardless of how much mechanism the fix needs — shipping a known hazard to defer work is never the trade. A pre-existing hazard the PR merely reveals is still out of scope, and the follow-up issue says so plainly.
+
+**A reviewer's `Recommended Optional` is a suggestion, not a work order.** It carries no authority to enlarge the PR: run the same test on it, and file the out-of-scope ones. An optional finding that arrives with an out-of-scope remedy is the single most common start of unbounded growth — in the case this rule comes from, one optional durability suggestion produced four further review cycles and a persisted journal the issue never asked for.
+
+**Growth check — run it once per invocation, before step 6.** Compare the PR's cumulative diff against its first push (`git diff --stat <first-push-sha>..HEAD`) and count the review cycles so far. When the diff has grown past roughly three times its first push, or this is cycle 4 or later, state both numbers in the step 11 report and in the disposition comment, and re-run the scope test on every finding you were about to implement. Sustained growth across cycles is evidence the scope test is being applied too loosely, not evidence the PR is thorough.
+
 **For every ❓ Judgment finding, do the analysis the reviewer couldn't and implement the result — don't hand the tradeoff back.** Trace the code, enumerate the viable approaches, and derive the **absolute-best solution** per the global "absolute best solution" rule in CLAUDE.md/AGENTS.md, then implement it (step 6) in this same run. Do **not** pause to ask the user. A **Recommended proposed solution:** line is the reviewer's preferred option: verify it against the code and that same standard, then implement it if it holds, or implement the better alternative and say why. Record the decision in the disposition comment — the chosen solution, the code-grounded reasoning (`file:line`), and the rejected alternatives in one line each — so the human can override after the fact if they disagree.
 
-The same standard governs `Recommended Optional` improvements: implement them too.
+The same standard governs `Recommended Optional` improvements: implement the in-scope ones too. This paragraph sets *how well* a remedy is derived; the scope test above decides *whether* it is derived here at all, and it runs first.
 
 ### 5. Decide whether to delegate implementation
 
@@ -109,10 +128,12 @@ Otherwise, delegate **only when the session is already long** — enough context
 
 ### 6. Implement the fixes
 
-Implement every finding that calls for a change: ✅ Confirmed, ⚠️ Partial (the true part), ❓ Judgment (the absolute-best solution you derived), and `Recommended Optional` (best-solution standard). Skip only ❌ Refuted and `Create Follow-up Issue` items.
+Implement every **in-scope** finding that calls for a change: ✅ Confirmed, ⚠️ Partial (the true part), ❓ Judgment (the absolute-best solution you derived), and `Recommended Optional` (best-solution standard). Skip ❌ Refuted items, `Create Follow-up Issue` items, and every finding step 4's scope test put out of scope.
 
+- File each out-of-scope finding as an issue per `github-issue-format` — complete body, never a stub — and carry its number into the disposition comment so the reviewer can see the work was placed rather than dropped. A finding you neither implement nor file is a finding you dropped.
 - Read the surrounding code and follow existing conventions before editing.
 - Keep each fix scoped to its finding; don't smuggle in unrelated refactors.
+- **A fix that needs a new mechanism to be correct is a scope-test failure, not a licence to build it.** When implementation reveals that the remedy you classified as in-scope cannot work without one, stop implementing, move the finding out of scope, and file it — do not build the mechanism and carry on.
 - After all fixes, **verify**: run the project's tests/build/lint (check the repo's `CLAUDE.md` / `package.json` / Makefile for the commands — e.g. `bun test`, `go test -race ./...`, `bun run build`). Evidence before assertions: do not claim a fix works without running verification, and report any failures honestly rather than papering over them.
 - If a fix turns out infeasible or reveals the finding was actually Refuted, move it to the Refuted bucket with the reason.
 

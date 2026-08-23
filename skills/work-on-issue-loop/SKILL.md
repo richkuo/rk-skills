@@ -40,7 +40,7 @@ Record the timestamp of the trigger comment and set `review_count = 1` — that 
 Run fix-pr-review-loop steps 2 through 4 against the PR:
 
 - **fix-pr-review-loop step 2** — wait for the review to land, with both jq gotchas, the background until-loop, and the ~30-minute wait cap.
-- **fix-pr-review-loop step 3** — check the review against the merge-conflict check and the stop conditions: a bare LGTM with nothing left to fix stops the loop; when `review_count > 5`, stop at the first LGTM even if non-blocking findings remain; a `Needs Updates` verdict never stops the loop by cycle count alone.
+- **fix-pr-review-loop step 3** — check the review against the merge-conflict check and the stop conditions: a bare LGTM with nothing left to fix stops the loop; when `review_count > 5`, stop at the first LGTM even if non-blocking findings remain; a `Needs Updates` verdict never stops the loop by cycle count alone. Its one exception is the divergence brake, which needs a second condition as well as the count: `review_count >= 4` **and** `Needs Updates` **and** every blocking finding sitting in code an earlier cycle added. That combination stops the loop and reports per step 5's **Diverging** row, because a loop correcting its own corrections compounds the PR rather than converging it. A `Needs Updates` whose findings are still in the PR's original work keeps going however many cycles it takes.
 - **fix-pr-review-loop step 4** — resolve the review with fix-pr-review, increment `review_count`, and loop back to its step 2.
 
 Carry the `review_count` and trigger timestamp from step 1 into that loop. When the loop reaches a "Done" terminal state, continue with step 3 below; on any other terminal state go to step 4.
@@ -58,10 +58,11 @@ The failure mode this prevents: a PR merges with follow-ons named only in prose,
 
 ### 4. Report
 
-Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. A `Verification limitation` line is not a finding and does not prevent a clean pass; in the report, name each unverified source in that list, outside the word cap, and omit the field when none. Apply two deltas:
+Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. A `Verification limitation` line is not a finding and does not prevent a clean pass; in the report, name each unverified source in that list, outside the word cap, and omit the field when none. Apply three deltas:
 
 - Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) → **Nothing to drive.** Relay its report; zero review cycles ran.
 - Add to the report contents: every follow-on issue filed in step 3 (URLs) and any item deliberately left unfiled.
+- On its **Diverging** row, the scope yardstick is named: the acceptance criteria of the issue this loop is implementing. Report which of them the PR already satisfies, so the narrowing recommendation is concrete rather than a general instruction to cut scope.
 
 ## Red Flags — STOP
 
