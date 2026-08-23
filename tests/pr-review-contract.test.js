@@ -223,8 +223,14 @@ describe('PR review contract', () => {
       expect(source, `${path}: a deferral settles a finding`).toMatch(
         /Deferred to follow-up`? disposition settles a finding the same way/i,
       )
-      expect(source, `${path}: deferral needs rule and issue`).toMatch(
-        /names (?:\*\*)?both(?:\*\*)? the scope rule it applied and the issue it filed/i,
+      expect(source, `${path}: deferral needs a basis and an issue`).toMatch(
+        /names (?:\*\*)?both(?:\*\*)? its basis[\s\S]{0,220}and the issue it filed/i,
+      )
+      // The basis is defined for both ways an item gets filed: the fixer's
+      // own scope rule, or the reviewer's routing where the fixer's
+      // exclusion filed the item without running one.
+      expect(source, `${path}: reviewer routing is an admissible basis`).toMatch(
+        /`?### Create Follow-up Issue`? routing where the fixer filed the item without running one/i,
       )
       expect(source, `${path}: re-raising a deferral needs treatment`).toMatch(
         /comes back only when you name the deferral/i,
@@ -546,10 +552,18 @@ describe('PR review contract', () => {
     // A deferral settles a finding only when it names its scope rule and its
     // issue, so the next reviewer has something it must answer.
     expect(disposition).toMatch(
-      /Every Deferred to follow-up item names both the scope rule it applied and the issue number/i,
+      /Every Deferred to follow-up item names both its basis and the issue number/i,
     )
+    // Both admissible bases are named, so a reviewer-routed follow-up has a
+    // defined value for the field rather than an omitted or invented rule.
+    expect(disposition).toMatch(/the fixer scope rule it applied/i)
+    expect(disposition).toMatch(
+      /the reviewer's own `### Create Follow-up Issue` routing/i,
+    )
+    // Rule 1 keeps the finding in the PR, so it never appears as a basis.
+    expect(disposition).toMatch(/Rule 1 never appears here/i)
     expect(disposition).toMatch(/deferral missing either half settles nothing/i)
-    expect(disposition).toMatch(/out of scope under scope rule <N>/)
+    expect(disposition).toMatch(/out of scope, basis <scope rule <N>/)
     expect(disposition).toContain('/replies')
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
@@ -1087,6 +1101,12 @@ describe('PR review contract', () => {
     // The brake and the growth check share one name for the derived count.
     expect(skill).toMatch(/pr_cycle_count/)
 
+    // Filing one records the basis that placed it, so the disposition field
+    // has a defined value for a reviewer-routed item too.
+    expect(step6).toMatch(
+      /the reviewer's own `### Create Follow-up Issue` routing for an item step 4's exclusion filed without running one/i,
+    )
+
     // A finding the reviewer routed to Create Follow-up Issue is filed, never
     // implemented — the scope table cannot claim it back through rule 3.
     expect(skill).toMatch(
@@ -1140,7 +1160,10 @@ describe('PR review contract', () => {
     expect(prompt).toMatch(/Rule 1 is that exclusion's only exception/i)
     // The deferral is a terminal disposition, so it carries its rationale.
     expect(prompt).toMatch(
-      /Deferred to follow-up section whose every item names both the scope rule applied and the issue filed/i,
+      /Deferred to follow-up section whose every item names both its basis and the issue filed/i,
+    )
+    expect(prompt).toMatch(
+      /the reviewer's own Create Follow-up Issue routing for an item the Phase 3 exclusion filed without running a scope rule on it/i,
     )
     expect(prompt).toMatch(/deferral missing either half settles nothing/i)
   })
