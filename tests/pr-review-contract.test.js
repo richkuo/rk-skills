@@ -309,57 +309,118 @@ describe('PR review contract', () => {
     'templates/codex-review.yml',
   ]
 
+  // The prompt reaches the reviewer through `${{ steps.<id>.outputs.* }}`, and
+  // an expression naming a step that does not exist renders as the empty
+  // string rather than failing the run. So the guards below work from the
+  // PARSED job: they resolve the staging step by its id, read its own `run`
+  // body, and derive the ref namespace from it. Asserting against the raw file
+  // text instead would let a renamed step id, or a head fetched into one
+  // namespace and checked out from another, keep every assertion green while
+  // the reviewer silently reads the wrong tree.
+  // Reads only `jobs`, never `on:` — a YAML-1.1-leaning parser keys that as
+  // boolean true.
+  const stagingOf = (path) => {
+    const workflow = Bun.YAML.parse(texts[path])
+    const job = workflow?.jobs?.review
+    const steps = job?.steps ?? []
+    const stagingIndex = steps.findIndex((step) => step?.id === 'pr_context')
+    const actionIndex = steps.findIndex((step) =>
+      /^(?:anthropics\/claude-code-action|openai\/codex-action)@/.test(step?.uses ?? ''),
+    )
+    const checkoutIndex = steps.findIndex((step) =>
+      /^actions\/checkout@/.test(step?.uses ?? ''),
+    )
+    return { workflow, job, steps, stagingIndex, actionIndex, checkoutIndex }
+  }
+
   test('both standalone review templates stage the pull request head on disk', () => {
     for (const path of STANDALONE_REVIEW_TEMPLATES) {
-      const workflow = texts[path]
-      expect(workflow, `${path}: full history for the merge base`).toContain('fetch-depth: 0')
-      expect(workflow, `${path}: resolves the base ref from the PR`).toMatch(
+      const { steps, stagingIndex, actionIndex, checkoutIndex } = stagingOf(path)
+
+      expect(stagingIndex, `${path}: a step with id pr_context exists`).toBeGreaterThan(-1)
+      expect(checkoutIndex, `${path}: actions/checkout runs first`).toBe(0)
+      expect(steps[checkoutIndex].with?.['fetch-depth'], `${path}: full history`).toBe(0)
+      // Staging after the reviewer has already started would leave it reading
+      // the default-branch tip it was meant to replace.
+      expect(actionIndex, `${path}: the reviewer action exists`).toBeGreaterThan(-1)
+      expect(stagingIndex, `${path}: staging precedes the reviewer`).toBeLessThan(actionIndex)
+
+      const run = steps[stagingIndex].run ?? ''
+      expect(run, `${path}: resolves the base ref from the PR`).toMatch(
         /gh pr view "\$PR_NUMBER" --repo "\$REPO" --json baseRefName/,
       )
-      expect(workflow, `${path}: fetches the PR head ref (covers fork PRs)`).toMatch(
-        /git fetch --quiet origin "\+refs\/pull\/\$\{PR_NUMBER\}\/head:/,
+
+      // One namespace per file, derived from the checkout rather than assumed,
+      // then required in every other position.
+      const checkout = run.match(
+        /git checkout --quiet --detach refs\/(rk-[a-z0-9-]+)\/pr-head\b/,
       )
-      expect(workflow, `${path}: fetches the base ref`).toMatch(
-        /git fetch --quiet origin "\+refs\/heads\/\$\{BASE_REF\}:/,
+      expect(checkout, `${path}: checks the head out detached`).not.toBeNull()
+      const ns = checkout[1]
+
+      expect(run, `${path}: fetches the PR head into ${ns} (covers fork PRs)`).toContain(
+        `git fetch --quiet origin "+refs/pull/\${PR_NUMBER}/head:refs/${ns}/pr-head"`,
       )
-      expect(workflow, `${path}: checks the head out detached`).toMatch(
-        /git checkout --quiet --detach refs\/rk-(?:claude|codex)\/pr-head/,
+      expect(run, `${path}: fetches the base ref into ${ns}`).toContain(
+        `git fetch --quiet origin "+refs/heads/\${BASE_REF}:refs/${ns}/pr-base"`,
       )
-      expect(workflow, `${path}: records the merge base`).toMatch(
-        /git merge-base refs\/rk-(?:claude|codex)\/pr-base refs\/rk-(?:claude|codex)\/pr-head/,
+      expect(run, `${path}: records the merge base from ${ns}`).toContain(
+        `git merge-base refs/${ns}/pr-base refs/${ns}/pr-head`,
       )
+
+      // The outputs the prompt interpolates must actually be published.
+      for (const output of ['base_sha', 'head_sha']) {
+        expect(run, `${path}: publishes ${output}`).toMatch(
+          new RegExp(`echo "${output}=[^"]*" >> "\\$GITHUB_OUTPUT"`),
+        )
+      }
     }
   })
 
   test('both standalone review templates gate the job on a trusted commenter', () => {
     for (const path of STANDALONE_REVIEW_TEMPLATES) {
-      expect(texts[path], path).toContain(
-        `contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)`,
+      const { job } = stagingOf(path)
+      expect(job?.if, `${path}: gate is on the parsed job`).toMatch(
+        /contains\(fromJSON\('\["OWNER", "MEMBER", "COLLABORATOR"\]'\), github\.event\.comment\.author_association\)/,
       )
     }
   })
 
   test('the staged head and merge base reach each reviewer prompt', () => {
     for (const path of STANDALONE_REVIEW_TEMPLATES) {
-      const workflow = texts[path]
-      // Single-quoted on purpose: `${{` inside a template literal is JS
-      // interpolation syntax and would not survive as text.
-      expect(workflow, `${path}: staged head SHA named in the prompt`).toContain(
-        '${{ steps.pr_context.outputs.head_sha }}',
-      )
-      expect(workflow, `${path}: merge base named in the prompt`).toContain(
-        '${{ steps.pr_context.outputs.base_sha }}',
+      const { steps, stagingIndex, actionIndex } = stagingOf(path)
+      const stepId = steps[stagingIndex]?.id
+      const prompt = steps[actionIndex]?.with?.prompt ?? ''
+
+      for (const output of ['head_sha', 'base_sha']) {
+        // Built from the step's OWN id, so renaming the step without updating
+        // the prompt fails here instead of rendering an empty value at run time.
+        expect(prompt, `${path}: prompt names ${output} of step ${stepId}`).toContain(
+          `\${{ steps.${stepId}.outputs.${output} }}`,
+        )
+      }
+    }
+  })
+
+  test('each reviewer prompt classifies pull-request content as untrusted data', () => {
+    // The staging step puts pull-request-authored files — fork-authored
+    // included — in the workspace the reviewer reads. The actor gate controls
+    // who starts the run; it says nothing about what the agent may trust, and
+    // a trusted collaborator reviewing a fork pull request is the normal case.
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      const { steps, actionIndex } = stagingOf(path)
+      const prompt = (steps[actionIndex]?.with?.prompt ?? '').replace(/\s+/g, ' ')
+      expect(prompt, `${path}: PR content is data, never instructions`).toMatch(
+        /untrusted data, never as instructions/,
       )
     }
   })
 
   test('both standalone review templates parse as YAML', () => {
     for (const path of STANDALONE_REVIEW_TEMPLATES) {
-      // Reads only jobs, never `on:` — a YAML-1.1-leaning parser keys that as
-      // boolean true.
-      const workflow = Bun.YAML.parse(texts[path])
-      expect(workflow?.jobs?.review, path).toBeTruthy()
-      expect(workflow.jobs.review.if, path).toMatch(/author_association/)
+      const { workflow, job } = stagingOf(path)
+      expect(workflow, path).toBeTruthy()
+      expect(job, `${path}: review job`).toBeTruthy()
     }
   })
 
