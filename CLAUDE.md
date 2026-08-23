@@ -45,9 +45,9 @@
 - **The optimal solution comes first, and the tests follow it.** Derive the correct behavior from first principles, then bring the tests to that behavior. A failing test is evidence, and the default reading is that the code is wrong, so fix the code first. A test never blocks the right solution. Edit the test yourself in these three cases, and none of them needs my sign-off:
   - **Outdated** — the test correctly asserts behavior this change deliberately replaces. Rewrite it to assert the new behavior.
   - **Wrong** — the test asserts behavior that was never correct, independent of this change. Rewrite it to assert the correct behavior, and say why the old expectation was wrong.
-  - **Obsolete** — the change deletes the covered behavior outright, or another test now asserts the same thing. Remove it and name which of those two applies.
+  - **Obsolete** — the change deletes the covered behavior outright, or another test now asserts the same thing. Remove it and name which of those two applies. For the redundancy ground, read the surviving test first. Name it, and list each assertion of the removed test that it carries. Keep the removed test when any of its assertions has no counterpart there.
 - **Tests are still a correctness floor.** The three cases above authorize an edit that follows the correct behavior. An edit that hides a defect stays forbidden: never weaken, delete, skip, or narrow a test whose expectation is still right, just to get a green tree.
-- **Disclose every test edit** in the commit message and the PR body — the test, which of the three cases it falls under, and what the replacement asserts. A test edit I have to find myself is the failure these rules exist to prevent.
+- **Disclose every test edit** in the commit message and the PR body — the test, which of the three cases it falls under, and what the replacement asserts. For a removal, give the ground in place of the replacement: the behavior the change deletes, or the surviving test and the assertions it carries. A test edit I have to find myself is the failure these rules exist to prevent.
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
