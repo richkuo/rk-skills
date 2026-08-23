@@ -20,7 +20,7 @@ Invoke the `work-on-issue` skill for the issue (Skill tool, `skill: work-on-issu
 
 **Gate on its outcome before continuing — work-on-issue can legitimately stop early:**
 
-- **Stopped with no PR** (issue already closed, an existing PR already addresses it, wrong repo checked out) → there is nothing to drive; stop and relay its report.
+- **Stopped with no PR** (issue already closed, an existing PR already addresses it, wrong repo checked out, or any other stop `work-on-issue` defines — it owns the full list, so treat any stop it reports the same way) → there is nothing to drive; stop and relay its report with the stop reason it gave.
 - **PR opened** → capture the PR number/URL and the branch, then trigger the first review yourself. Don't wait on CI or poll `gh pr checks` — CI runs in parallel and the reviewer surfaces check failures itself. Post a **separate, one-line** comment so the bot fires cleanly (match the repo's trigger phrase if it differs — check recent PR comments; a trigger mention is not authored content — no footer):
 
 ```bash
@@ -60,7 +60,7 @@ The failure mode this prevents: a PR merges with follow-ons named only in prose,
 
 Report per fix-pr-review-loop step 5: same terminal-state table, same 55-word cap, and same `**Verification limitation:**` list. A `Verification limitation` line is not a finding and does not prevent a clean pass; in the report, name each unverified source in that list, outside the word cap, and omit the field when none. Apply three deltas:
 
-- Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR (closed issue / existing PR / wrong repo) → **Nothing to drive.** Relay its report; zero review cycles ran.
+- Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR (closed issue / existing PR / wrong repo / any other stop `work-on-issue` defines) → **Nothing to drive.** Relay its report, naming the stop reason it gave rather than forcing it into one of the listed labels; zero review cycles ran.
 - Add to the report contents: every follow-on issue filed in step 3 (URLs) and any item deliberately left unfiled.
 - On its **Diverging** row, the scope yardstick is named: the acceptance criteria of the issue this loop is implementing. Report which of them the PR already satisfies, so the narrowing recommendation is concrete rather than a general instruction to cut scope.
 
