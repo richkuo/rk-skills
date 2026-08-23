@@ -214,7 +214,8 @@ const REVIEW_BANDS = [
 // arrives as undefined and routes to the top band because the complexity is
 // unknown; a literal [C0] is the smallest real score and routes to the bottom
 // band. The prep normalizer below reconciles the field against the title, so a
-// prep agent that fills in 0 for an unprefixed issue cannot downgrade routing.
+// prep agent that reports a score the title does not carry cannot downgrade
+// routing — any disagreement resolves to unknown, which is the top band.
 function hasScore(complexity) {
   return Number.isInteger(complexity) && complexity >= 0
 }
@@ -244,7 +245,7 @@ const NONBLOCKING_RETRIGGER = { claude: '@claude sonnet review', codex: '@codex 
 // the bare standard trigger; the Action picks its configured default model.
 function firstReviewTrigger(ex) {
   const stamped = MODEL_IDS[ex.first_review_model]
-  const review = reviewBandFor(ex.effective_complexity ?? ex.complexity).review
+  const review = reviewBandFor(ex.review_complexity ?? ex.complexity).review
   if (REVIEW_BOT === 'codex') {
     const source = stamped || review.model
     const shorthand = source ? CODEX_REVIEW_SHORTHAND[source] : null
@@ -256,6 +257,19 @@ function firstReviewTrigger(ex) {
   if (review.model === 'opus') return '@claude opus review'
   if (review.model === 'sonnet') return '@claude sonnet review'
   return `@claude ${review.model} review effort:${review.effort}`
+}
+
+// The trigger for a BLOCKING re-review, keyed to the reviewer that actually ran
+// cycle 1 — never to the band, which only ever selected that reviewer. Fable
+// reviews the first cycle only, so a Fable cycle 1 steps down one rung per
+// blocking re-review (opus, then the bare trigger, where it stops). Every other
+// cycle-1 reviewer repeats its own trigger, so an operator's stamped `PR review:`
+// line survives every cycle. Codex has one flagship and no Fable tier, so its
+// cycle-1 trigger always repeats. Mirrors runSubagentReviewLoop's FABLE_STEP_DOWN.
+function blockingRetrigger(ex) {
+  const cycle1 = firstReviewTrigger(ex)
+  if (REVIEW_BOT !== 'codex' && /^@claude\s+fable\b/.test(cycle1)) return '@claude opus review'
+  return cycle1
 }
 
 // Band-derived build for an issue with no Execution block: the band default.
@@ -454,7 +468,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
 1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/${REVIEW_BOT}.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
-4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot${REVIEW_BOT === 'claude' ? ' (derive the blocking re-trigger from the band: `@claude sonnet review` at C0–C10, `@claude review` at C11–C40, `@claude opus review` at C41–C80; never repeat the `@claude fable review` trigger — fable reviews the first cycle only, so at C81+ the first blocking re-trigger after it is `@claude opus review` and every one after that is the standard `@claude review`, and that C81+ ladder never drops to `@claude sonnet review`)' : ' (never switch to @claude — this run selected Codex, so derive the blocking re-trigger from the band: `@codex luna review` at C0–C10 and a bare `@codex review` above it, with the C81+ ladder staying on the bare trigger and never reaching luna)'}, and wait for that re-review verdict.
+4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot. The blocking re-trigger is keyed to the reviewer that actually ran cycle 1 — the trigger you posted in step 1 — and the band does not decide it, because the band only ever selected that reviewer. For this PR that makes the blocking re-trigger exactly \`${blockingRetrigger(ex)}\` and the non-blocking one \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`; post the one that matches what you addressed, verbatim.${REVIEW_BOT === 'claude' ? ' (That value already applies the rule: a `@claude fable review` cycle 1 steps down to `@claude opus review`, because fable reviews the first cycle only and its trigger is never repeated; a cycle 1 on any other model repeats its own trigger, so a stamped reviewer survives every cycle.)' : ' (This run selected Codex — never switch to @claude. Codex exposes one flagship and no fable tier, so its cycle-1 trigger simply repeats; the C81+ ladder stays on the bare trigger and never reaches luna.)'} Then wait for that re-review verdict.
 5. Stop after that verdict. Do not fix the re-review's findings; the pipeline gives later cycles to another agent.
 
 Return the standing verdict as github_review_status, the remaining non-blocking count, and a github_review_summary. If cycle 1 cannot finish, return github_review_status blocked and github_review_blocker.`
@@ -477,7 +491,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger that skill's band and step-down rules give you${REVIEW_BOT === 'claude' ? ' — `@claude sonnet review` in the C0–C10 band, `@claude opus review` in the C41–C80 band and for the FIRST blocking re-review after a `@claude fable review` first review, `@claude review` otherwise; never repeat the fable trigger, which is first-cycle-only, and never step a C81+ ladder down to sonnet' : ' — `@codex luna review` in the C0–C10 band, a bare `@codex review` otherwise, since the heavier tiers all collapse onto it; never switch to @claude, which this run did not select'}).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it.${REVIEW_BOT === 'claude' ? ' If that cycle-1 trigger names fable, step down one rung per blocking re-review — `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened; that ladder stops at `@claude review` and never reaches sonnet, and the fable trigger is never repeated because fable reviews the first cycle only. If it names any other model, repeat that same trigger verbatim for every blocking re-review, whatever the band, so a stamped reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -600,7 +614,7 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
   // model null means "no override — inherit the session default", the
   // subagent equivalent of the bare @claude trigger (band 0).
-  const bandReview = reviewBandFor(ex.effective_complexity ?? ex.complexity).review
+  const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
   // Fable reviews the first cycle only, then the reviewer steps down one rung
   // per blocking re-review: opus for the first, the standard bare-@claude
@@ -680,14 +694,17 @@ if (!prep) throw new Error('prep agent failed — cannot resolve Execution block
 const SCORE_PREFIX = /^\s*\[C(\d+)\]/
 const normalizedIssues = prep.issues.map((issue) => {
   const normalized = { ...issue }
-  // Prep is told to omit complexity for an unprefixed title, but a slip there
-  // would route an unknown-complexity issue to the CHEAPEST band. Reconcile the
-  // only ambiguous value against the title the runtime already has: a reported
-  // 0 stands only when the title really reads [C0]. This can escalate to
-  // unknown, never downgrade, so a title that does not match the convention
-  // behaves exactly as before.
-  if (normalized.complexity === 0 && !SCORE_PREFIX.test(normalized.title || '')) {
-    log(`#${normalized.number}: prep reported C0 but the title carries no [C0] prefix — routing as unscored (unknown), which takes the top band`)
+  // Prep reads complexity from the [C<score>] title prefix and nothing else, so
+  // the runtime can check its work against the title it already has. Reconcile
+  // the reported value against the prefix and drop to unknown on ANY
+  // disagreement, not just a reported 0: a reported 0 on a [C50] title would
+  // take the CHEAPEST band, and a reported 5 on a [C90] title the second
+  // cheapest. Unknown takes the top band, so this only ever escalates routing.
+  const prefixMatch = SCORE_PREFIX.exec(normalized.title || '')
+  const prefixScore = prefixMatch ? Number(prefixMatch[1]) : undefined
+  if (hasScore(normalized.complexity) && normalized.complexity !== prefixScore) {
+    const titleSays = prefixMatch ? `reads [C${prefixScore}]` : 'carries no [C<score>] prefix'
+    log(`#${normalized.number}: prep reported C${normalized.complexity} but the title ${titleSays} — routing as unscored (unknown), which takes the top band`)
     delete normalized.complexity
   }
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
@@ -874,6 +891,12 @@ async function executeTrack(trackIndex) {
       }
     }
     ex.effective_complexity = effectiveComplexity
+    // Review routing is clamped the way the validate band above is: upward only.
+    // An issue with no [C<score>] prefix has UNKNOWN complexity, which reviews on
+    // the heaviest row, so a validator rescore of 5 must not hand it the cheapest
+    // reviewer. Nothing outranks the top band, so an unscored issue simply stays
+    // unknown here; a scored issue keeps the escalated value, which can only rise.
+    ex.review_complexity = hasScore(ex.complexity) ? effectiveComplexity : undefined
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary
       log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)

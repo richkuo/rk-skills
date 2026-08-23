@@ -465,10 +465,21 @@ describe('PR review contract', () => {
     }
   })
 
-  test('the loop skill warns that a @claude shorthand fires no Codex Action', async () => {
+  test('the loop skill warns that a @claude shorthand misroutes the Codex Action', async () => {
+    // codex.yml fires on any line-start @codex (invocation gate), falls through
+    // to the default model, and takes the first non-shorthand token as the route
+    // keyword — so `sonnet` selects the write-capable fix-pr route on a
+    // trusted-author PR. The skill must not understate that as "nothing runs".
     const body = (await read('skills/fix-pr-review-loop/SKILL.md')).replace(/\s+/g, ' ')
-    expect(body, 'names the phrase that fires nothing').toMatch(/@codex sonnet review/)
-    expect(body, 'says it matches no trigger').toMatch(/matches no trigger|no Action answers|never runs/i)
+    expect(body, 'names the misrouted phrase').toMatch(/@codex sonnet review/)
+    expect(body, 'says it reaches the write-capable fix-pr route').toMatch(
+      /write-capable fix-pr route|fix-pr route, which mints/i,
+    )
+    expect(body, 'says it pushes to the branch').toMatch(/pushes commits/i)
+    expect(body, 'keeps the untrusted-author carve-out').toMatch(/fork or an untrusted-author/i)
+    expect(body, 'never claims the Action does not run').not.toMatch(
+      /matches no trigger|no Action answers|a review that never runs/i,
+    )
   })
 
   test('every step-down statement keys the ladder to a Fable first review, never to a band', async () => {
@@ -482,6 +493,8 @@ describe('PR review contract', () => {
       'skills/validate-issue/SKILL.md',
       'skills/validate-issue/complexity-scoring.md',
       'templates/claude-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'workflows/milestone-pipeline.js',
       'README.md',
       'docs/contract-inventory.md',
     ]
