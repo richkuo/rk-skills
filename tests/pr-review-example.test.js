@@ -38,7 +38,7 @@ const DEFINED_FIELDS = new Set([
   'Verification limitation:',
 ])
 
-const FOOTER = /^Validated with LLM: [^|]+ \| [^|]+ \| Harness: .+$/m
+const FOOTER = /^Reviewed with LLM: [^|]+ \| [^|]+ \| Harness: .+$/m
 
 // Findings end where the Verification limitation line (or the footer) begins, so
 // the last section's body never absorbs either.
@@ -124,11 +124,11 @@ describe('PR review worked example', () => {
     expect(nonBlank(lines.slice(limitIndex + 1).join('\n'))[0]).toBe('---')
   })
 
-  test('both example reviews end with the Validated attribution footer', () => {
+  test('both example reviews end with the Reviewed attribution footer', () => {
     for (const [index, block] of blocks.entries()) {
       const trailing = nonBlank(block).slice(-2)
       expect(trailing[0], `block ${index + 1}: footer separator`).toBe('---')
-      expect(trailing[1], `block ${index + 1}: Validated verb`).toMatch(FOOTER)
+      expect(trailing[1], `block ${index + 1}: Reviewed verb`).toMatch(FOOTER)
     }
   })
 

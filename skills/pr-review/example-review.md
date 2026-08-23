@@ -85,7 +85,7 @@ Line 10 reads `tagName` and line 22 passes it back unchanged, which is self-cons
 **Verification limitation:** GitHub release-notes body size limit (docs.github.com) unavailable — this route has no network or fetch tool.
 
 ---
-Validated with LLM: Opus 5 | high | Harness: Claude Code
+Reviewed with LLM: Opus 5 | high | Harness: Claude Code
 ```
 
 What the example demonstrates:
@@ -117,7 +117,7 @@ With no findings at all, the verdict stands alone above the footer.
 LGTM
 
 ---
-Validated with LLM: Opus 5 | high | Harness: Claude Code
+Reviewed with LLM: Opus 5 | high | Harness: Claude Code
 ```
 
 The bare `LGTM` itself asserts that you completed every applicable item under "Before you write".
@@ -125,5 +125,6 @@ Do not add verification prose to prove it. Only two things may join a bare `LGTM
 footer: zero or more `**Verification limitation:**` lines, and the non-blocking finding sections
 when the review has non-blocking findings and nothing blocking.
 
-Both examples end with the LLM Attribution Footer using the verb `Validated` — a review is
-validation output. Fill in the model, effort, and harness that actually ran.
+Both examples end with the LLM Attribution Footer using the verb `Reviewed`, the verb this repo
+reserves for a pull request review comment. Fill in the model, effort, and harness that actually
+ran.
