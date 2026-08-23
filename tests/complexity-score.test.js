@@ -234,14 +234,20 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } }")
 
-    // The reviewer runs on its own coarser scale, whose boundaries (30, 70)
+    // The reviewer runs on its own coarser scale, whose boundaries (10, 40, 80)
     // deliberately do not line up with the six build/validate bands above.
-    expect(validateIssue).toContain('| 0–30 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) |')
-    expect(validateIssue).toContain('| 31–70 | Opus 5 · high | `@claude opus review` |')
-    expect(validateIssue).toContain('| 71–99, or no score | Fable 5 · high | `@claude fable review effort:high` |')
-    expect(pipeline).toContain("{ name: '0–30', min: 0, max: 30, review: { model: null, effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '31–70', min: 31, max: 70, review: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '71+', min: 71, max: Infinity, review: { model: 'fable', effort: 'high' } }")
+    expect(validateIssue).toContain('| 0–10 | Sonnet 5 · high | `@claude sonnet review` |')
+    expect(validateIssue).toContain('| 11–40 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) |')
+    expect(validateIssue).toContain('| 41–80 | Opus 5 · high | `@claude opus review` |')
+    expect(validateIssue).toContain('| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` |')
+    expect(pipeline).toContain("{ name: '0–10', min: 0, max: 10, review: { model: 'sonnet', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } }")
+    // The C81+ step-down ladder floors at the standard trigger; sonnet is a
+    // band tier and the non-blocking tier, never a C81+ blocking rung.
+    expect(validateIssue).toMatch(/never steps down to Sonnet/i)
+    expect(pipeline).toMatch(/never steps down to sonnet/i)
 
     // fableplan is yes at score ≥ 61 everywhere the signal is defined,
     // and the worked example round-trips its own band through the rule.
