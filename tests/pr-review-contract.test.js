@@ -695,6 +695,22 @@ describe('PR review contract', () => {
       )
       expect(body, `${path}: route-keyword consequence stated`).toMatch(/route keyword/i)
     }
+    // work-on-issue-loop composes the first-review trigger from the same stamp,
+    // so restating the band table without the mapping is what lets a stamped
+    // haiku through verbatim. Its fix-pr-review-loop pointer is framed as bot
+    // selection and preflight, which a Claude-default run reads as settled, so
+    // the mapping has to be stated here.
+    const loop = (await read('skills/work-on-issue-loop/SKILL.md')).replace(/\s+/g, ' ')
+    expect(loop, 'stamped line overrides the band').toMatch(/stamped `?PR review:?`? line[^.]{0,140}overrides the band/i)
+    expect(loop, 'haiku maps to the sonnet trigger').toMatch(
+      /stamped `?sonnet`? or `?haiku`? posts `?@claude sonnet review/i,
+    )
+    expect(loop, 'names the admitted shorthand set').toMatch(
+      /resolves only `?opus`?, `?sonnet`? and `?fable`?/i,
+    )
+    expect(loop, 'route-keyword consequence stated').toMatch(/route keyword/i)
+    expect(loop, 'never posts an unadmitted claude shorthand').not.toMatch(/@claude haiku/i)
+    expect(loop, 'maps onto the Codex column too').toMatch(/@codex luna review/)
   })
 
   test('contract inventory carries the band-derived review trigger row', async () => {

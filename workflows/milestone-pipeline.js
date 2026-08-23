@@ -967,12 +967,23 @@ async function executeTrack(trackIndex) {
 
     // An issue with no Execution block now has a validated score — derive its
     // build and fableplan from the band instead of a conservative constant.
+    // Clamped upward only, exactly like the review clamp above and for the same
+    // reason with more force: an issue with no [C<score>] prefix has UNKNOWN
+    // complexity, which builds on the top band, and the BUILDER writes the code,
+    // so a validator rescore of 5 must not hand it the cheapest route. Passing
+    // undefined IS the upward clamp — unknown is already the top band, so
+    // nothing can raise it. A missing-block issue whose title DOES carry a score
+    // still derives from that score, and the escalation above still raises it.
     if (ex.missing_block) {
-      const derived = derivedBuild(effectiveComplexity)
+      const buildComplexity = hasScore(ex.complexity) ? effectiveComplexity : undefined
+      const derived = derivedBuild(buildComplexity)
       ex.model = derived.model
       ex.effort = derived.effort
       ex.fableplan = derived.fableplan
-      log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from band ${derived.band.name}`)
+      const source = hasScore(ex.complexity)
+        ? `band ${derived.band.name}`
+        : `band ${derived.band.name} (complexity unknown — no [C<score>] prefix, so a validator rescore never lowers the build route)`
+      log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from ${source}`)
     }
     // Fable is never a build fallback — it builds only on an explicit user stamp.
     const modelId = MODEL_IDS[ex.model] || 'opus'

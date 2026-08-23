@@ -1333,32 +1333,50 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('derives build routing from the validated score when the Execution block is missing', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: '[C0] Unprefixed, rescored trivial', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
-          { number: 3, title: '[C0] Unprefixed, rescored hard', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
-          { number: 4, title: '[C0] Band 0 ceiling', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
-          { number: 5, title: '[C0] Band 1 floor', complexity: 0, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
+          // Unscored: no [C..] prefix and the complexity field omitted, exactly
+          // as the prep schema requires for a title that carries no prefix.
+          { number: 2, title: 'Unprefixed, rescored trivial', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
+          { number: 3, title: 'Unprefixed, rescored hard', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
+          // Scored, but with no Execution block — the band derivation replaces
+          // the prep agent's conservative opus/high constant.
+          { number: 4, title: '[C6] Band 0–9 from the title', complexity: 6, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
+          { number: 5, title: '[C10] Band 10–20 floor', complexity: 10, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
+          { number: 6, title: '[C5] Scored low, rescored hard', complexity: 5, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
         ],
       }),
       'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
       'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 90 }),
-      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 9 }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 6 }),
       'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
+      'validate:#6': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 90 }),
     })
 
-    // All validate on the top band (no prefix), then build from the validated score:
-    // C6 lands in band 0 (Sonnet 5 high); C90 builds Opus 5 xhigh with a plan first.
-    expect(started(events, 'implement:#2 (sonnet/high)')).toBeTrue()
-    expect(started(events, 'plan:#2')).toBeFalse()
+    // #2 and #3 validate on the top band because they carry no prefix. The build
+    // clamp is upward only, so the rescore of 6 cannot hand #2 the cheapest
+    // builder — unknown stays the top band, Opus 5 @ xhigh with a plan.
+    expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+ (complexity unknown'))).toBeTrue()
+    // An upward rescore on an unscored issue changes nothing: it was already top band.
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Sonnet 5 @ high from band 0–9'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#3: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
-    // The Sonnet high band ends at 9; 10 starts the Sonnet xhigh band.
+
+    // A missing-block issue that DOES carry a score still derives from that
+    // score — the derivation replaces the conservative constant, and the
+    // band boundary at 9/10 still separates the two Sonnet rows.
     expect(started(events, 'implement:#4 (sonnet/high)')).toBeTrue()
+    expect(started(events, 'plan:#4')).toBeFalse()
+    expect(logs.some((message) => message.includes('#4: no Execution block — deriving build Sonnet 5 @ high from band 0–9'))).toBeTrue()
+    expect(logs.some((message) => message.includes('complexity unknown') && message.includes('#4:'))).toBeFalse()
     expect(started(events, 'implement:#5 (sonnet/xhigh)')).toBeTrue()
+
+    // Upward escalation still applies to a scored missing-block issue.
+    expect(started(events, 'implement:#6 (opus/xhigh)')).toBeTrue()
+    expect(started(events, 'plan:#6')).toBeTrue()
+    expect(logs.some((message) => message.includes('#6: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
