@@ -475,19 +475,94 @@ describe('PR review contract', () => {
     expect(args, 'the staged tree supplies no settings, hooks, or rules').toContain(
       '--setting-sources user',
     )
-    const settingsFile = args.match(/--settings (\S+)/)?.[1]
+    // The flag and the file are two independent literals. Renaming one alone
+    // would leave the action loading a settings file that does not exist, and
+    // the memory exclusion would stop applying with every assertion green — so
+    // derive the expected path from the staging step's own env.
+    // The value carries a `${{ … }}` expression, which contains spaces.
+    const settingsFile = args.match(/--settings ((?:\$\{\{[^}]*\}\})?\S*)/)?.[1]
     expect(settingsFile, 'a settings file is passed').toBeTruthy()
+    expect(
+      steps[stagingIndex]?.env?.SETTINGS_FILE,
+      'the flag loads the file the staging step writes',
+    ).toBe(settingsFile)
 
     const run = steps[stagingIndex]?.run ?? ''
     expect(run, 'the staging step writes that settings file').toContain('claudeMdExcludes')
-    for (const name of ['CLAUDE.md', 'CLAUDE.local.md', '.claude/rules/**']) {
-      expect(run, `claudeMdExcludes covers ${name} under the workspace`).toContain(
-        `\${GITHUB_WORKSPACE}/**/${name}`,
-      )
+    expect(run, 'it writes to the path the flag names').toContain('cat > "$SETTINGS_FILE"')
+    // Every name at depth 0 AND under **/. This list is a boundary: a glob
+    // that turns out not to match the workspace root would open it silently,
+    // so neither form may be dropped.
+    for (const name of ['CLAUDE.md', 'CLAUDE.local.md', '.claude/CLAUDE.md', '.claude/rules/**']) {
+      for (const prefix of ['', '**/']) {
+        expect(run, `claudeMdExcludes covers ${prefix}${name} under the workspace`).toContain(
+          `"\${GITHUB_WORKSPACE}/${prefix}${name}"`,
+        )
+      }
     }
     // Scoped to the workspace, so the runner's own user-scope memory — the
     // trusted side — is never excluded along with it.
     expect(run, 'the excludes are workspace-scoped').not.toMatch(/"\*\*\/CLAUDE\.md"/)
+  })
+
+  // The staging step detaches HEAD, so the workspace carries no branch name and
+  // `gh` cannot resolve a pull request from it: `gh pr view` with no number
+  // fails with "could not determine current branch". A prompt that says "use
+  // gh" without supplying the number therefore cannot read the prior cycles —
+  // an LGTM precondition — and cannot post its comment.
+  test('the Claude reviewer prompt supplies the identifiers its gh calls need', () => {
+    const path = 'templates/claude-review.yml'
+    const { steps, actionIndex } = stagingOf(path)
+    const prompt = (steps[actionIndex]?.with?.prompt ?? '').replace(/\s+/g, ' ')
+
+    expect(prompt, 'the prompt names the pull request number').toContain(
+      '${{ github.event.issue.number }}',
+    )
+    expect(prompt, 'the prompt names the repository').toContain('${{ github.repository }}')
+    expect(prompt, 'and requires both on every gh call').toMatch(
+      /Every `gh` call MUST pass both/,
+    )
+    // The prior-cycle read is the call whose failure is silent — it degrades
+    // into a blocking Requires Human Review item on every run, which livelocks
+    // the review loop rather than erroring.
+    expect(prompt, 'the prior-cycle read passes them').toContain(
+      'gh pr view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json comments,reviews',
+    )
+    expect(prompt, 'no placeholder number survives').not.toMatch(/gh pr \w+ <N>/)
+  })
+
+  // `Write` is denied on this route, so the agent must hand the review body to
+  // `gh` somehow. A command-line body would shell-evaluate `$(...)`, backticks,
+  // and apostrophes lifted verbatim out of pull-request-authored code, beside a
+  // write-scoped token and an API key. A quoted heredoc evaluates none of it.
+  test('the Claude reviewer posts its comment off the command line', () => {
+    const path = 'templates/claude-review.yml'
+    const { steps, actionIndex } = stagingOf(path)
+    const prompt = (steps[actionIndex]?.with?.prompt ?? '').replace(/\s+/g, ' ')
+
+    expect(prompt, 'the body goes in on standard input').toContain('--body-file -')
+    expect(prompt, 'delimited by a QUOTED heredoc').toMatch(/<<'RK_REVIEW_EOF'/)
+    expect(prompt, 'and never as a command-line argument').toMatch(/never with `--body`/)
+  })
+
+  // A prompt that classifies the staged tree's instruction files as carrying no
+  // authority must not then send the agent to those same files for a rule it
+  // has to obey — that hand-read reinstates the channel the flags close.
+  test('neither reviewer prompt sends the agent to the staged tree for its own rules', () => {
+    for (const path of STANDALONE_REVIEW_TEMPLATES) {
+      const { steps, actionIndex } = stagingOf(path)
+      const prompt = (steps[actionIndex]?.with?.prompt ?? '').replace(/\s+/g, ' ')
+
+      expect(prompt, `${path}: no pointer at the tree's instruction files`).not.toMatch(
+        /per the CLAUDE\.md\/AGENTS\.md Response Style rules/,
+      )
+      expect(prompt, `${path}: the style rule is stated inline`).toMatch(
+        /Simplified Technical English \(ASD-STE100\) under 55 words/,
+      )
+      expect(prompt, `${path}: and the lookup is forbidden`).toMatch(
+        /never open a `CLAUDE\.md`, `AGENTS\.md`, or `\.claude\/` file from the staged tree/,
+      )
+    }
   })
 
   test('both standalone review templates parse as YAML', () => {
