@@ -39,7 +39,7 @@ Safety carve-out (overrides the materiality filter and any confidence threshold)
 
 Within each non-empty section use a numbered list; omit any section that has no items. Each item is a single bold one-sentence title that states the item, then a newline, then a short description containing only the critical details (file:line and why it matters).
 
-Anchor every file:line to the pull request head commit. Resolve each citation against the head commit you reviewed. A working-tree copy, an earlier push, or a diff hunk header is not the authority for a line number. When the head moved while you were reviewing, name the head commit's short SHA once in the review, so the agent that acts on it can tell a stale citation from a disagreement.
+Anchor every file:line to the pull request head commit. Resolve each citation against the head commit you reviewed. A working-tree copy, an earlier push, or a diff hunk header is not the authority for a line number. When the head moved while you were reviewing and the review carries at least one finding, name the head commit's short SHA once, in the first finding's description, so the agent that acts on it can tell a stale citation from a disagreement. A review with no findings cites nothing, so it names no SHA — LGTM still stands alone.
 
 For ### Needs Fixing and ### Recommended Optional items, add a newline then **Invariant:** (one sentence stating the general property the code must satisfy — what is violated, independent of the example), then a newline then **Must survive:** (1 to 3 adversarial cases beyond the example that any fix must handle: compound states, inverse scenario, boundary).
 

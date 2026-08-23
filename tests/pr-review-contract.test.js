@@ -145,7 +145,12 @@ describe('PR review contract', () => {
         /diff hunk header[\s\S]{0,80}not the authority for a line number/i,
       )
       expect(source, `${path}: name the short SHA when the head moved`).toMatch(
-        /head moved while you were reviewing[\s\S]{0,80}short SHA once in the review/i,
+        /head moved while you were reviewing and the review carries at least one finding[\s\S]{0,60}short SHA once, in the first finding's description/i,
+      )
+      // A finding-free review cites nothing, so the SHA has nothing to anchor —
+      // emitting it would collide with "LGTM stands alone".
+      expect(source, `${path}: a finding-free review names no SHA`).toMatch(
+        /review with no findings cites nothing, so it names no SHA/i,
       )
     }
   })
