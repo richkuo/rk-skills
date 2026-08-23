@@ -249,6 +249,16 @@ jobs:
             the example that any fix must handle: compound states, inverse
             scenario, boundary).
 
+            Anchor every file:line to the pull request head commit. Resolve
+            each citation against the head commit you reviewed. A working-tree
+            copy, an earlier push, or a diff hunk header is not the authority
+            for a line number. When the head moved while you were reviewing
+            and the review carries at least one finding, name the head
+            commit's short SHA once, in the first finding's description, so
+            the agent that acts on it can tell a stale citation from a
+            disagreement. A review with no findings cites nothing, so it names
+            no SHA — `LGTM` still stands alone.
+
             `### Create Follow-up Issue` is the disposition of last resort —
             strongly prefer keeping work in the current PR. Two conditions
             must BOTH hold before suggesting a new issue: (1) the finding is
