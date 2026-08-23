@@ -16,7 +16,9 @@ A CI failure you refuted still counts as blocking on purpose: if that refutation
 
 ### Blocking — check what ran cycle 1, then route on the band
 
-**The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, look at the PR's own trigger comments: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder, not the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
+**The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, look at the PR's own trigger comments: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder rather than the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
+
+**On a Codex cycle the same stamp rule applies in Codex's own vocabulary.** Never post a `@claude` rung on a Codex cycle, and never discard the stamp back to the band. Map the stamped model onto the Codex column: a stamped `sonnet` or `haiku` becomes `@codex luna review`, and a stamped `opus` or `fable` becomes the bare `@codex review`, each followed by `effort:<tier>` when the stamped line carries one. Codex exposes one flagship and has no Fable tier, so it has no step-down ladder at all — its cycle-1 trigger simply repeats for every blocking re-review. A C60 Codex PR stamped `@claude sonnet review` therefore stays on `@codex luna review` at every cycle, and an unstamped C90 one keeps the bare `@codex review` and never reaches `luna`.
 
 | Band | Claude trigger | Codex trigger |
 |---|---|---|
@@ -31,9 +33,11 @@ C0–C10 band and the non-blocking re-review use the cheap shorthand.
 
 Read the score with fix-pr-review-loop step 1's source order: a stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix. `validate-issue` step 6 owns the authoritative table.
 
-### After a Fable first review — the step-down ladder
+### After a Fable first review — the step-down ladder (Claude cycles only)
 
-Fable reviews the first cycle only, so whenever cycle 1 ran on Fable — selected by the C81+ row or by a stamp at any score — the reviewer steps down one rung per blocking re-review:
+This ladder is Claude's. Its rungs are `@claude` triggers, which section 1 forbids on a Codex cycle, and Codex has no Fable tier to step down from — on Codex the cycle-1 trigger repeats instead, per the mapping above.
+
+Fable reviews the first cycle only, so whenever a Claude cycle 1 ran on Fable — selected by the C81+ row or by a stamp at any score — the reviewer steps down one rung per blocking re-review:
 
 | Blocking cycle | Trigger |
 |---|---|

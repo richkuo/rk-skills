@@ -432,11 +432,56 @@ describe('PR review contract', () => {
         /post `?@codex review`? instead/i,
       )
     }
+
+    // A stamped `PR review:` line overrides the band on Codex too. A site that
+    // states the band without the stamp mapping sends a [C5] issue stamped
+    // fable to `@codex luna review` — the cheapest model on the one change whose
+    // operator asked for the strongest reviewer — or invites an agent to compose
+    // `@codex fable review`, which codex.yml routes to its write-capable job.
+    // Only the sites that SELECT a trigger from the stamp need the mapping.
+    // templates/codex-workflow/prompts/fix-pr.md repeats the cycle-1 trigger
+    // verbatim, so the mapping was already applied upstream; it is asserted
+    // separately below.
+    const STAMP_SELECTING_SITES = [
+      'skills/fix-pr-review-loop/SKILL.md',
+      'skills/fix-pr-review/rereview-routing.md',
+      'templates/codex-workflow/prompts/issue-workflow.md',
+    ]
+    for (const path of STAMP_SELECTING_SITES) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: sonnet/haiku map to luna`).toMatch(
+        /(?:sonnet|haiku)[^.]{0,70}luna|luna[^.]{0,70}(?:sonnet|haiku)/i,
+      )
+      expect(body, `${path}: opus/fable map to the flagship trigger`).toMatch(
+        /(?:opus|fable)[^.]{0,90}@codex review|@codex review[^.]{0,90}(?:opus|fable)/i,
+      )
+      expect(body, `${path}: the stamped effort rides along`).toMatch(/effort:<tier>/i)
+    }
+    // The Codex fixer must say the mapping already happened, so it repeats the
+    // cycle-1 trigger instead of re-deriving one from a @claude model name.
+    const codexFixer = (await read('templates/codex-workflow/prompts/fix-pr.md')).replace(/\s+/g, ' ')
+    expect(codexFixer, 'stamp was mapped upstream').toMatch(
+      /already mapped onto the Codex column|luna for sonnet or haiku/i,
+    )
+    expect(codexFixer, 'never carries a @claude shorthand').toMatch(
+      /[Nn]ever carry a @claude model shorthand across to @codex/,
+    )
+    // Codex has no Fable tier, so the two skill pages must say the cycle-1
+    // trigger repeats instead of pointing a Codex cycle at the @claude ladder.
+    for (const path of ['skills/fix-pr-review-loop/SKILL.md', 'skills/fix-pr-review/rereview-routing.md']) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: no Fable tier on Codex`).toMatch(/Codex has no Fable tier|no Fable tier/i)
+      expect(body, `${path}: the Codex cycle-1 trigger repeats`).toMatch(
+        /cycle-1 trigger (?:simply )?repeats/i,
+      )
+    }
   })
 
   test('no site maps a @claude model shorthand onto @codex', async () => {
-    // codex.yml resolves only sol|terra|luna|mini|codex|spark, so a phrase like
-    // "@codex sonnet review" matches no trigger and the loop waits out its cap.
+    // codex.yml resolves only sol|terra|luna|mini|codex|spark. A phrase like
+    // "@codex sonnet review" still starts the Action, falls through to the
+    // default model, and takes `sonnet` as the route keyword — which selects the
+    // write-capable fix-pr job on a trusted-author PR. No site may post one.
     const consumers = [
       'skills/fix-pr-review-loop/SKILL.md',
       'skills/work-on-issue-loop/SKILL.md',

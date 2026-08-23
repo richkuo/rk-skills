@@ -1125,7 +1125,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('reviewBot codex routes every github-mode trigger to @codex', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
+    const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C10] Band 1', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
@@ -1133,6 +1133,10 @@ describe('milestone-pipeline subagent review mode', () => {
           { number: 4, title: '[C90] Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
           { number: 5, title: '[C60] Stamped trigger', complexity: 60, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 6, title: '[C20] Band 2', complexity: 20, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          // Must survive: the smallest band with a stamp naming the STRONGEST
+          // Claude reviewer. The C0-C10 row would post luna — the cheapest Codex
+          // model on the one change whose operator asked for the strongest one.
+          { number: 7, title: '[C5] Stamped fable on a tiny issue', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
         ],
       }),
       Implement: (event) => {
@@ -1152,6 +1156,9 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex luna review effort:high"')
+    expect(promptFor(events, 'implement:#7 (sonnet/high)')).toContain('gh pr comment <num> --body "@codex review effort:high"')
+    // No site may compose a phrase codex.yml cannot resolve to a model.
+    expect(promptFor(events, 'implement:#7 (sonnet/high)')).not.toContain('@codex fable')
     for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#5 (sonnet/xhigh)']) {
       const prompt = promptFor(events, label)
       expect(prompt, label).toContain('.github/workflows/codex.yml')
@@ -1175,6 +1182,9 @@ describe('milestone-pipeline subagent review mode', () => {
       // Must survive: a mid-band PR stamped sonnet opens on luna and STAYS on
       // luna — the C41–C80 band must never take the stamped reviewer back.
       'implement:#5 (sonnet/xhigh)': '@codex luna review effort:high',
+      // A stamped fable maps onto the Codex flagship, never onto the C0-C10
+      // luna row and never onto the unresolvable `@codex fable review`.
+      'implement:#7 (sonnet/high)': '@codex review effort:high',
     }
     for (const [label, trigger] of Object.entries(codexRetrigger)) {
       expect(promptFor(events, label), `${label}: blocking re-trigger`).toContain(

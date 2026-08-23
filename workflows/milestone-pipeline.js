@@ -289,7 +289,7 @@ const PREP_SCHEMA = {
         required: ['number', 'title', 'model', 'effort', 'fableplan'],
         properties: {
           number: { type: 'integer' },
-          title: { type: 'string' },
+          title: { type: 'string', description: 'The issue title EXACTLY as gh issue view --json title reports it, including any [C<score>] prefix — the runtime reconciles the reported complexity against this prefix, so a shortened or reworded title makes a scored issue look unscored' },
           complexity: { type: 'integer', minimum: 0, description: 'The integer from the [C<score>] title prefix — a literal [C0] is a real score of 0; OMIT this field entirely when the title carries no [C..] prefix, because absence is how the runtime tells an unscored issue from a genuinely zero-scored one' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
@@ -679,6 +679,7 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
 // ---- Prep: one agent reads every issue's Execution block ----
 const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
+- title: the issue title EXACTLY as \`gh issue view --json title\` reports it, including any [C<score>] prefix. Never shorten, reword, or strip the prefix: the runtime reconciles the complexity you report against this title, so a trimmed title makes a scored issue look unscored and routes the whole run to the most expensive band
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
@@ -890,7 +891,6 @@ async function executeTrack(trackIndex) {
         log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
       }
     }
-    ex.effective_complexity = effectiveComplexity
     // Review routing is clamped the way the validate band above is: upward only.
     // An issue with no [C<score>] prefix has UNKNOWN complexity, which reviews on
     // the heaviest row, so a validator rescore of 5 must not hand it the cheapest
