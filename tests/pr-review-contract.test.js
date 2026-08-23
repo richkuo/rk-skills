@@ -1007,15 +1007,33 @@ describe('PR review contract', () => {
   test('the scope test gates implementation and routes out-of-scope remedies to issues', async () => {
     const skill = await read('skills/fix-pr-review/SKILL.md')
 
-    // Scope is decided per finding, alongside the verdict, before step 6 runs.
+    // Scope is decided per finding, alongside the verdict, before step 6 runs,
+    // by three precedence-ordered rules.
     expect(skill).toMatch(/Scope: the second axis on every finding/i)
-    expect(skill).toMatch(/\*\*In scope\*\*[\s\S]{0,200}Implement it/i)
-    expect(skill).toMatch(/\*\*Out of scope\*\*[\s\S]{0,300}File a follow-up issue; do not implement/i)
+    expect(skill).toMatch(/in order — the first match decides/i)
+    expect(skill).toMatch(/PR-caused — always in scope/i)
+    expect(skill).toMatch(/File a follow-up issue; do not implement/i)
 
-    // The test keys on where the defect lives, never on remedy size — the
-    // reading that lets "it is only a few lines" reopen the gate.
+    // Rule 1 cannot be reclassified by any later rule or step — the reading
+    // that let step 6's discovery bullet defer a hazard the PR created.
     expect(skill).toMatch(
-      /the source of the defect decides scope, not its severity/i,
+      /No later rule, step, or growth check may reclassify it out of scope/i,
+    )
+
+    // Rule 3 closes the table's gap: a mechanism-free fix to a pre-existing
+    // defect is in scope, matching pr-review's routing of the same finding.
+    expect(skill).toMatch(
+      /pre-existing defect whose remedy needs no new mechanism/i,
+    )
+
+    // Remedy size never decides, in either direction.
+    expect(skill).toMatch(
+      /size of the remedy never decides scope, in either direction/i,
+    )
+
+    // The yardstick is defined even when the PR closes no issue.
+    expect(skill).toMatch(
+      /closes no issue[\s\S]{0,120}PR body's own stated scope/i,
     )
 
     // A reviewer's optional carries no authority to enlarge the PR.
@@ -1023,16 +1041,21 @@ describe('PR review contract', () => {
       /Recommended Optional[\s\S]{0,120}suggestion, not a work order/i,
     )
 
-    // Step 6 skips out-of-scope findings and files them instead of dropping them.
+    // Step 6 skips out-of-scope findings and files them instead of dropping
+    // them, deduplicating against issues earlier cycles filed.
     const step6 = skill.slice(skill.indexOf('### 6. Implement the fixes'), skill.indexOf('### 7.'))
     expect(step6).toMatch(/every finding step 4's scope test put out of scope/i)
     expect(step6).toMatch(/File each out-of-scope finding as an issue/i)
     expect(step6).toMatch(/neither implement nor file is a finding you dropped/i)
+    expect(step6).toMatch(/gh issue list --search/)
+    // Discovery mid-implementation re-runs the precedence — a rule-1 finding
+    // stays in the PR and gets its mechanism built here.
+    expect(step6).toMatch(/re-run step 4's scope rules in order/i)
+    expect(step6).toMatch(/rule-1 finding[\s\S]{0,200}stays in scope/i)
 
-    // Safety overrides the gate only where this PR creates the hazard.
-    expect(skill).toMatch(
-      /safety carve-out overrides the out-of-scope class in one direction only[\s\S]{0,120}this PR itself creates the hazard/i,
-    )
+    // The growth check's two inputs each name a concrete derivation.
+    expect(skill).toMatch(/first-push-sha[\s\S]{0,300}committedDate/i)
+    expect(skill).toMatch(/Cycle count[\s\S]{0,200}trigger comments/i)
   })
 
   test.each([
@@ -1041,21 +1064,31 @@ describe('PR review contract', () => {
   ])('%s restates the scope test and files what it does not implement', async (promptPath) => {
     const prompt = await read(promptPath)
 
-    expect(prompt).toMatch(/Scope is a second axis, decided per finding alongside the verdict/i)
     expect(prompt).toMatch(
-      /out of scope when the issue the pull request closes does not ask for it/i,
+      /Scope is a second axis, decided per finding alongside the verdict, against a defined yardstick/i,
     )
-    expect(prompt).toMatch(/The source of the defect decides scope, never the size of the remedy/i)
+    // The yardstick is defined even when the PR closes no issue.
+    expect(prompt).toMatch(
+      /closes no issue[\s\S]{0,80}pull request body's own stated scope/i,
+    )
+    // Rule 1 is absolute: a PR-caused defect or hazard can never be deferred.
+    expect(prompt).toMatch(
+      /always in scope, however much mechanism its fix needs, and no later rule or phase may reclassify it/i,
+    )
+    expect(prompt).toMatch(/which the yardstick does not ask for is out of scope/i)
+    expect(prompt).toMatch(/size of the remedy never decides scope in either direction/i)
     expect(prompt).toMatch(
       /Recommended Optional item is a suggestion, not a work order/i,
-    )
-    expect(prompt).toMatch(
-      /safety carve-out where THIS pull request creates the hazard/i,
     )
     expect(prompt).toMatch(
       /File each out-of-scope finding as an issue instead of implementing it/i,
     )
     expect(prompt).toMatch(/neither implement nor file is a finding you dropped/i)
+    expect(prompt).toMatch(/gh issue list --search/)
+    // Mid-implementation discovery re-runs the precedence rather than
+    // unconditionally deferring — rule-1 findings keep their mechanism here.
+    expect(prompt).toMatch(/re-run the scope rules in order/i)
+    expect(prompt).toMatch(/stays in scope and the mechanism gets built here/i)
   })
 
   test('the contract inventory carries the scope-test row and the brake exception', async () => {
@@ -1065,24 +1098,63 @@ describe('PR review contract', () => {
     expect(inventory).toMatch(
       /divergence brake[\s\S]{0,160}only when[\s\S]{0,160}an earlier cycle added/i,
     )
+    // The scope-test row names every reviewer-side consumer of the routing rule.
+    const rowAt = inventory.indexOf('| Review-remedy scope test')
+    expect(rowAt).toBeGreaterThan(-1)
+    const row = inventory.slice(rowAt, inventory.indexOf('\n|', rowAt))
+    for (const consumer of [
+      'templates/claude-workflow/prompts/pr-review-format.md',
+      'templates/codex-workflow/prompts/pr-review-format.md',
+      'templates/claude-review.yml',
+      'templates/codex-review.yml',
+    ]) {
+      expect(row, consumer).toContain(consumer)
+    }
   })
+
+  const NEW_MECHANISM_ROUTING = [
+    // Whitespace-normalized phrases, so the wrapped YAML prose matches too.
+    'One case reverses that default: a remedy the PR has no mechanism for',
+    'Apply these rules in order; the first match routes the finding',
+    'stays in the PR however much mechanism its fix needs',
+    'however small the patch looks',
+    'Remedy size never routes a finding in either direction',
+    'safety carve-out in routing form and outranks the next one',
+  ]
 
   test('pr-review routes a new-mechanism remedy to a follow-up issue', async () => {
     const skill = texts['skills/pr-review/SKILL.md']
     const at = skill.indexOf('### Create Follow-up Issue` is the disposition of last resort')
     expect(at).toBeGreaterThan(-1)
     // Assert inside the disposition rules, not across the whole document.
-    const region = skill.slice(at, skill.indexOf('`### Requires Human Review` is the escalation', at))
+    const region = skill
+      .slice(at, skill.indexOf('`### Requires Human Review` is the escalation', at))
+      .replace(/\s+/g, ' ')
+      .replace(/[`*]/g, '')
 
-    expect(region).toMatch(/One case reverses that default/i)
+    for (const phrase of NEW_MECHANISM_ROUTING) {
+      expect(region, phrase).toContain(phrase)
+    }
     expect(region).toMatch(
-      /Create Follow-up Issue`? rather than `?### Recommended Optional/i,
+      /Create Follow-up Issue rather than ### Recommended Optional/i,
     )
-    // Routed by where the defect lives, never by how small the patch looks.
-    expect(region).toMatch(/Route it by where the defect lives, never by how small the patch looks/i)
-    expect(region).toMatch(/a defect in code the PR adds stays in the PR/i)
-    // Safety carve-out still wins when the PR creates the hazard.
-    expect(region).toMatch(/safety carve-out where \*\*this PR\*\* creates the hazard/i)
+    // Rule 3 preserves the trivially-fixable same-bug-class routing above it.
+    expect(region).toMatch(/mechanism-free fix, gets fixed here/i)
+  })
+
+  test.each([
+    'templates/claude-workflow/prompts/pr-review-format.md',
+    'templates/codex-workflow/prompts/pr-review-format.md',
+    'templates/claude-review.yml',
+    'templates/codex-review.yml',
+  ])('%s restates the new-mechanism routing rule', async (consumerPath) => {
+    // The Action reviewers read these files, not skills/pr-review/SKILL.md —
+    // a rule stated only in the skill never reaches a reviewer that runs.
+    const flat = (await read(consumerPath)).replace(/\s+/g, ' ').replace(/[`*]/g, '')
+    for (const phrase of NEW_MECHANISM_ROUTING) {
+      expect(flat, `${consumerPath}: ${phrase}`).toContain(phrase)
+    }
+    expect(flat).toMatch(/mechanism-free fix, gets fixed here/i)
   })
 
   test('contract inventory carries the band-derived review trigger row', async () => {

@@ -189,7 +189,10 @@ describe('loop/validate pipeline contract', () => {
       expect(rule, path).toMatch(/Needs Updates/i)
       expect(rule, path).toMatch(/an earlier cycle[\s\S]{0,40}added/i)
       // It escalates to the human rather than continuing or silently trimming.
-      expect(body, path).toMatch(/Diverging/)
+      // Asserted on the region, not the whole document — "Diverging" also
+      // appears in step 5's table and the Red Flags rows, and a hit there
+      // would keep this green after the rule lost its escalation step.
+      expect(region, path).toMatch(/Diverging/)
     }
   })
 

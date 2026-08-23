@@ -9,6 +9,8 @@ Write the comment as direct, scannable status:
 ```
 Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
 
+Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
+
 ### Fixed
 1. **<finding title>** — <what changed> (`file:line`).
 
@@ -30,6 +32,8 @@ Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
 - **Copy `<finding title>` verbatim from the review comment** — the reviewer's own bold one-sentence title, word for word, with no paraphrase or shortening. The next reviewer matches its findings to these dispositions by claim (`pr-review` requires that read before it drafts), and a reworded title breaks that match, so a settled finding comes back.
 - Every **Not changed (refuted)** and **Corrected scope (partial)** item states the verdict through its section heading and carries a code-grounded rebuttal with its `file:line` — that rebuttal is the evidence a later reviewer must answer before it re-raises the finding, so make it stand on its own without the thread around it.
 - Omit any empty section. Keep each item one line with a `file:line` anchor.
+- The `Growth check:` line appears only when SKILL.md step 4's growth check fired (diff past ~3x the first push, or cycle 4+); omit it otherwise. It is the one place in this comment those numbers live — never fold them into a finding item.
+- A **Deferred to follow-up** item that matched an issue an earlier cycle already filed cites that existing issue rather than a new one.
 - CI Failure findings slot into the same sections — fixed ones under **Fixed**, pre-existing/flaky ones under **Not changed (refuted)** with the base-branch or flake evidence in place of a code citation.
 
 ## Inline-thread replies
