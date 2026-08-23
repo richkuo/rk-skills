@@ -50,7 +50,7 @@ State what you picked (authors + timestamps) so the user can confirm it's the ri
 **Note whether the collected set contains any blocking finding** — a `Needs Fixing` or `Requires Human Review` item from any review, an inline thread asserting a real defect (classified in step 3), or any failing CI check from step 2. This drives the re-review routing in step 10.
 
 **If the only new feedback is `LGTM` with no blocking sections,** nothing is blocking, but the non-blocking items are still this run's work:
-- Implement each `Recommended Optional` item and file each `Create Follow-up Issue` item, per step 6. Don't invent work the review never raised.
+- Implement each `Recommended Optional` item per step 6, and file each `Create Follow-up Issue` item as an issue per step 3's bar — step 6 edits no code for it. Don't invent work the review never raised.
 - **Bare `LGTM`, no finding items, no open inline threads** — a `**Verification limitation:**` line does not count as a finding, and step 3 owns that rule: report the PR approved and stop, naming every such line in the step 11 report.
 - **Exception:** if step 0 flagged merge conflicts, still run step 7 (resolve, verify, push, disposition comment) so the approved PR is actually mergeable.
 

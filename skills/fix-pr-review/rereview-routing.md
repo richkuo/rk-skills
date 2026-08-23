@@ -16,12 +16,16 @@ A CI failure you refuted still counts as blocking on purpose: if that refutation
 
 ### Blocking — route on the PR's complexity band
 
-| Band | Trigger |
-|---|---|
-| C0–C10 | `@claude sonnet review` |
-| C11–C40 | `@claude review` |
-| C41–C80 | `@claude opus review` |
-| C81+, or no score | Step down one rung per blocking cycle (below) |
+| Band | Claude trigger | Codex trigger |
+|---|---|---|
+| C0–C10 | `@claude sonnet review` | `@codex luna review` |
+| C11–C40 | `@claude review` | `@codex review` |
+| C41–C80 | `@claude opus review` | `@codex review` |
+| C81+, or no score | Step down one rung per blocking cycle (below) | `@codex review` at every cycle |
+
+Codex exposes one flagship, so all three bands above C10 collapse onto its bare
+trigger, and the C81+ ladder stays there — it never reaches `luna`. Only the
+C0–C10 band and the non-blocking re-review use the cheap shorthand.
 
 Read the score with fix-pr-review-loop step 1's source order: a stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix. `validate-issue` step 6 owns the authoritative table.
 
@@ -59,8 +63,8 @@ gh pr comment <N> --body "@claude opus review"
 # blocking, C0–C10 — and any pass that addressed only non-blocking items, in any band
 gh pr comment <N> --body "@claude sonnet review"
 
-# the same cases when this cycle selected Codex — both heavy tiers collapse onto the bare
-# trigger, and only the cheap tier keeps a shorthand
+# the same cases when this cycle selected Codex — every band above C10 collapses onto the
+# bare trigger; the C0–C10 band and the non-blocking pass keep the cheap shorthand
 gh pr comment <N> --body "@codex review"
 gh pr comment <N> --body "@codex luna review"
 ```

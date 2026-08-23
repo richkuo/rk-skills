@@ -1076,6 +1076,43 @@ describe('milestone-pipeline subagent review mode', () => {
       const prompt = promptFor(events, label)
       expect(prompt, label).toContain('.github/workflows/codex.yml')
       expect(prompt, label).toContain('never switch to @claude')
+      // Step 4's parenthetical must read the band too. A flat "a blocking
+      // re-trigger is @codex review" would send a C0–C10 PR to the flagship
+      // at cycle 1 and back to luna at cycle 2, from prompts in one file.
+      expect(prompt, `${label}: cycle-1 re-trigger reads the band`).toContain(
+        '`@codex luna review` at C0–C10 and a bare `@codex review` above it',
+      )
+      expect(prompt, `${label}: C81+ ladder never reaches luna`).toContain('never reaching luna')
+    }
+  })
+
+  test('the github-mode cycle-1 prompt derives its Claude re-trigger from the band', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [4]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: 'Cheap band', complexity: 8, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 4, title: 'Top band', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#4 (fable/high)']) {
+      const prompt = promptFor(events, label)
+      // The cheap band must be named, or a C0–C10 cycle-1 fixer has no rung.
+      expect(prompt, `${label}: names the C0–C10 tier`).toContain('`@claude sonnet review` at C0–C10')
+      // The sonnet ban belongs to the C81+ ladder. Unscoped, a C8 reader takes
+      // it as a blanket ban on the trigger its own band requires.
+      expect(prompt, `${label}: sonnet ban scoped to the C81+ ladder`).toContain(
+        'that C81+ ladder never drops to `@claude sonnet review`',
+      )
+      expect(prompt, `${label}: fable never repeats`).toContain('never repeat the `@claude fable review` trigger')
     }
   })
 
