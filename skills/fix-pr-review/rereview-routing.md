@@ -16,7 +16,7 @@ A CI failure you refuted still counts as blocking on purpose: if that refutation
 
 ### Blocking — route on the reviewer that ran cycle 1
 
-**The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, look at the PR's own trigger comments: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder rather than the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
+**The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, identify the cycle-1 reviewer: list the PR's comments in chronological order and take the **EARLIEST** one whose entire body is an `@<bot> … review` trigger line. That comment is cycle 1. Never take a later trigger comment for it — a step-down rung and a cheap non-blocking re-trigger are both later trigger comments, so reading the newest one would let a `@claude sonnet review` posted by a non-blocking cycle 2 pass as the cycle-1 reviewer and send a C90 PR's blocking findings to the cheapest tier. Then: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder rather than the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
 
 On a Claude cycle a stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet` and `fable`, and an unresolved shorthand becomes the route keyword, which sends a trusted-author PR to the write-capable fix-pr job instead of the reviewer.
 
@@ -51,7 +51,7 @@ Fable reviews the first cycle only, so whenever a Claude cycle 1 ran on Fable �
 
 The ladder **stops at `@claude review`**. It never steps down to sonnet, however many cycles it takes — a change that earned a Fable first review keeps a capable reviewer to the end.
 
-Decide which rung you are on from the PR's own trigger comments: a prior `@claude opus review` posted after the `@claude fable review` one means the next rung is `@claude review`.
+Decide which rung you are on from the PR's own trigger comments, reading them in chronological order from that **earliest** `@claude fable review` comment: a prior `@claude opus review` posted after it means the next rung is `@claude review`. Ignore any `@claude sonnet review` comment while counting rungs — that is a non-blocking re-trigger, which consumes no rung and is never a ladder position.
 
 ### Non-blocking only
 

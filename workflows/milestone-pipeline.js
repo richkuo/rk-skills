@@ -917,8 +917,20 @@ async function executeTrack(trackIndex) {
     // An issue with no [C<score>] prefix has UNKNOWN complexity, which reviews on
     // the heaviest row, so a validator rescore of 5 must not hand it the cheapest
     // reviewer. Nothing outranks the top band, so an unscored issue simply stays
-    // unknown here; a scored issue keeps the escalated value, which can only rise.
-    ex.review_complexity = hasScore(ex.complexity) ? effectiveComplexity : undefined
+    // unknown here.
+    // The review scale has its OWN boundaries (10/40/80), which do not line up
+    // with the build bands, so the escalation above cannot stand in for this one:
+    // a [C10] rescored to 15 stays inside build band 10–20 and never raises
+    // effectiveComplexity, while it does cross the review boundary at 10/11.
+    // Compare the REVIEW band index directly so a rescore escalates whenever it
+    // crosses a review boundary, whether or not it crosses a build one.
+    let reviewComplexity = effectiveComplexity
+    if (hasScore(reviewComplexity) && hasScore(rescored) &&
+        REVIEW_BANDS.indexOf(reviewBandFor(rescored)) > REVIEW_BANDS.indexOf(reviewBandFor(reviewComplexity))) {
+      log(`#${issue}: validator re-scored C${reviewComplexity} → C${rescored} across a review boundary — first review moves to review band ${reviewBandFor(rescored).name}`)
+      reviewComplexity = rescored
+    }
+    ex.review_complexity = hasScore(ex.complexity) ? reviewComplexity : undefined
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary
       log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)

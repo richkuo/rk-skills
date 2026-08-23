@@ -1305,6 +1305,33 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(output.results.find((result) => result.issue === 2)?.rescore).toBeUndefined()
   })
 
+  test('a rescore that crosses only a review boundary still escalates the first review', async () => {
+    // The review scale's boundaries (10/40/80) do not line up with the build
+    // bands, so a [C10] rescored to 15 stays inside build band 10-20 and never
+    // raises effectiveComplexity — while it does cross the review boundary at
+    // 10/11. Keying review routing to the build gate keeps it on sonnet.
+    const trigger = async (rescored) => {
+      const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+        Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'high', fableplan: false, first_review_model: undefined, first_review_effort: undefined })] }),
+        'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: rescored }),
+        Implement: () => ({
+          pr_number: 1002, pr_url: 'https://example.test/pr/1002', head_ref: 'cc/issue-2', head_sha: headSha(2),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }),
+      })
+      return { prompt: promptFor(events, 'implement:#2 (sonnet/high)'), logs }
+    }
+
+    // (1) Upward across the review boundary — the standard reviewer, not sonnet.
+    const up = await trigger(15)
+    expect(up.prompt).toContain('gh pr comment <num> --body "@claude review"')
+    expect(up.logs.some((m) => m.includes('across a review boundary'))).toBeTrue()
+    // (2) A downward rescore never weakens routing.
+    const down = await trigger(8)
+    expect(down.prompt).toContain('gh pr comment <num> --body "@claude sonnet review"')
+    expect(down.logs.some((m) => m.includes('across a review boundary'))).toBeFalse()
+  })
+
   test('derives build routing from the validated score when the Execution block is missing', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({

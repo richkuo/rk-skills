@@ -497,13 +497,21 @@ describe('PR review contract', () => {
       return new Set(body.match(new RegExp(`\\^\\(${group}[^)]*\\)`))[0].replace(/^\^\(|\)$/g, '').split('|'))
     }
 
-    const claudeAdmitted = await admitted('.github/workflows/claude.yml', 'opus')
-    for (const shorthand of shorthandTable('CLAUDE_REVIEW_SHORTHAND')) {
-      expect(claudeAdmitted.has(shorthand), `claude.yml admits "${shorthand}"`).toBeTrue()
+    // Both the repo's own workflow and the template copy a consumer repo
+    // installs — a shorthand admitted here but not there breaks on install.
+    let claudeAdmitted
+    for (const workflow of ['.github/workflows/claude.yml', 'templates/claude-workflow/workflows/claude.yml']) {
+      claudeAdmitted = await admitted(workflow, 'opus')
+      for (const shorthand of shorthandTable('CLAUDE_REVIEW_SHORTHAND')) {
+        expect(claudeAdmitted.has(shorthand), `${workflow} admits "${shorthand}"`).toBeTrue()
+      }
     }
-    const codexAdmitted = await admitted('.github/workflows/codex.yml', 'sol')
-    for (const shorthand of shorthandTable('CODEX_REVIEW_SHORTHAND')) {
-      expect(codexAdmitted.has(shorthand), `codex.yml admits "${shorthand}"`).toBeTrue()
+    let codexAdmitted
+    for (const workflow of ['.github/workflows/codex.yml', 'templates/codex-workflow/workflows/codex.yml']) {
+      codexAdmitted = await admitted(workflow, 'sol')
+      for (const shorthand of shorthandTable('CODEX_REVIEW_SHORTHAND')) {
+        expect(codexAdmitted.has(shorthand), `${workflow} admits "${shorthand}"`).toBeTrue()
+      }
     }
     // The band table feeds the same emitter, so its models must be admitted too.
     const bandModels = [...source.match(/const REVIEW_BANDS = \[[\s\S]*?\n\]/)[0].matchAll(/review: \{ model: (?:'([a-z]+)'|null)/g)]
@@ -547,6 +555,23 @@ describe('PR review contract', () => {
     expect(body, 'the stamp is not listed as a score source').not.toMatch(
       /[Rr]ead the score[^.]{0,60}a stamped `?PR review:?`? line/,
     )
+    // Without "earliest", a fixer can read the newest trigger comment — a
+    // step-down rung, or a non-blocking `@claude sonnet review` — as cycle 1,
+    // and send a C90 PR's blocking findings to the cheapest tier.
+    expect(body, 'cycle 1 is the earliest trigger comment').toMatch(
+      /EARLIEST[^.]{0,90}trigger|earliest[^.]{0,90}`?@<bot> … review`? trigger/i,
+    )
+    expect(body, 'a non-blocking re-trigger is not a rung').toMatch(
+      /consumes no rung|never a ladder position/i,
+    )
+    // The three sibling consumers already order the same read; they stay in step.
+    for (const path of [
+      'templates/claude-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'workflows/milestone-pipeline.js',
+    ]) {
+      expect((await read(path)).replace(/\s+/g, ' '), `${path}: earliest trigger comment`).toMatch(/EARLIEST/)
+    }
   })
 
   test('no site maps a @claude model shorthand onto @codex', async () => {
@@ -606,6 +631,7 @@ describe('PR review contract', () => {
     // fixer to repeat a Fable trigger the same page forbids.
     const consumers = [
       'skills/fix-pr-review/rereview-routing.md',
+      'skills/fix-pr-review/SKILL.md',
       'skills/fix-pr-review-loop/SKILL.md',
       'skills/validate-issue/SKILL.md',
       'skills/validate-issue/complexity-scoring.md',
@@ -649,6 +675,26 @@ describe('PR review contract', () => {
     // Its Claude sibling states the same override — the two stay in step.
     const claude = (await read('templates/claude-workflow/prompts/issue-workflow.md')).replace(/\s+/g, ' ')
     expect(claude, 'claude sibling states the override').toMatch(/stamped PR review:? line[^.]{0,80}overrides/i)
+    // Stating the override without a model mapping lets a stamped haiku through
+    // verbatim, and claude.yml reads that as the route keyword.
+    expect(claude, 'haiku maps to the sonnet trigger').toMatch(
+      /@claude sonnet review when the stamp names sonnet or haiku/i,
+    )
+    expect(claude, 'names the admitted shorthand set').toMatch(
+      /resolves only opus, sonnet and fable/i,
+    )
+    expect(claude, 'never posts an unadmitted claude shorthand').not.toMatch(
+      /post `?@claude haiku|words @claude haiku/i,
+    )
+    // The two planning sites that author or render a stamp must name the legal
+    // set too, or an operator stamps a model no Action admits.
+    for (const path of ['skills/prd-to-issues/SKILL.md', 'skills/milestoneplan/SKILL.md']) {
+      const body = (await read(path)).replace(/\s+/g, ' ')
+      expect(body, `${path}: names the admitted shorthand set`).toMatch(
+        /`?sonnet`?, `?opus`? or `?fable`?|admits only `?sonnet`?\/`?opus`?\/`?fable`?/i,
+      )
+      expect(body, `${path}: route-keyword consequence stated`).toMatch(/route keyword/i)
+    }
   })
 
   test('contract inventory carries the band-derived review trigger row', async () => {
