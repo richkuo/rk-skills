@@ -230,6 +230,18 @@ function reviewBandFor(complexity) {
   return REVIEW_BANDS.find((band) => complexity >= band.min && complexity <= band.max) || REVIEW_BANDS[REVIEW_BANDS.length - 1]
 }
 
+// Rank a first-review model on the REVIEW_BANDS order — the scale the reviewer
+// escalates on, which is independent of the build bands. Used to decide whether
+// a rescored band's default reviewer actually outranks an operator's stamped
+// one; a stamped haiku posts the sonnet trigger, so it ranks where sonnet does.
+// A null model is the bare standard trigger, which is its own rung.
+const REVIEW_MODEL_RANK = new Map(REVIEW_BANDS.map((band, index) => [band.review.model, index]))
+function reviewModelRank(model) {
+  const resolved = model === 'haiku' ? 'sonnet' : (model ?? null)
+  const rank = REVIEW_MODEL_RANK.get(resolved)
+  return rank === undefined ? -1 : rank
+}
+
 // Codex exposes one flagship, so the heavy Claude reviewer tiers (opus and
 // fable) and the bare-@claude tier collapse onto its bare default trigger; only
 // the cheap tier — the C0–C10 band and the non-blocking re-review — has a
@@ -505,7 +517,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it.${REVIEW_BOT === 'claude' ? ' If that cycle-1 trigger names fable, step down one rung per blocking re-review — `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened; that ladder stops at `@claude review` and never reaches sonnet, and the fable trigger is never repeated because fable reviews the first cycle only. If it names any other model, repeat that same trigger verbatim for every blocking re-review, whatever the band, so a stamped reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it, skipping any \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comment while you look — that is the cheap non-blocking re-trigger, which a pass posts at any band and which is never cycle 1 unless the band itself selected it.${REVIEW_BOT === 'claude' ? ' If that cycle-1 trigger names fable, step down one rung per blocking re-review — `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened; that ladder stops at `@claude review` and never reaches sonnet, and the fable trigger is never repeated because fable reviews the first cycle only. If it names any other model, repeat that same trigger verbatim for every blocking re-review, whatever the band, so a stamped reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -958,10 +970,26 @@ async function executeTrack(trackIndex) {
       ex.model = derived.model
       ex.effort = derived.effort
       ex.fableplan = derived.fableplan
-      // A stamped first-review trigger predates the rescore too — the band
-      // default for the rescored band takes over.
-      delete ex.first_review_model
-      delete ex.first_review_effort
+      // A stamped first-review trigger predates the rescore too, but the review
+      // scale has its own boundaries, so the rescored BUILD band's review default
+      // is not automatically stronger than the stamp: a [C5] stamped
+      // `@claude fable review` rescored to 25 would fall back to the bare
+      // standard trigger, weakening the reviewer on an issue just judged harder.
+      // Replace the stamp only when the new default outranks it on REVIEW_BANDS;
+      // otherwise the operator's stronger choice stands. "Never lower routing
+      // from a validator rescore" covers the reviewer too. Build, plan and
+      // fableplan stamps keep their unconditional upward replacement above.
+      if (ex.first_review_model) {
+        const stampedRank = reviewModelRank(MODEL_IDS[ex.first_review_model])
+        const derivedReview = reviewBandFor(ex.review_complexity ?? effectiveComplexity).review
+        if (reviewModelRank(derivedReview.model) > stampedRank) {
+          log(`#${issue}: rescored review band ${reviewBandFor(ex.review_complexity ?? effectiveComplexity).name} outranks the stamped first review ${MODEL_NAMES[MODEL_IDS[ex.first_review_model]]} — dropping the stamp for the band default`)
+          delete ex.first_review_model
+          delete ex.first_review_effort
+        } else {
+          log(`#${issue}: keeping the stamped first review ${MODEL_NAMES[MODEL_IDS[ex.first_review_model]]} — the rescored review band ${reviewBandFor(ex.review_complexity ?? effectiveComplexity).name} does not outrank it, and a rescore never lowers review routing`)
+        }
+      }
       log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
     }
 

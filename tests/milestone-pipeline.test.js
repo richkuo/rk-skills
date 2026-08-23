@@ -1252,6 +1252,81 @@ describe('milestone-pipeline subagent review mode', () => {
     }
   })
 
+  test('a validator rescore never lowers a stamped first review', async () => {
+    // The build bands and the review bands have different boundaries, so an
+    // upward BUILD rescore can land on a review band whose default reviewer is
+    // WEAKER than the operator's stamp. Dropping the stamp there would lower
+    // review routing on an issue the validator just judged harder.
+    const stampedIssues = [
+      { number: 2, title: '[C5] Stamped fable, rescored to a weaker review band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
+      { number: 3, title: '[C5] Stamped sonnet, rescored past it', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
+      { number: 4, title: '[C5] Stamped opus, rescored to the bare trigger band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
+    ]
+    const rescores = {
+      'validate:#2': 25,
+      'validate:#3': 90,
+      'validate:#4': 25,
+    }
+    const handlers = {
+      Prep: () => ({ issues: stampedIssues }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    }
+    for (const [label, rescored_complexity] of Object.entries(rescores)) {
+      handlers[label] = () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity })
+    }
+
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewMode: 'github', merge: false }, handlers)
+
+    // #2: rescore 25 moves the BUILD band up, but review band 11–40 is the bare
+    // standard trigger, which is weaker than the stamped Fable. The stamp stands,
+    // and its blocking re-reviews still step down to opus.
+    const two = promptFor(events, 'implement:#2 (opus/high)')
+    expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review`')
+    expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5'))).toBeTrue()
+
+    // #3: rescore 90 reaches review band 81+, which DOES outrank the stamped
+    // Sonnet — a real escalation still replaces the stamp.
+    const three = promptFor(events, 'implement:#3 (opus/xhigh)')
+    expect(three, '#3 stamp is replaced by the stronger band default').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    expect(logs.some((m) => m.includes('#3: rescored review band 81+ outranks the stamped first review Sonnet 5'))).toBeTrue()
+
+    // #4: Opus outranks the bare standard trigger, so the stamp stands.
+    const four = promptFor(events, 'implement:#4 (opus/high)')
+    expect(four, '#4 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+    expect(four, '#4 blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
+  })
+
+  test('a validator rescore never lowers a stamped first review on a Codex cycle', async () => {
+    const { events } = await executeWorkflow({ tracks: [[4]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 4, title: '[C5] Stamped opus, rescored to the bare trigger band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
+        ],
+      }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    // The Codex column already maps a stamped opus onto the bare trigger; the
+    // stamped effort rides along, and the rescore does not discard either.
+    const prompt = promptFor(events, 'implement:#4 (opus/high)')
+    expect(prompt, 'codex cycle-1 keeps the stamped effort').toContain('gh pr comment <num> --body "@codex review effort:high"')
+    expect(prompt, 'codex blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@codex review effort:high`')
+  })
+
   test('rejects an unknown reviewBot', async () => {
     await expect(
       executeWorkflow({ tracks: [[2]], reviewBot: 'gemini' }, { Prep: () => ({ issues: [prepIssue()] }) }),

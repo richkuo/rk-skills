@@ -540,8 +540,13 @@ describe('PR review contract', () => {
     // it gives a competing answer for a stamped PR, and the ladder then posts a
     // trigger the code never would.
     const body = (await read('skills/fix-pr-review/rereview-routing.md')).replace(/\s+/g, ' ')
-    expect(body, 'band table is gated on having no trigger comment').toMatch(
-      /band table[^.]{0,80}ONLY when the PR carries no `?@<bot> … review`? trigger comment/i,
+    expect(body, 'band table is gated on having no cycle-1 trigger comment').toMatch(
+      /band table[^.]{0,80}ONLY when the PR carries no cycle-1 trigger comment/i,
+    )
+    // …and the gate must survive a PR whose only trigger comment is the cheap
+    // non-blocking re-trigger, which a pass posts at any band.
+    expect(body, 'the gate covers a PR left with no trigger after the skip').toMatch(
+      /none left after the cheap non-blocking re-triggers are skipped/i,
     )
     expect(body, 'no heading orders band routing after the cycle-1 check').not.toMatch(
       /check what ran cycle 1, then route on the band/i,
@@ -564,13 +569,35 @@ describe('PR review contract', () => {
     expect(body, 'a non-blocking re-trigger is not a rung').toMatch(
       /consumes no rung|never a ladder position/i,
     )
+    // Excluding the cheap shorthand only while counting rungs is not enough: a
+    // first review can arrive with no trigger comment at all (a human reviewer,
+    // or the loop's "feedback already present" branch), so on a C90 PR the
+    // earliest trigger comment can be a non-blocking `@claude sonnet review`.
+    // Reading that as cycle 1 pins every blocking re-review to the cheapest
+    // tier, which is the failure the earliest-comment rule exists to prevent.
+    expect(body, 'the cheap re-trigger is skipped during the cycle-1 read').toMatch(
+      /skipping every cheap non-blocking re-trigger[^.]{0,160}unless the PR's band is C0–C10/i,
+    )
     // The three sibling consumers already order the same read; they stay in step.
     for (const path of [
       'templates/claude-workflow/prompts/fix-pr.md',
       'templates/codex-workflow/prompts/fix-pr.md',
       'workflows/milestone-pipeline.js',
     ]) {
-      expect((await read(path)).replace(/\s+/g, ' '), `${path}: earliest trigger comment`).toMatch(/EARLIEST/)
+      const sibling = (await read(path)).replace(/\s+/g, ' ')
+      expect(sibling, `${path}: earliest trigger comment`).toMatch(/EARLIEST/)
+      // Each sibling names its own bot's cheap shorthand and skips it during
+      // the cycle-1 read; the pipeline interpolates NONBLOCKING_RETRIGGER.
+      expect(sibling, `${path}: skips the cheap re-trigger during the cycle-1 read`).toMatch(
+        /skipping (?:every|any) (?:@claude sonnet review|@codex luna review|\\`\$\{NONBLOCKING_RETRIGGER\[REVIEW_BOT\]\}\\`)/i,
+      )
+    }
+    // The two Action prompts must also gate the band fallback on the skip, or a
+    // PR whose only trigger comment is the cheap one still has no fallback.
+    for (const path of ['templates/claude-workflow/prompts/fix-pr.md', 'templates/codex-workflow/prompts/fix-pr.md']) {
+      expect((await read(path)).replace(/\s+/g, ' '), `${path}: band fallback covers the skip`).toMatch(
+        /no cycle-1 trigger comment[^.]{0,180}none left after the non-blocking (?:sonnet|luna) comments are skipped/i,
+      )
     }
   })
 
