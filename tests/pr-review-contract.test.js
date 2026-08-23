@@ -477,6 +477,78 @@ describe('PR review contract', () => {
     }
   })
 
+  test('every trigger the pipeline can emit resolves to the review route on its Action', async () => {
+    // Both Actions take the FIRST token after the mention that is not a known
+    // model shorthand as the ROUTE KEYWORD. So an unadmitted shorthand does not
+    // merely lose the model — the keyword stops being `review`, and a
+    // trusted-author PR then takes the write-capable fix-pr route. Every
+    // shorthand any routing table can emit must therefore be one the Action
+    // admits, on both bots.
+    const source = await read('workflows/milestone-pipeline.js')
+
+    const shorthandTable = (name) => {
+      const body = source.match(new RegExp(`const ${name} = \\{([^}]*)\\}`))[1]
+      return body.split(',').map((pair) => pair.split(':')[1].trim().replace(/^'|'$/g, ''))
+        .filter((value) => value !== 'null')
+    }
+    // The Action's admitted set, taken from its own route-keyword parser.
+    const admitted = async (workflow, group) => {
+      const body = await read(workflow)
+      return new Set(body.match(new RegExp(`\\^\\(${group}[^)]*\\)`))[0].replace(/^\^\(|\)$/g, '').split('|'))
+    }
+
+    const claudeAdmitted = await admitted('.github/workflows/claude.yml', 'opus')
+    for (const shorthand of shorthandTable('CLAUDE_REVIEW_SHORTHAND')) {
+      expect(claudeAdmitted.has(shorthand), `claude.yml admits "${shorthand}"`).toBeTrue()
+    }
+    const codexAdmitted = await admitted('.github/workflows/codex.yml', 'sol')
+    for (const shorthand of shorthandTable('CODEX_REVIEW_SHORTHAND')) {
+      expect(codexAdmitted.has(shorthand), `codex.yml admits "${shorthand}"`).toBeTrue()
+    }
+    // The band table feeds the same emitter, so its models must be admitted too.
+    const bandModels = [...source.match(/const REVIEW_BANDS = \[[\s\S]*?\n\]/)[0].matchAll(/review: \{ model: (?:'([a-z]+)'|null)/g)]
+      .map((m) => m[1]).filter(Boolean)
+    expect(bandModels.length, 'band models found').toBeGreaterThan(0)
+    for (const model of bandModels) {
+      expect(claudeAdmitted.has(model), `claude.yml admits band model "${model}"`).toBeTrue()
+    }
+    // Every build model must be REPRESENTABLE as a review trigger, so a stamp
+    // naming one can never fall through to an unadmitted shorthand.
+    const buildModels = Object.keys(JSON.parse(
+      source.match(/const MODEL_IDS = (\{[^}]*\})/)[1].replace(/'/g, '"'),
+    ))
+    for (const model of buildModels) {
+      expect(source, `CLAUDE_REVIEW_SHORTHAND covers ${model}`).toMatch(
+        new RegExp(`CLAUDE_REVIEW_SHORTHAND = \\{[^}]*\\b${model}:`),
+      )
+      expect(source, `CODEX_REVIEW_SHORTHAND covers ${model}`).toMatch(
+        new RegExp(`CODEX_REVIEW_SHORTHAND = \\{[^}]*\\b${model}:`),
+      )
+    }
+  })
+
+  test('the routing page lets a band row apply only with no cycle-1 trigger comment', async () => {
+    // The page states the cycle-1 rule in prose; an unqualified band table beside
+    // it gives a competing answer for a stamped PR, and the ladder then posts a
+    // trigger the code never would.
+    const body = (await read('skills/fix-pr-review/rereview-routing.md')).replace(/\s+/g, ' ')
+    expect(body, 'band table is gated on having no trigger comment').toMatch(
+      /band table[^.]{0,80}ONLY when the PR carries no `?@<bot> … review`? trigger comment/i,
+    )
+    expect(body, 'no heading orders band routing after the cycle-1 check').not.toMatch(
+      /check what ran cycle 1, then route on the band/i,
+    )
+    // The C81+ row must not assert that fable ran cycle 1 — a stamp can put any
+    // model on a C81+ cycle 1, which the same page says keeps its own trigger.
+    expect(body, 'C81+ row asserts nothing about what ran cycle 1').not.toMatch(
+      /`?@claude fable review effort:high`? ran cycle 1/i,
+    )
+    // A stamped PR review: line carries a trigger, not a score.
+    expect(body, 'the stamp is not listed as a score source').not.toMatch(
+      /[Rr]ead the score[^.]{0,60}a stamped `?PR review:?`? line/,
+    )
+  })
+
   test('no site maps a @claude model shorthand onto @codex', async () => {
     // codex.yml resolves only sol|terra|luna|mini|codex|spark. A phrase like
     // "@codex sonnet review" still starts the Action, falls through to the

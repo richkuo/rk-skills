@@ -372,7 +372,7 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewMode: 'github', merge: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
           // A genuine zero: all five axes grade 0, so the step-6 formula reaches 0.
@@ -394,6 +394,10 @@ describe('milestone-pipeline dependency scheduling', () => {
           // The same slip in the other direction: a small reported score on a
           // heavy title must not downgrade routing either.
           { number: 7, title: '[C90] Prep slipped on a heavy title', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
+          // The mirror slip: a real prefix with the field omitted. The prefix is
+          // already authoritative when the two disagree, so discarding it here
+          // would send the whole run to the top band on one agent omission.
+          { number: 8, title: '[C50] Prep omitted the score', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
         ],
       }),
       Implement: (event) => {
@@ -424,6 +428,11 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
     // The reconciliation fires only on a real disagreement, never on #2's true [C0].
     expect(logs.filter((m) => m.includes('routing as unscored (unknown)'))).toHaveLength(3)
+    // (5) A present prefix with the field omitted routes on the prefix, not the
+    // top band, and says so with its own distinct log line.
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
+    expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
   })
 
   test('the prep contract tells a real zero from a missing prefix', async () => {
@@ -1194,7 +1203,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('the github-mode cycle-1 prompt keys its Claude re-trigger to the cycle-1 reviewer', async () => {
-    const { events } = await executeWorkflow({ tracks: [[2], [4], [5], [6]], reviewMode: 'github', merge: false }, {
+    const { events } = await executeWorkflow({ tracks: [[2], [4], [5], [6], [7]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C8] Cheap band', complexity: 8, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
@@ -1205,6 +1214,11 @@ describe('milestone-pipeline subagent review mode', () => {
           // Must survive: a heavy issue stamped Opus carries NO fable trigger,
           // so the C81+ row must not send its re-review to the bare trigger.
           { number: 6, title: '[C90] Stamped opus on a heavy issue', complexity: 90, model: 'opus', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
+          // Haiku is a legal BUILD model, so an operator can stamp it as the
+          // reviewer. claude.yml admits no haiku shorthand and would read the
+          // word as the ROUTE KEYWORD, taking the write-capable fix-pr job, so
+          // the emitter maps it onto the cheapest reviewer the Action admits.
+          { number: 7, title: '[C5] Stamped haiku', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'haiku', first_review_effort: 'high' },
         ],
       }),
       Implement: (event) => {
@@ -1224,6 +1238,7 @@ describe('milestone-pipeline subagent review mode', () => {
       // The stamped effort rides along verbatim, at both cycles.
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
+      'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
     }
     for (const [label, [cycle1, blocking]] of Object.entries(expected)) {
       const prompt = promptFor(events, label)

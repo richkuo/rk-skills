@@ -236,6 +236,16 @@ function reviewBandFor(complexity) {
 // distinct shorthand. A null entry means "no shorthand — bare trigger".
 const CODEX_REVIEW_SHORTHAND = { fable: null, opus: null, sonnet: 'luna', haiku: 'luna' }
 
+// The Claude column of the same table. claude.yml resolves only opus/opus5,
+// sonnet/sonnet5 and fable/fable5, and it takes the first token after @claude
+// that is NOT one of those as the ROUTE KEYWORD — so `@claude haiku review`
+// reads `haiku` as the keyword, which is not `review`, and a trusted-author PR
+// then takes the write-capable fix-pr route instead of the reviewer. Haiku is a
+// legal BUILD model, so an operator can stamp it; map it onto the cheapest
+// reviewer the Action actually admits, exactly as the Codex column maps it onto
+// luna. Never emit a shorthand absent from this table.
+const CLAUDE_REVIEW_SHORTHAND = { fable: 'fable', opus: 'opus', sonnet: 'sonnet', haiku: 'sonnet' }
+
 // The cheaper re-review shorthand after a pass that addressed nothing blocking,
 // per fix-pr-review step 10.
 const NONBLOCKING_RETRIGGER = { claude: '@claude sonnet review', codex: '@codex luna review' }
@@ -252,7 +262,11 @@ function firstReviewTrigger(ex) {
     const effort = stamped ? ex.first_review_effort : null
     return `@codex${shorthand ? ` ${shorthand}` : ''} review${effort ? ` effort:${effort}` : ''}`
   }
-  if (stamped) return `@claude ${stamped} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+  if (stamped) {
+    const shorthand = CLAUDE_REVIEW_SHORTHAND[stamped]
+    if (shorthand !== stamped) log(`stamped first-review model ${MODEL_NAMES[stamped]} → @claude ${shorthand} review (claude.yml resolves no ${stamped} shorthand, and an unresolved one routes to the write-capable fix-pr job)`)
+    return `@claude ${shorthand} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+  }
   if (!review.model) return '@claude review'
   if (review.model === 'opus') return '@claude opus review'
   if (review.model === 'sonnet') return '@claude sonnet review'
@@ -707,6 +721,14 @@ const normalizedIssues = prep.issues.map((issue) => {
     const titleSays = prefixMatch ? `reads [C${prefixScore}]` : 'carries no [C<score>] prefix'
     log(`#${normalized.number}: prep reported C${normalized.complexity} but the title ${titleSays} — routing as unscored (unknown), which takes the top band`)
     delete normalized.complexity
+  } else if (!hasScore(normalized.complexity) && hasScore(prefixScore)) {
+    // The mirror slip: the title carries a real prefix and the agent omitted the
+    // field. The prefix is already authoritative in the disagreement case above,
+    // so use it here rather than discarding a score the runtime just parsed and
+    // sending the whole run to the top band. A trimmed title still yields no
+    // prefix and still routes as unknown, so this never weakens the guard.
+    log(`#${normalized.number}: prep omitted the score but the title reads [C${prefixScore}] — routing on the title prefix`)
+    normalized.complexity = prefixScore
   }
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)

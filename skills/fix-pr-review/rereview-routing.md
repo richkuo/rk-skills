@@ -14,30 +14,34 @@ A finding is blocking when it is a `Needs Fixing` or `Requires Human Review` ite
 
 A CI failure you refuted still counts as blocking on purpose: if that refutation was wrong, the heavier re-review is what catches the real regression you dismissed.
 
-### Blocking — check what ran cycle 1, then route on the band
+### Blocking — route on the reviewer that ran cycle 1
 
 **The step-down is keyed to the reviewer that actually ran cycle 1.** The score band does not decide it. Before you read a band row, look at the PR's own trigger comments: if cycle 1 ran on Fable — selected by the C81+ row below, or by a stamped `PR review:` line naming Fable at any score, which the read order puts first — take the step-down ladder instead of the band row. A first review on any other model keeps its own trigger for every blocking re-review, whatever its band. So a C55 PR whose issue stamps `@claude fable review effort:high` takes the ladder rather than the C41–C80 row, and a C10 PR stamped `@claude opus review` keeps Opus for every blocking re-review.
 
+On a Claude cycle a stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet` and `fable`, and an unresolved shorthand becomes the route keyword, which sends a trusted-author PR to the write-capable fix-pr job instead of the reviewer.
+
 **On a Codex cycle the same stamp rule applies in Codex's own vocabulary.** Never post a `@claude` rung on a Codex cycle, and never discard the stamp back to the band. Map the stamped model onto the Codex column: a stamped `sonnet` or `haiku` becomes `@codex luna review`, and a stamped `opus` or `fable` becomes the bare `@codex review`, each followed by `effort:<tier>` when the stamped line carries one. Codex exposes one flagship and has no Fable tier, so it has no step-down ladder at all — its cycle-1 trigger simply repeats for every blocking re-review. A C60 Codex PR stamped `@claude sonnet review` therefore stays on `@codex luna review` at every cycle, and an unstamped C90 one keeps the bare `@codex review` and never reaches `luna`.
+
+**The band table below applies ONLY when the PR carries no `@<bot> … review` trigger comment at all.** It is the table that *selected* cycle 1, so once a cycle-1 trigger comment exists on the PR, that comment decides and no row here overrides it. Reach for a row only when a review arrived by some other route and the PR has no trigger comment to read.
 
 | Band | Claude trigger | Codex trigger |
 |---|---|---|
 | C0–C10 | `@claude sonnet review` | `@codex luna review` |
 | C11–C40 | `@claude review` | `@codex review` |
 | C41–C80 | `@claude opus review` | `@codex review` |
-| C81+, or no score | `@claude fable review effort:high` ran cycle 1, so step down one rung per blocking cycle (below) | `@codex review` at every cycle |
+| C81+, or no score | `@claude opus review` — a first review already ran by some other route, so never open a Fable cycle on a re-review | `@codex review` at every cycle |
 
 Codex exposes one flagship, so all three bands above C10 collapse onto its bare
 trigger, and the C81+ ladder stays there — it never reaches `luna`. Only the
 C0–C10 band and the non-blocking re-review use the cheap shorthand.
 
-Read the score with fix-pr-review-loop step 1's source order: a stamped `PR review:` line, then the PR title bracket, then the closed issue's `[C<score>]` prefix. `validate-issue` step 6 owns the authoritative table.
+When a band row does apply, read the score from the `[C<score>, …]` bracket in the PR title, then from the `[C<score>]` prefix of the issue the PR closes. A stamped `PR review:` line carries a trigger and no score, so it is not a score source — it selects the reviewer directly, which is the cycle-1 rule above. `validate-issue` step 6 owns the authoritative band table.
 
 ### After a Fable first review — the step-down ladder (Claude cycles only)
 
 This ladder is Claude's. Its rungs are `@claude` triggers, which section 1 forbids on a Codex cycle, and Codex has no Fable tier to step down from — on Codex the cycle-1 trigger repeats instead, per the mapping above.
 
-Fable reviews the first cycle only, so whenever a Claude cycle 1 ran on Fable — selected by the C81+ row or by a stamp at any score — the reviewer steps down one rung per blocking re-review:
+Fable reviews the first cycle only, so whenever a Claude cycle 1 ran on Fable — selected by the C81+ first-review row or by a stamp at any score — the reviewer steps down one rung per blocking re-review. Cycle 1 on any other model takes none of these rungs; it repeats its own trigger:
 
 | Blocking cycle | Trigger |
 |---|---|
@@ -58,13 +62,12 @@ When the pass addressed only optional improvements or follow-ups, the PR was alr
 Post a **separate** comment so the bot triggers cleanly on its own line. Never bundle the trigger into the disposition comment — a trigger buried in a longer body does not fire.
 
 ```bash
-# blocking, C11–C40 — and every blocking re-review from cycle 3 on after a fable first review
+# whatever ran cycle 1, repeated — or, after a fable cycle 1, the next rung down;
+# a band row only when the PR carries no trigger comment at all
 gh pr comment <N> --body "@claude review"
-
-# blocking, C41–C80 — and the FIRST blocking re-review after a fable first review
 gh pr comment <N> --body "@claude opus review"
 
-# blocking, C0–C10 — and any pass that addressed only non-blocking items, in any band
+# any pass that addressed only non-blocking items, in any band
 gh pr comment <N> --body "@claude sonnet review"
 
 # the same cases when this cycle selected Codex — every band above C10 collapses onto the
