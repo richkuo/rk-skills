@@ -43,7 +43,7 @@ Determine the **cutoff**: the timestamp of your most recent disposition comment 
 
 - Every formal review or review-formatted issue comment **newer than the cutoff** (no cutoff → everything since the PR opened) — it opens with a `LGTM` / `Needs Updates` verdict, contains review sections like `### Needs Fixing`, or is otherwise clearly review feedback. **If multiple reviews landed — e.g. two reviewers — address all of them**, not just the latest. Skip `DISMISSED` reviews.
 - Every **unresolved** inline thread (`isResolved: false`), **regardless of age** — resolution state, not timestamp, decides whether a thread is open work. A thread from before the cutoff that the reviewer never resolved is still open. Exception: if the thread's last comment is your own disposition reply and no one has responded since, it's awaiting the reviewer — skip it. `isOutdated` alone doesn't mean resolved. Treat each thread as one finding.
-- Ignore your own prior disposition comments and `@claude review` trigger comments.
+- Ignore your own prior disposition comments and `@claude review` trigger comments. That scoping is the fixer's alone — it skips its own words when collecting *new* work. The reviewer reads those same disposition comments on purpose, because `pr-review` requires the prior-cycle read before it drafts, so never delete, edit, or bury a disposition comment to keep the next review clean.
 
 State what you picked (authors + timestamps) so the user can confirm it's the right set.
 

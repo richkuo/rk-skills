@@ -27,6 +27,8 @@ Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
 
 ## Slotting rules
 
+- **Copy `<finding title>` verbatim from the review comment** — the reviewer's own bold one-sentence title, word for word, with no paraphrase or shortening. The next reviewer matches its findings to these dispositions by claim (`pr-review` requires that read before it drafts), and a reworded title breaks that match, so a settled finding comes back.
+- Every **Not changed (refuted)** and **Corrected scope (partial)** item states the verdict through its section heading and carries a code-grounded rebuttal with its `file:line` — that rebuttal is the evidence a later reviewer must answer before it re-raises the finding, so make it stand on its own without the thread around it.
 - Omit any empty section. Keep each item one line with a `file:line` anchor.
 - CI Failure findings slot into the same sections — fixed ones under **Fixed**, pre-existing/flaky ones under **Not changed (refuted)** with the base-branch or flake evidence in place of a code citation.
 
