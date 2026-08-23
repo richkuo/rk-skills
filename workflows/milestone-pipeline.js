@@ -943,6 +943,29 @@ async function executeTrack(trackIndex) {
       reviewComplexity = rescored
     }
     ex.review_complexity = hasScore(ex.complexity) ? reviewComplexity : undefined
+
+    // A stamped first-review trigger predates the rescore too, so a rescore that
+    // raises the REVIEW band re-evaluates it. Key that on the review band, never
+    // on the build one: the review boundary at 10/11 sits inside build band
+    // 10–20, so a [C10] stamped `@claude sonnet review` rescored to 15 crosses no
+    // build boundary while its review band does move to 11–40 — gating on the
+    // build index would keep a stamp this code itself ranks below the new
+    // default. Replace the stamp only when that default OUTRANKS it on
+    // REVIEW_BANDS; otherwise the operator's stronger choice stands, because a
+    // rescore never lowers routing. An unrescored issue never enters here, so a
+    // stamped reviewer still survives every cycle at its own band.
+    if (ex.first_review_model && hasScore(ex.complexity) && hasScore(ex.review_complexity) &&
+        REVIEW_BANDS.indexOf(reviewBandFor(ex.review_complexity)) > REVIEW_BANDS.indexOf(reviewBandFor(ex.complexity))) {
+      const rescoredBand = reviewBandFor(ex.review_complexity)
+      const stampedName = MODEL_NAMES[MODEL_IDS[ex.first_review_model]]
+      if (reviewModelRank(rescoredBand.review.model) > reviewModelRank(MODEL_IDS[ex.first_review_model])) {
+        log(`#${issue}: rescored review band ${rescoredBand.name} outranks the stamped first review ${stampedName} — dropping the stamp for the band default`)
+        delete ex.first_review_model
+        delete ex.first_review_effort
+      } else {
+        log(`#${issue}: keeping the stamped first review ${stampedName} — the rescored review band ${rescoredBand.name} does not outrank it, and a rescore never lowers review routing`)
+      }
+    }
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary
       log(`#${issue}: INVALID — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
@@ -970,26 +993,6 @@ async function executeTrack(trackIndex) {
       ex.model = derived.model
       ex.effort = derived.effort
       ex.fableplan = derived.fableplan
-      // A stamped first-review trigger predates the rescore too, but the review
-      // scale has its own boundaries, so the rescored BUILD band's review default
-      // is not automatically stronger than the stamp: a [C5] stamped
-      // `@claude fable review` rescored to 25 would fall back to the bare
-      // standard trigger, weakening the reviewer on an issue just judged harder.
-      // Replace the stamp only when the new default outranks it on REVIEW_BANDS;
-      // otherwise the operator's stronger choice stands. "Never lower routing
-      // from a validator rescore" covers the reviewer too. Build, plan and
-      // fableplan stamps keep their unconditional upward replacement above.
-      if (ex.first_review_model) {
-        const stampedRank = reviewModelRank(MODEL_IDS[ex.first_review_model])
-        const derivedReview = reviewBandFor(ex.review_complexity ?? effectiveComplexity).review
-        if (reviewModelRank(derivedReview.model) > stampedRank) {
-          log(`#${issue}: rescored review band ${reviewBandFor(ex.review_complexity ?? effectiveComplexity).name} outranks the stamped first review ${MODEL_NAMES[MODEL_IDS[ex.first_review_model]]} — dropping the stamp for the band default`)
-          delete ex.first_review_model
-          delete ex.first_review_effort
-        } else {
-          log(`#${issue}: keeping the stamped first review ${MODEL_NAMES[MODEL_IDS[ex.first_review_model]]} — the rescored review band ${reviewBandFor(ex.review_complexity ?? effectiveComplexity).name} does not outrank it, and a rescore never lowers review routing`)
-        }
-      }
       log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
     }
 

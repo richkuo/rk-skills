@@ -740,6 +740,23 @@ describe('PR review contract', () => {
     expect(loop, 'maps onto the Codex column too').toMatch(/@codex luna review/)
   })
 
+  test('no site claims a rescore always replaces the stamped first review', async () => {
+    // milestone-pipeline replaces a stamped PR review: model only when the
+    // rescored REVIEW band's default outranks it — a rescore never lowers review
+    // routing. A restatement that lumps review in with build/effort/fableplan
+    // tells a reader the operator's stronger choice is always discarded.
+    const body = (await read('skills/milestone-workflow/SKILL.md')).replace(/\s+/g, ' ')
+    expect(body, 'review is not listed among the unconditional replacements').not.toMatch(
+      /build effort, fableplan, and review all move to the escalated band's defaults/i,
+    )
+    expect(body, 'the review stamp is kept unless the band default outranks it').toMatch(
+      /only when that default outranks the stamp/i,
+    )
+    expect(body, 'build, effort and fableplan still replace unconditionally').toMatch(
+      /build model, build effort and fableplan always move to the escalated band's defaults/i,
+    )
+  })
+
   test('contract inventory carries the band-derived review trigger row', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Band-derived review trigger/)

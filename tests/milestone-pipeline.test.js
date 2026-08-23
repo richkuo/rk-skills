@@ -1303,6 +1303,53 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(four, '#4 blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
   })
 
+  test('a rescore across only the review boundary re-evaluates the stamped first review', async () => {
+    // The 10/11 review boundary sits INSIDE build band 10–20, so a [C10]
+    // rescored to 15 crosses no build boundary. Gating the stamp re-evaluation
+    // on the build index would keep a stamp weaker than the rescored band's own
+    // default; the gate is the REVIEW band index.
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C10] Stamped sonnet, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
+          { number: 3, title: '[C10] Stamped opus, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
+          { number: 4, title: '[C10] Stamped sonnet, rescored downward', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
+          { number: 5, title: '[C10] Unstamped, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+        ],
+      }),
+      'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 15 }),
+      'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 15 }),
+      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 8 }),
+      'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 15 }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    // #2: the 11–40 default (the bare trigger) outranks sonnet, so the stamp goes.
+    expect(promptFor(events, 'implement:#2 (sonnet/xhigh)'), '#2 takes the rescored band default')
+      .toContain('gh pr comment <num> --body "@claude review"')
+    expect(logs.some((m) => m.includes('#2: rescored review band 11–40 outranks the stamped first review Sonnet 5'))).toBeTrue()
+
+    // #3: opus outranks that default, so the operator's choice stands.
+    expect(promptFor(events, 'implement:#3 (sonnet/xhigh)'), '#3 keeps the stronger stamp')
+      .toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+    expect(logs.some((m) => m.includes('#3: keeping the stamped first review Opus 5'))).toBeTrue()
+
+    // #4: a downward rescore never raises the review band, so nothing is re-evaluated.
+    expect(promptFor(events, 'implement:#4 (sonnet/xhigh)'), '#4 keeps sonnet on a downward rescore')
+      .toContain('gh pr comment <num> --body "@claude sonnet review effort:high"')
+    expect(logs.some((m) => m.includes('#4:') && m.includes('review band'))).toBeFalse()
+
+    // #5: an unstamped issue still escalates through review_complexity, unchanged.
+    expect(promptFor(events, 'implement:#5 (sonnet/xhigh)'), '#5 escalates without a stamp')
+      .toContain('gh pr comment <num> --body "@claude review"')
+  })
+
   test('a validator rescore never lowers a stamped first review on a Codex cycle', async () => {
     const { events } = await executeWorkflow({ tracks: [[4]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
       Prep: () => ({
