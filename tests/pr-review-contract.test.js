@@ -442,11 +442,36 @@ describe('PR review contract', () => {
   })
 
   // The staged tree becomes the agent's project root, so it reaches the agent
-  // through two channels the prompt above cannot govern: memory files
-  // (CLAUDE.md) and project settings (hooks, rules). Only the Claude route
-  // needs these flags — the Codex twin is bounded by its read-only sandbox and
-  // holds no write credential at all — so this guard is Claude-only by design
-  // and the divergence is recorded in docs/contract-inventory.md.
+  // through four channels the prompt above cannot govern: memory files
+  // (CLAUDE.md), project settings (hooks, rules), skills under .claude/skills/
+  // and subagents under .claude/agents/. Only the Claude route needs these
+  // flags — the Codex twin is bounded by the read-only sandbox around its
+  // agent, which is handed no token at all, while the job around it does hold
+  // pull-requests: write and issues: write for its own trusted posting step —
+  // so this guard is Claude-only by design and the divergence is recorded in
+  // docs/contract-inventory.md.
+  // setupGitHubToken() runs on every mode and returns the github_token input
+  // when it is non-empty; with it empty the action requests an OIDC token and
+  // throws, and there is no fallback to github.token — so the template does not
+  // merely leak, it fails to start. Granting id-token: write instead would mint
+  // an App token whose defaults are contents/pull_requests/issues write and
+  // export it into the agent's GH_TOKEN, handing the reader of fork-authored
+  // code a scope this job's contents: read never granted. Both halves are one
+  // rule: the agent's token is the job's token.
+  test('the Claude review template binds the agent to the job token', () => {
+    const path = 'templates/claude-review.yml'
+    const { job, steps, actionIndex } = stagingOf(path)
+
+    expect(steps[actionIndex]?.with?.github_token, 'the job token is supplied').toBe(
+      '${{ github.token }}',
+    )
+    expect(
+      job?.permissions?.['id-token'],
+      'and no id-token scope invites an App token instead',
+    ).toBeUndefined()
+    expect(job?.permissions?.contents, 'the agent stays read-only on code').toBe('read')
+  })
+
   test('the Claude review template bounds the reviewer it hands the staged tree', () => {
     const path = 'templates/claude-review.yml'
     const { steps, stagingIndex, actionIndex } = stagingOf(path)
@@ -479,9 +504,13 @@ describe('PR review contract', () => {
       expect(denied, `${tool} cannot invoke instructions from the staged tree`).toContain(tool)
     }
 
-    // The instruction channel: settings sources drop the staged tree's own
-    // .claude/settings.json and rules; claudeMdExcludes drops its CLAUDE.md.
-    expect(args, 'the staged tree supplies no settings, hooks, or rules').toContain(
+    // The instruction channel rests on this one flag: the agent SDK loads
+    // CLAUDE.md files only when settingSources includes 'project', so dropping
+    // project drops the staged tree's memory files along with its
+    // .claude/settings.json, hooks and rules. The claudeMdExcludes file below
+    // is the deliberate second layer, asserted separately so it stays complete
+    // for the day this flag is widened.
+    expect(args, 'the staged tree supplies no memory, settings, hooks, or rules').toContain(
       '--setting-sources user',
     )
     // The flag and the file are two independent literals. Renaming one alone
@@ -1010,6 +1039,22 @@ describe('PR review contract', () => {
     const run = steps[stagingIndex]?.run ?? ''
     expect(run, 'the template excludes AGENTS.md').toContain('/AGENTS.md"')
     expect(row, 'the row says so').toContain('AGENTS.md')
+
+    // The token binding is part of the same boundary, so the row states it and
+    // names the reason a maintainer would otherwise reach for id-token: write.
+    expect(steps[actionIndex]?.with?.github_token, 'the template binds the job token').toBe(
+      '${{ github.token }}',
+    )
+    expect(row, 'the row names the binding').toContain('github_token')
+    expect(row, 'and why id-token: write is not the repair').toContain('id-token: write')
+
+    // Which flag the memory boundary rests on, stated the same way in both.
+    expect(row, 'the row names the real mechanism').toMatch(
+      /`settingSources` includes `project`/,
+    )
+    expect(row, 'and marks the excludes as the spare').toMatch(
+      /second layer[\s\S]{0,120}never the mechanism the boundary rests on today/,
+    )
 
     // Channel count and residual, stated once in each place and never in
     // conflict: the template records the discovery listing as still open.

@@ -109,12 +109,19 @@ jobs:
           # The checkout above makes the pull request tree the project root, so
           # a fork-authored CLAUDE.md / CLAUDE.local.md / .claude/rules entry
           # would load into the agent's INSTRUCTION channel, where the prompt's
-          # data-only rule does not reach. claudeMdExcludes drops every such
-          # file under the workspace by absolute path; --setting-sources user
-          # (below) drops the tree's .claude/settings.json with its hooks and
-          # its project rules. Both are needed: memory files and settings load
-          # by separate mechanisms. Scoped to $GITHUB_WORKSPACE so the runner's
-          # own user-scope memory is untouched.
+          # data-only rule does not reach.
+          #
+          # --setting-sources user (below) is the boundary that closes it, and
+          # it closes memory and settings together: the agent SDK declares that
+          # settingSources "must include 'project' to load CLAUDE.md files", so
+          # dropping project also drops the tree's CLAUDE.md family along with
+          # its .claude/settings.json, hooks and rules. The file written here
+          # is a deliberate SECOND layer against that one flag being narrowed —
+          # a later edit to --setting-sources user,project would put the whole
+          # memory boundary on this list alone, and it has to already be there
+          # and be complete on that day. Do not read it as today's mechanism.
+          # Scoped to $GITHUB_WORKSPACE so the runner's own user-scope memory,
+          # the trusted side, is untouched.
           #
           # Every name is listed at depth 0 AND under **/, because this list is
           # a boundary and a glob that turns out not to match the workspace
@@ -149,6 +156,23 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Bind the agent to THIS job's token. setupGitHubToken() runs on
+          # every mode and returns the github_token input when it is non-empty;
+          # with the input empty it requests an OIDC token instead and throws
+          # "Could not fetch an OIDC token. Did you remember to add
+          # `id-token: write` to your workflow permissions?" — the job block
+          # above grants no id-token, so without this line the run fails before
+          # the review starts, and there is no fallback to github.token.
+          #
+          # Adding id-token: write would be the wrong repair. With no
+          # additional_permissions the action then mints a GitHub App token
+          # whose defaults are contents/pull_requests/issues WRITE, and exports
+          # it into the agent's GITHUB_TOKEN and GH_TOKEN — so the agent that
+          # reads fork-authored code from the staged tree would hold a
+          # contents: write token this job's own contents: read never bounded.
+          # Supplying the job token keeps the agent inside the permissions
+          # block, which is where the boundary is declared and reviewed.
+          github_token: ${{ github.token }}
           # Route the model shorthand that follows "@claude"; any other body
           # uses the action's default model. The shorthand must sit directly
           # after the mention, so the word "opus" inside review prose cannot
