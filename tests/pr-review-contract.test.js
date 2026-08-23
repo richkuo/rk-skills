@@ -218,6 +218,23 @@ describe('PR review contract', () => {
       expect(source, `${path}: untreated re-raise is dropped`).toMatch(
         /drop a re-raised finding that carries no such treatment/i,
       )
+      // A deferral is a terminal disposition too, so a blocking finding the
+      // fixer files cannot be re-derived and re-raised on every cycle.
+      expect(source, `${path}: a deferral settles a finding`).toMatch(
+        /Deferred to follow-up`? disposition settles a finding the same way/i,
+      )
+      expect(source, `${path}: deferral needs rule and issue`).toMatch(
+        /names (?:\*\*)?both(?:\*\*)? the scope rule it applied and the issue it filed/i,
+      )
+      expect(source, `${path}: re-raising a deferral needs treatment`).toMatch(
+        /comes back only when you name the deferral/i,
+      )
+      expect(source, `${path}: a rule-1 finding is never deferrable`).toMatch(
+        /scope rule 1 outranks any deferral/i,
+      )
+      expect(source, `${path}: an incomplete deferral settles nothing`).toMatch(
+        /deferral missing either half settles nothing/i,
+      )
       // A rebuttal covers one claim, never a whole file or function.
       expect(source, `${path}: match by claim`).toMatch(/match findings by claim/i)
       expect(source, `${path}: a rebuttal settles only its own claim`).toMatch(
@@ -526,6 +543,13 @@ describe('PR review contract', () => {
     expect(recipes).toContain('--log-failed')
     expect(recipes).toMatch(/`bucket: cancel`/)
     expect(disposition).toContain('Resolved judgment calls (was Requires Human Review)')
+    // A deferral settles a finding only when it names its scope rule and its
+    // issue, so the next reviewer has something it must answer.
+    expect(disposition).toMatch(
+      /Every Deferred to follow-up item names both the scope rule it applied and the issue number/i,
+    )
+    expect(disposition).toMatch(/deferral missing either half settles nothing/i)
+    expect(disposition).toMatch(/out of scope under scope rule <N>/)
     expect(disposition).toContain('/replies')
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
@@ -1056,6 +1080,25 @@ describe('PR review contract', () => {
     // The growth check's two inputs each name a concrete derivation.
     expect(skill).toMatch(/first-push-sha[\s\S]{0,300}committedDate/i)
     expect(skill).toMatch(/Cycle count[\s\S]{0,200}trigger comments/i)
+    // Both growth readings exclude the base branch, so a step 7 merge of the
+    // base into the head is never counted as growth of this PR.
+    expect(skill).toMatch(/Both readings exclude the base branch/i)
+    expect(skill).toMatch(/never measure growth with a plain `<first-push-sha>\.\.HEAD` two-dot diff/i)
+    // The brake and the growth check share one name for the derived count.
+    expect(skill).toMatch(/pr_cycle_count/)
+
+    // A finding the reviewer routed to Create Follow-up Issue is filed, never
+    // implemented — the scope table cannot claim it back through rule 3.
+    expect(skill).toMatch(
+      /except one the reviewer already routed to `### Create Follow-up Issue`[\s\S]{0,120}filed and never implemented/i,
+    )
+    // One stated precedence decides the overlap: rule 1 outranks the routing.
+    expect(skill).toMatch(
+      /Rule 1 is that exclusion's only exception[\s\S]{0,220}outranks the reviewer's routing/i,
+    )
+    expect(step6).toMatch(
+      /`Create Follow-up Issue` items — file them, never implement them, with scope rule 1 the only exception/i,
+    )
   })
 
   test.each([
@@ -1089,12 +1132,25 @@ describe('PR review contract', () => {
     // unconditionally deferring — rule-1 findings keep their mechanism here.
     expect(prompt).toMatch(/re-run the scope rules in order/i)
     expect(prompt).toMatch(/stays in scope and the mechanism gets built here/i)
+    // A reviewer-routed follow-up is filed, never implemented, with one
+    // stated exception so the overlap with rule 1 has a single answer.
+    expect(prompt).toMatch(
+      /except for a finding the reviewer already routed to Create Follow-up Issue, which is filed and never implemented/i,
+    )
+    expect(prompt).toMatch(/Rule 1 is that exclusion's only exception/i)
+    // The deferral is a terminal disposition, so it carries its rationale.
+    expect(prompt).toMatch(
+      /Deferred to follow-up section whose every item names both the scope rule applied and the issue filed/i,
+    )
+    expect(prompt).toMatch(/deferral missing either half settles nothing/i)
   })
 
   test('the contract inventory carries the scope-test row and the brake exception', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Review-remedy scope test/)
-    expect(inventory).toMatch(/the divergence brake stops the loop at `review_count >= 4`/)
+    expect(inventory).toMatch(/the divergence brake stops the loop at `pr_cycle_count >= 4`/)
+    expect(inventory).toMatch(/never the in-memory `review_count`/)
+    expect(inventory).toMatch(/unattributable blocking finding\s+defeating the condition/i)
     expect(inventory).toMatch(
       /divergence brake[\s\S]{0,160}only when[\s\S]{0,160}an earlier cycle added/i,
     )
@@ -1120,6 +1176,19 @@ describe('PR review contract', () => {
     'however small the patch looks',
     'Remedy size never routes a finding in either direction',
     'safety carve-out in routing form and outranks the next one',
+    // The rules route between the PR and a follow-up issue only. They never
+    // make ### Requires Human Review unreachable for a finding in PR-added
+    // code, which rule 1 would otherwise match first.
+    "never remove a finding's eligibility for ### Requires Human Review",
+    'goes there whatever these rules say',
+    // The mechanism list is identical in the owner and in every consumer, so
+    // a later addition to it fails here when one copy is missed.
+    'a new persistent store',
+    'a new lifecycle or generation scheme',
+    'a new cross-cutting invariant',
+    'a retry or recovery path',
+    'a new subsystem',
+    'turns a small PR into a large one',
   ]
 
   test('pr-review routes a new-mechanism remedy to a follow-up issue', async () => {

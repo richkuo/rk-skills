@@ -153,11 +153,6 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/review_count\s*>\s*5/)
       expect(body, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
-      // A cycle count alone never stops a `Needs Updates` PR. The divergence
-      // brake below is the one exception, and it needs a second condition.
-      expect(body, path).toMatch(
-        /never stops the loop by cycle count|stops the loop by cycle count only through/is,
-      )
       // Cap rule: past threshold, first LGTM ends the loop (not a bare keyword hit).
       expect(body, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
     }
@@ -178,11 +173,14 @@ describe('loop/validate pipeline contract', () => {
       expect(end, path).toBeGreaterThan(from)
       const region = body.slice(from, end)
 
-      const at = region.search(/review_count\s*>=\s*(\d+)/)
+      const at = region.search(/pr_cycle_count\s*>=\s*(\d+)/)
       expect(at, path).toBeGreaterThan(-1)
+      // The brake reads its own derived count, never the in-memory
+      // `review_count` that the past-5 LGTM cap uses.
+      expect(region, path).toMatch(/(?:not|never) the in-memory `?review_count`?/i)
       // The threshold has to sit below the LGTM cap of 5, or the brake can
       // never fire before the cap ends the loop on its own.
-      const threshold = Number(region.match(/review_count\s*>=\s*(\d+)/)[1])
+      const threshold = Number(region.match(/pr_cycle_count\s*>=\s*(\d+)/)[1])
       expect(threshold, path).toBeLessThan(5)
       const rule = region.slice(at, at + 300)
       // Both halves in one rule — the cycle count is never sufficient alone.
@@ -193,6 +191,19 @@ describe('loop/validate pipeline contract', () => {
       // appears in step 5's table and the Red Flags rows, and a hit there
       // would keep this green after the rule lost its escalation step.
       expect(region, path).toMatch(/Diverging/)
+
+      // A cycle count alone never stops a `Needs Updates` PR. Asserted on the
+      // region that states the rules, so step 5's prose restating it cannot
+      // satisfy this after rule 4 loses its own clause.
+      expect(region, path).toMatch(
+        /never stops the loop by cycle count|no cycle count alone stops a/is,
+      )
+
+      // Base-branch code a step 7 merge brought into the head is not the
+      // loop's own work, and an unattributable blocking finding defeats the
+      // self-inflicted test instead of satisfying it vacuously.
+      expect(region, path).toMatch(/base merge|base-branch work|origin\/<baseRefName>/i)
+      expect(region, path).toMatch(/cannot be attributed|defeats/i)
     }
   })
 
