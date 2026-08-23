@@ -42,7 +42,12 @@
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface — always.** Never pick the tidier design if it leaves any correctness/safety gap (money, data integrity, security, auto-protective mechanisms); weigh gaps against the realistic worst case, and ignore the average. Derive the right solution from first principles even if it means more code.
 - **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow unless I override it, verifying claims against code, destructive-action safety) override "best."
-- **Tests are a correctness floor.** They are never an obstacle. "Best solution" never means weakening, deleting, or skipping a test to make a change pass — fix the code, or if the test itself is wrong, say so and get explicit sign-off before touching it.
+- **Tests are a correctness floor.** They are never an obstacle. "Best solution" never means weakening, deleting, skipping, or narrowing a test to make a change pass. When a test fails the default is that the code is wrong, so fix the code. Editing the test is the right answer in three named cases, and the case decides who authorizes it:
+  - **Outdated** — the test correctly asserts behavior this change deliberately replaces. Update it in the same change, under whatever authorized the change (the issue, the review finding, my instruction). No separate sign-off.
+  - **Wrong** — the test asserts behavior that was never correct, independent of this change. Say so and get my explicit sign-off before touching it.
+  - **Obsolete** — the change deletes the covered behavior outright, or another test now asserts the same thing. Remove it and name which of those two applies.
+- **A replacement test is at least as strong as the one it replaces.** It still fails on every defect the old one caught, except the exact behavior the change intentionally replaced. Prove that by mutation wherever a mutation is possible; a green suite is no evidence, because a guard that cannot fail passes too.
+- **Disclose every test edit** in the commit message and the PR body — the test, which of the three cases it falls under, and what the replacement asserts. A test edit I have to find myself is the failure these rules exist to prevent.
 - Parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
