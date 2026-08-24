@@ -232,6 +232,15 @@ describe('PR review contract', () => {
       expect(source, `${path}: reviewer routing is an admissible basis`).toMatch(
         /`?### Create Follow-up Issue`? routing where the fixer filed the item without running one/i,
       )
+      // The mirror case: a Fixed item that kept the work here over the
+      // reviewer's own routing must name the rule that authorized it, and an
+      // unexplained override is itself a finding.
+      expect(source, `${path}: a rule-1 override is answerable`).toMatch(
+        /`?Fixed`? item naming scope rule 1 over your `?### Create Follow-up Issue`? routing/i,
+      )
+      expect(source, `${path}: an unnamed override is a finding`).toMatch(
+        /overrode your routing and names no such rule is itself a finding/i,
+      )
       expect(source, `${path}: re-raising a deferral needs treatment`).toMatch(
         /comes back only when you name the deferral/i,
       )
@@ -956,6 +965,22 @@ describe('PR review contract', () => {
     expect(disposition).toMatch(/Rule 1 never appears here/i)
     expect(disposition).toMatch(/deferral missing either half settles nothing/i)
     expect(disposition).toMatch(/out of scope, basis <scope rule <N>/)
+    // A Fixed item that kept work here against a routing or a rule that
+    // would have filed it names scope rule 1 — the counterpart of the
+    // deferral's basis, in a required field rather than prose discretion.
+    expect(disposition).toMatch(
+      /A Fixed item that kept a finding in the PR against something that would have filed it carries a scope rule 1 note/i,
+    )
+    expect(disposition).toMatch(/Exactly two cases require it/i)
+    expect(disposition).toMatch(
+      /step 4's exclusion-exception pulled it back, or the fixer's own rule 2 would have filed the remedy/i,
+    )
+    // An ordinary Fixed item overrides nothing and stays unannotated.
+    expect(disposition).toMatch(
+      /Every other Fixed item overrides nothing and carries no note/i,
+    )
+    // The template carries the field, not only the prose rule.
+    expect(disposition).toMatch(/Scope rule 1 note, required only when/i)
     expect(disposition).toContain('/replies')
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
@@ -1602,12 +1627,21 @@ describe('PR review contract', () => {
     expect(prompt).toMatch(
       /the reviewer's own Create Follow-up Issue routing for an item the Phase 3 exclusion filed without running a scope rule on it/i,
     )
+    // The Fixed section states the rule-1 override, so a reviewer-routed
+    // follow-up built here cannot read as unexplained growth.
+    expect(prompt).toMatch(
+      /a Fixed section whose every item that kept a finding in the pull request against something that would have filed it/i,
+    )
+    expect(prompt).toMatch(/every other Fixed item overrides nothing and carries no such note/i)
     expect(prompt).toMatch(/deferral missing either half settles nothing/i)
   })
 
   test('the contract inventory carries the scope-test row and the brake exception', async () => {
     const inventory = await read('docs/contract-inventory.md')
     expect(inventory).toMatch(/Review-remedy scope test/)
+    expect(inventory).toMatch(
+      /A Fixed item that kept a finding in the PR against the reviewer's `### Create Follow-up Issue` routing, or against the fixer's own rule 2, names scope rule 1 as its authority/i,
+    )
     expect(inventory).toMatch(/the divergence brake stops the loop at `pr_cycle_count >= 4`/)
     expect(inventory).toMatch(/never the in-memory `review_count`/)
     expect(inventory).toMatch(/unattributable blocking finding\s+defeating the condition/i)

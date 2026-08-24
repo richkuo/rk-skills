@@ -310,10 +310,18 @@ jobs:
               lives in code this PR adds or changes, where scope rule 1
               outranks any deferral and any routing of your own. A deferral
               missing either half settles nothing, and its finding is raised
-              normally. Match findings by claim. A prior rebuttal settles only
-              the claim it answered; a different defect in the same file,
-              function, or line is untouched by it and gets raised normally.
-              The safety carve-out overrides this rule: a money,
+              normally. The mirror case is a `Fixed` item naming scope rule 1
+              over your `### Create Follow-up Issue` routing: that note is the
+              fixer's authority for keeping the work here, and you re-raise
+              the routing only by showing from current code at file:line that
+              the rule does not match — this PR neither adds nor changes the
+              code the defect lives in, and creates no hazard. A `Fixed` item
+              that overrode your routing and names no such rule is itself a
+              finding: the PR grew past what you routed into it, with no
+              stated authority. Match findings by claim. A prior rebuttal
+              settles only the claim it answered; a different defect in the
+              same file, function, or line is untouched by it and gets raised
+              normally. The safety carve-out overrides this rule: a money,
               data-integrity, security, or auto-protective finding is always
               surfaced, and when a prior rebuttal is the only reason to drop
               it and you cannot confirm that rebuttal from current code, it
