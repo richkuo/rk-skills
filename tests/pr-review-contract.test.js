@@ -218,6 +218,38 @@ describe('PR review contract', () => {
       expect(source, `${path}: untreated re-raise is dropped`).toMatch(
         /drop a re-raised finding that carries no such treatment/i,
       )
+      // A deferral is a terminal disposition too, so a blocking finding the
+      // fixer files cannot be re-derived and re-raised on every cycle.
+      expect(source, `${path}: a deferral settles a finding`).toMatch(
+        /Deferred to follow-up`? disposition settles a finding the same way/i,
+      )
+      expect(source, `${path}: deferral needs a basis and an issue`).toMatch(
+        /names (?:\*\*)?both(?:\*\*)? its basis[\s\S]{0,220}and the issue it filed/i,
+      )
+      // The basis is defined for both ways an item gets filed: the fixer's
+      // own scope rule, or the reviewer's routing where the fixer's
+      // exclusion filed the item without running one.
+      expect(source, `${path}: reviewer routing is an admissible basis`).toMatch(
+        /`?### Create Follow-up Issue`? routing where the fixer filed the item without running one/i,
+      )
+      // The mirror case: a Fixed item that kept the work here over the
+      // reviewer's own routing must name the rule that authorized it, and an
+      // unexplained override is itself a finding.
+      expect(source, `${path}: a rule-1 override is answerable`).toMatch(
+        /`?Fixed`? item naming scope rule 1 over your `?### Create Follow-up Issue`? routing/i,
+      )
+      expect(source, `${path}: an unnamed override is a finding`).toMatch(
+        /overrode your routing and names no such rule is itself a finding/i,
+      )
+      expect(source, `${path}: re-raising a deferral needs treatment`).toMatch(
+        /comes back only when you name the deferral/i,
+      )
+      expect(source, `${path}: a rule-1 finding is never deferrable`).toMatch(
+        /scope rule 1 outranks any deferral/i,
+      )
+      expect(source, `${path}: an incomplete deferral settles nothing`).toMatch(
+        /deferral missing either half settles nothing/i,
+      )
       // A rebuttal covers one claim, never a whole file or function.
       expect(source, `${path}: match by claim`).toMatch(/match findings by claim/i)
       expect(source, `${path}: a rebuttal settles only its own claim`).toMatch(
@@ -918,6 +950,37 @@ describe('PR review contract', () => {
     expect(recipes).toContain('--log-failed')
     expect(recipes).toMatch(/`bucket: cancel`/)
     expect(disposition).toContain('Resolved judgment calls (was Requires Human Review)')
+    // A deferral settles a finding only when it names its scope rule and its
+    // issue, so the next reviewer has something it must answer.
+    expect(disposition).toMatch(
+      /Every Deferred to follow-up item names both its basis and the issue number/i,
+    )
+    // Both admissible bases are named, so a reviewer-routed follow-up has a
+    // defined value for the field rather than an omitted or invented rule.
+    expect(disposition).toMatch(/the fixer scope rule it applied/i)
+    expect(disposition).toMatch(
+      /the reviewer's own `### Create Follow-up Issue` routing/i,
+    )
+    // Rule 1 keeps the finding in the PR, so it never appears as a basis.
+    expect(disposition).toMatch(/Rule 1 never appears here/i)
+    expect(disposition).toMatch(/deferral missing either half settles nothing/i)
+    expect(disposition).toMatch(/out of scope, basis <scope rule <N>/)
+    // A Fixed item that kept work here against a routing or a rule that
+    // would have filed it names scope rule 1 — the counterpart of the
+    // deferral's basis, in a required field rather than prose discretion.
+    expect(disposition).toMatch(
+      /A Fixed item that kept a finding in the PR against something that would have filed it carries a scope rule 1 note/i,
+    )
+    expect(disposition).toMatch(/Exactly two cases require it/i)
+    expect(disposition).toMatch(
+      /step 4's exclusion-exception pulled it back, or the fixer's own rule 2 would have filed the remedy/i,
+    )
+    // An ordinary Fixed item overrides nothing and stays unannotated.
+    expect(disposition).toMatch(
+      /Every other Fixed item overrides nothing and carries no note/i,
+    )
+    // The template carries the field, not only the prose rule.
+    expect(disposition).toMatch(/Scope rule 1 note, required only when/i)
     expect(disposition).toContain('/replies')
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
@@ -1439,6 +1502,222 @@ describe('PR review contract', () => {
     expect(body, 'build, effort and fableplan still replace unconditionally').toMatch(
       /build model, build effort and fableplan always move to the escalated band's defaults/i,
     )
+  })
+
+  test('the scope test gates implementation and routes out-of-scope remedies to issues', async () => {
+    const skill = await read('skills/fix-pr-review/SKILL.md')
+
+    // Scope is decided per finding, alongside the verdict, before step 6 runs,
+    // by three precedence-ordered rules.
+    expect(skill).toMatch(/Scope: the second axis on every finding/i)
+    expect(skill).toMatch(/in order — the first match decides/i)
+    expect(skill).toMatch(/PR-caused — always in scope/i)
+    expect(skill).toMatch(/File a follow-up issue; do not implement/i)
+
+    // Rule 1 cannot be reclassified by any later rule or step — the reading
+    // that let step 6's discovery bullet defer a hazard the PR created.
+    expect(skill).toMatch(
+      /No later rule, step, or growth check may reclassify it out of scope/i,
+    )
+
+    // Rule 3 closes the table's gap: a mechanism-free fix to a pre-existing
+    // defect is in scope, matching pr-review's routing of the same finding.
+    expect(skill).toMatch(
+      /pre-existing defect whose remedy needs no new mechanism/i,
+    )
+
+    // Remedy size never decides, in either direction.
+    expect(skill).toMatch(
+      /size of the remedy never decides scope, in either direction/i,
+    )
+
+    // The yardstick is defined even when the PR closes no issue.
+    expect(skill).toMatch(
+      /closes no issue[\s\S]{0,120}PR body's own stated scope/i,
+    )
+
+    // A reviewer's optional carries no authority to enlarge the PR.
+    expect(skill).toMatch(
+      /Recommended Optional[\s\S]{0,120}suggestion, not a work order/i,
+    )
+
+    // Step 6 skips out-of-scope findings and files them instead of dropping
+    // them, deduplicating against issues earlier cycles filed.
+    const step6 = skill.slice(skill.indexOf('### 6. Implement the fixes'), skill.indexOf('### 7.'))
+    expect(step6).toMatch(/every finding step 4's scope test put out of scope/i)
+    expect(step6).toMatch(/File each out-of-scope finding as an issue/i)
+    expect(step6).toMatch(/neither implement nor file is a finding you dropped/i)
+    expect(step6).toMatch(/gh issue list --search/)
+    // Discovery mid-implementation re-runs the precedence — a rule-1 finding
+    // stays in the PR and gets its mechanism built here.
+    expect(step6).toMatch(/re-run step 4's scope rules in order/i)
+    expect(step6).toMatch(/rule-1 finding[\s\S]{0,200}stays in scope/i)
+
+    // The growth check's two inputs each name a concrete derivation.
+    expect(skill).toMatch(/first-push-sha[\s\S]{0,300}committedDate/i)
+    expect(skill).toMatch(/Cycle count[\s\S]{0,200}trigger comments/i)
+    // Both growth readings exclude the base branch, so a step 7 merge of the
+    // base into the head is never counted as growth of this PR.
+    expect(skill).toMatch(/Both readings exclude the base branch/i)
+    expect(skill).toMatch(/never measure growth with a plain `<first-push-sha>\.\.HEAD` two-dot diff/i)
+    // The brake and the growth check share one name for the derived count.
+    expect(skill).toMatch(/pr_cycle_count/)
+
+    // Filing one records the basis that placed it, so the disposition field
+    // has a defined value for a reviewer-routed item too.
+    expect(step6).toMatch(
+      /the reviewer's own `### Create Follow-up Issue` routing for an item step 4's exclusion filed without running one/i,
+    )
+
+    // A finding the reviewer routed to Create Follow-up Issue is filed, never
+    // implemented — the scope table cannot claim it back through rule 3.
+    expect(skill).toMatch(
+      /except one the reviewer already routed to `### Create Follow-up Issue`[\s\S]{0,120}filed and never implemented/i,
+    )
+    // One stated precedence decides the overlap: rule 1 outranks the routing.
+    expect(skill).toMatch(
+      /Rule 1 is that exclusion's only exception[\s\S]{0,220}outranks the reviewer's routing/i,
+    )
+    expect(step6).toMatch(
+      /`Create Follow-up Issue` items — file them, never implement them, with scope rule 1 the only exception/i,
+    )
+  })
+
+  test.each([
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ])('%s restates the scope test and files what it does not implement', async (promptPath) => {
+    const prompt = await read(promptPath)
+
+    expect(prompt).toMatch(
+      /Scope is a second axis, decided per finding alongside the verdict, against a defined yardstick/i,
+    )
+    // The yardstick is defined even when the PR closes no issue.
+    expect(prompt).toMatch(
+      /closes no issue[\s\S]{0,80}pull request body's own stated scope/i,
+    )
+    // Rule 1 is absolute: a PR-caused defect or hazard can never be deferred.
+    expect(prompt).toMatch(
+      /always in scope, however much mechanism its fix needs, and no later rule or phase may reclassify it/i,
+    )
+    expect(prompt).toMatch(/which the yardstick does not ask for is out of scope/i)
+    expect(prompt).toMatch(/size of the remedy never decides scope in either direction/i)
+    expect(prompt).toMatch(
+      /Recommended Optional item is a suggestion, not a work order/i,
+    )
+    expect(prompt).toMatch(
+      /File each out-of-scope finding as an issue instead of implementing it/i,
+    )
+    expect(prompt).toMatch(/neither implement nor file is a finding you dropped/i)
+    expect(prompt).toMatch(/gh issue list --search/)
+    // Mid-implementation discovery re-runs the precedence rather than
+    // unconditionally deferring — rule-1 findings keep their mechanism here.
+    expect(prompt).toMatch(/re-run the scope rules in order/i)
+    expect(prompt).toMatch(/stays in scope and the mechanism gets built here/i)
+    // A reviewer-routed follow-up is filed, never implemented, with one
+    // stated exception so the overlap with rule 1 has a single answer.
+    expect(prompt).toMatch(
+      /except for a finding the reviewer already routed to Create Follow-up Issue, which is filed and never implemented/i,
+    )
+    expect(prompt).toMatch(/Rule 1 is that exclusion's only exception/i)
+    // The deferral is a terminal disposition, so it carries its rationale.
+    expect(prompt).toMatch(
+      /Deferred to follow-up section whose every item names both its basis and the issue filed/i,
+    )
+    expect(prompt).toMatch(
+      /the reviewer's own Create Follow-up Issue routing for an item the Phase 3 exclusion filed without running a scope rule on it/i,
+    )
+    // The Fixed section states the rule-1 override, so a reviewer-routed
+    // follow-up built here cannot read as unexplained growth.
+    expect(prompt).toMatch(
+      /a Fixed section whose every item that kept a finding in the pull request against something that would have filed it/i,
+    )
+    expect(prompt).toMatch(/every other Fixed item overrides nothing and carries no such note/i)
+    expect(prompt).toMatch(/deferral missing either half settles nothing/i)
+  })
+
+  test('the contract inventory carries the scope-test row and the brake exception', async () => {
+    const inventory = await read('docs/contract-inventory.md')
+    expect(inventory).toMatch(/Review-remedy scope test/)
+    expect(inventory).toMatch(
+      /A Fixed item that kept a finding in the PR against the reviewer's `### Create Follow-up Issue` routing, or against the fixer's own rule 2, names scope rule 1 as its authority/i,
+    )
+    expect(inventory).toMatch(/the divergence brake stops the loop at `pr_cycle_count >= 4`/)
+    expect(inventory).toMatch(/never the in-memory `review_count`/)
+    expect(inventory).toMatch(/unattributable blocking finding\s+defeating the condition/i)
+    expect(inventory).toMatch(
+      /divergence brake[\s\S]{0,160}only when[\s\S]{0,160}an earlier cycle added/i,
+    )
+    // The scope-test row names every reviewer-side consumer of the routing rule.
+    const rowAt = inventory.indexOf('| Review-remedy scope test')
+    expect(rowAt).toBeGreaterThan(-1)
+    const row = inventory.slice(rowAt, inventory.indexOf('\n|', rowAt))
+    for (const consumer of [
+      'templates/claude-workflow/prompts/pr-review-format.md',
+      'templates/codex-workflow/prompts/pr-review-format.md',
+      'templates/claude-review.yml',
+      'templates/codex-review.yml',
+    ]) {
+      expect(row, consumer).toContain(consumer)
+    }
+  })
+
+  const NEW_MECHANISM_ROUTING = [
+    // Whitespace-normalized phrases, so the wrapped YAML prose matches too.
+    'One case reverses that default: a remedy the PR has no mechanism for',
+    'Apply these rules in order; the first match routes the finding',
+    'stays in the PR however much mechanism its fix needs',
+    'however small the patch looks',
+    'Remedy size never routes a finding in either direction',
+    'safety carve-out in routing form and outranks the next one',
+    // The rules route between the PR and a follow-up issue only. They never
+    // make ### Requires Human Review unreachable for a finding in PR-added
+    // code, which rule 1 would otherwise match first.
+    "never remove a finding's eligibility for ### Requires Human Review",
+    'goes there whatever these rules say',
+    // The mechanism list is identical in the owner and in every consumer, so
+    // a later addition to it fails here when one copy is missed.
+    'a new persistent store',
+    'a new lifecycle or generation scheme',
+    'a new cross-cutting invariant',
+    'a retry or recovery path',
+    'a new subsystem',
+    'turns a small PR into a large one',
+  ]
+
+  test('pr-review routes a new-mechanism remedy to a follow-up issue', async () => {
+    const skill = texts['skills/pr-review/SKILL.md']
+    const at = skill.indexOf('### Create Follow-up Issue` is the disposition of last resort')
+    expect(at).toBeGreaterThan(-1)
+    // Assert inside the disposition rules, not across the whole document.
+    const region = skill
+      .slice(at, skill.indexOf('`### Requires Human Review` is the escalation', at))
+      .replace(/\s+/g, ' ')
+      .replace(/[`*]/g, '')
+
+    for (const phrase of NEW_MECHANISM_ROUTING) {
+      expect(region, phrase).toContain(phrase)
+    }
+    expect(region).toMatch(
+      /Create Follow-up Issue rather than ### Recommended Optional/i,
+    )
+    // Rule 3 preserves the trivially-fixable same-bug-class routing above it.
+    expect(region).toMatch(/mechanism-free fix, gets fixed here/i)
+  })
+
+  test.each([
+    'templates/claude-workflow/prompts/pr-review-format.md',
+    'templates/codex-workflow/prompts/pr-review-format.md',
+    'templates/claude-review.yml',
+    'templates/codex-review.yml',
+  ])('%s restates the new-mechanism routing rule', async (consumerPath) => {
+    // The Action reviewers read these files, not skills/pr-review/SKILL.md —
+    // a rule stated only in the skill never reaches a reviewer that runs.
+    const flat = (await read(consumerPath)).replace(/\s+/g, ' ').replace(/[`*]/g, '')
+    for (const phrase of NEW_MECHANISM_ROUTING) {
+      expect(flat, `${consumerPath}: ${phrase}`).toContain(phrase)
+    }
+    expect(flat).toMatch(/mechanism-free fix, gets fixed here/i)
   })
 
   test('contract inventory carries the band-derived review trigger row', async () => {

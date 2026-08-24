@@ -15,6 +15,13 @@ const REVIEW_CYCLE_FULL = [
 ]
 const REVIEW_CYCLE_PARAPHRASE = ['skills/fableplan-loop/SKILL.md']
 
+// Where each review-cycle owner states its stop conditions. The divergence
+// brake is asserted inside this region only.
+const STOP_CONDITION_REGION = {
+  'skills/fix-pr-review-loop/SKILL.md': ['### 3. Check the review', '### 4. Resolve the review'],
+  'skills/work-on-issue-loop/SKILL.md': ['**fix-pr-review-loop step 3**', '**fix-pr-review-loop step 4**'],
+}
+
 const CAPABILITY_GATE = [
   'skills/fable-validate-loop/SKILL.md',
   'skills/validate-fableplan-loop/SKILL.md',
@@ -146,11 +153,57 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/review_count\s*>\s*5/)
       expect(body, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
-      expect(body, path).toMatch(
-        /Needs Updates.*never stops|never force-stops a `Needs Updates`|never stops the loop by cycle count/is,
-      )
       // Cap rule: past threshold, first LGTM ends the loop (not a bare keyword hit).
       expect(body, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
+    }
+  })
+
+  test('review-cycle owners brake on divergence, and only with the self-inflicted condition', () => {
+    for (const path of REVIEW_CYCLE_FULL) {
+      const body = procedureBody(texts[path])
+      // The brake exists and is keyed to a cycle count below the LGTM cap, so
+      // a PR correcting its own corrections stops before cycle 5.
+      // Scope to the region that states the stop conditions. The Red Flags and
+      // Common Mistakes rows restate these same phrases, so a search over the
+      // whole document finds them there and proves nothing about the rule.
+      const [open_, close] = STOP_CONDITION_REGION[path]
+      const from = body.indexOf(open_)
+      expect(from, path).toBeGreaterThan(-1)
+      const end = body.indexOf(close, from + open_.length)
+      expect(end, path).toBeGreaterThan(from)
+      const region = body.slice(from, end)
+
+      const at = region.search(/pr_cycle_count\s*>=\s*(\d+)/)
+      expect(at, path).toBeGreaterThan(-1)
+      // The brake reads its own derived count, never the in-memory
+      // `review_count` that the past-5 LGTM cap uses.
+      expect(region, path).toMatch(/(?:not|never) the in-memory `?review_count`?/i)
+      // The threshold has to sit below the LGTM cap of 5, or the brake can
+      // never fire before the cap ends the loop on its own.
+      const threshold = Number(region.match(/pr_cycle_count\s*>=\s*(\d+)/)[1])
+      expect(threshold, path).toBeLessThan(5)
+      const rule = region.slice(at, at + 300)
+      // Both halves in one rule — the cycle count is never sufficient alone.
+      expect(rule, path).toMatch(/Needs Updates/i)
+      expect(rule, path).toMatch(/an earlier cycle[\s\S]{0,40}added/i)
+      // It escalates to the human rather than continuing or silently trimming.
+      // Asserted on the region, not the whole document — "Diverging" also
+      // appears in step 5's table and the Red Flags rows, and a hit there
+      // would keep this green after the rule lost its escalation step.
+      expect(region, path).toMatch(/Diverging/)
+
+      // A cycle count alone never stops a `Needs Updates` PR. Asserted on the
+      // region that states the rules, so step 5's prose restating it cannot
+      // satisfy this after rule 4 loses its own clause.
+      expect(region, path).toMatch(
+        /never stops the loop by cycle count|no cycle count alone stops a/is,
+      )
+
+      // Base-branch code a step 7 merge brought into the head is not the
+      // loop's own work, and an unattributable blocking finding defeats the
+      // self-inflicted test instead of satisfying it vacuously.
+      expect(region, path).toMatch(/base merge|base-branch work|origin\/<baseRefName>/i)
+      expect(region, path).toMatch(/cannot be attributed|defeats/i)
     }
   })
 

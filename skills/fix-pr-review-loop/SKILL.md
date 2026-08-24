@@ -1,11 +1,11 @@
 ---
 name: fix-pr-review-loop
-description: Use when the user asks to fix a PR review and drive it to approval autonomously — "fix the PR review and loop until approved", "fix-pr-review-loop", "keep addressing review comments until this PR is approved", or as the standalone counterpart to work-on-issue-loop's polling/resolving steps for a PR that already exists. Takes an optional PR number/URL (defaults to the current branch's PR). Repeatedly calls fix-pr-review to resolve the latest review, waits for the resulting re-review from the selected review bot (@claude by default, @codex when selected), and repeats. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
+description: Use when the user asks to fix a PR review and drive it to approval autonomously — "fix the PR review and loop until approved", "fix-pr-review-loop", "keep addressing review comments until this PR is approved", or as the standalone counterpart to work-on-issue-loop's polling/resolving steps for a PR that already exists. Takes an optional PR number/URL (defaults to the current branch's PR). Repeatedly calls fix-pr-review to resolve the latest review, waits for the resulting re-review from the selected review bot (@claude by default, @codex when selected), and repeats. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain; and stops to escalate when four or more cycles keep producing blocking findings in code the loop itself added, rather than compounding a PR that is growing instead of converging.
 ---
 
 # fix-pr-review-loop
 
-Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. This skill owns the convergence loop; work-on-issue-loop delegates to steps 2 through 4 here after it opens a PR, then writes its own report step that reuses step 5's terminal-state table with two named deltas (its own "no PR" row, plus the follow-on issue URLs it files). An edit to step 5's table therefore needs a matching edit in work-on-issue-loop step 4.
+Drive an already-open PR from "has review feedback" to "reviewed to convergence" without stopping in between: resolve the latest review (fix-pr-review), wait for the bot's re-review, and repeat. Past 5 cycles the bar for "done" relaxes — any LGTM ends the loop — so a PR with recurring minor findings doesn't get fix-pr-review'd forever. A second brake catches the other failure: when four or more cycles keep raising blocking findings in code earlier cycles added, the loop stops and hands the scope decision to the user instead of correcting its own corrections indefinitely. This skill owns the convergence loop; work-on-issue-loop delegates to steps 2 through 4 here after it opens a PR, then writes its own report step that reuses step 5's terminal-state table with two named deltas (its own "no PR" row, plus the follow-on issue URLs it files). An edit to step 5's table therefore needs a matching edit in work-on-issue-loop step 4.
 
 ## Input
 
@@ -76,7 +76,13 @@ Evaluate in this order:
 0. **Merge conflict check.** Before evaluating the verdict, check `gh pr view <N> --json mergeable,mergeStateStatus`. If the PR is `CONFLICTING`/`DIRTY`, it can't be terminal regardless of verdict — invoke fix-pr-review (step 4) so it resolves the conflict, even on a bare LGTM.
 1. **Clean pass — stop, success.** Verdict is `LGTM` and **no finding sections at all** — nothing under Recommended Optional or Create Follow-up Issue either. A `**Verification limitation:**` line is not a finding and does not prevent a clean pass. Nothing left to fix, at any `review_count`. Go to step 5.
 2. **Past the cap and it's an LGTM — stop, first one wins.** `review_count > 5` **and** verdict is `LGTM` (even with Recommended Optional / Create Follow-up Issue items still listed). Once the loop has run more than 5 cycles, the first LGTM it sees ends it — don't spend a 6th+ fix-pr-review cycle chasing non-blocking findings. Go to step 5.
-3. **Otherwise — keep going.** Verdict is `Needs Updates` (at any `review_count` — there is no cycle count that alone stops a `Needs Updates` PR; only an LGTM does, per rules 1–2), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
+3. **Sustained `Needs Updates` — stop, hand the scope call to the user.** `pr_cycle_count >= 4` **and** the verdict is `Needs Updates` **and** every blocking finding in the latest review sits in code an earlier cycle of this loop added. Four cycles of the loop correcting its own corrections is evidence that fix-pr-review's scope test is being applied too loosely, and another cycle compounds it rather than converging. Go to step 5 and report per its **Diverging** row.
+
+   The condition is deliberately narrow. A blocking finding in code the PR shipped in its **first** push does not trigger it — that is the loop doing its job, and it keeps going under rule 4 however many cycles it takes. Only self-inflicted findings count.
+
+   Both inputs come from the PR itself, so a loop resumed on a PR that already ran cycles under an earlier invocation reads the same values. **`pr_cycle_count` is not the in-memory `review_count` that rules 2 and 4 read.** It is fix-pr-review step 4's growth-check count (trigger comments read per its rereview-routing rules), and it skips the cheap non-blocking re-triggers, so it can sit below `review_count`; every restatement of this rule carries that definition. `<first-push-sha>` resolves per that same growth check. A finding sits in code an earlier cycle added when `git blame <file> -L<line>,<line>` at the PR head attributes its cited line to a commit that is an ancestor of neither `<first-push-sha>` nor `origin/<baseRefName>` (both `git merge-base --is-ancestor <blame-sha> <first-push-sha>` and `git merge-base --is-ancestor <blame-sha> origin/<baseRefName>` fail); a line the first push wrote and a later cycle rewrote blames to the later cycle and counts, while a line a step 7 base merge brought in is base-branch work and never counts. A blocking finding that cannot be attributed at all — it cites no `file:line` (an LGTM-precondition gap carries none by construction), or it cites a path or line the head no longer has — **defeats this condition rather than satisfying it vacuously**: rule 3 fires only when the review carries at least one blocking finding and every one of them is attributed to a later cycle.
+
+4. **Otherwise — keep going.** Verdict is `Needs Updates` and rule 3 did not fire (at any `review_count` — no cycle count alone stops a `Needs Updates` PR whose findings are in its original work), or verdict is `LGTM` with findings still listed and `review_count <= 5`. A `**Verification limitation:**` line alone does not count as findings still listed. Continue to step 4.
 
 ### 4. Resolve the review and loop
 
@@ -94,10 +100,11 @@ Stop the loop and report the terminal state — don't claim blanket success:
 |---|---|
 | Clean `LGTM`, no findings, at or before `review_count` 5 | **Done.** PR is approved with nothing outstanding. If the terminal review carried any `**Verification limitation:**` lines, name each unverified source — they are not outstanding work, but they must still be reported. |
 | `review_count > 5` and an `LGTM` (with non-blocking items remaining) ended the loop | **Done, with leftovers.** PR is approved; note the remaining optional/follow-up items that were left unaddressed once the loop passed 5 cycles. Also name each unverified source from any `**Verification limitation:**` lines in the terminal review. |
+| Rule 3 fired — sustained `Needs Updates` on self-inflicted findings | **Diverging — escalate the scope call.** Report `pr_cycle_count`, the PR's growth measured base-excluded per fix-pr-review step 4's growth check (`git diff --stat $(git merge-base origin/<baseRefName> HEAD)..HEAD` against the same reading taken at `<first-push-sha>`), and the chain: for each cycle, the finding it fixed and the finding that fix produced. Name the mechanisms the PR has grown that its scope yardstick (fix-pr-review step 4: the linked issue(s), or the PR body's stated scope when it closes none) never asked for. Recommend one of: revert to the last cycle whose findings were all in the original work and file the rest as issues; or narrow the PR to the yardstick and file the remainder. Do not start another cycle. |
 | Bot never responded within the wait window | **Escalate.** Report that the PR is pushed but review never landed; the user should check the selected review bot's GitHub Action status. |
 | PR was already `merged`/`closed` when the skill started | **Nothing to drive.** Report the state; zero review cycles ran. |
 
-There is no "stuck on `Needs Updates` past the cap" case to report — per step 3, `Needs Updates` never stops the loop by cycle count alone; it keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, the row above).
+`Needs Updates` stops the loop by cycle count only through step 3 rule 3, which needs the findings to be self-inflicted as well. A `Needs Updates` PR whose findings still sit in its original work keeps calling fix-pr-review until an LGTM appears (or the bot stops responding, or rule 3's condition comes to hold).
 
 In every case, give: PR URL, number of review cycles run, final verdict, and (if escalating) exactly what's left.
 
@@ -110,16 +117,18 @@ After that narrative, name each unverified source from any `**Verification limit
 | Situation | Action |
 |---|---|
 | `review_count > 5` and the latest verdict is `LGTM` | Stop per step 3 rule 2; report per step 5 |
-| `review_count > 5` and the latest verdict is still `Needs Updates` | Keep going per step 3 rule 3 |
+| `review_count > 5` and the latest verdict is still `Needs Updates`, findings in the PR's original work | Keep going per step 3 rule 4 |
+| `pr_cycle_count >= 4` (step 3 rule 3's derived count, never the in-memory `review_count`), verdict `Needs Updates`, every blocking finding attributed to code an earlier cycle added | Stop per step 3 rule 3; report per step 5's **Diverging** row |
 | Latest "review" is your own prior fix-pr-review disposition comment or a review trigger comment (`@claude review` / `@codex review`), not an actual review | Skip it — keep waiting/polling for the real next review, same rule as fix-pr-review step 1 |
 | Review bot hasn't responded after ~30 minutes | Stop waiting; report that review didn't land rather than polling forever |
-| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't terminal — step 3 rule 3 sends it through fix-pr-review; step 3 rule 1 defines the only clean pass |
+| Tempted to treat "LGTM with Recommended Optional items" as terminal at `review_count <= 5` | It isn't terminal — step 3 rule 4 sends it through fix-pr-review; step 3 rule 1 defines the only clean pass |
 | PR gets closed or merged mid-loop (e.g. by the user) | Stop immediately; don't keep pushing fixes to a closed/merged PR |
 | PR already has unaddressed feedback when the skill starts | Don't post a redundant review trigger — step 1 evaluates existing feedback first and only triggers when none exists |
 
 ## Common Mistakes
 
-- **Misapplying the cycle cap.** Step 3 rules 1–3 own the cap and the `**Verification limitation:**` handling; apply them as written.
+- **Misapplying the cycle cap.** Step 3 rules 1–4 own the cap and the `**Verification limitation:**` handling; apply them as written.
+- **Reading rule 3 as a plain cycle cap.** It needs both halves: four or more cycles **and** every blocking finding sitting in code an earlier cycle added. A PR still being corrected in its original work keeps going under rule 4.
 - **Losing count across cycles.** Track `review_count` explicitly — it's what distinguishes "full fix cycle" from "first-LGTM-wins" behavior.
 - **Polling synchronously forever.** Use an until-loop with a timeout so a non-responding bot doesn't hang the whole run.
 - **Re-triggering review on top of fix-pr-review's own trigger.** fix-pr-review already posts its own re-review trigger as a separate comment (its step 10) — don't add a second one here.
