@@ -89,16 +89,11 @@ function visitTrack(trackIndex, path) {
 TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
-
 const REVIEW_MODE = ARGS.reviewMode ?? 'github'
-
 const REVIEW_BOT = ARGS.reviewBot ?? 'claude'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
-
 const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
-
 const MERGE = ARGS.merge ?? REVIEW_LOOP
-
 const RELEASE = ARGS.release ?? MERGE
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (REVIEW_MODE !== 'subagent' && REVIEW_MODE !== 'github') throw new Error("reviewMode must be 'subagent' or 'github'")
@@ -126,7 +121,6 @@ for (const entry of MERGED_INPUT) {
   MERGED.set(entry.issue, { pr: entry.pr, merge_sha: entry.merge_sha, issue_state: entry.issue_state === 'closed' || entry.issue_state === 'open' ? entry.issue_state : 'unknown' })
   MERGED_PRS.add(entry.pr)
 }
-
 const CONSUMED_MERGE_RECORDS = new Set()
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
@@ -520,10 +514,8 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 }
 
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
-
   const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
-
   const FABLE_STEP_DOWN = [{ model: 'opus', effort: 'high' }, { model: null, effort: 'high' }]
   let stepDown = 0
   const nextBlockingReview = () => {
@@ -596,7 +588,6 @@ if (!prep) throw new Error('prep agent failed — cannot resolve Execution block
 const SCORE_PREFIX = /^\s*\[C(\d+)\]/
 const normalizedIssues = prep.issues.map((issue) => {
   const normalized = { ...issue }
-
   const prefixMatch = SCORE_PREFIX.exec(normalized.title || '')
   const prefixScore = prefixMatch ? Number(prefixMatch[1]) : undefined
   if (hasScore(normalized.complexity) && normalized.complexity !== prefixScore) {
@@ -604,7 +595,6 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: prep reported C${normalized.complexity} but the title ${titleSays} — routing as unscored (unknown), which takes the top band`)
     delete normalized.complexity
   } else if (!hasScore(normalized.complexity) && hasScore(prefixScore)) {
-
     log(`#${normalized.number}: prep omitted the score but the title reads [C${prefixScore}] — routing on the title prefix`)
     normalized.complexity = prefixScore
   }
@@ -612,12 +602,10 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
   }
-
   if (normalized.model === 'fable' && normalized.effort === 'xhigh') {
     log(`#${normalized.number}: normalized build effort xhigh → high (Fable never runs at xhigh)`)
     normalized.effort = 'high'
   }
-
   if (normalized.plan_effort === 'xhigh') {
     log(`#${normalized.number}: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)`)
     normalized.plan_effort = 'high'
@@ -626,7 +614,6 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized first-review effort xhigh → high (Fable never runs at xhigh)`)
     normalized.first_review_effort = 'high'
   }
-
   if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
     log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
   }
@@ -715,7 +702,6 @@ async function executeTrack(trackIndex) {
 
   const localCompleted = []
   const localSkipped = []
-
   let baseRefs = dedupeBaseRefs(hardPredecessors.map(({ outcome }) => outcome.head).filter((candidate) => candidate && !candidate.merged))
   let head = null
   let status = 'ready'
@@ -760,7 +746,6 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
-
     const rescored = Number.isInteger(validation.rescored_complexity) && validation.rescored_complexity > 0 ? validation.rescored_complexity : undefined
     let effectiveComplexity = hasScore(ex.complexity) ? ex.complexity : rescored
     if (hasScore(rescored) && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
@@ -774,7 +759,6 @@ async function executeTrack(trackIndex) {
         log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
       }
     }
-
     let reviewComplexity = effectiveComplexity
     if (hasScore(reviewComplexity) && hasScore(rescored) &&
         REVIEW_BANDS.indexOf(reviewBandFor(rescored)) > REVIEW_BANDS.indexOf(reviewBandFor(reviewComplexity))) {
@@ -831,7 +815,6 @@ async function executeTrack(trackIndex) {
         : `band ${derived.band.name} (complexity unknown — no [C<score>] prefix, so a validator rescore never lowers the build route)`
       log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from ${source}`)
     }
-
     const modelId = MODEL_IDS[ex.model] || 'opus'
 
     let plan = null
@@ -937,10 +920,8 @@ async function executeTrack(trackIndex) {
     }
 
     if (MERGE) {
-
       const recordedMerge = MERGED.get(issue)
       if (recordedMerge && recordedMerge.pr !== impl.pr_number) {
-
         blocker = `merged record for issue #${issue} names PR #${recordedMerge.pr}, but this run opened PR #${impl.pr_number} for it — correct the record before resuming`
         record.status = 'merge_record_mismatch'
         record.blocker = blocker

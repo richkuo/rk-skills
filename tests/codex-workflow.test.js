@@ -75,7 +75,6 @@ function jobPermissions(source, jobName) {
 
 describe('Codex workflow bundle', () => {
   test('the vendored trigger carries the template classifier verbatim', () => {
-
     for (const step of CLASSIFIER_STEPS) {
       const fromTemplate = stepRunBlock(templateTrigger, step)
       const fromRepo = stepRunBlock(repoTrigger, step)
@@ -99,7 +98,6 @@ describe('Codex workflow bundle', () => {
     '%s keeps every job on contents: read and never grants id-token',
     async (path) => {
       const source = await read(path)
-
       for (const job of ['review', 'implement', 'fix-pr']) {
         expect(jobPermissions(source, job), `${path}: ${job}`).toEqual([
           'contents: read',
@@ -162,7 +160,6 @@ describe('Codex workflow bundle', () => {
       expect(fixPr, path).toContain(
         "contains(fromJSON('[\"OWNER\", \"MEMBER\", \"COLLABORATOR\"]'), github.event.issue.author_association)",
       )
-
       expect(fixPr, path).toContain(
         "vars.CODEX_BOT_LOGIN != '' && github.event.issue.user.login == vars.CODEX_BOT_LOGIN",
       )
@@ -177,7 +174,6 @@ describe('Codex workflow bundle', () => {
       expect(block).toContain('CODEX_APP_PRIVATE_KEY')
       expect(block).toContain('exit 1')
       expect(runBody).toContain('uses: actions/create-github-app-token@v2')
-
       expect(runBody).toMatch(
         /- name: Mint the GitHub App installation token\n\s+if: inputs\.mode != 'review'/,
       )
@@ -186,7 +182,6 @@ describe('Codex workflow bundle', () => {
     test('the review route posts through a trusted step, never the agent', () => {
       const block = stepRunBlock(runBody, 'Post the Codex review comment')
       expect(block).toBeTruthy()
-
       expect(block).toContain('--body-file')
       expect(block).not.toMatch(/--body\s+"/)
       expect(runBody).toContain(

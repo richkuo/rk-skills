@@ -40,7 +40,6 @@ describe('numbered plan steps with verify points', () => {
       expect(body, `${path}: numbering instruction`).toMatch(
         /[Nn]umber(?:ed)?\s+the\s+implementation\s+steps|implementation\s+steps\s+numbered/,
       )
-
       expect(body, `${path}: numbering shape`).toMatch(/`?1\.`?,\s*`?2\.`?/)
       expect(body, `${path}: verify point`).toMatch(/verify point/i)
       expect(body, `${path}: verify point is an observable check`).toMatch(
@@ -101,11 +100,9 @@ describe('numbered plan steps with verify points', () => {
 
   test('an item that borrowed a later step\'s verify point re-homes when that step is overridden', () => {
     const body = procedureBody(texts[MIRROR_OWNER])
-
     expect(body, `${MIRROR_OWNER}: every borrower re-homes`).toMatch(
       /every[\s\S]{0,60}borrowed it[\s\S]{0,40}re-homes/i,
     )
-
     expect(body, `${MIRROR_OWNER}: borrowed check follows a replacement`).toMatch(
       /re-homes[\s\S]{0,200}replacement step's verify point/i,
     )
@@ -124,7 +121,6 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: re-homing cascades through chains`).toMatch(
       /[Rr]e-homing cascades[\s\S]{0,400}repeats until no open item keys on a check that cannot run/i,
     )
-
     expect(body, `${MIRROR_OWNER}: fallback points at the re-homing rule`).toMatch(
       /the borrowed check re-homes[\s\S]{0,120}A borrowed verify point re-homes when its source step is overridden/,
     )
@@ -154,7 +150,6 @@ describe('numbered plan steps with verify points', () => {
       .split('\n')
       .find((line) => line.startsWith('|') && /Adopted plan/.test(line) && /task tracker/.test(line))
     expect(row, `${MIRROR_OWNER}: guardrail row present`).toBeDefined()
-
     expect(row, `${MIRROR_OWNER}: guardrail row not narrowed to long plans`).not.toMatch(
       /long or many-part/i,
     )
@@ -175,7 +170,6 @@ describe('numbered plan steps with verify points', () => {
   })
 
   test('every producer posts its plan under the heading work-on-issue step 0 matches', () => {
-
     for (const path of PRODUCERS) {
       const body = procedureBody(texts[path])
       expect(body, `${path}: plan-comment heading`).toMatch(/## Implementation plan \(/)
@@ -187,7 +181,6 @@ describe('numbered plan steps with verify points', () => {
   })
 
   test('fableplan planning-phase-only mode still forbids the build step', () => {
-
     const body = procedureBody(texts['skills/fableplan/SKILL.md'])
     expect(body, 'fableplan: planning-only forbids steps 7-8').toMatch(
       /Do NOT execute steps 7–8/,

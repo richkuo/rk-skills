@@ -16,6 +16,7 @@ import urllib.parse
 SCRIPT = os.path.join(os.path.dirname(__file__), "rewrite_create_pr_link.py")
 FOOTER = "---\nLLM: Claude Opus 5 | high"
 
+
 def run(body_in, footer=FOOTER):
     result = subprocess.run(
         [sys.executable, SCRIPT],
@@ -26,6 +27,7 @@ def run(body_in, footer=FOOTER):
     )
     return result.stdout.rstrip("\n")
 
+
 def extract_body_param(markdown):
     """Pull the `body=` query param out of the first Create-PR link."""
     start = markdown.index("(https://github.com/")
@@ -33,6 +35,7 @@ def extract_body_param(markdown):
     url = markdown[start + 1 : end]
     qs = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query, keep_blank_values=True)
     return qs["body"][0]
+
 
 class RewriteCreatePRLinkTest(unittest.TestCase):
     def test_replaces_default_attribution(self):
@@ -84,7 +87,6 @@ class RewriteCreatePRLinkTest(unittest.TestCase):
         comment = f"first {link} and second {link}"
 
         out = run(comment)
-
         self.assertEqual(urllib.parse.unquote(out).count("LLM:"), 2)
 
     def test_replaces_stale_llm_footer_in_prefilled_body(self):
@@ -116,6 +118,6 @@ class RewriteCreatePRLinkTest(unittest.TestCase):
             extract_body_param(twice),
         )
 
+
 if __name__ == "__main__":
     unittest.main()
-

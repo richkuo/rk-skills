@@ -70,6 +70,7 @@ else
 fi
 """
 
+
 def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -95,7 +96,6 @@ def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
             "CLAUDE_HARNESS": "anthropics/claude-code-action@v1",
         }
     )
-
     if single_comment is not None:
         single = tmp_path / "single.json"
         single.write_text(json.dumps(single_comment))
@@ -113,6 +113,7 @@ def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
     log = patch_log.read_text() if patch_log.exists() else ""
     return result.stdout, log
 
+
 class PatchClaudeCommentTest(unittest.TestCase):
     def _run(self, extra_env, single_comment=None):
         with tempfile.TemporaryDirectory() as d:
@@ -128,23 +129,19 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertIn("body from claude[bot]", patched)
 
     def test_bot_login_override_without_run_id_takes_latest_by_author(self):
-
         patched = self._run({"BOT_LOGIN": "github-actions[bot]"})
         self.assertIn("repos/o/r/issues/comments/404", patched)
 
     def test_run_id_selects_own_comment_despite_newer_same_author(self):
-
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "222"})
         self.assertIn("repos/o/r/issues/comments/202", patched)
         self.assertIn("body from github-actions[bot]", patched)
 
     def test_run_id_without_match_is_a_clean_noop(self):
-
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555"})
         self.assertEqual(patched, "")
 
     def test_run_id_match_is_not_a_prefix_match(self):
-
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "22"})
         self.assertEqual(patched, "")
 
@@ -157,7 +154,6 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(patched, "")
 
     def test_on_miss_post_creates_new_status_comment(self):
-
         patched = self._run(
             {
                 "BOT_LOGIN": "github-actions[bot]",
@@ -184,14 +180,12 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertNotIn("--method\nPOST", patched)
 
     def test_on_miss_post_without_status_note_is_a_noop(self):
-
         patched = self._run(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555", "ON_MISS": "post"}
         )
         self.assertEqual(patched, "")
 
     def test_select_only_emits_run_matched_comment_id_without_patching(self):
-
         out, log = self._run_full(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "222", "SELECT_ONLY": "1"}
         )
@@ -199,7 +193,6 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(log, "")
 
     def test_select_only_emits_empty_string_on_miss(self):
-
         out, log = self._run_full(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555", "SELECT_ONLY": "1"}
         )
@@ -207,7 +200,6 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(log, "")
 
     def test_target_comment_id_patches_that_comment_bypassing_selection(self):
-
         single = {
             "id": 202,
             "user": {"login": "claude[bot]"},
@@ -220,6 +212,6 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertIn("--method\nPATCH", patched)
         self.assertNotIn("issues/comments/101", patched)
 
+
 if __name__ == "__main__":
     unittest.main()
-

@@ -72,7 +72,6 @@ describe('PR review worked example', () => {
     const headings = [...needsUpdates.matchAll(/^### .+$/gm)].map((match) => match[0])
     expect(headings).toEqual(SECTION_ORDER)
     for (const heading of SECTION_ORDER) {
-
       expect(skill, `Format rules must name ${heading}`).toContain(heading.slice(4))
       expect(
         sectionBody(heading).match(/^1\. \*\*.+\*\*$/m),
@@ -87,7 +86,6 @@ describe('PR review worked example', () => {
         (match) => match[1],
       )
       expect(fields, heading).toEqual(SECTION_FIELDS[heading])
-
       expect(fields[fields.length - 1], `${heading}: last field`).toBe('Plain simple English:')
     }
   })
@@ -109,10 +107,8 @@ describe('PR review worked example', () => {
 
     const limitLine = lines[limitIndex]
     expect(limitLine).toMatch(/^\*\*Verification limitation:\*\* .+ unavailable — .+\.$/)
-
     expect(limitLine).not.toMatch(/Invariant:|Must survive:|Plain simple English:/)
     expect(limitLine).not.toMatch(/^\s*\d+\./)
-
     expect(nonBlank(lines.slice(limitIndex + 1).join('\n'))[0]).toBe('---')
   })
 
@@ -130,7 +126,6 @@ describe('PR review worked example', () => {
         /^\*\*(Plain simple English|Recommended proposed solution):\*\* (.+)$/gm,
       ),
     ]
-
     expect(fields.length).toBeGreaterThanOrEqual(5)
     for (const [, label, body] of fields) {
       expect(body.trim().split(/\s+/).length, `${label} word count`).toBeLessThan(55)

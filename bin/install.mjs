@@ -43,19 +43,15 @@ const backedUpSkills = [];
 const keptSkills = [];
 for (const name of retiredSkills) {
 	const target = join(skillsDir, name);
-
 	const stat = lstatSync(target, { throwIfNoEntry: false });
 	if (stat === undefined) continue;
 	if (stat.isSymbolicLink()) {
-
 		rmSync(target, { force: true });
 		removedSkills.push(name);
 	} else if (lstatSync(`${target}.bak`, { throwIfNoEntry: false }) === undefined) {
-
 		renameSync(target, `${target}.bak`);
 		backedUpSkills.push(name);
 	} else {
-
 		keptSkills.push(name);
 	}
 }

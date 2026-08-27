@@ -1,4 +1,5 @@
 name: Claude Code
+
 on:
   issue_comment:
     types: [created]
@@ -8,9 +9,11 @@ on:
     types: [opened]
   pull_request_review:
     types: [submitted]
+
 concurrency:
   group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
+
 jobs:
   classify:
     if: |
@@ -185,6 +188,7 @@ jobs:
       effort: ${{ needs.classify.outputs.effort }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
   implement:
     needs: classify
     if: needs.classify.outputs.invoked == 'true' && needs.classify.outputs.mode == 'implement'
@@ -201,6 +205,7 @@ jobs:
       effort: ${{ needs.classify.outputs.effort }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
   fix-pr:
     needs: classify
     if: >

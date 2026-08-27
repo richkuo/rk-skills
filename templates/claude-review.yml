@@ -1,7 +1,10 @@
+
 name: Claude PR Review
+
 on:
   issue_comment:
     types: [created]
+
 jobs:
   review:
     if: |
@@ -17,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Stage the pull request under review
         id: pr_context
         env:

@@ -104,7 +104,6 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           summary: 'fixed',
         }
       } else {
-
         result = {
           status: 'lgtm',
           nonblocking_remaining: 0,
@@ -278,7 +277,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
-
     expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
     expect(planEvent(3).effort).toBe('low')
@@ -292,7 +290,6 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-
     expect(logs.filter((message) => message.includes('normalized plan effort xhigh → high'))).toEqual([
       '#2: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
       '#5: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
@@ -308,7 +305,6 @@ describe('milestone-pipeline dependency scheduling', () => {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C20] No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 3, title: '[C20] No Execution block at all', complexity: 20, model: 'fable', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
           { number: 4, title: '[C60] Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', fableplan: true, missing_block: false },
           { number: 5, title: '[C20] No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
@@ -325,7 +321,6 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('prep is contracted to omit Plan effort when the issue stamps none', () => {
-
     const source = workflowSource
     const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
     expect(schemaLine).toMatch(/OMIT this field entirely when the line is absent/)
@@ -340,17 +335,13 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('prep is contracted to omit the stamps the band derives', () => {
     const source = workflowSource
-
     expect(source).not.toMatch(/validate_effort/)
     expect(source).toContain('do NOT extract a "**Validate effort:**"')
-
     const reviewSchemaLine = source.match(/^ +first_review_model: \{.*$/m)[0]
     expect(reviewSchemaLine).toMatch(/OMIT this field when the line is a standard/)
     const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
-
     expect(source).toContain('const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review')
-
     expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
     expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
     expect(source).not.toMatch(/build: \{ model: 'fable'/)
@@ -361,19 +352,12 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
-
           { number: 2, title: '[C0] Genuinely the smallest change', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 3, title: 'No score anywhere in this title', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 4, title: '[Cx] Malformed prefix', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 5, title: 'Prep slipped and reported zero', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 6, title: '[C50] Prep slipped on a mid-band title', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 7, title: '[C90] Prep slipped on a heavy title', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 8, title: '[C50] Prep omitted the score', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
         ],
       }),
@@ -387,10 +371,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
-
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
     expect(promptFor(events, 'implement:#2 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
-
     for (const issue of [3, 4, 5, 6, 7]) {
       expect(dispatch(`validate:#${issue}`), `#${issue}`).toMatchObject({ model: 'fable', effort: 'high' })
       expect(promptFor(events, `implement:#${issue} (sonnet/high)`), `#${issue}`)
@@ -399,12 +381,9 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5 @ medium')
     expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high')
     expect(logs).toContain('#5: prep reported C0 but the title carries no [C<score>] prefix — routing as unscored (unknown), which takes the top band')
-
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
-
     expect(logs.filter((m) => m.includes('routing as unscored (unknown)'))).toHaveLength(3)
-
     expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
     expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
@@ -412,13 +391,11 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('the prep contract tells a real zero from a missing prefix', async () => {
     const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
-
     expect(source).toContain("required: ['number', 'title', 'model', 'effort', 'fableplan'],")
     const schemaLine = source.match(/^ +complexity: \{.*$/m)[0]
     expect(schemaLine).toMatch(/OMIT this field entirely when the title carries no \[C\.\.\] prefix/)
     const promptLine = source.match(/^- complexity: .*$/m)[0]
     expect(promptLine).toMatch(/OMIT the field rather than sending 0/)
-
     expect(source).toContain('function hasScore(complexity) {')
     expect(source).toContain('  if (!hasScore(complexity)) return BANDS[BANDS.length - 1]')
     expect(source).toContain('  if (!hasScore(complexity)) return REVIEW_BANDS[REVIEW_BANDS.length - 1]')
@@ -450,10 +427,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
-
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
     expect(dispatch('validate:#3')).toMatchObject({ model: 'opus', effort: 'medium' })
-
     expect(dispatch('validate:#4')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
@@ -463,7 +438,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#10')).toMatchObject({ model: 'fable', effort: 'medium' })
     expect(dispatch('validate:#11')).toMatchObject({ model: 'fable', effort: 'medium' })
     expect(dispatch('validate:#12')).toMatchObject({ model: 'fable', effort: 'high' })
-
     expect(dispatch('validate:#13')).toMatchObject({ model: 'fable', effort: 'high' })
 
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
@@ -504,7 +478,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
-
     expect(effortFor('validate:#2')).toBe('medium')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
     expect(effortFor('review-loop:PR#1002 c2-c3')).toBe('medium')
@@ -512,7 +485,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#4')).toBe('medium')
     expect(effortFor('validate:#5')).toBe('medium')
     expect(effortFor('validate:#6')).toBe('medium')
-
     expect(effortFor('validate:#7')).toBe('high')
     expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
     expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
@@ -530,7 +502,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('review-loop:PR#1009 c2-c3')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1010 c2-c3')).toBe('high')
-
     expect(effortFor('implement:#11 (fable/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1011 c2-c3')).toBe('high')
 
@@ -1008,7 +979,6 @@ describe('milestone-pipeline github review mode', () => {
 })
 
 describe('milestone-pipeline subagent review mode', () => {
-
   const prepIssue = (overrides = {}) => {
     const merged = {
       number: 2,
@@ -1044,7 +1014,6 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewMode: 'subagent' }, {
       Prep: () => ({
         issues: [
-
           prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 3, complexity: 11, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 4, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
@@ -1057,7 +1026,6 @@ describe('milestone-pipeline subagent review mode', () => {
     })
 
     expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
-
     const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1003 c1 (claude/high)')
     expect(bandZeroReview).toBeTruthy()
     expect(bandZeroReview.model).toBeUndefined()
@@ -1067,7 +1035,6 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(started(events, 'review:PR#1005 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1006 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1007 c1 (fable/high)')).toBeTrue()
-
     expect(started(events, 'review:PR#1008 c1 (fable/high)')).toBeTrue()
   })
 
@@ -1095,9 +1062,7 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
     expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-
     for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#3 (opus/high)', 'implement:#4 (fable/high)']) {
       expect(promptFor(events, label), label).not.toContain('@codex')
     }
@@ -1112,7 +1077,6 @@ describe('milestone-pipeline subagent review mode', () => {
           { number: 4, title: '[C90] Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
           { number: 5, title: '[C60] Stamped trigger', complexity: 60, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 6, title: '[C20] Band 2', complexity: 20, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 7, title: '[C5] Stamped fable on a tiny issue', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
         ],
       }),
@@ -1131,27 +1095,22 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex luna review effort:high"')
     expect(promptFor(events, 'implement:#7 (sonnet/high)')).toContain('gh pr comment <num> --body "@codex review effort:high"')
-
     expect(promptFor(events, 'implement:#7 (sonnet/high)')).not.toContain('@codex fable')
     for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#5 (sonnet/xhigh)']) {
       const prompt = promptFor(events, label)
       expect(prompt, label).toContain('.github/workflows/codex.yml')
       expect(prompt, label).toContain('never switch to @claude')
-
       expect(prompt, `${label}: re-trigger keys to cycle 1`).toContain(
         'keyed to the reviewer that actually ran cycle 1',
       )
       expect(prompt, `${label}: C81+ ladder never reaches luna`).toContain('never reaches luna')
     }
-
     const codexRetrigger = {
       'implement:#2 (sonnet/xhigh)': '@codex luna review',
       'implement:#6 (sonnet/high)': '@codex review',
       'implement:#3 (opus/high)': '@codex review',
       'implement:#4 (fable/high)': '@codex review',
-
       'implement:#5 (sonnet/xhigh)': '@codex luna review effort:high',
-
       'implement:#7 (sonnet/high)': '@codex review effort:high',
     }
     for (const [label, trigger] of Object.entries(codexRetrigger)) {
@@ -1167,11 +1126,8 @@ describe('milestone-pipeline subagent review mode', () => {
         issues: [
           { number: 2, title: '[C8] Cheap band', complexity: 8, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 4, title: '[C90] Top band', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
-
           { number: 5, title: '[C5] Stamped opus on a tiny issue', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
-
           { number: 6, title: '[C90] Stamped opus on a heavy issue', complexity: 90, model: 'opus', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
-
           { number: 7, title: '[C5] Stamped haiku', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'haiku', first_review_effort: 'high' },
         ],
       }),
@@ -1187,7 +1143,6 @@ describe('milestone-pipeline subagent review mode', () => {
     const expected = {
       'implement:#2 (sonnet/xhigh)': ['@claude sonnet review', '@claude sonnet review'],
       'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review'],
-
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
       'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
@@ -1205,7 +1160,6 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a validator rescore never lowers a stamped first review', async () => {
-
     const stampedIssues = [
       { number: 2, title: '[C5] Stamped fable, rescored to a weaker review band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
       { number: 3, title: '[C5] Stamped sonnet, rescored past it', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
@@ -1247,7 +1201,6 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a rescore across only the review boundary re-evaluates the stamped first review', async () => {
-
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
@@ -1329,12 +1282,10 @@ describe('milestone-pipeline subagent review mode', () => {
       { model: 'fable', effort: 'medium' },
     ])
     expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
-
     expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
-
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
       to: 70,
@@ -1361,7 +1312,6 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a rescore that crosses only a review boundary still escalates the first review', async () => {
-
     const trigger = async (rescored) => {
       const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
         Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'high', fableplan: false, first_review_model: undefined, first_review_effort: undefined })] }),
@@ -1377,7 +1327,6 @@ describe('milestone-pipeline subagent review mode', () => {
     const up = await trigger(15)
     expect(up.prompt).toContain('gh pr comment <num> --body "@claude review"')
     expect(up.logs.some((m) => m.includes('across a review boundary'))).toBeTrue()
-
     const down = await trigger(8)
     expect(down.prompt).toContain('gh pr comment <num> --body "@claude sonnet review"')
     expect(down.logs.some((m) => m.includes('across a review boundary'))).toBeFalse()
@@ -1387,10 +1336,8 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-
           { number: 2, title: 'Unprefixed, rescored trivial', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 3, title: 'Unprefixed, rescored hard', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
-
           { number: 4, title: '[C6] Band 0–9 from the title', complexity: 6, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 5, title: '[C10] Band 10–20 floor', complexity: 10, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 6, title: '[C5] Scored low, rescored hard', complexity: 5, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
@@ -1406,7 +1353,6 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+ (complexity unknown'))).toBeTrue()
-
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
 
@@ -1511,7 +1457,6 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c2 (sonnet/high)')).toBeTrue()
-
     expect(started(events, 'review:PR#1002 c3 (opus/high)')).toBeTrue()
     expect(record?.review.final_status).toBe('lgtm')
   })

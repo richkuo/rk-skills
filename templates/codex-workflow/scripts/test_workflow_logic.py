@@ -38,9 +38,11 @@ RESOLVE_MODEL_STEP = "Resolve model from @codex invocation"
 
 BOT_LOGIN = "acme-codex[bot]"
 
+
 def _read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
 
 def extract_step_run_block(yml_text, step_name):
     """Return the dedented body of a step's `run: |` block, verbatim from the YAML."""
@@ -93,6 +95,7 @@ def extract_step_run_block(yml_text, step_name):
     min_indent = min(len(l) - len(l.lstrip()) for l in non_blank)
     return "\n".join(l[min_indent:] if l.strip() != "" else "" for l in body)
 
+
 def _run_block(script, env_overrides, output_key):
     """Execute an extracted run block with injected env; return the last value it
     wrote to GITHUB_OUTPUT under output_key (the real value is written after any
@@ -115,6 +118,7 @@ def _run_block(script, env_overrides, output_key):
                 f"run block wrote no {output_key}= line to GITHUB_OUTPUT; stderr:\n{r.stderr}"
             )
         return value
+
 
 def run_classify_mode(
     event_name,
@@ -140,6 +144,7 @@ def run_classify_mode(
         "mode",
     )
 
+
 def _run_block_all_outputs(script, env_overrides):
     """Execute an extracted run block with injected env; return every key it
     wrote to GITHUB_OUTPUT as a dict (last-wins per key, same rule as
@@ -162,6 +167,7 @@ def _run_block_all_outputs(script, env_overrides):
             raise AssertionError(f"run block wrote no GITHUB_OUTPUT; stderr:\n{r.stderr}")
         return values
 
+
 def run_resolve_model(event_name, stripped, docs_release_enabled=""):
     script = extract_step_run_block(_read(CODEX_YML), RESOLVE_MODEL_STEP)
     return _run_block_all_outputs(
@@ -172,6 +178,7 @@ def run_resolve_model(event_name, stripped, docs_release_enabled=""):
             "DOCS_RELEASE_ENABLED": docs_release_enabled,
         },
     )
+
 
 def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_login=""):
     script = extract_step_run_block(_read(CODEX_YML), VERIFY_STEP)
@@ -188,7 +195,9 @@ def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_
         "invoked",
     )
 
+
 PR_URL = "https://api.github.com/repos/o/r/pulls/5"
+
 
 class ClassifyModeRoutingTest(unittest.TestCase):
     """Pin every documented route. fix-pr is the only issue_comment path that
@@ -210,7 +219,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_fix_pr(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -219,7 +227,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_review_when_bot_login_unset(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -228,7 +235,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_human_routes_still_work_when_bot_login_unset(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="MEMBER",
@@ -237,7 +243,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_other_bot_login_is_review_only(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix this",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -246,7 +251,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_external_author_pr_comment_is_review_only(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -275,7 +279,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_keyword_after_uppercase_model_shorthand_is_review(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex Luna review",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -297,7 +300,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_word_later_in_sentence_no_longer_forces_review(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr the review comments",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -319,7 +321,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_untrusted_pr_author_is_review_only(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -327,7 +328,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_plain_issue_is_implement(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -335,7 +335,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_inline_review_surface_stays_review(self):
-
         self.assertEqual(
             run_classify_mode("pull_request_review_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
@@ -364,7 +363,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_issue_comment_on_issue_is_implement(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex implement this",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -379,13 +377,13 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_flow_wins_over_pr_review_word(self):
-
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex create-release review",
                               pr_url=PR_URL, flow="create-release",
                               pr_author_assoc="MEMBER"),
             "implement",
         )
+
 
 class ResolveModelTest(unittest.TestCase):
     """Pin the model-shorthand → MODEL_ID resolution and the docs/release FLOW
@@ -399,7 +397,6 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_unknown_shorthand_falls_through_to_the_default(self):
-
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex banana review")["model_id"],
             "gpt-5.6-sol",
@@ -430,7 +427,6 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_uppercase_luna_shorthand_selects_the_fast_model(self):
-
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex LUNA review")["model_id"],
             "gpt-5.6-luna",
@@ -475,6 +471,7 @@ class ResolveModelTest(unittest.TestCase):
             run_resolve_model("issue_comment", "@codex create-release")["flow"],
             "",
         )
+
 
 class VerifyInvocationSelfTriggerTest(unittest.TestCase):
     """Pin the Codex bot self-trigger guard: whitespace/blank-line padding around
@@ -521,7 +518,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_second_nonblank_line_does_not_fire(self):
-
         self.assertEqual(
             run_verify_invocation(
                 "issue_comment",
@@ -545,7 +541,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_bot_self_trigger_is_unreachable_when_bot_login_unset(self):
-
         self.assertEqual(
             run_verify_invocation("issue_comment", "@codex review", BOT_LOGIN, ""),
             "true",
@@ -575,6 +570,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
             run_verify_invocation("issue_comment", body, "someuser", BOT_LOGIN), "false"
         )
 
+
 if __name__ == "__main__":
     unittest.main()
-

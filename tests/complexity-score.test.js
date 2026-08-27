@@ -57,7 +57,6 @@ const PROPOSAL_CONCERN_CONSUMERS = [
 ]
 
 describe('complexity score band encoding', () => {
-
   function parseGoldenExamples(markdown) {
     const section = markdown.split('#### Golden examples (consistency checklist)')[1]
     expect(section).toBeTruthy()
@@ -208,7 +207,6 @@ describe('complexity score band encoding', () => {
     expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |')
     expect(validateIssue).toContain('| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high |')
     expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |')
-
     expect(validateIssueScoring).toMatch(/Never lower routing from a validator rescore/)
 
     expect(prdToIssues).toContain("| 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |")
@@ -234,7 +232,6 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } }")
     expect(pipeline).toContain("{ name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } }")
-
     expect(validateIssue).toMatch(/never steps down to Sonnet/i)
     expect(pipeline).toContain('fable reviews the first cycle only')
 
@@ -243,7 +240,6 @@ describe('complexity score band encoding', () => {
       expect(doc).not.toMatch(/Capability ≥ 2 \(score ≥ 50|only when Capability = 2|only at Capability 2/)
     }
     expect(githubIssueFormat).toContain('Volume 20 — Opus 5, xhigh · fableplan: yes')
-
     for (const doc of [validateIssue, newIssue, githubIssueFormat, prdToIssues, fableValidateLoop, validateFableplanLoop]) {
       expect(doc).not.toMatch(/verdict line reads `fableplan: no`/)
       expect(doc).not.toMatch(/band 3 is built by Fable 5 directly/)
@@ -264,10 +260,8 @@ describe('complexity score band encoding', () => {
     expect(executionPlanReview).not.toContain('conflicts with the heuristics')
     expect(claudeMd).toContain('model + effort routing signal')
     expect(claudeMd).not.toContain('describe complexity as scope and risk')
-
     expect(githubIssueFormat).toContain('[C95] Orders can be filled twice')
     expect(githubIssueFormat).toContain('Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh')
-
     expect(githubIssueFormat).not.toContain('Fable 5, xhigh')
     expect(githubIssueFormat).not.toContain('[C70] Orders can be filled twice')
     expect(githubIssueFormat).not.toContain('Capability 2 (risk high on order-fill path)')

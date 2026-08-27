@@ -77,7 +77,6 @@ const EDIT_VERB_CONSUMERS = [
   'skills/fable-validate-fableplan-loop/SKILL.md',
 ]
 const EDIT_VERB_FORMAT = 'skills/github-issue-format/SKILL.md'
-
 const EDIT_VERB_WORKFLOW = 'workflows/milestone-pipeline.js'
 
 const INVENTORY = 'docs/contract-inventory.md'
@@ -126,7 +125,6 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/review_count\s*>\s*5/)
       expect(body, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
-
       expect(body, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
     }
   })
@@ -134,7 +132,6 @@ describe('loop/validate pipeline contract', () => {
   test('review-cycle owners brake on divergence, and only with the self-inflicted condition', () => {
     for (const path of REVIEW_CYCLE_FULL) {
       const body = procedureBody(texts[path])
-
       const [open_, close] = STOP_CONDITION_REGION[path]
       const from = body.indexOf(open_)
       expect(from, path).toBeGreaterThan(-1)
@@ -144,16 +141,12 @@ describe('loop/validate pipeline contract', () => {
 
       const at = region.search(/pr_cycle_count\s*>=\s*(\d+)/)
       expect(at, path).toBeGreaterThan(-1)
-
       expect(region, path).toMatch(/(?:not|never) the in-memory `?review_count`?/i)
-
       const threshold = Number(region.match(/pr_cycle_count\s*>=\s*(\d+)/)[1])
       expect(threshold, path).toBeLessThan(5)
       const rule = region.slice(at, at + 300)
-
       expect(rule, path).toMatch(/Needs Updates/i)
       expect(rule, path).toMatch(/an earlier cycle[\s\S]{0,40}added/i)
-
       expect(region, path).toMatch(/Diverging/)
 
       expect(region, path).toMatch(
@@ -177,7 +170,6 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/\*\*Score gate:\*\*/)
       expect(body, path).toMatch(/below 61|score\s*<\s*61/)
-
       expect(body, path).toMatch(
         /safety carve-out[\s\S]{0,300}money[\s\S]{0,120}data integrity[\s\S]{0,120}security[\s\S]{0,120}auto-protective/i,
       )
@@ -189,7 +181,6 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/no score gate|score gate removed/i)
       expect(body, path).toMatch(/always runs|for EVERY issue/i)
-
       expect(body, path).not.toMatch(
         /\*\*Score gate:\*\*[^\n]*below 61[^\n]*skip fableplan/i,
       )
@@ -199,7 +190,6 @@ describe('loop/validate pipeline contract', () => {
   test('new-issue loops stop on duplicate or non-convergence', () => {
     for (const path of DUPLICATE_CONVERGENCE) {
       const body = procedureBody(texts[path])
-
       expect(hasStopTableRow(body, /duplicate/i), `${path}: STOP+duplicate row`).toBe(true)
       expect(hasStopTableRow(body, /converg/i), `${path}: STOP+converg row`).toBe(true)
     }
@@ -218,7 +208,6 @@ describe('loop/validate pipeline contract', () => {
   })
 
   test('verdict-block template stays parseable in every loop that quotes it', () => {
-
     const fieldPatterns = [
       /Update issue description\? <Yes ?\| ?No>/,
       /Complexity: <[^>]+>\/100/,
@@ -251,19 +240,16 @@ describe('loop/validate pipeline contract', () => {
   test('work-on-issue stays under 200 lines with whole-number step headings', () => {
     const text = texts[PLAN_DEVIATION_OWNER]
     expect(text.split('\n').length - 1, PLAN_DEVIATION_OWNER).toBeLessThan(200)
-
     expect(procedureBody(text), PLAN_DEVIATION_OWNER).not.toMatch(/^#+ \d+\.\d+/m)
   })
 
   test('work-on-issue owns one plan-deviation policy and no caller narrows it', () => {
     const owner = procedureBody(texts[PLAN_DEVIATION_OWNER])
-
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(
       /adopted plan is the blueprint[\s\S]{0,900}traced code[\s\S]{0,400}newer on the issue[\s\S]{0,400}[Cc]orrectness and safety/,
     )
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/single plan-deviation policy/i)
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/never narrows it|does not remove the other two/i)
-
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/Fable-authored/)
     expect(owner, PLAN_DEVIATION_OWNER).not.toMatch(
       /adopted from the issue thread in step 0\.1, which counts the same as one produced this session/,
@@ -271,7 +257,6 @@ describe('loop/validate pipeline contract', () => {
 
     for (const path of PLAN_DEVIATION_CALLERS) {
       const body = procedureBody(texts[path])
-
       expect(body, `${path}: narrowed deviation rule`).not.toMatch(
         /deviations?[^.\n]{0,80}only when the code contradicts the plan/i,
       )

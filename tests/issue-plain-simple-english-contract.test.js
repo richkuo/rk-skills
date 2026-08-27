@@ -43,7 +43,6 @@ describe('Issue-body Plain simple English contract', () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
       const source = normalized[path]
       expect(source, path).toMatch(/Plain simple English/)
-
       expect(source, path).toMatch(
         /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
@@ -63,12 +62,9 @@ describe('Issue-body Plain simple English contract', () => {
 
     expect(owner).toMatch(/`## Plain simple English` is mandatory on every issue/i)
     expect(owner).toMatch(/ASD-STE100/)
-
     expect(owner).toMatch(/CLAUDE\.md\/AGENTS\.md Response Style rules/)
-
     expect(owner).toMatch(/Never restate the approach there/i)
     expect(owner).toMatch(/never put a time or effort estimate in it/i)
-
     expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
     expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
   })

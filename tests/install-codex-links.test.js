@@ -99,7 +99,6 @@ describe('install.sh Codex links', () => {
     const target = join(home, '.codex/skills', skill)
     mkdirSync(target, { recursive: true })
     writeFileSync(join(target, 'SKILL.md'), 'current copy\n')
-
     mkdirSync(`${target}.bak`, { recursive: true })
     writeFileSync(join(`${target}.bak`, 'SKILL.md'), 'earlier backup\n')
 
@@ -117,14 +116,12 @@ describe('install.sh Codex links', () => {
     mkdirSync(join(home, '.codex'), { recursive: true })
     const target = join(home, '.codex/AGENTS.md')
     writeFileSync(target, 'live notes\n')
-
     writeFileSync(`${target}.bak`, 'backup 1\n')
     for (let n = 2; n <= 99; n++) writeFileSync(`${target}.bak.${n}`, `backup ${n}\n`)
 
     const run = runInstall(home)
 
     expect(run.exitCode, run.stderr.toString()).toBe(0)
-
     expect(readFileSync(target, 'utf8')).toBe('live notes\n')
     expect(readFileSync(`${target}.bak`, 'utf8')).toBe('backup 1\n')
     expect(readFileSync(`${target}.bak.99`, 'utf8')).toBe('backup 99\n')
@@ -136,7 +133,6 @@ describe('install.sh Codex links', () => {
     const home = makeHome()
     const target = join(home, '.codex/skills', RETIRED)
     mkdirSync(join(home, '.codex/skills'), { recursive: true })
-
     symlinkSync(join(repoRoot, 'skills', RETIRED), target)
 
     const run = runInstall(home)
@@ -153,7 +149,6 @@ describe('install.sh Codex links', () => {
 
     expect(run.exitCode, run.stderr.toString()).toBe(0)
     expect(existsSync(join(home, '.codex'))).toBe(false)
-
     expect(existsSync(join(home, '.claude/CLAUDE.md'))).toBe(true)
   })
 

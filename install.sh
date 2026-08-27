@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE="${HOME}/.claude"
 CODEX="${HOME}/.codex"
 BACKUP_LIMIT=99
+
 exists() {
   [ -e "$1" ] || [ -L "$1" ]
 }
+
 free_backup_path() {
   local target="$1" candidate="$1.bak" n=2
   while exists "$candidate"; do
@@ -16,6 +19,7 @@ free_backup_path() {
   done
   echo "$candidate"
 }
+
 link() {
   local src="$REPO/$1" target="$2" backup
   [ -e "$src" ] || { echo "SKIP (missing in repo): $1"; return; }
@@ -34,6 +38,7 @@ link() {
   ln -s "$src" "$target"
   echo "linked $target -> $src"
 }
+
 link_skills() {
   local skills_dir="$1" dir name
   for dir in "$REPO"/skills/*/; do
@@ -41,6 +46,7 @@ link_skills() {
     link "skills/$name" "$skills_dir/$name"
   done
 }
+
 retire_renamed_skills() {
   local skills_dir="$1" name target
   for name in pr-review-format; do
@@ -59,8 +65,10 @@ retire_renamed_skills() {
     fi
   done
 }
+
 link_skills "$CLAUDE/skills"
 retire_renamed_skills "$CLAUDE/skills"
+
 for name in sync-docs-runner.md create-release-runner.md; do
   target="$CLAUDE/agents/$name"
   if [ -L "$target" ]; then
@@ -68,12 +76,15 @@ for name in sync-docs-runner.md create-release-runner.md; do
     echo "removed retired agent symlink $target"
   fi
 done
+
 for f in "$REPO"/workflows/*.js; do
   name="$(basename "$f")"
   link "workflows/$name" "$CLAUDE/workflows/$name"
 done
+
 link "CLAUDE.md"          "$CLAUDE/CLAUDE.md"
 link "commands/commit.md" "$CLAUDE/commands/commit.md"
+
 if [ -d "$CODEX" ]; then
   link_skills "$CODEX/skills"
   retire_renamed_skills "$CODEX/skills"
@@ -81,4 +92,5 @@ if [ -d "$CODEX" ]; then
 else
   echo "SKIP (no $CODEX): Codex is not set up on this machine"
 fi
+
 echo "done."

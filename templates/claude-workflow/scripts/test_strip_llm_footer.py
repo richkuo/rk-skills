@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 from strip_llm_footer import strip_llm_footer
 
+
 class StripLLMFooterTest(unittest.TestCase):
     def test_strips_footer_with_separator(self):
         body = "## Summary\n- did a thing\n\n---\nLLM: Claude Opus 5 | medium"
@@ -43,6 +44,6 @@ class StripLLMFooterTest(unittest.TestCase):
         body = "## Summary\n\n\n\n---\nLLM: Claude Opus 5 | medium"
         self.assertEqual(strip_llm_footer(body), "## Summary")
 
+
 if __name__ == "__main__":
     unittest.main()
-

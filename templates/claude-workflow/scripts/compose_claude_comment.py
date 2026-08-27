@@ -25,7 +25,6 @@ MODEL_DISPLAY_NAMES = {
     "claude-opus-5": "Claude Opus 5",
     "claude-sonnet-5": "Claude Sonnet 5",
     "claude-fable-5": "Claude Fable 5",
-
     "gpt-5.6-sol": "GPT-5.6 Sol",
     "gpt-5.6-terra": "GPT-5.6 Terra",
     "gpt-5.6-luna": "GPT-5.6 Luna",
@@ -36,10 +35,12 @@ _STATUS_NOTE = re.compile(
     r"\n*\*\*Workflow (?:cancelled|failed) before completion\.\*\*[^\n]*\n?"
 )
 
+
 def model_display_name(model_id: str) -> str:
     if not model_id:
         return "(model not resolved)"
     return MODEL_DISPLAY_NAMES.get(model_id, model_id)
+
 
 def compose(
     body: str, model_id: str, effort: str, harness: str, status_note: str = ""
@@ -50,12 +51,12 @@ def compose(
         f"---\nLLM: {model_display_name(model_id)}"
         f" | {effort or 'unknown'} | Harness: {harness}"
     )
-
     parts = [body] if body else []
     if status_note:
         parts.append(status_note)
     parts.append(footer)
     return rewrite_create_pr_link("\n\n".join(parts), footer)
+
 
 if __name__ == "__main__":
     sys.stdout.write(
@@ -67,4 +68,3 @@ if __name__ == "__main__":
             os.environ.get("STATUS_NOTE", ""),
         )
     )
-

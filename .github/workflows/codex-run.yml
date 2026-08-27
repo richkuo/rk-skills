@@ -1,4 +1,5 @@
 name: Codex run
+
 on:
   workflow_call:
     inputs:
@@ -54,6 +55,7 @@ on:
       CODEX_APP_PRIVATE_KEY:
         description: 'GitHub App private key used to mint the write-route installation token'
         required: false
+
 jobs:
   run:
     runs-on: ${{ inputs.runs_on }}
@@ -92,11 +94,13 @@ jobs:
         with:
           app-id: ${{ secrets.CODEX_APP_ID }}
           private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token || github.token }}
+
       - name: Checkout rk-skills (shared prompts, scripts, and skills)
         uses: actions/checkout@v4
         with:
@@ -104,6 +108,7 @@ jobs:
           ref: main
           path: .rk-skills-shared
           fetch-depth: 1
+
       - name: Stage shared assets outside the workspace
         run: |
           rm -rf "$RUNNER_TEMP/rk-shared"
@@ -126,11 +131,13 @@ jobs:
       - name: Note that extra_allowed_tools does not apply to Codex
         if: inputs.extra_allowed_tools != ''
         run: echo "::notice::extra_allowed_tools is accepted for call-site parity with claude-run.yml but has no effect here — Codex has no per-tool allowlist. The Codex sandbox and the job permissions are the boundary on this route."
+
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
         uses: actions/setup-go@v5
         with:
           go-version: ${{ inputs.go_version }}
+
       - name: Configure the git identity for write routes
         if: inputs.mode != 'review'
         run: |
@@ -286,6 +293,7 @@ jobs:
           sandbox: ${{ inputs.mode == 'review' && 'read-only' || 'workspace-write' }}
           allow-users: '*'
           allow-bot-users: ${{ inputs.bot_login }}
+
       - name: Post the Codex review comment
         if: inputs.mode == 'review'
         env:
@@ -343,6 +351,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           SELECT_ONLY: '1'
         run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
+
       - name: Revise AGENTS.md with session learnings
         if: inputs.mode == 'implement' && steps.codex.outcome == 'success' && steps.codex_changes.outputs.made_commits == 'true'
         uses: openai/codex-action@v1
@@ -358,6 +367,7 @@ jobs:
           sandbox: workspace-write
           allow-users: '*'
           allow-bot-users: ${{ inputs.bot_login }}
+
       - name: Append the LLM footer to the Codex comment
         if: env.BOT_LOGIN != ''
         env:
@@ -369,9 +379,11 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           TARGET_COMMENT_ID: ${{ steps.primary_comment.outputs.id }}
         run: bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
+
       - name: Mark cancellation for the downstream status note
         if: always() && cancelled()
         run: echo "IS_CANCELLED=true" >> "$GITHUB_ENV"
+
       - name: Note workflow cancellation or failure on the Codex comment
         if: always() && (cancelled() || failure()) && env.BOT_LOGIN != ''
         env:

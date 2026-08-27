@@ -21,7 +21,6 @@ const read = (path) => Bun.file(new URL(path, root)).text()
 const skillsDir = new URL('skills/', root)
 
 const SKILL = 'pr-review'
-
 const RETIRED = 'pr-review-format'
 
 const ACTION_PROMPT = `templates/claude-workflow/prompts/${RETIRED}.md`
@@ -40,10 +39,8 @@ function seedRetiredSkill(claudeDir, { asSymlink }) {
   const target = join(claudeDir, 'skills', RETIRED)
   mkdirSync(join(claudeDir, 'skills'), { recursive: true })
   if (asSymlink) {
-
     symlinkSync(join(repoRoot, 'skills', RETIRED), target)
   } else {
-
     mkdirSync(target, { recursive: true })
     writeFileSync(join(target, 'SKILL.md'), `---\nname: ${RETIRED}\n---\n`)
   }
@@ -72,7 +69,6 @@ describe('PR review skill name', () => {
   })
 
   test('leaves no skill answering to the retired name', () => {
-
     expect(existsSync(new URL(RETIRED, skillsDir))).toBe(false)
 
     for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
@@ -93,7 +89,6 @@ describe('PR review skill name', () => {
       'skills/milestone-workflow/SKILL.md',
       'workflows/milestone-pipeline.js',
     ]
-
     const names = (name) => new RegExp(`(?<!fix-)\\b${name}\\b`)
     for (const path of loadSites) {
       const body = await read(path)
@@ -120,10 +115,8 @@ describe('PR review skill name', () => {
       expect(run.exitCode, run.stderr.toString()).toBe(0)
       expect(stillThere(leftover), `symlink: ${asSymlink}`).toBe(false)
       if (asSymlink) {
-
         expect(stillThere(`${leftover}.bak`)).toBe(false)
       } else {
-
         expect(readFileSync(join(`${leftover}.bak`, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
       }
       expect(existsSync(join(project, '.claude/skills', SKILL, 'SKILL.md'))).toBe(true)
@@ -178,7 +171,6 @@ describe('PR review skill name', () => {
   })
 
   test('neither installer retires a name the repo ships', () => {
-
     const mjsRepo = stageRepo()
     const project = makeTempDir('rk-skills-guard-mjs-')
     seedRetiredSkill(join(project, '.claude'), { asSymlink: false })
@@ -199,7 +191,6 @@ describe('PR review skill name', () => {
     })
 
     expect(shRun.exitCode, shRun.stderr.toString()).toBe(0)
-
     expect(lstatSync(join(home, '.claude/skills', RETIRED)).isSymbolicLink()).toBe(true)
     expect(readFileSync(join(home, '.claude/skills', RETIRED, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
   })

@@ -33,7 +33,6 @@ function fencedBlocks(markdown) {
 }
 
 function ghInvocations(text) {
-
   return [...text.matchAll(/\bgh\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/g)].map(
     ([whole, sub, verb]) => ({ sub, verb: verb ?? '', whole: whole.trim() }),
   )
@@ -52,7 +51,6 @@ const READ_ONLY_GH = {
 }
 
 const WRITING_GH_API = [
-
   /gh api[^\n`]*(?:-X|--method)(?:=\s*|\s*)(POST|PATCH|PUT|DELETE)/gi,
   /gh api[^\n`]*(?:(?:\s(?:-f|--field|-F|--raw-field)\s)|(?:(?:-f|--field|-F|--raw-field)=))/g,
   /gh api[^\n`]*(?:(?:\s--input\s)|(?:--input=))/g,
@@ -62,7 +60,6 @@ const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
 const GRAPHQL_MUTATION = /\bmutation\b/
 
 function joinContinuedLines(text) {
-
   return text.replace(/\\\r?\n/g, ' ')
 }
 
@@ -78,10 +75,8 @@ function readOnlyViolations(text) {
   for (const { sub, verb, whole } of ghInvocations(text)) {
     const readOnlyVerbs = READ_ONLY_GH[sub]
     if (!readOnlyVerbs) violations.push(`unknown gh subcommand: ${whole}`)
-
     else if (sub !== 'api' && !readOnlyVerbs.includes(verb)) violations.push(`mutating gh command: ${whole}`)
   }
-
   for (const match of text.matchAll(GRAPHQL_CALL)) {
     const rest = text.slice(match.index)
     const statement = rest.slice(0, Math.min(...[rest.indexOf('```'), rest.indexOf('\n\n'), rest.length].filter((i) => i >= 0)))
@@ -138,7 +133,6 @@ describe('Execution block ordering contract', () => {
 describe('Execution block Plan effort contract', () => {
   test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
     expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high>')
-
     expect(prdToIssues).not.toContain('- **Plan effort:** <low | medium | high | xhigh>')
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
     expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
@@ -164,11 +158,9 @@ describe('Execution block Plan effort contract', () => {
   })
 
   test('fableplan consumes the same field name every other document publishes', () => {
-
     const blockLine = '- **Plan effort:**'
     expect(prdToIssues).toContain(blockLine)
     expect(fableplan).toContain(blockLine)
-
     for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
       expect(doc).toContain('Plan effort')
     }
@@ -183,7 +175,6 @@ describe('Execution block Plan effort contract', () => {
 
   test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
     expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
-
     expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
     expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
     expect(fableplan).toMatch(/never a constant/i)
@@ -197,17 +188,14 @@ describe('Execution block Plan effort contract', () => {
   })
 
   test('fableplan tells the operator when a stamped tier could not be honored', () => {
-
     expect(fableplan).toMatch(/report it to the user in step 5/i)
     expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
     expect(fableplan).toMatch(/not a notice/i)
-
     expect(fableplan).toMatch(/when the tier \*was\* honored \(no notice/i)
     expect(fableplan).toMatch(/make no claim about a stamped tier in either direction/i)
   })
 
   test('fableplan passes an explicit tier rather than inheriting the session effort', () => {
-
     expect(fableplan).toMatch(/otherwise `high`.*Pass it explicitly even in the unstamped case/is)
     expect(fableplan).toMatch(/may be \*below\* `high`/i)
     expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
@@ -221,7 +209,6 @@ describe('Execution block Plan effort contract', () => {
   })
 
   test('fableplan falls back to the documented default, never a guessed session tier', () => {
-
     expect(fableplan).toMatch(/record the repo attribution default `high`/i)
     expect(fableplan).toMatch(/do not try to name the session's own tier/i)
     expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
@@ -274,7 +261,6 @@ describe('milestoneplan table contract', () => {
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
     }
-
     for (const read of [
       'gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq \'.[]\'',
       'gh issue list --milestone "M" --state all --limit 500 --json number',
