@@ -31,6 +31,8 @@ CLAUDE_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "claude.yml")
 VERIFY_STEP = "Verify @claude is an actual invocation (not in a code block or example)"
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
 RESOLVE_MODEL_STEP = "Resolve model from @claude invocation"
+PERL_STRIP_FENCED = "s/```.*?```//gs"
+SED_STRIP_INLINE = "s/`[^`]*`//g"
 
 
 def _read(path):
@@ -177,6 +179,8 @@ def run_verify_invocation(event_name, body, trigger_actor="someuser"):
             "REVIEW_BODY": body,
             "ISSUE_BODY": body,
             "TRIGGER_ACTOR": trigger_actor,
+            "PERL_STRIP_FENCED": PERL_STRIP_FENCED,
+            "SED_STRIP_INLINE": SED_STRIP_INLINE,
         },
         "invoked",
     )
