@@ -21,8 +21,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# The script under test lives next to this file, both in an installed repo
-# (.github/scripts/) and in the rk-skills template bundle (scripts/).
 SCRIPT = Path(__file__).resolve().parent / "patch_claude_comment.sh"
 
 COMMENTS_PAGE = [
@@ -72,7 +70,6 @@ else
 fi
 """
 
-
 def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -98,8 +95,7 @@ def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
             "CLAUDE_HARNESS": "anthropics/claude-code-action@v1",
         }
     )
-    # The TARGET_COMMENT_ID path fetches one comment by id (a non-paginate,
-    # non-method GET); stub its response when a test needs that path.
+
     if single_comment is not None:
         single = tmp_path / "single.json"
         single.write_text(json.dumps(single_comment))
@@ -117,7 +113,6 @@ def run_patch_script(tmp_path: Path, extra_env: dict, single_comment=None):
     log = patch_log.read_text() if patch_log.exists() else ""
     return result.stdout, log
 
-
 class PatchClaudeCommentTest(unittest.TestCase):
     def _run(self, extra_env, single_comment=None):
         with tempfile.TemporaryDirectory() as d:
@@ -133,28 +128,23 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertIn("body from claude[bot]", patched)
 
     def test_bot_login_override_without_run_id_takes_latest_by_author(self):
-        # Documents the collision the RUN_ID filter exists to prevent: without it,
-        # the newest github-actions[bot] comment wins even if another workflow
-        # authored it.
+
         patched = self._run({"BOT_LOGIN": "github-actions[bot]"})
         self.assertIn("repos/o/r/issues/comments/404", patched)
 
     def test_run_id_selects_own_comment_despite_newer_same_author(self):
-        # Must survive: a second, unrelated github-actions[bot] comment updated
-        # after the review comment (id 404, run 999) — the run-id filter pins the
-        # selection to this run's tracking comment (id 202, run 222).
+
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "222"})
         self.assertIn("repos/o/r/issues/comments/202", patched)
         self.assertIn("body from github-actions[bot]", patched)
 
     def test_run_id_without_match_is_a_clean_noop(self):
-        # Must survive: no comment from this run — never fall back to another
-        # author-matching comment (that would stamp a foreign workflow's comment).
+
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555"})
         self.assertEqual(patched, "")
 
     def test_run_id_match_is_not_a_prefix_match(self):
-        # Run 22 must not match /actions/runs/222.
+
         patched = self._run({"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "22"})
         self.assertEqual(patched, "")
 
@@ -167,9 +157,7 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(patched, "")
 
     def test_on_miss_post_creates_new_status_comment(self):
-        # Must survive: setup / checkout failing before the tracking comment
-        # exists — the failure note must still surface in the thread, as a NEW
-        # comment (never misattributed to an older run's comment).
+
         patched = self._run(
             {
                 "BOT_LOGIN": "github-actions[bot]",
@@ -196,15 +184,14 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertNotIn("--method\nPOST", patched)
 
     def test_on_miss_post_without_status_note_is_a_noop(self):
-        # A footer-only comment with no status note is pure noise — don't post it.
+
         patched = self._run(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555", "ON_MISS": "post"}
         )
         self.assertEqual(patched, "")
 
     def test_select_only_emits_run_matched_comment_id_without_patching(self):
-        # The pre-revise capture step resolves the primary comment (id 202, run
-        # 222) to stdout and must never patch — SELECT_ONLY leaves the log empty.
+
         out, log = self._run_full(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "222", "SELECT_ONLY": "1"}
         )
@@ -212,8 +199,7 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(log, "")
 
     def test_select_only_emits_empty_string_on_miss(self):
-        # No comment from this run — capture emits nothing so the footer step
-        # falls back to its own selection instead of pinning a wrong id.
+
         out, log = self._run_full(
             {"BOT_LOGIN": "github-actions[bot]", "RUN_ID": "555", "SELECT_ONLY": "1"}
         )
@@ -221,10 +207,7 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertEqual(log, "")
 
     def test_target_comment_id_patches_that_comment_bypassing_selection(self):
-        # The footer step pins the captured primary comment id and patches it
-        # directly — never the newer revise-pass comment that a run-id +
-        # latest-by-updated_at select would otherwise win. Proven by pinning id
-        # 202 while the default claude[bot] selection would have chosen id 101.
+
         single = {
             "id": 202,
             "user": {"login": "claude[bot]"},
@@ -236,7 +219,6 @@ class PatchClaudeCommentTest(unittest.TestCase):
         self.assertIn("primary work comment", patched)
         self.assertIn("--method\nPATCH", patched)
         self.assertNotIn("issues/comments/101", patched)
-
 
 if __name__ == "__main__":
     unittest.main()

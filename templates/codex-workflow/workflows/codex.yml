@@ -1,5 +1,4 @@
 name: Codex
-
 on:
   issue_comment:
     types: [created]
@@ -9,37 +8,9 @@ on:
     types: [opened]
   pull_request_review:
     types: [submitted]
-
-# Serialize runs per issue/PR: the footer/failure comment-patch steps rewrite
-# "the latest bot comment", so overlapping runs would stamp each other's
-# comments. The group is per workflow RUN, so the classify -> review/implement
-# jobs of one run never overlap a second run on the same issue/PR. The group is
-# deliberately NOT shared with claude.yml: a Codex run and a Claude run on the
-# same issue are independent and must be free to run at the same time.
 concurrency:
   group: codex-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
-
-# Least-privilege split, mirroring claude.yml: a zero-permission classify job
-# plus the three runner jobs. The runner body is the reusable codex-run.yml
-# workflow published from richkuo/rk-skills — it fetches its prompts, scripts,
-# and skill files from rk-skills at run time, so this file is the ONLY piece a
-# consumer repo vendors (plus optional .github/prompts/<route>-local.md
-# tailoring); only the permissions (and route) differ at the call sites below.
-#
-# openai/codex-action mints no GitHub App token of its own, so the write-capable
-# routes take a GitHub App installation token from the CODEX_APP_ID /
-# CODEX_APP_PRIVATE_KEY secrets instead of OIDC. GITHUB_TOKEN therefore never
-# needs contents: write on ANY route here — a push through the job token would
-# not retrigger CI anyway — and every job below keeps contents: read. That makes
-# "no GITHUB_TOKEN fallback for push" a permission boundary, not just an intent.
-#
-# vars.CODEX_BOT_LOGIN is the write-route bot identity. Claude hardcodes
-# claude[bot] because every consumer shares one Claude GitHub App; a Codex
-# consumer brings its own App, so the login is per repo and lives in a
-# repository VARIABLE (a job-level if: cannot read secrets). Leaving it unset
-# disables ONLY the bot self-trigger and bot-author trust; human
-# OWNER/MEMBER/COLLABORATOR routes keep working.
 jobs:
   classify:
     if: |
@@ -70,11 +41,8 @@ jobs:
           REVIEW_BODY: ${{ github.event.review.body }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           TRIGGER_ACTOR: ${{ github.actor }}
-          # Empty when the repository variable is unset — the self-trigger guard
-          # below then never matches, so bot chaining stays off (fail-closed).
           CODEX_BOT_LOGIN: ${{ vars.CODEX_BOT_LOGIN }}
         run: |
-          # Select body based on event type
           case "$EVENT_NAME" in
             issue_comment|pull_request_review_comment)
               BODY="$COMMENT_BODY"
@@ -87,17 +55,8 @@ jobs:
               ;;
           esac
 
-          # Strip fenced code blocks (``` ... ```) and inline code spans (` ... `)
-          # shellcheck disable=SC2016  # single quotes are intentional — Perl regex has no shell vars
           STRIPPED=$(printf '%s' "$BODY" | perl -0777 -pe 's/```.*?```//gs' | sed 's/`[^`]*`//g')
 
-          # Publish the code-stripped body as a single source of truth: both
-          # classify_mode (which decides review vs. push-capable fix-pr from the
-          # word "review") and resolve_model consume THIS text, so the body that
-          # gates "is @codex invoked" and the body that gates "does this run earn
-          # push access" can never diverge. The heredoc delimiter is randomized
-          # because the body is attacker-influenced — a fixed delimiter appearing
-          # inside the body could inject additional step outputs.
           DELIM="STRIPPED_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           {
             printf 'stripped<<%s\n' "$DELIM"
@@ -106,17 +65,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           if [ -n "$CODEX_BOT_LOGIN" ] && [ "$TRIGGER_ACTOR" = "$CODEX_BOT_LOGIN" ]; then
-            # Bot self-trigger loop prevention: a comment authored by the Codex
-            # write-route bot is a valid invocation ONLY when its stripped body is
-            # exactly a one-line review trigger (optional model shorthand + effort
-            # token). Review output that merely quotes @codex at a line start must
-            # never chain another run.
-            # Normalize CRLF, trim each line, and DROP blank lines so whitespace
-            # padding (leading/trailing spaces, blank lines, or a stray CR) around
-            # an otherwise exact one-line "@codex review" trigger cannot defeat
-            # the guard. Any real content on a second non-blank line keeps
-            # NONBLANK_LINES > 1, so multi-line review output that merely quotes
-            # @codex at a line start never chains another run.
             NONBLANK=$(printf '%s' "$STRIPPED" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d')
             NONBLANK_LINES=$(printf '%s' "$NONBLANK" | awk 'END{print NR}')
             if [ "$NONBLANK_LINES" -eq 1 ] && \
@@ -126,7 +74,6 @@ jobs:
               echo "invoked=false" >> "$GITHUB_OUTPUT"
               echo "::notice::Codex bot comment is not an exact one-line @codex review trigger — skipping."
             fi
-          # @codex is a real invocation only when it appears at the start of a line
           elif printf '%s' "$STRIPPED" | grep -qE '(^|(\r?\n))[[:space:]]*@codex([[:space:]]|$)'; then
             echo "invoked=true" >> "$GITHUB_OUTPUT"
           else
@@ -139,60 +86,27 @@ jobs:
         id: resolve_model
         env:
           EVENT_NAME: ${{ github.event_name }}
-          # The code-stripped body from verify_invocation — the exact text the
-          # invocation gate saw, by construction (single source of truth).
           STRIPPED: ${{ steps.verify_invocation.outputs.stripped }}
-          # Repo variable feature-flag: the docs-sync / create-release comment
-          # flows stay OFF until this is set to 'true', so merging this workflow
-          # to main does not immediately arm the trigger. Empty when unset.
           DOCS_RELEASE_ENABLED: ${{ vars.DOCS_RELEASE_ENABLED }}
         run: |
-          # Extract optional model shorthand after @codex on a line boundary,
-          # including an optional version digit. Case-insensitive match (-i),
-          # then lowercased, so "Luna"/"LUNA" resolve the same as "luna".
-          # e.g. "@codex luna fix this" → "luna", "@codex Terra …" → "terra"
           MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -ioE '(^|(\r?\n))[[:space:]]*@codex[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' || true)
 
-          # Codex model slugs (developer docs, models page). The no-shorthand
-          # default is the flagship, matching this bundle's xhigh default effort.
-          # "mini" is accepted as an alias for the fast/affordable model because
-          # it is the documented migration target of the retired gpt-5.4-mini.
           case "$MODEL_SHORT" in
             sol)         MODEL_ID="gpt-5.6-sol" ;;
             terra)       MODEL_ID="gpt-5.6-terra" ;;
             luna|mini)   MODEL_ID="gpt-5.6-luna" ;;
             codex|spark) MODEL_ID="gpt-5.3-codex-spark" ;;
-            *)           MODEL_ID="gpt-5.6-sol" ;;  # default (no model specified)
+            *)           MODEL_ID="gpt-5.6-sol" ;;
           esac
 
           echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
           echo "::notice::Using model: $MODEL_ID"
 
-          # Extract optional effort level from comment: "effort:low", "effort:medium", "effort:high", "effort:xhigh"
           EFFORT_RAW=$(printf '%s' "$STRIPPED" | grep -oiE 'effort:(low|medium|xhigh|high)' | head -1 | tr '[:upper:]' '[:lower:]' | cut -d: -f2 || true)
           EFFORT="${EFFORT_RAW:-xhigh}"
           echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
           echo "::notice::Using effort: $EFFORT"
 
-          # Detect a docs-sync / release trigger phrase. These flows ONLY run on
-          # issue_comment events and ONLY when the DOCS_RELEASE_ENABLED repo
-          # variable is 'true' (feature-flagged rollout). The phrase is matched
-          # against the same code-stripped body as verify_invocation, so a mention
-          # inside a fenced/inline code block never triggers. Precedence when a
-          # comment names more than one: create-release > sync-docs. An empty flow
-          # falls through to the existing issue-workflow / PR-review paths in
-          # codex-run.yml, so the read-only PR-review contract and today's
-          # behavior are untouched for every non-trigger comment. sync-release is
-          # intentionally omitted from this template: it requires a repo-side
-          # merge-triggered release workflow that parses the docs-release/*
-          # branch name. The run body supports flow=sync-release — a repo that
-          # has such a workflow adds sync-release to the candidate list below,
-          # between create-release and sync-docs.
-          #
-          # Note: the model-shorthand parser above reads the flow word after @codex
-          # (e.g. 'sync' in '@codex sync-docs') as an unknown model token and falls
-          # through to the default model — intended and harmless; '@codex luna
-          # create-release' still selects luna via the optional model group below.
           FLOW=""
           if [ "$EVENT_NAME" = "issue_comment" ] && [ "$DOCS_RELEASE_ENABLED" = "true" ]; then
             for cand in create-release sync-docs; do
@@ -214,44 +128,11 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_URL: ${{ github.event.issue.pull_request.url }}
           FLOW: ${{ steps.resolve_model.outputs.flow }}
-          # Same code-stripped body the invocation gate saw — the route keyword
-          # (first word after @codex) is parsed from THIS text, so the body that
-          # gates "is @codex invoked" and the body that gates "does this run earn
-          # push access" can never diverge.
           STRIPPED: ${{ steps.verify_invocation.outputs.stripped }}
-          # On an issue_comment for a PR, these describe the PULL REQUEST's author
-          # (github.event.issue is the PR). They gate the push-capable fix-pr path:
-          # only a trusted-author PR earns an in-place fix, so the agent never
-          # writes while reading an untrusted contributor's diff.
           PR_AUTHOR_ASSOC: ${{ github.event.issue.author_association }}
           PR_AUTHOR_LOGIN: ${{ github.event.issue.user.login }}
-          # Empty when the repository variable is unset — bot-author trust then
-          # never applies (fail-closed).
           CODEX_BOT_LOGIN: ${{ vars.CODEX_BOT_LOGIN }}
         run: |
-          # Fail-closed routing keyed on the FIRST word after @codex (an
-          # optional model shorthand — sol/terra/luna/mini/codex/spark — is
-          # skipped). Four outcomes:
-          #   - implement: a docs-sync/release FLOW, or a plain issue (an `issues`
-          #     event, or an issue_comment whose issue is NOT a PR) — the
-          #     issue-workflow that opens its OWN pull request.
-          #   - review (always): PR-review surfaces (pull_request_review and inline
-          #     pull_request_review_comment) — reading untrusted diff content never
-          #     earns push there, even for an inline "fix X" ask.
-          #   - review: a PR issue_comment whose route keyword is "review"
-          #     ("@codex review ..."), or whose PR author is untrusted
-          #     (external/fork) — read-only. NOTE: only the keyword position
-          #     counts; "review" later in the sentence ("@codex fix the review
-          #     comments") no longer forces read-only.
-          #   - fix-pr: any other issue_comment on a trusted-author PR — the
-          #     review-fixing playbook (validate all review feedback against the
-          #     code, fix what survives, disposition comment, re-review trigger),
-          #     with any text in the triggering comment folded in as additional
-          #     scope on top of that standard work.
-          # Anything not positively identified as write-safe degrades to
-          # read-only review (the review job holds no App token, so a misroute
-          # cannot push rather than running write-capable over untrusted PR
-          # content).
           IS_ISSUE=false
           case "$EVENT_NAME" in
             issues) IS_ISSUE=true ;;
@@ -266,9 +147,6 @@ jobs:
                 MODE=review
                 ;;
               *)
-                # issue_comment on a PR conversation. Route keyword = first
-                # token after @codex on its invocation line, skipping an
-                # optional model shorthand.
                 KEYWORD=$(printf '%s' "$STRIPPED" | tr -d '\r' \
                   | sed -n 's/^[[:space:]]*@codex[[:space:]]\{1,\}//p' | head -n 1 \
                   | awk '{ if (tolower($1) ~ /^(sol|terra|luna|mini|codex|spark)$/) { print $2 } else { print $1 } }' \
@@ -295,21 +173,10 @@ jobs:
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "::notice::Route: $MODE"
 
-  # Review runs read untrusted PR content. Two independent boundaries hold:
-  # the job token is contents: read (no push, no merge) and NO GitHub App token
-  # is minted on this route at all, so the agent has no write credential of any
-  # kind; and codex-run.yml runs the agent under the read-only Codex sandbox,
-  # which also denies it network access. The agent never posts — a later trusted
-  # step posts its final message with the job token.
   review:
     needs: classify
     if: needs.classify.outputs.invoked == 'true' && needs.classify.outputs.mode == 'review'
     permissions:
-      # Untrusted-content path: read-only on CODE. pull-requests: write is
-      # REQUIRED, not optional: a review comment targets a PR, and GitHub
-      # authorizes POST /issues/{n}/comments by the target's type — for a pull
-      # request that is pull-requests: write, NOT issues: write (which only
-      # covers real issues).
       contents: read
       pull-requests: write
       issues: write
@@ -322,15 +189,7 @@ jobs:
       runs_on: self-hosted
       bot_login: ${{ vars.CODEX_BOT_LOGIN }}
     secrets:
-      # No App secrets on this route: a review must not be able to mint a
-      # push-capable credential even by accident.
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-  # Implementation runs legitimately commit and push (issue workflow opens a PR;
-  # docs-sync opens a PR; create-release publishes). openai/codex-action has no
-  # OIDC App mint, so codex-run.yml mints a GitHub App installation token from
-  # CODEX_APP_ID / CODEX_APP_PRIVATE_KEY and fails closed, naming the missing
-  # secret, when either is absent. GITHUB_TOKEN stays contents: read.
   implement:
     needs: classify
     if: needs.classify.outputs.invoked == 'true' && needs.classify.outputs.mode == 'implement'
@@ -350,21 +209,6 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       CODEX_APP_ID: ${{ secrets.CODEX_APP_ID }}
       CODEX_APP_PRIVATE_KEY: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
-
-  # A fix-pr run edits the pull request's own branch in place and pushes to it:
-  # fetch all unaddressed review feedback, validate each finding against the
-  # code, fix what survives, fold in any additional instructions carried by the
-  # triggering comment, post a disposition comment, and trigger a fresh
-  # @codex review. It needs the App token like implement. Unlike a review run it
-  # does NOT read an untrusted author's diff: classify routes here ONLY for an
-  # issue_comment on a PR whose author is trusted (owner/member/collaborator, or
-  # the Codex write-route bot). The `if` below RE-ASSERTS that trust from the
-  # event payload, independent of classify's output — classify runs with zero
-  # permissions and this job can mint a push-capable App token, so this second,
-  # independent gate ensures a classify bug can never grant push over an
-  # untrusted-author PR. Trust is anchored on the PR author, not the commenter:
-  # the job-level trigger already requires an OWNER/MEMBER/COLLABORATOR
-  # commenter, so both the human asking and the diff being edited are trusted.
   fix-pr:
     needs: classify
     if: >

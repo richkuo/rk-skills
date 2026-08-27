@@ -18,7 +18,6 @@ import { fileURLToPath } from 'node:url'
 const root = new URL('../', import.meta.url)
 const repoRoot = fileURLToPath(root)
 
-/** The skill name install.sh retires wherever an older install left it. */
 const RETIRED = 'pr-review-format'
 
 const tempDirs = []
@@ -33,7 +32,6 @@ afterAll(() => {
 
 const runInstall = (home) => Bun.spawnSync(['bash', join(repoRoot, 'install.sh')], { env: { ...process.env, HOME: home } })
 
-/** Every skill directory the repo ships — the set both destinations must carry. */
 const shippedSkills = readdirSync(join(repoRoot, 'skills'), { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -85,10 +83,6 @@ describe('install.sh Codex links', () => {
 
     expect(runInstall(home).exitCode).toBe(0)
 
-    // A second run finds a fresh real file at the same target. The first run's
-    // backup must survive it, so the new one takes the next free name. Unlink
-    // before writing: the target is now a symlink into the repo, and writing
-    // through it would edit the repo's own AGENTS.md.
     rmSync(join(home, '.codex/AGENTS.md'))
     writeFileSync(join(home, '.codex/AGENTS.md'), 'second notes\n')
 
@@ -105,8 +99,7 @@ describe('install.sh Codex links', () => {
     const target = join(home, '.codex/skills', skill)
     mkdirSync(target, { recursive: true })
     writeFileSync(join(target, 'SKILL.md'), 'current copy\n')
-    // `mv dir dir.bak` moves dir *into* dir.bak when the backup is a directory,
-    // which buries the earlier backup instead of replacing it.
+
     mkdirSync(`${target}.bak`, { recursive: true })
     writeFileSync(join(`${target}.bak`, 'SKILL.md'), 'earlier backup\n')
 
@@ -124,14 +117,14 @@ describe('install.sh Codex links', () => {
     mkdirSync(join(home, '.codex'), { recursive: true })
     const target = join(home, '.codex/AGENTS.md')
     writeFileSync(target, 'live notes\n')
-    // install.sh tries .bak, then .bak.2 through .bak.99.
+
     writeFileSync(`${target}.bak`, 'backup 1\n')
     for (let n = 2; n <= 99; n++) writeFileSync(`${target}.bak.${n}`, `backup ${n}\n`)
 
     const run = runInstall(home)
 
     expect(run.exitCode, run.stderr.toString()).toBe(0)
-    // Refusing to link loses nothing; clobbering a backup loses a file.
+
     expect(readFileSync(target, 'utf8')).toBe('live notes\n')
     expect(readFileSync(`${target}.bak`, 'utf8')).toBe('backup 1\n')
     expect(readFileSync(`${target}.bak.99`, 'utf8')).toBe('backup 99\n')
@@ -143,9 +136,7 @@ describe('install.sh Codex links', () => {
     const home = makeHome()
     const target = join(home, '.codex/skills', RETIRED)
     mkdirSync(join(home, '.codex/skills'), { recursive: true })
-    // What an older hand-made Codex link left: a link into the repo, dangling
-    // since the rename. existsSync reports a dangling link as absent, so the
-    // retire step has to lstat it.
+
     symlinkSync(join(repoRoot, 'skills', RETIRED), target)
 
     const run = runInstall(home)
@@ -162,7 +153,7 @@ describe('install.sh Codex links', () => {
 
     expect(run.exitCode, run.stderr.toString()).toBe(0)
     expect(existsSync(join(home, '.codex'))).toBe(false)
-    // The Claude destination is still installed in full.
+
     expect(existsSync(join(home, '.claude/CLAUDE.md'))).toBe(true)
   })
 
@@ -172,7 +163,6 @@ describe('install.sh Codex links', () => {
 
     expect(runInstall(home).exitCode).toBe(0)
 
-    // Both are Claude Code formats; Codex has no reader for them.
     expect(existsSync(join(home, '.codex/workflows'))).toBe(false)
     expect(existsSync(join(home, '.codex/commands'))).toBe(false)
     expect(existsSync(join(home, '.claude/commands/commit.md'))).toBe(true)

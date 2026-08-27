@@ -1,22 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Semantic guard for the numbered-plan-steps contract.
- *
- * Four prompt sites produce a plan that a separate builder implements, and one
- * file owns what the builder does with it. The rule is restated prose with no
- * generator, so it drifts unless CI asserts the shared semantics: every producer
- * asks for numbered steps with verify points, and every build path either owns
- * the mirror rule or points at the file that does.
- *
- * Checks required shared semantics (numbering, verify point, mirror, fallbacks,
- * overridden-step disposition), never exact wording — a producer may or may not
- * spell out the verify-point examples. See docs/contract-inventory.md.
- */
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-// Prompt sites that hand a plan to a separate builder.
 const PRODUCERS = [
   'skills/fableplan/SKILL.md',
   'skills/issueplan/SKILL.md',
@@ -24,11 +10,8 @@ const PRODUCERS = [
   'workflows/milestone-pipeline.js',
 ]
 
-// Owner of the mirror-and-verify rule the producers' numbering exists for.
 const MIRROR_OWNER = 'skills/work-on-issue/SKILL.md'
 
-// Build paths that consume a numbered plan outside work-on-issue step 2 and so
-// must point at the owner rather than dropping the anchor.
 const MIRROR_POINTERS = [
   'skills/fableplan/SKILL.md',
   'skills/issueplan/SKILL.md',
@@ -37,7 +20,6 @@ const MIRROR_POINTERS = [
 
 const INVENTORY = 'docs/contract-inventory.md'
 
-/** Strip YAML frontmatter so a `description:` keyword cannot satisfy a procedure rule. */
 function procedureBody(markdown) {
   const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)
   return match ? match[1] : markdown
@@ -58,7 +40,7 @@ describe('numbered plan steps with verify points', () => {
       expect(body, `${path}: numbering instruction`).toMatch(
         /[Nn]umber(?:ed)?\s+the\s+implementation\s+steps|implementation\s+steps\s+numbered/,
       )
-      // The literal `1.`, `2.` shape, so "number the steps" alone cannot pass.
+
       expect(body, `${path}: numbering shape`).toMatch(/`?1\.`?,\s*`?2\.`?/)
       expect(body, `${path}: verify point`).toMatch(/verify point/i)
       expect(body, `${path}: verify point is an observable check`).toMatch(
@@ -128,11 +110,11 @@ describe('numbered plan steps with verify points', () => {
 
   test('an item that borrowed a later step\'s verify point re-homes when that step is overridden', () => {
     const body = procedureBody(texts[MIRROR_OWNER])
-    // Every borrower re-homes, not just one.
+
     expect(body, `${MIRROR_OWNER}: every borrower re-homes`).toMatch(
       /every[\s\S]{0,60}borrowed it[\s\S]{0,40}re-homes/i,
     )
-    // A replaced step hands its borrowers the replacement's check.
+
     expect(body, `${MIRROR_OWNER}: borrowed check follows a replacement`).toMatch(
       /re-homes[\s\S]{0,200}replacement step's verify point/i,
     )
@@ -159,8 +141,7 @@ describe('numbered plan steps with verify points', () => {
       /[Rr]e-homing cascades[\s\S]{0,400}repeats until no open item keys on a check that cannot run/i,
     )
     // The fallback's forward pointer must name the re-homing paragraph, not the
-    // overridden-step disposition — the latter governs the cancelled step's own
-    // item and omits the replacement-check-first ordering.
+
     expect(body, `${MIRROR_OWNER}: fallback points at the re-homing rule`).toMatch(
       /the borrowed check re-homes[\s\S]{0,120}A borrowed verify point re-homes when its source step is overridden/,
     )
@@ -190,7 +171,7 @@ describe('numbered plan steps with verify points', () => {
       .split('\n')
       .find((line) => line.startsWith('|') && /Adopted plan/.test(line) && /task tracker/.test(line))
     expect(row, `${MIRROR_OWNER}: guardrail row present`).toBeDefined()
-    // The superseded "long or many-part" narrowing must not come back.
+
     expect(row, `${MIRROR_OWNER}: guardrail row not narrowed to long plans`).not.toMatch(
       /long or many-part/i,
     )
@@ -211,9 +192,7 @@ describe('numbered plan steps with verify points', () => {
   })
 
   test('every producer posts its plan under the heading work-on-issue step 0 matches', () => {
-    // step 0 matches on `## Implementation plan` first; the fallback ("a maintainer
-    // clearly frames it") is a weaker bar for an automated bot comment, so a
-    // producer that omits the heading risks a later standalone run finding no plan.
+
     for (const path of PRODUCERS) {
       const body = procedureBody(texts[path])
       expect(body, `${path}: plan-comment heading`).toMatch(/## Implementation plan \(/)
@@ -225,7 +204,7 @@ describe('numbered plan steps with verify points', () => {
   })
 
   test('fableplan planning-phase-only mode still forbids the build step', () => {
-    // The pointer lives in step 8; wrapper callers must not gain a build instruction.
+
     const body = procedureBody(texts['skills/fableplan/SKILL.md'])
     expect(body, 'fableplan: planning-only forbids steps 7-8').toMatch(
       /Do NOT execute steps 7–8/,

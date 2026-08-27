@@ -26,7 +26,6 @@ _CREATE_PR_LINK = re.compile(
     r"\((https://github\.com/[^)\s]*compare/[^)\s]*[?&]quick_pull=1[^)\s]*)\)"
 )
 
-
 def rewrite_create_pr_link(body: str, footer: str) -> str:
     def rewrite(match):
         url = match.group(1)
@@ -48,7 +47,6 @@ def rewrite_create_pr_link(body: str, footer: str) -> str:
         return "(" + new_url + ")"
 
     return _CREATE_PR_LINK.sub(rewrite, body)
-
 
 if __name__ == "__main__":
     sys.stdout.write(

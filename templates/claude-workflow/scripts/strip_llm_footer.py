@@ -18,10 +18,8 @@ _LLM_FOOTER = re.compile(
     re.MULTILINE,
 )
 
-
 def strip_llm_footer(body: str) -> str:
     return _LLM_FOOTER.sub("", body)
-
 
 if __name__ == "__main__":
     body = sys.stdin.read()

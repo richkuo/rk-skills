@@ -20,16 +20,10 @@ const repoRoot = fileURLToPath(root)
 const read = (path) => Bun.file(new URL(path, root)).text()
 const skillsDir = new URL('skills/', root)
 
-/** The review-contract skill's only name. */
 const SKILL = 'pr-review'
-/** The name it was renamed from. No skill may answer to it again. */
+
 const RETIRED = 'pr-review-format'
 
-/**
- * The GitHub Action review route keeps the old filename: `claude-run.yml`
- * injects the prompt with --append-system-prompt, and Action prompts cannot
- * contain quotes, backticks, or dollar signs, so that file is not a skill.
- */
 const ACTION_PROMPT = `templates/claude-workflow/prompts/${RETIRED}.md`
 
 const tempDirs = []
@@ -42,15 +36,14 @@ afterAll(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-/** Seed a destination that a pre-rename install would have left behind. */
 function seedRetiredSkill(claudeDir, { asSymlink }) {
   const target = join(claudeDir, 'skills', RETIRED)
   mkdirSync(join(claudeDir, 'skills'), { recursive: true })
   if (asSymlink) {
-    // What install.sh left: a link into the repo, dangling since the rename.
+
     symlinkSync(join(repoRoot, 'skills', RETIRED), target)
   } else {
-    // What `bunx rk-skills` left: a real copy of the old skill.
+
     mkdirSync(target, { recursive: true })
     writeFileSync(join(target, 'SKILL.md'), `---\nname: ${RETIRED}\n---\n`)
   }
@@ -59,12 +52,6 @@ function seedRetiredSkill(claudeDir, { asSymlink }) {
 
 const stillThere = (path) => lstatSync(path, { throwIfNoEntry: false }) !== undefined
 
-/**
- * Stage a minimal copy of the repo so the installers' repo-still-ships guard
- * can actually run: against the real repo the retired name is always absent,
- * so that branch is unreachable. Both installers resolve the repo root from
- * their own file location, so a staged copy redirects them cleanly.
- */
 function stageRepo() {
   const repo = makeTempDir('rk-skills-repo-')
   mkdirSync(join(repo, 'bin'), { recursive: true })
@@ -85,11 +72,9 @@ describe('PR review skill name', () => {
   })
 
   test('leaves no skill answering to the retired name', () => {
-    // A skill is addressed by its directory name and by its frontmatter name,
-    // so an alias in either form would keep the retired contract loadable.
+
     expect(existsSync(new URL(RETIRED, skillsDir))).toBe(false)
 
-    // Synchronous read so the assertion settles — and can fail — inside the test.
     for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
       const manifest = new URL(`${entry.name}/SKILL.md`, skillsDir)
@@ -108,8 +93,7 @@ describe('PR review skill name', () => {
       'skills/milestone-workflow/SKILL.md',
       'workflows/milestone-pipeline.js',
     ]
-    // fix-pr-review is a different skill whose name contains both of these as a
-    // substring, so every match is anchored to exclude that prefix.
+
     const names = (name) => new RegExp(`(?<!fix-)\\b${name}\\b`)
     for (const path of loadSites) {
       const body = await read(path)
@@ -136,10 +120,10 @@ describe('PR review skill name', () => {
       expect(run.exitCode, run.stderr.toString()).toBe(0)
       expect(stillThere(leftover), `symlink: ${asSymlink}`).toBe(false)
       if (asSymlink) {
-        // A symlink holds no data, so it is deleted with no backup.
+
         expect(stillThere(`${leftover}.bak`)).toBe(false)
       } else {
-        // A real directory may be user-authored, so its content moves to .bak.
+
         expect(readFileSync(join(`${leftover}.bak`, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
       }
       expect(existsSync(join(project, '.claude/skills', SKILL, 'SKILL.md'))).toBe(true)
@@ -194,8 +178,7 @@ describe('PR review skill name', () => {
   })
 
   test('neither installer retires a name the repo ships', () => {
-    // The live repo never ships the retired name, so the repo-still-ships guard
-    // is unreachable against it; the staged repo copy makes that branch run.
+
     const mjsRepo = stageRepo()
     const project = makeTempDir('rk-skills-guard-mjs-')
     seedRetiredSkill(join(project, '.claude'), { asSymlink: false })
@@ -216,7 +199,7 @@ describe('PR review skill name', () => {
     })
 
     expect(shRun.exitCode, shRun.stderr.toString()).toBe(0)
-    // The link loop just linked the shipped skill; the guard must leave it alone.
+
     expect(lstatSync(join(home, '.claude/skills', RETIRED)).isSymbolicLink()).toBe(true)
     expect(readFileSync(join(home, '.claude/skills', RETIRED, 'SKILL.md'), 'utf8')).toContain(`name: ${RETIRED}`)
   })

@@ -38,7 +38,7 @@
 
 - Read relevant files and understand existing patterns before changing anything.
 - Favor project conventions over generic best practices; flag one only if actively harmful (bug-prone, insecure).
-- **Never add comments in the codebase.** Do not write inline comments, block comments, documentation comments, or TODO comments in source files. Keep existing comments unless the change deletes the code they describe.
+- **Never add comments in the codebase.** Do not write inline comments, block comments, documentation comments, or TODO comments in source files.
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface — always.** Never pick the tidier design if it leaves any correctness/safety gap (money, data integrity, security, auto-protective mechanisms); weigh gaps against the realistic worst case, and ignore the average. Derive the right solution from first principles even if it means more code.
 - **Always pursue the absolute best solution.** Cost, compute, time, effort, token spend, code volume, and convenience never narrow the option space. Use the most capable models and most thorough verification. Only correctness/safety and the explicit non-negotiables (worktree+PR workflow unless I override it, verifying claims against code, destructive-action safety) override "best."

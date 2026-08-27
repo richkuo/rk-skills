@@ -6,9 +6,6 @@ const read = (path) => Bun.file(new URL(path, root)).text()
 
 const DISPATCH_SKILL = 'skills/fable-dispatch/SKILL.md'
 
-// Skills known to dispatch a Fable 5 subagent. The scan below discovers the
-// set dynamically; this list pins the minimum so a rename can't silently
-// shrink coverage to zero.
 const KNOWN_DISPATCHERS = [
   'skills/fableplan/SKILL.md',
   'skills/fable-validate/SKILL.md',
@@ -32,9 +29,6 @@ const skillTexts = Object.fromEntries(
   ),
 )
 
-// `model`: `fable` / `model: fable` / `model: 'fable'` — backtick-stripped so
-// every inline-code spelling collapses to one form. `/model fable` (the slash
-// command) has no colon and stays excluded.
 const namesFableModel = (source) => /model:\s*'?fable'?/.test(source.replace(/`/g, ''))
 
 describe('fable dispatch contract', () => {

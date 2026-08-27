@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Canonical complexity score — mirrors validate-issue step 6.
- * Kept as executable golden examples so a reviewer can verify the routing
- * formula without re-deriving it from prose.
- */
 export function capabilityFromAxes({ risk, uncertainty, coupling }) {
   const map = (n) => (n <= 1 ? 0 : n === 2 ? 1 : n === 3 ? 2 : 3)
   let capability = map(Math.max(risk, uncertainty))
@@ -62,7 +57,7 @@ const PROPOSAL_CONCERN_CONSUMERS = [
 ]
 
 describe('complexity score band encoding', () => {
-  /** Parse golden rows from the validate-issue scoring reference so table drift fails CI. */
+
   function parseGoldenExamples(markdown) {
     const section = markdown.split('#### Golden examples (consistency checklist)')[1]
     expect(section).toBeTruthy()
@@ -207,17 +202,15 @@ describe('complexity score band encoding', () => {
   test('the six-band routing matrix is stated consistently across docs and the pipeline', async () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
-    // validate-issue holds the canonical matrix.
     expect(validateIssue).toContain('| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |')
     expect(validateIssue).toContain('| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |')
     expect(validateIssue).toContain('| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high |')
     expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |')
     expect(validateIssue).toContain('| 4 | 61–80 | Fable 5 · medium | **Yes** | Opus 5 · high |')
     expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |')
-    // Escalation is part of the canonical statement.
+
     expect(validateIssueScoring).toMatch(/Never lower routing from a validator rescore/)
 
-    // prd-to-issues stamps Execution blocks from the same matrix.
     expect(prdToIssues).toContain("| 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |")
     expect(prdToIssues).toContain("| 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |")
     expect(prdToIssues).toContain('| 2 | 21–40 | Opus 5 | No | high |')
@@ -226,7 +219,6 @@ describe('complexity score band encoding', () => {
     expect(prdToIssues).toMatch(/\| 5 \| 81–99 \| Opus 5 \| \*\*Yes\*\* \| xhigh/)
     expect(prdToIssues).toMatch(/Validation is fully derived from the score/)
 
-    // The pipeline executes the same matrix.
     expect(pipeline).toContain("{ name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } }")
     expect(pipeline).toContain("{ name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } }")
@@ -234,8 +226,6 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '61–80', min: 61, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } }")
 
-    // The reviewer runs on its own coarser scale, whose boundaries (10, 40, 80)
-    // deliberately do not line up with the six build/validate bands above.
     expect(validateIssue).toContain('| 0–10 | Sonnet 5 · high | `@claude sonnet review` |')
     expect(validateIssue).toContain('| 11–40 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) |')
     expect(validateIssue).toContain('| 41–80 | Opus 5 · high | `@claude opus review` |')
@@ -244,19 +234,16 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } }")
     expect(pipeline).toContain("{ name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } }")
-    // The C81+ step-down ladder floors at the standard trigger; sonnet is a
-    // band tier and the non-blocking tier, never a C81+ blocking rung.
-    expect(validateIssue).toMatch(/never steps down to Sonnet/i)
-    expect(pipeline).toMatch(/never steps down to sonnet/i)
 
-    // fableplan is yes at score ≥ 61 everywhere the signal is defined,
-    // and the worked example round-trips its own band through the rule.
+    expect(validateIssue).toMatch(/never steps down to Sonnet/i)
+    expect(pipeline).toContain('fable reviews the first cycle only')
+
     for (const doc of [validateIssue, newIssue, githubIssueFormat]) {
       expect(doc).toMatch(/score is ≥ 61|score is 61 or higher|score ≥ 61/)
       expect(doc).not.toMatch(/Capability ≥ 2 \(score ≥ 50|only when Capability = 2|only at Capability 2/)
     }
     expect(githubIssueFormat).toContain('Volume 20 — Opus 5, xhigh · fableplan: yes')
-    // No document may keep describing the superseded band-3 = "no" convention.
+
     for (const doc of [validateIssue, newIssue, githubIssueFormat, prdToIssues, fableValidateLoop, validateFableplanLoop]) {
       expect(doc).not.toMatch(/verdict line reads `fableplan: no`/)
       expect(doc).not.toMatch(/band 3 is built by Fable 5 directly/)
@@ -277,10 +264,10 @@ describe('complexity score band encoding', () => {
     expect(executionPlanReview).not.toContain('conflicts with the heuristics')
     expect(claudeMd).toContain('model + effort routing signal')
     expect(claudeMd).not.toContain('describe complexity as scope and risk')
-    // Money double-fill example must round-trip Risk 4 → Capability 3 → band-5 build on Opus 5 (not Fable).
+
     expect(githubIssueFormat).toContain('[C95] Orders can be filled twice')
     expect(githubIssueFormat).toContain('Capability 3 (Risk 4 — money/data-integrity on order-fill path); Volume 20 — Opus 5, xhigh')
-    // Fable never pairs with xhigh — high is Fable's ceiling.
+
     expect(githubIssueFormat).not.toContain('Fable 5, xhigh')
     expect(githubIssueFormat).not.toContain('[C70] Orders can be filled twice')
     expect(githubIssueFormat).not.toContain('Capability 2 (risk high on order-fill path)')

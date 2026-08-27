@@ -1,35 +1,23 @@
 name: Bun tests
-
 on:
   pull_request:
     types: [opened, reopened, synchronize]
   push:
     branches: [main]
-
 permissions:
   contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-
       - run: bun run test
-
-      # The push-access boundary of both bot bundles lives in hand-written shell
-      # inside their trigger workflows. These suites extract that shell out of
-      # the live YAML and execute it, so they must gate every PR, not only a
-      # manual run. Python 3 ships on ubuntu-latest.
       - run: python3 -m unittest discover -s templates/claude-workflow/scripts -p 'test_*.py'
-
       - run: python3 -m unittest discover -s templates/codex-workflow/scripts -p 'test_*.py'

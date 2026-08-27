@@ -13,7 +13,6 @@ if (!existsSync(skillsSrc)) {
 	process.exit(1);
 }
 
-// Each skill is a directory under skills/ that contains a SKILL.md.
 const skills = readdirSync(skillsSrc, { withFileTypes: true })
 	.filter((entry) => entry.isDirectory())
 	.map((entry) => entry.name)
@@ -38,45 +37,35 @@ for (const name of skills) {
 	cpSync(join(skillsSrc, name), join(skillsDir, name), { recursive: true });
 }
 
-// pr-review-format was renamed to pr-review. The copy loop above never deletes
-// a skill that left the repo, so an earlier install keeps the retired name — and
-// its stale copy of the review contract — invokable. Retire it, but never a name
-// the repo still ships, so re-adding one of these later cannot retire it.
 const retiredSkills = ['pr-review-format'].filter((name) => !skills.includes(name));
 const removedSkills = [];
 const backedUpSkills = [];
 const keptSkills = [];
 for (const name of retiredSkills) {
 	const target = join(skillsDir, name);
-	// lstat, not existsSync: install.sh leaves a symlink here, and the rename
-	// makes that symlink dangle, which existsSync reports as absent.
+
 	const stat = lstatSync(target, { throwIfNoEntry: false });
 	if (stat === undefined) continue;
 	if (stat.isSymbolicLink()) {
-		// A symlink holds no data of its own; remove it outright.
+
 		rmSync(target, { force: true });
 		removedSkills.push(name);
 	} else if (lstatSync(`${target}.bak`, { throwIfNoEntry: false }) === undefined) {
-		// A real directory or file may be user-authored rather than this
-		// installer's stale copy — back it up instead of deleting it.
+
 		renameSync(target, `${target}.bak`);
 		backedUpSkills.push(name);
 	} else {
-		// A backup already exists; never overwrite it or delete the original.
+
 		keptSkills.push(name);
 	}
 }
 
-// sync-docs and create-release used to dispatch to runner subagents; they now
-// carry their workflows inline. Remove the stale runner files this installer
-// wrote in earlier versions so they cannot be dispatched to by mistake.
 const retiredAgents = ['sync-docs-runner.md', 'create-release-runner.md'];
 const removedAgents = retiredAgents.filter((name) => existsSync(join(agentsDir, name)));
 for (const name of removedAgents) {
 	rmSync(join(agentsDir, name));
 }
 
-// Dynamic workflow scripts some skills invoke via the Workflow tool.
 const workflows = existsSync(workflowsSrc)
 	? readdirSync(workflowsSrc).filter((name) => name.endsWith('.js')).sort()
 	: [];

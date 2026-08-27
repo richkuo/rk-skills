@@ -1,14 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Pins for the @codex GitHub Actions bundle that only a live YAML edit can
- * break. The routing SHELL is covered by
- * templates/codex-workflow/scripts/test_workflow_logic.py, which extracts and
- * executes the real classifier out of the TEMPLATE workflow. These tests cover
- * what that extractor cannot see: that this repo's vendored copy carries the
- * identical classifier, and that the permission / credential boundaries around
- * it stay where they are.
- */
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
@@ -22,7 +13,6 @@ const [repoTrigger, templateTrigger, runBody] = await Promise.all([
   read(RUN_BODY),
 ])
 
-/** Dedented body of a step's `run: |` block, verbatim from the YAML. */
 function stepRunBlock(source, stepName) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line.trim() === `- name: ${stepName}`)
@@ -62,7 +52,6 @@ const CLASSIFIER_STEPS = [
   'Classify invocation route (review, implement, or fix-pr)',
 ]
 
-/** Value of a `permissions:` block for a named top-level job. */
 function jobPermissions(source, jobName) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line === `  ${jobName}:`)
@@ -86,8 +75,7 @@ function jobPermissions(source, jobName) {
 
 describe('Codex workflow bundle', () => {
   test('the vendored trigger carries the template classifier verbatim', () => {
-    // The Python routing tests extract from the TEMPLATE. Without this pin,
-    // this repo's own copy could drift and run unpinned routing logic.
+
     for (const step of CLASSIFIER_STEPS) {
       const fromTemplate = stepRunBlock(templateTrigger, step)
       const fromRepo = stepRunBlock(repoTrigger, step)
@@ -111,10 +99,7 @@ describe('Codex workflow bundle', () => {
     '%s keeps every job on contents: read and never grants id-token',
     async (path) => {
       const source = await read(path)
-      // openai/codex-action mints no App token via OIDC, and a GITHUB_TOKEN
-      // push would not retrigger CI — so the job token must never carry push
-      // rights on ANY route. That makes "no GITHUB_TOKEN fallback for push" a
-      // permission boundary rather than an intention.
+
       for (const job of ['review', 'implement', 'fix-pr']) {
         expect(jobPermissions(source, job), `${path}: ${job}`).toEqual([
           'contents: read',
@@ -177,8 +162,7 @@ describe('Codex workflow bundle', () => {
       expect(fixPr, path).toContain(
         "contains(fromJSON('[\"OWNER\", \"MEMBER\", \"COLLABORATOR\"]'), github.event.issue.author_association)",
       )
-      // Bot-author trust must be gated on the variable being set, so an unset
-      // CODEX_BOT_LOGIN cannot make an empty login match an empty variable.
+
       expect(fixPr, path).toContain(
         "vars.CODEX_BOT_LOGIN != '' && github.event.issue.user.login == vars.CODEX_BOT_LOGIN",
       )
@@ -193,7 +177,7 @@ describe('Codex workflow bundle', () => {
       expect(block).toContain('CODEX_APP_PRIVATE_KEY')
       expect(block).toContain('exit 1')
       expect(runBody).toContain('uses: actions/create-github-app-token@v2')
-      // The mint step and the checkout token must both stay off the review route.
+
       expect(runBody).toMatch(
         /- name: Mint the GitHub App installation token\n\s+if: inputs\.mode != 'review'/,
       )
@@ -202,8 +186,7 @@ describe('Codex workflow bundle', () => {
     test('the review route posts through a trusted step, never the agent', () => {
       const block = stepRunBlock(runBody, 'Post the Codex review comment')
       expect(block).toBeTruthy()
-      // --body-file keeps model output that read untrusted PR content out of
-      // any shell evaluation; the run link is what RUN_ID selection matches.
+
       expect(block).toContain('--body-file')
       expect(block).not.toMatch(/--body\s+"/)
       expect(runBody).toContain(

@@ -6,14 +6,11 @@ const read = (path) => Bun.file(new URL(path, root)).text()
 const example = await read('skills/pr-review/example-review.md')
 const skill = await read('skills/pr-review/SKILL.md')
 
-// The fenced ```markdown blocks are the only posted-review text in the file;
-// everything outside them is commentary addressed to the reviewer.
 const blocks = [...example.matchAll(/```markdown\n([\s\S]*?)```/g)].map((match) =>
   match[1].trimEnd(),
 )
 const [needsUpdates, bareLgtm] = blocks
 
-/** Section order is fixed: the two blocking sections, then the two non-blocking ones. */
 const SECTION_ORDER = [
   '### Needs Fixing',
   '### Requires Human Review',
@@ -21,7 +18,6 @@ const SECTION_ORDER = [
   '### Create Follow-up Issue',
 ]
 
-/** Field set each section's items must carry, in this exact order. */
 const SECTION_FIELDS = {
   '### Needs Fixing': ['Invariant:', 'Must survive:', 'Plain simple English:'],
   '### Requires Human Review': ['Recommended proposed solution:', 'Plain simple English:'],
@@ -29,7 +25,6 @@ const SECTION_FIELDS = {
   '### Create Follow-up Issue': ['Plain simple English:'],
 }
 
-/** Every field name the `## Format` rules define. Anything else is drift. */
 const DEFINED_FIELDS = new Set([
   'Invariant:',
   'Must survive:',
@@ -40,8 +35,6 @@ const DEFINED_FIELDS = new Set([
 
 const FOOTER = /^Reviewed with LLM: [^|]+ \| [^|]+ \| Harness: .+$/m
 
-// Findings end where the Verification limitation line (or the footer) begins, so
-// the last section's body never absorbs either.
 const findingsEnd = needsUpdates.search(/\n\*\*Verification limitation:\*\*|\n---$/m)
 const findingsRegion = findingsEnd === -1 ? needsUpdates : needsUpdates.slice(0, findingsEnd)
 
@@ -68,7 +61,6 @@ describe('PR review worked example', () => {
     expect(blocks).toHaveLength(2)
     expect(needsUpdates.split('\n')[0]).toBe('Needs Updates')
 
-    // A bare LGTM stands alone above the footer: verdict, separator, footer line.
     const lgtmLines = nonBlank(bareLgtm)
     expect(lgtmLines).toHaveLength(3)
     expect(lgtmLines[0]).toBe('LGTM')
@@ -80,7 +72,7 @@ describe('PR review worked example', () => {
     const headings = [...needsUpdates.matchAll(/^### .+$/gm)].map((match) => match[0])
     expect(headings).toEqual(SECTION_ORDER)
     for (const heading of SECTION_ORDER) {
-      // The heading must be one the Format rules name, spelled the same way.
+
       expect(skill, `Format rules must name ${heading}`).toContain(heading.slice(4))
       expect(
         sectionBody(heading).match(/^1\. \*\*.+\*\*$/m),
@@ -95,7 +87,7 @@ describe('PR review worked example', () => {
         (match) => match[1],
       )
       expect(fields, heading).toEqual(SECTION_FIELDS[heading])
-      // Plain simple English is the last field of every finding, in every section.
+
       expect(fields[fields.length - 1], `${heading}: last field`).toBe('Plain simple English:')
     }
   })
@@ -117,10 +109,10 @@ describe('PR review worked example', () => {
 
     const limitLine = lines[limitIndex]
     expect(limitLine).toMatch(/^\*\*Verification limitation:\*\* .+ unavailable — .+\.$/)
-    // Not a finding: no finding fields, and not an item inside a numbered list.
+
     expect(limitLine).not.toMatch(/Invariant:|Must survive:|Plain simple English:/)
     expect(limitLine).not.toMatch(/^\s*\d+\./)
-    // Only the footer follows it.
+
     expect(nonBlank(lines.slice(limitIndex + 1).join('\n'))[0]).toBe('---')
   })
 
@@ -138,7 +130,7 @@ describe('PR review worked example', () => {
         /^\*\*(Plain simple English|Recommended proposed solution):\*\* (.+)$/gm,
       ),
     ]
-    // Four findings plus the one Recommended proposed solution.
+
     expect(fields.length).toBeGreaterThanOrEqual(5)
     for (const [, label, body] of fields) {
       expect(body.trim().split(/\s+/).length, `${label} word count`).toBeLessThan(55)

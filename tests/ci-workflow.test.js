@@ -55,9 +55,6 @@ describe('Bun test workflow contract', () => {
   test('gates both bot bundles routing suites', async () => {
     const workflow = await readWorkflow()
 
-    // These extract and execute the real classifier shell from the trigger
-    // workflows — the push-access boundary of @claude and @codex. A PR that
-    // widens either must fail CI, not merely a manual run.
     expect(workflow).toContain(
       "run: python3 -m unittest discover -s templates/claude-workflow/scripts -p 'test_*.py'",
     )

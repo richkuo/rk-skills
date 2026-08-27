@@ -36,14 +36,11 @@ VERIFY_STEP = "Verify @codex is an actual invocation (not in a code block or exa
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
 RESOLVE_MODEL_STEP = "Resolve model from @codex invocation"
 
-# The bot login a consumer would put in the CODEX_BOT_LOGIN repository variable.
 BOT_LOGIN = "acme-codex[bot]"
-
 
 def _read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
-
 
 def extract_step_run_block(yml_text, step_name):
     """Return the dedented body of a step's `run: |` block, verbatim from the YAML."""
@@ -96,7 +93,6 @@ def extract_step_run_block(yml_text, step_name):
     min_indent = min(len(l) - len(l.lstrip()) for l in non_blank)
     return "\n".join(l[min_indent:] if l.strip() != "" else "" for l in body)
 
-
 def _run_block(script, env_overrides, output_key):
     """Execute an extracted run block with injected env; return the last value it
     wrote to GITHUB_OUTPUT under output_key (the real value is written after any
@@ -119,7 +115,6 @@ def _run_block(script, env_overrides, output_key):
                 f"run block wrote no {output_key}= line to GITHUB_OUTPUT; stderr:\n{r.stderr}"
             )
         return value
-
 
 def run_classify_mode(
     event_name,
@@ -145,7 +140,6 @@ def run_classify_mode(
         "mode",
     )
 
-
 def _run_block_all_outputs(script, env_overrides):
     """Execute an extracted run block with injected env; return every key it
     wrote to GITHUB_OUTPUT as a dict (last-wins per key, same rule as
@@ -168,7 +162,6 @@ def _run_block_all_outputs(script, env_overrides):
             raise AssertionError(f"run block wrote no GITHUB_OUTPUT; stderr:\n{r.stderr}")
         return values
 
-
 def run_resolve_model(event_name, stripped, docs_release_enabled=""):
     script = extract_step_run_block(_read(CODEX_YML), RESOLVE_MODEL_STEP)
     return _run_block_all_outputs(
@@ -179,7 +172,6 @@ def run_resolve_model(event_name, stripped, docs_release_enabled=""):
             "DOCS_RELEASE_ENABLED": docs_release_enabled,
         },
     )
-
 
 def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_login=""):
     script = extract_step_run_block(_read(CODEX_YML), VERIFY_STEP)
@@ -196,10 +188,7 @@ def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_
         "invoked",
     )
 
-
-# A PR issue_comment carries a non-empty pull_request.url; an issue comment does not.
 PR_URL = "https://api.github.com/repos/o/r/pulls/5"
-
 
 class ClassifyModeRoutingTest(unittest.TestCase):
     """Pin every documented route. fix-pr is the only issue_comment path that
@@ -221,9 +210,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_fix_pr(self):
-        # work-on-issue PRs opened by the Codex App are authored by its bot
-        # (association NONE) — the login check, not the association, admits them,
-        # and only when CODEX_BOT_LOGIN names that bot.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -232,8 +219,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_review_when_bot_login_unset(self):
-        # Must survive: with CODEX_BOT_LOGIN unset, bot-author trust must fail
-        # closed to read-only review rather than defaulting to trusted.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -242,8 +228,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_human_routes_still_work_when_bot_login_unset(self):
-        # An unset CODEX_BOT_LOGIN disables ONLY bot trust; a trusted human
-        # author still reaches fix-pr.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="MEMBER",
@@ -252,8 +237,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_other_bot_login_is_review_only(self):
-        # Must survive: a bot that is NOT the configured Codex bot never earns
-        # push, even when the variable is set to a different bot.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix this",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -262,8 +246,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_external_author_pr_comment_is_review_only(self):
-        # An external/fork-authored PR (association NONE) never earns push, even
-        # from a trusted commenter (the job trigger already gated the commenter).
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -292,10 +275,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_keyword_after_uppercase_model_shorthand_is_review(self):
-        # Must survive: a capitalized shorthand ("Luna") must be skipped
-        # identically to its lowercase form, or the real "review" keyword gets
-        # discarded and a trusted-author PR misroutes to push-capable fix-pr
-        # instead of staying read-only.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex Luna review",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -317,8 +297,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_word_later_in_sentence_no_longer_forces_review(self):
-        # Keyword routing: only the FIRST word after @codex counts, so an
-        # instruction that merely mentions review keeps a push-capable route.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr the review comments",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -340,8 +319,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_untrusted_pr_author_is_review_only(self):
-        # Must survive: the fix-pr keyword never earns push over an
-        # external-author PR — fail-closed to read-only review.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -349,7 +327,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_plain_issue_is_implement(self):
-        # No PR context: the issue path wins before keyword routing.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -357,7 +335,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_inline_review_surface_stays_review(self):
-        # PR-review surfaces are always read-only regardless of keyword.
+
         self.assertEqual(
             run_classify_mode("pull_request_review_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
@@ -386,7 +364,7 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_issue_comment_on_issue_is_implement(self):
-        # No PR_URL: an issue_comment on a plain issue is the issue-workflow path.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex implement this",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -401,15 +379,13 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_flow_wins_over_pr_review_word(self):
-        # A non-empty FLOW routes to implement even on a PR comment mentioning
-        # 'review' — the flow prompt, not fix-pr, governs its push scope.
+
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex create-release review",
                               pr_url=PR_URL, flow="create-release",
                               pr_author_assoc="MEMBER"),
             "implement",
         )
-
 
 class ResolveModelTest(unittest.TestCase):
     """Pin the model-shorthand → MODEL_ID resolution and the docs/release FLOW
@@ -423,8 +399,7 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_unknown_shorthand_falls_through_to_the_default(self):
-        # Must survive: an unrecognized token must never resolve to an empty or
-        # invalid model id — the run would fail at the API instead of routing.
+
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex banana review")["model_id"],
             "gpt-5.6-sol",
@@ -455,9 +430,7 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_uppercase_luna_shorthand_selects_the_fast_model(self):
-        # Must survive: a shorthand token that routing recognizes and skips for
-        # every case variant must resolve to the same model for every case
-        # variant — never silently drop to the flagship default.
+
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex LUNA review")["model_id"],
             "gpt-5.6-luna",
@@ -502,7 +475,6 @@ class ResolveModelTest(unittest.TestCase):
             run_resolve_model("issue_comment", "@codex create-release")["flow"],
             "",
         )
-
 
 class VerifyInvocationSelfTriggerTest(unittest.TestCase):
     """Pin the Codex bot self-trigger guard: whitespace/blank-line padding around
@@ -549,8 +521,7 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_second_nonblank_line_does_not_fire(self):
-        # Must survive: the guard must not accept a genuinely multi-line body
-        # whose first line is the trigger — that is the loop-prevention boundary.
+
         self.assertEqual(
             run_verify_invocation(
                 "issue_comment",
@@ -574,10 +545,7 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_bot_self_trigger_is_unreachable_when_bot_login_unset(self):
-        # With CODEX_BOT_LOGIN unset the bot branch must not match; the comment
-        # then falls through to the ordinary line-start check. The job-level
-        # gate in codex.yml is what keeps such a comment from ever reaching
-        # here, and it applies the same unset-variable rule.
+
         self.assertEqual(
             run_verify_invocation("issue_comment", "@codex review", BOT_LOGIN, ""),
             "true",
@@ -606,7 +574,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         self.assertEqual(
             run_verify_invocation("issue_comment", body, "someuser", BOT_LOGIN), "false"
         )
-
 
 if __name__ == "__main__":
     unittest.main()

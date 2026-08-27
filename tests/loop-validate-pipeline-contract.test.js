@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Semantic guard for loop/validate skill-family pipeline rules.
- * Checks key parameters (thresholds, stop conditions), not exact prose.
- * Markers must appear in the procedure body — frontmatter `description:` alone is not enough.
- * See docs/contract-inventory.md.
- */
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
@@ -15,8 +9,6 @@ const REVIEW_CYCLE_FULL = [
 ]
 const REVIEW_CYCLE_PARAPHRASE = ['skills/fableplan-loop/SKILL.md']
 
-// Where each review-cycle owner states its stop conditions. The divergence
-// brake is asserted inside this region only.
 const STOP_CONDITION_REGION = {
   'skills/fix-pr-review-loop/SKILL.md': ['### 3. Check the review', '### 4. Resolve the review'],
   'skills/work-on-issue-loop/SKILL.md': ['**fix-pr-review-loop step 3**', '**fix-pr-review-loop step 4**'],
@@ -45,9 +37,6 @@ const VALIDATION_STOP = [
   'skills/fable-validate-fableplan/SKILL.md',
 ]
 
-// Loop skills that quote validate-issue's verdict block so they can parse it
-// without waiting on the interactive reply. validate-issue owns the canonical
-// format (placeholder spelling may differ: `<0-100>` vs `<score>`).
 const VERDICT_TEMPLATE_OWNER = 'skills/validate-issue/SKILL.md'
 const VERDICT_TEMPLATE_CONSUMERS = [
   'skills/validate-issue-loop/SKILL.md',
@@ -57,7 +46,6 @@ const VERDICT_TEMPLATE_CONSUMERS = [
   'skills/fable-validate-fableplan/SKILL.md',
 ]
 
-// Final-report presentation rule every autonomous chain ends with.
 const REPORT_CAP = [
   'skills/validate-issue-loop/SKILL.md',
   'skills/fable-validate-loop/SKILL.md',
@@ -70,9 +58,6 @@ const REPORT_CAP = [
   'skills/fable-new-issue-loop/SKILL.md',
 ]
 
-// work-on-issue owns the plan-deviation policy for a plan adopted from the issue
-// thread; the chains that hand a plan down may restate it but must not narrow it
-// back to "only when the code contradicts the plan".
 const PLAN_DEVIATION_OWNER = 'skills/work-on-issue/SKILL.md'
 const PLAN_DEVIATION_CALLERS = [
   'skills/fableplan-work-on-issue/SKILL.md',
@@ -82,11 +67,6 @@ const PLAN_DEVIATION_CALLERS = [
   'skills/validate-fableplan-loop/SKILL.md',
 ]
 
-// validate-issue's issue-editing procedure owns the attribution verb for a
-// validation-driven issue edit. That edit is review/verification output, so the
-// appended footer line is `Validated`; `Updated` there would report a validation
-// pass as an ordinary revision. Every validate-family skill that names the line
-// must agree — there is no generator between these files.
 const EDIT_VERB_OWNER = 'skills/validate-issue/issue-editing.md'
 const EDIT_VERB_CONSUMERS = [
   'skills/validate-issue-loop/SKILL.md',
@@ -97,23 +77,16 @@ const EDIT_VERB_CONSUMERS = [
   'skills/fable-validate-fableplan-loop/SKILL.md',
 ]
 const EDIT_VERB_FORMAT = 'skills/github-issue-format/SKILL.md'
-// The milestone workflow hands the same issue-correction job to an agent prompt.
+
 const EDIT_VERB_WORKFLOW = 'workflows/milestone-pipeline.js'
 
 const INVENTORY = 'docs/contract-inventory.md'
 
-/** Strip YAML frontmatter so description: keywords cannot satisfy procedure rules. */
 function procedureBody(markdown) {
   const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)
   return match ? match[1] : markdown
 }
 
-/**
- * True when a markdown table row co-locates the decision-table **STOP** /
- * **STOP.** marker with every term pattern. Case-insensitive "Stop and report"
- * in Red Flags is not enough — that would keep passing after the real stop
- * rows are deleted.
- */
 function hasStopTableRow(body, ...termPatterns) {
   return body.split('\n').some((line) => {
     if (!line.startsWith('|')) return false
@@ -153,7 +126,7 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/review_count\s*>\s*5/)
       expect(body, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
-      // Cap rule: past threshold, first LGTM ends the loop (not a bare keyword hit).
+
       expect(body, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
     }
   })
@@ -161,11 +134,7 @@ describe('loop/validate pipeline contract', () => {
   test('review-cycle owners brake on divergence, and only with the self-inflicted condition', () => {
     for (const path of REVIEW_CYCLE_FULL) {
       const body = procedureBody(texts[path])
-      // The brake exists and is keyed to a cycle count below the LGTM cap, so
-      // a PR correcting its own corrections stops before cycle 5.
-      // Scope to the region that states the stop conditions. The Red Flags and
-      // Common Mistakes rows restate these same phrases, so a search over the
-      // whole document finds them there and proves nothing about the rule.
+
       const [open_, close] = STOP_CONDITION_REGION[path]
       const from = body.indexOf(open_)
       expect(from, path).toBeGreaterThan(-1)
@@ -175,33 +144,22 @@ describe('loop/validate pipeline contract', () => {
 
       const at = region.search(/pr_cycle_count\s*>=\s*(\d+)/)
       expect(at, path).toBeGreaterThan(-1)
-      // The brake reads its own derived count, never the in-memory
-      // `review_count` that the past-5 LGTM cap uses.
+
       expect(region, path).toMatch(/(?:not|never) the in-memory `?review_count`?/i)
-      // The threshold has to sit below the LGTM cap of 5, or the brake can
-      // never fire before the cap ends the loop on its own.
+
       const threshold = Number(region.match(/pr_cycle_count\s*>=\s*(\d+)/)[1])
       expect(threshold, path).toBeLessThan(5)
       const rule = region.slice(at, at + 300)
-      // Both halves in one rule — the cycle count is never sufficient alone.
+
       expect(rule, path).toMatch(/Needs Updates/i)
       expect(rule, path).toMatch(/an earlier cycle[\s\S]{0,40}added/i)
-      // It escalates to the human rather than continuing or silently trimming.
-      // Asserted on the region, not the whole document — "Diverging" also
-      // appears in step 5's table and the Red Flags rows, and a hit there
-      // would keep this green after the rule lost its escalation step.
+
       expect(region, path).toMatch(/Diverging/)
 
-      // A cycle count alone never stops a `Needs Updates` PR. Asserted on the
-      // region that states the rules, so step 5's prose restating it cannot
-      // satisfy this after rule 4 loses its own clause.
       expect(region, path).toMatch(
         /never stops the loop by cycle count|no cycle count alone stops a/is,
       )
 
-      // Base-branch code a step 7 merge brought into the head is not the
-      // loop's own work, and an unattributable blocking finding defeats the
-      // self-inflicted test instead of satisfying it vacuously.
       expect(region, path).toMatch(/base merge|base-branch work|origin\/<baseRefName>/i)
       expect(region, path).toMatch(/cannot be attributed|defeats/i)
     }
@@ -219,7 +177,7 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/\*\*Score gate:\*\*/)
       expect(body, path).toMatch(/below 61|score\s*<\s*61/)
-      // Four carve-out terms must sit with the safety carve-out, not as stray keywords.
+
       expect(body, path).toMatch(
         /safety carve-out[\s\S]{0,300}money[\s\S]{0,120}data integrity[\s\S]{0,120}security[\s\S]{0,120}auto-protective/i,
       )
@@ -231,7 +189,7 @@ describe('loop/validate pipeline contract', () => {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/no score gate|score gate removed/i)
       expect(body, path).toMatch(/always runs|for EVERY issue/i)
-      // Must not install the skip gate as this skill's own procedure heading.
+
       expect(body, path).not.toMatch(
         /\*\*Score gate:\*\*[^\n]*below 61[^\n]*skip fableplan/i,
       )
@@ -241,7 +199,7 @@ describe('loop/validate pipeline contract', () => {
   test('new-issue loops stop on duplicate or non-convergence', () => {
     for (const path of DUPLICATE_CONVERGENCE) {
       const body = procedureBody(texts[path])
-      // Decision-table rows must co-locate STOP with the rule — frontmatter alone fails.
+
       expect(hasStopTableRow(body, /duplicate/i), `${path}: STOP+duplicate row`).toBe(true)
       expect(hasStopTableRow(body, /converg/i), `${path}: STOP+converg row`).toBe(true)
     }
@@ -260,9 +218,7 @@ describe('loop/validate pipeline contract', () => {
   })
 
   test('verdict-block template stays parseable in every loop that quotes it', () => {
-    // One template line must co-locate every field the loops parse. Placeholder
-    // spelling may vary (`<score>` vs `<0-100>`, `<Yes|No>` vs `<Yes | No>`);
-    // a missing or renamed field breaks the loops' verdict parsing.
+
     const fieldPatterns = [
       /Update issue description\? <Yes ?\| ?No>/,
       /Complexity: <[^>]+>\/100/,
@@ -295,19 +251,19 @@ describe('loop/validate pipeline contract', () => {
   test('work-on-issue stays under 200 lines with whole-number step headings', () => {
     const text = texts[PLAN_DEVIATION_OWNER]
     expect(text.split('\n').length - 1, PLAN_DEVIATION_OWNER).toBeLessThan(200)
-    // Fractional step labels (0.1, 1.1, 1.2) must not come back as headings.
+
     expect(procedureBody(text), PLAN_DEVIATION_OWNER).not.toMatch(/^#+ \d+\.\d+/m)
   })
 
   test('work-on-issue owns one plan-deviation policy and no caller narrows it', () => {
     const owner = procedureBody(texts[PLAN_DEVIATION_OWNER])
-    // All three overrides, plus the marker that a caller cannot narrow them.
+
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(
       /adopted plan is the blueprint[\s\S]{0,900}traced code[\s\S]{0,400}newer on the issue[\s\S]{0,400}[Cc]orrectness and safety/,
     )
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/single plan-deviation policy/i)
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/never narrows it|does not remove the other two/i)
-    // The `, fableplan` marker stays keyed to Fable authorship, not to adoption.
+
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/Fable-authored/)
     expect(owner, PLAN_DEVIATION_OWNER).not.toMatch(
       /adopted from the issue thread in step 0\.1, which counts the same as one produced this session/,
@@ -315,7 +271,7 @@ describe('loop/validate pipeline contract', () => {
 
     for (const path of PLAN_DEVIATION_CALLERS) {
       const body = procedureBody(texts[path])
-      // The superseded narrower rule must not come back.
+
       expect(body, `${path}: narrowed deviation rule`).not.toMatch(
         /deviations?[^.\n]{0,80}only when the code contradicts the plan/i,
       )

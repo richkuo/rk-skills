@@ -23,37 +23,26 @@ const [
   read('README.md'),
 ])
 
-/** Strip YAML frontmatter so a description: keyword cannot satisfy a procedure rule. */
 function procedureBody(markdown) {
   const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)
   return match ? match[1] : markdown
 }
 
-/** The fenced code blocks of a procedure — where its actual instructions live. */
 function fencedBlocks(markdown) {
   return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map(([, code]) => code)
 }
 
-/**
- * Every `gh` invocation in a chunk of text as `<subcommand> <verb>` pairs. Matches
- * ANY subcommand, not a fixed list: the read-only guarantee is open-world, so a
- * command the guard does not recognize has to reach the allowlist check and fail
- * there rather than slip past extraction.
- */
 function ghInvocations(text) {
-  // \b is load-bearing: without it the trailing "gh" of "through" matches and the
-  // next prose word reads as a subcommand.
+
   return [...text.matchAll(/\bgh\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/g)].map(
     ([whole, sub, verb]) => ({ sub, verb: verb ?? '', whole: whole.trim() }),
   )
 }
 
-/** gh verbs that write. Present anywhere in a read-only procedure — instruction or aside — is a failure. */
 const MUTATING_GH = /gh\s+(?:issue|pr)\s+(edit|create|comment|close|reopen|delete|merge|review|lock|transfer|develop)\b/
 
-/** Subcommand verbs that only read. Anything outside this set mutates and must fail a read-only claim. */
 const READ_ONLY_GH = {
-  api: [], // GET by default; the verb slot is a path, so writes are caught by method/field instead
+  api: [],
   issue: ['list', 'view', 'status'],
   pr: ['list', 'view', 'checks', 'diff', 'status'],
   run: ['list', 'view'],
@@ -62,15 +51,8 @@ const READ_ONLY_GH = {
   search: ['issues', 'prs', 'repos', 'code'],
 }
 
-/**
- * `gh api` turns into a write via an explicit method, or via any parameter form —
- * gh switches to POST as soon as a parameter is attached. -f/--field is not the only
- * one: -F/--raw-field and --input POST just as surely, so all of them belong here.
- * Checked in prose as well as in fenced blocks.
- */
 const WRITING_GH_API = [
-  // Space-separated and `--flag=value` / `-X=VERB` forms — gh accepts both.
-  // Put `=` before `\s*` so `--method=POST` is not eaten by an empty `\s*` match.
+
   /gh api[^\n`]*(?:-X|--method)(?:=\s*|\s*)(POST|PATCH|PUT|DELETE)/gi,
   /gh api[^\n`]*(?:(?:\s(?:-f|--field|-F|--raw-field)\s)|(?:(?:-f|--field|-F|--raw-field)=))/g,
   /gh api[^\n`]*(?:(?:\s--input\s)|(?:--input=))/g,
@@ -85,35 +67,26 @@ const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
 const GRAPHQL_MUTATION = /\bmutation\b/
 
 function joinContinuedLines(text) {
-  // Shell line continuations: `\\\n` joins physical lines into one logical command
-  // so a write flag on the second line cannot hide from single-line scanners.
+
   return text.replace(/\\\r?\n/g, ' ')
 }
 
-/** Non-gh write forms — the read-only guarantee is open-world across binaries, not only `gh`. */
 const NON_GH_WRITES = [
   /\bgit\s+(?:commit|push|amend|tag|rebase|merge|cherry-pick|reset|stash\s+push|branch\s+-D)\b/g,
   /\bcurl\b[^\n`]*(?:(?:\s(?:-X|--request)\s)|(?:(?:-X|--request)=))(?:POST|PUT|PATCH|DELETE)/gi,
   /\bcurl\b[^\n`]*(?:(?:\s(?:-d|--data|--data-raw|--data-binary)\s)|(?:(?:-d|--data|--data-raw|--data-binary)=))/g,
 ]
 
-/**
- * Every reason a chunk of text fails a read-only claim, as human-readable strings.
- * Returning the violations (rather than asserting inline) is what makes the guard
- * itself testable: a seeded `gh release create` must produce a violation, and
- * today's commands must produce none.
- */
 function readOnlyViolations(text) {
   text = joinContinuedLines(text)
   const violations = []
   for (const { sub, verb, whole } of ghInvocations(text)) {
     const readOnlyVerbs = READ_ONLY_GH[sub]
     if (!readOnlyVerbs) violations.push(`unknown gh subcommand: ${whole}`)
-    // `gh api`'s next token is a path, not a verb — its writes are the method/field forms below.
+
     else if (sub !== 'api' && !readOnlyVerbs.includes(verb)) violations.push(`mutating gh command: ${whole}`)
   }
-  // A GraphQL operation reads or writes by keyword, not by parameter form, so judge those
-  // calls separately and keep them out of the parameter scans below.
+
   for (const match of text.matchAll(GRAPHQL_CALL)) {
     const rest = text.slice(match.index)
     const statement = rest.slice(0, Math.min(...[rest.indexOf('```'), rest.indexOf('\n\n'), rest.length].filter((i) => i >= 0)))
@@ -170,7 +143,7 @@ describe('Execution block ordering contract', () => {
 describe('Execution block Plan effort contract', () => {
   test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
     expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high>')
-    // xhigh is not a legal plan tier — the planner is always Fable 5, and Fable caps at high.
+
     expect(prdToIssues).not.toContain('- **Plan effort:** <low | medium | high | xhigh>')
     expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
     expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
@@ -196,11 +169,11 @@ describe('Execution block Plan effort contract', () => {
   })
 
   test('fableplan consumes the same field name every other document publishes', () => {
-    // A rename in one document must fail here rather than pass file-by-file.
+
     const blockLine = '- **Plan effort:**'
     expect(prdToIssues).toContain(blockLine)
     expect(fableplan).toContain(blockLine)
-    // README describes the field in prose rather than naming the block line.
+
     for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
       expect(doc).toContain('Plan effort')
     }
@@ -215,7 +188,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
     expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
-    // (a) re-hardcoding the posted-plan footer to a literal tier must fail here.
+
     expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
     expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
     expect(fableplan).toMatch(/never a constant/i)
@@ -231,18 +204,17 @@ describe('Execution block Plan effort contract', () => {
 
   test('fableplan tells the operator when a stamped tier could not be honored', () => {
     // The degradation is common (Claude Code's Agent tool has no `effort` parameter),
-    // so it must reach the person who stamped the tier, not just the footer.
+
     expect(fableplan).toMatch(/report it to the user in step 5/i)
     expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
     expect(fableplan).toMatch(/not a notice/i)
-    // …and stay silent when there is nothing to correct.
+
     expect(fableplan).toMatch(/when the tier \*was\* honored \(no notice/i)
     expect(fableplan).toMatch(/make no claim about a stamped tier in either direction/i)
   })
 
   test('fableplan passes an explicit tier rather than inheriting the session effort', () => {
-    // Passing `high` when nothing is stamped makes the footer's value observed
-    // rather than conventional, and floors the plan at high on a low-effort session.
+
     expect(fableplan).toMatch(/otherwise `high`.*Pass it explicitly even in the unstamped case/is)
     expect(fableplan).toMatch(/may be \*below\* `high`/i)
     expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
@@ -256,8 +228,7 @@ describe('Execution block Plan effort contract', () => {
   })
 
   test('fableplan falls back to the documented default, never a guessed session tier', () => {
-    // An agent cannot observe its own effort tier, so the unhonored-stamp fallback
-    // must name the repo attribution default rather than invent a value.
+
     expect(fableplan).toMatch(/record the repo attribution default `high`/i)
     expect(fableplan).toMatch(/do not try to name the session's own tier/i)
     expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
@@ -313,7 +284,7 @@ describe('milestoneplan table contract', () => {
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
     }
-    // …and every command this procedure legitimately uses must still pass.
+
     for (const read of [
       'gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq \'.[]\'',
       'gh issue list --milestone "M" --state all --limit 500 --json number',
