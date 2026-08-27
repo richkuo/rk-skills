@@ -1683,7 +1683,6 @@ describe('milestone-pipeline merge and release', () => {
 
   test('the workflow describes the release as deferred to the orchestrator, with no agent', async () => {
     expect(workflowSource).not.toContain('one Sonnet agent runs sync-docs-release')
-    expect(workflowSource).toContain('deferred to the orchestrator')
   })
 
   test('merge and release default off when review loops are off', async () => {

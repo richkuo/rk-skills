@@ -44,6 +44,8 @@ jobs:
           REVIEW_BODY: ${{ github.event.review.body }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           TRIGGER_ACTOR: ${{ github.actor }}
+          PERL_STRIP_FENCED: 's/```.*?```//gs'
+          SED_STRIP_INLINE: 's/`[^`]*`//g'
         run: |
           case "$EVENT_NAME" in
             issue_comment|pull_request_review_comment)
@@ -57,7 +59,7 @@ jobs:
               ;;
           esac
 
-          STRIPPED=$(printf '%s' "$BODY" | perl -0777 -pe 's/```.*?```//gs' | sed 's/`[^`]*`//g')
+          STRIPPED=$(printf '%s' "$BODY" | perl -0777 -pe "$PERL_STRIP_FENCED" | sed "$SED_STRIP_INLINE")
 
           DELIM="STRIPPED_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           {

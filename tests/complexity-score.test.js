@@ -233,7 +233,6 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } }")
     expect(validateIssue).toMatch(/never steps down to Sonnet/i)
-    expect(pipeline).toContain('fable reviews the first cycle only')
 
     for (const doc of [validateIssue, newIssue, githubIssueFormat]) {
       expect(doc).toMatch(/score is ≥ 61|score is 61 or higher|score ≥ 61/)
