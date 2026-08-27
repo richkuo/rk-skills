@@ -5,10 +5,6 @@ import { fileURLToPath } from 'node:url'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-// AGENTS.md is a symlink to CLAUDE.md, so the Codex-facing doc and the
-// Claude-facing doc are one file and cannot drift apart. These tests guard the
-// link itself: replacing it with a copy would let a rule land in one file and
-// not the other again.
 const agentsPath = fileURLToPath(new URL('AGENTS.md', root))
 
 describe('AGENTS.md is a symlink to CLAUDE.md', () => {

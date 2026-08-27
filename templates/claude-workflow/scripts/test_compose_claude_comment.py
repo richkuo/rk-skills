@@ -23,8 +23,6 @@ class ModelDisplayNameTest(unittest.TestCase):
         self.assertEqual(model_display_name("claude-fable-5"), "Claude Fable 5")
 
     def test_codex_ids_mapped(self):
-        # codex-run.yml patches its comments with these same scripts, so every
-        # slug codex.yml can resolve must have a display name here.
         self.assertEqual(model_display_name("gpt-5.6-sol"), "GPT-5.6 Sol")
         self.assertEqual(model_display_name("gpt-5.6-terra"), "GPT-5.6 Terra")
         self.assertEqual(model_display_name("gpt-5.6-luna"), "GPT-5.6 Luna")
@@ -76,8 +74,6 @@ class ComposeTest(unittest.TestCase):
         )
 
     def test_empty_body_composes_standalone_status_comment(self):
-        # patch_claude_comment.sh ON_MISS=post composes a NEW comment from an
-        # empty body — no leading blank lines before the status note.
         note = "**Workflow failed before completion.** See [run log](http://x)."
         out = compose("", "claude-sonnet-5", "high", HARNESS, note)
         self.assertTrue(out.startswith("**Workflow failed before completion.**"))
@@ -114,7 +110,6 @@ class ComposeTest(unittest.TestCase):
         out = compose(comment, "claude-sonnet-5", "xhigh", HARNESS)
         decoded = urllib.parse.unquote(out)
         self.assertNotIn("claude.com/claude-code", decoded)
-        # One footer inside the rewritten link body, one on the comment itself.
         self.assertEqual(decoded.count("LLM:"), 2)
 
 

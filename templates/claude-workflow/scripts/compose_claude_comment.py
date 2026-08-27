@@ -25,9 +25,6 @@ MODEL_DISPLAY_NAMES = {
     "claude-opus-5": "Claude Opus 5",
     "claude-sonnet-5": "Claude Sonnet 5",
     "claude-fable-5": "Claude Fable 5",
-    # Codex slugs: the same scripts patch @codex comments, with CLAUDE_HARNESS
-    # set to openai/codex-action@v1 by codex-run.yml. Unknown ids already fall
-    # through to the raw id, so this table is additive.
     "gpt-5.6-sol": "GPT-5.6 Sol",
     "gpt-5.6-terra": "GPT-5.6 Terra",
     "gpt-5.6-luna": "GPT-5.6 Luna",
@@ -54,8 +51,6 @@ def compose(
         f"---\nLLM: {model_display_name(model_id)}"
         f" | {effort or 'unknown'} | Harness: {harness}"
     )
-    # body is empty when composing a standalone status comment (ON_MISS=post
-    # in patch_claude_comment.sh) — omit it so the note leads the comment.
     parts = [body] if body else []
     if status_note:
         parts.append(status_note)

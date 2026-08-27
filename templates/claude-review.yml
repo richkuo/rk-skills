@@ -1,56 +1,3 @@
-# Claude PR review bot — companion to the fix-pr-review / *-loop skills.
-#
-# Setup (one-time, per repo):
-#   1. Copy this file to .github/workflows/claude.yml in your repo.
-#   2. Add an ANTHROPIC_API_KEY secret (repo Settings → Secrets and variables
-#      → Actions). Reviews consume Claude API usage on your account.
-#      Alternatively, install the Claude GitHub App and use OAuth
-#      (see https://github.com/anthropics/claude-code-action for options).
-#   3. Trigger a review by commenting "@claude review" on any PR. The comment
-#      author must be an owner, member, or collaborator — see the actor gate
-#      note below.
-#      A model shorthand right after "@claude" pins the reviewer:
-#      "@claude sonnet review" for cheaper re-checks, "@claude opus review"
-#      and "@claude fable review" for the heavier tiers the skills route to
-#      by complexity band. Any other body uses the action's default model.
-#      This lightweight template routes the model only — it ignores an
-#      "effort:<tier>" suffix. Use templates/claude-workflow for effort
-#      parsing and the rest of the full workflow.
-#
-# The review prompt below enforces the exact output format the fix-pr-review
-# and *-loop skills parse: an LGTM / Needs Updates verdict on the first line,
-# findings under four H3 sections, and blocking determined only by
-# "### Needs Fixing" and "### Requires Human Review". Edit the prompt and the
-# skills together if you change the contract.
-#
-# Reviews never gate on or wait for CI — CI intentionally runs longer than the
-# review and is enforced separately by branch protection. The review judges the
-# code itself.
-#
-# Why this file stages the pull request head itself. Passing prompt: to
-# claude-code-action selects its agent mode, and agent mode performs no
-# checkout of its own — setupBranch, the action's only head-checkout path,
-# runs in tag mode alone. actions/checkout on an issue_comment event lands on
-# the default-branch tip, so without the staging step the reviewer would read
-# base-branch files while the format contract below tells it to anchor every
-# file:line to the head commit. The staging step is required.
-#
-# The actor gate on the job is part of that same change: staging
-# refs/pull/<n>/head places fork-authored code in the workspace of an agent
-# holding pull-requests: write, so only an owner, member, or collaborator may
-# start this job.
-#
-# Staging that tree also makes it the agent's project root, which reaches the
-# agent by four channels the prompt cannot govern: memory files (CLAUDE.md and
-# friends), project settings (hooks, rules), auto-discovered skills under
-# .claude/skills/, and auto-discovered subagents under .claude/agents/, whose
-# frontmatter picks a model and a tool set and whose body becomes that
-# subagent's whole system prompt. The claude_args block on the action closes
-# the first two by flag, and closes the last two by denying the tools that
-# invoke them. What stays open is the discovery listing itself: skill and
-# subagent names and descriptions still load into context, and the actor gate
-# is what covers that. Read that block's comment before changing any of its
-# four flags.
 
 name: Claude PR Review
 
@@ -60,16 +7,6 @@ on:
 
 jobs:
   review:
-    # Only run on PR comments by a trusted author that mention @claude. The
-    # actor gate is load-bearing: the staging step below puts pull-request
-    # code on disk — fork-authored included — for an agent that holds
-    # pull-requests: write, so only an owner, member, or collaborator may
-    # start this job. The gate admits an association only by allowlist
-    # membership: every value outside the three listed is excluded, whatever
-    # it happens to be. Do not widen the list to admit a class of commenter —
-    # a bot comment can carry CONTRIBUTOR, so adding that value would admit
-    # bots and every past contributor at once. The companion loop skills post
-    # triggers with the operator's own gh credentials, which pass.
     if: |
       github.event.issue.pull_request &&
       contains(github.event.comment.body, '@claude') &&
@@ -84,13 +21,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The action's agent mode (selected by the prompt: input below) never
-      # checks out the pull request head, and actions/checkout on an
-      # issue_comment event lands on the default-branch tip. Stage the head
-      # explicitly so every file:line the review cites resolves against the
-      # code the PR actually contains. Fetching refs/pull/<n>/head also
-      # covers fork PRs. Do NOT remove this step as redundant with the
-      # action — the action performs no checkout on this route.
       - name: Stage the pull request under review
         id: pr_context
         env:
@@ -106,36 +36,6 @@ jobs:
           echo "base_sha=$(git merge-base refs/rk-claude/pr-base refs/rk-claude/pr-head)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-          # The checkout above makes the pull request tree the project root, so
-          # a fork-authored CLAUDE.md / CLAUDE.local.md / .claude/rules entry
-          # would load into the agent's INSTRUCTION channel, where the prompt's
-          # data-only rule does not reach.
-          #
-          # --setting-sources user (below) is the boundary that closes it, and
-          # it closes memory and settings together: the agent SDK declares that
-          # settingSources "must include 'project' to load CLAUDE.md files", so
-          # dropping project also drops the tree's CLAUDE.md family along with
-          # its .claude/settings.json, hooks and rules. The file written here
-          # is a deliberate SECOND layer against that one flag being narrowed —
-          # a later edit to --setting-sources user,project would put the whole
-          # memory boundary on this list alone, and it has to already be there
-          # and be complete on that day. Do not read it as today's mechanism.
-          # Scoped to $GITHUB_WORKSPACE so the runner's own user-scope memory,
-          # the trusted side, is untouched.
-          #
-          # Every name is listed at depth 0 AND under **/, because this list is
-          # a boundary and a glob that turns out not to match the workspace
-          # root would open it silently. .claude/rules is covered here as well
-          # as by --setting-sources so that removing either one alone leaves
-          # the boundary standing.
-          #
-          # AGENTS.md is listed even though the documented loader reads
-          # CLAUDE.md and not AGENTS.md. Two entries cost nothing, and this
-          # list is a boundary: a repository may ship AGENTS.md as a symlink to
-          # CLAUDE.md or the reverse, an @AGENTS.md import may pull it in, and
-          # a later Claude Code release may read the filename directly. Any of
-          # those makes the omission a silent hole, so the entries stay whether
-          # or not the loader needs them today.
           cat > "$SETTINGS_FILE" <<EOF
           {
             "claudeMdExcludes": [
@@ -156,77 +56,8 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Bind the agent to THIS job's token. setupGitHubToken() runs on
-          # every mode and returns the github_token input when it is non-empty;
-          # with the input empty it requests an OIDC token instead and throws
-          # "Could not fetch an OIDC token. Did you remember to add
-          # `id-token: write` to your workflow permissions?" — the job block
-          # above grants no id-token, so without this line the run fails before
-          # the review starts, and there is no fallback to github.token.
-          #
-          # Adding id-token: write would be the wrong repair. With no
-          # additional_permissions the action then mints a GitHub App token
-          # whose defaults are contents/pull_requests/issues WRITE, and exports
-          # it into the agent's GITHUB_TOKEN and GH_TOKEN — so the agent that
-          # reads fork-authored code from the staged tree would hold a
-          # contents: write token this job's own contents: read never bounded.
-          # Supplying the job token keeps the agent inside the permissions
-          # block, which is where the boundary is declared and reviewed.
           github_token: ${{ github.token }}
-          # Route the model shorthand that follows "@claude"; any other body
-          # uses the action's default model. The shorthand must sit directly
-          # after the mention, so the word "opus" inside review prose cannot
-          # re-route a plain "@claude review".
           model: ${{ contains(github.event.comment.body, '@claude sonnet') && 'claude-sonnet-5' || contains(github.event.comment.body, '@claude fable') && 'claude-fable-5' || contains(github.event.comment.body, '@claude opus') && 'claude-opus-5' || '' }}
-          # Bound the reviewer. The staging step puts fork-authored code in the
-          # workspace, and the action exports GH_TOKEN/GITHUB_TOKEN into the
-          # agent's environment beside ANTHROPIC_API_KEY, so an unbounded shell
-          # here would sit next to a write-scoped token and a paid credential.
-          #
-          #   --allowedTools    read verbs plus `gh pr comment`, which is how
-          #                     the agent posts the one review comment. Copied
-          #                     from the review route of
-          #                     .github/workflows/claude-run.yml, which runs
-          #                     this same prompt contract against this same
-          #                     action. No `gh api` (its --method flag reaches
-          #                     every mutating endpoint), no interpreters, no
-          #                     build or test runners — the review is static.
-          #                     Read/Glob/Grep need no entry; they are
-          #                     permitted by default.
-          #   --disallowedTools bare names, which REMOVE the tool rather than
-          #                     prompt for it, so the boundary holds whatever
-          #                     permission mode the action starts in. WebFetch
-          #                     and WebSearch are removed on purpose: they are
-          #                     the exfiltration path for the credentials
-          #                     above, and the prompt's source-availability
-          #                     table already handles a route with no fetch
-          #                     tool as a non-blocking Verification limitation.
-          #                     Skill, Agent and Task are removed for the same
-          #                     reason the memory and settings channels are
-          #                     closed: a skill body under the staged tree's
-          #                     .claude/skills/ and a subagent definition under
-          #                     its .claude/agents/ are pull-request-authored
-          #                     instructions, and a subagent's file even picks
-          #                     its own model and tool set. No flag disables
-          #                     that discovery, so denying the invoking tool is
-          #                     what closes it. Agent is the current name and
-          #                     Task the older alias; both are listed so the
-          #                     denial holds across action versions. This
-          #                     review is single-agent and static, so it calls
-          #                     none of the three.
-          #   --setting-sources drops project and local settings, so the staged
-          #                     tree's own .claude/settings.json — hooks
-          #                     included — and its project rules never load.
-          #   --settings        the claudeMdExcludes file written by the
-          #                     staging step, which keeps a fork-authored
-          #                     CLAUDE.md out of the instruction channel.
-          #
-          # Residual, deliberately recorded: the flags stop the staged tree's
-          # skill and subagent BODIES from being invoked, and nothing stops
-          # those files from being discovered. Their names and descriptions
-          # still load into the agent's context as the discovery listing, so a
-          # fork-authored description is still text this agent sees. The actor
-          # gate remains the outer boundary of this route.
           claude_args: >-
             --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)"
             --disallowedTools "Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task"

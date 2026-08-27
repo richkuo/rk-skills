@@ -26,10 +26,6 @@ jobs:
 
       - run: bun run test
 
-      # The push-access boundary of both bot bundles lives in hand-written shell
-      # inside their trigger workflows. These suites extract that shell out of
-      # the live YAML and execute it, so they must gate every PR, not only a
-      # manual run. Python 3 ships on ubuntu-latest.
       - run: python3 -m unittest discover -s templates/claude-workflow/scripts -p 'test_*.py'
 
       - run: python3 -m unittest discover -s templates/codex-workflow/scripts -p 'test_*.py'

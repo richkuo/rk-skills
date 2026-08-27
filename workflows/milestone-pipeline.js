@@ -13,20 +13,6 @@ export const meta = {
   ],
 }
 
-// args.tracks accepts legacy issue-number arrays and dependency-aware objects.
-// `after` is a hard code dependency; `runsAfter` is ordering only. Serial issues
-// within every track are conservative hard dependencies because their edge kind
-// is not explicit. The full graph is validated before any agent starts.
-// Build model/effort/fableplan/plan effort come from each issue's ## Execution
-// block (stamped by prd-to-issues, revised by execution-plan-review); validation
-// and the first-review default derive from the [C..] score band (see BANDS for
-// build and validation, REVIEW_BANDS for the reviewer).
-// Prep preserves representable stale combinations so the runtime can normalize
-// and log them before dispatch.
-// Validation still runs as the first step of every issue. Predecessor PRs change
-// the ground truth, so each issue is re-checked against its pinned dependency
-// heads immediately before it starts.
-// Some harness paths deliver args as a JSON string — normalize before validating.
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 if (!ARGS || !Array.isArray(ARGS.tracks) || ARGS.tracks.length === 0) {
   throw new Error('milestone-pipeline requires a non-empty args.tracks array')
@@ -103,34 +89,11 @@ function visitTrack(trackIndex, path) {
 TRACKS.forEach((_track, trackIndex) => visitTrack(trackIndex, []))
 
 const REVIEW_LOOP = ARGS.reviewLoop ?? true
-// 'github' (default): reviews run through the repo's @claude Action, so the
-// review history lives on GitHub under the same bot used outside pipeline
-// runs. 'subagent' reviews in-session — a reviewer agent posts a
-// pr-review comment, a fixer agent resolves it — the fallback when the
-// repo lacks the Action or GitHub Actions is unavailable.
 const REVIEW_MODE = ARGS.reviewMode ?? 'github'
-// Which GitHub review bot the default github review mode talks to. Claude
-// unless the caller explicitly names Codex — a repo having codex.yml installed
-// does not select it. Ignored entirely in subagent review mode, which posts no
-// GitHub trigger at all.
 const REVIEW_BOT = ARGS.reviewBot ?? 'claude'
 const MAX_REVIEW_CYCLES = ARGS.maxReviewCycles ?? 5
-// Only enforced when the turn has a token target (budget.total set); below the
-// floor, remaining issues defer cleanly instead of an agent dying at the ceiling.
-// Checked at issue start only — best-effort, not a ceiling guarantee; size the
-// floor to roughly one issue's worst-case cost (implement + full review loop).
 const BUDGET_FLOOR = ARGS.budgetFloor ?? 80_000
-// Merge gating stays LGTM-based, but no agent in this run ever merges: the
-// orchestrator merges each PR in-session, under the user's own permission
-// mode, and records it in args.merged on the next resume. Defaults to
-// reviewLoop because LGTM is the merge criterion — with review loops off
-// there is no completed criterion, so merging is off and asking for it
-// explicitly is rejected. After a recorded merge, successors build from the
-// updated base branch instead of stacking on unmerged predecessor heads.
 const MERGE = ARGS.merge ?? REVIEW_LOOP
-// When every issue merged, the run defers the release to the orchestrator,
-// which runs sync-docs-release in-session (doc sync → land it →
-// create-release). No agent runs here. Defaults to merge; meaningless without it.
 const RELEASE = ARGS.release ?? MERGE
 if (typeof REVIEW_LOOP !== 'boolean') throw new Error('reviewLoop must be a boolean')
 if (REVIEW_MODE !== 'subagent' && REVIEW_MODE !== 'github') throw new Error("reviewMode must be 'subagent' or 'github'")
@@ -143,17 +106,6 @@ if (typeof RELEASE !== 'boolean') throw new Error('release must be a boolean')
 if (RELEASE && !MERGE) throw new Error('release requires merge — a release only makes sense after the run lands the code')
 const ALL_ISSUES = TRACKS.flatMap((track) => track.issues)
 
-// PRs the orchestrator already merged in-session, as { issue, pr, merge_sha,
-// issue_state } records. The orchestrator verifies each PR is MERGED before
-// recording it; this run never re-checks GitHub, so the record is the only
-// evidence a merge happened and one mistyped number would otherwise report an
-// open PR as merged, build successors from a base that lacks the code, and let
-// the release fire. Every record therefore identifies the issue/PR PAIR: the
-// map is keyed by issue (validated to belong to this run), and the merge gate
-// additionally requires the recorded pr to equal the PR this run opened for
-// that issue. An LGTM PR with no record pauses its track as awaiting_merge —
-// the orchestrator merges it, appends the record, and resumes (cached agents
-// replay). Records that never match a gated pair are reported, never ignored.
 const MERGED_INPUT = ARGS.merged ?? []
 if (!Array.isArray(MERGED_INPUT)) throw new Error('merged must be an array of { issue, pr, merge_sha, issue_state } records')
 const RUN_ISSUES = new Set(ALL_ISSUES)
@@ -169,20 +121,11 @@ for (const entry of MERGED_INPUT) {
   MERGED.set(entry.issue, { pr: entry.pr, merge_sha: entry.merge_sha, issue_state: entry.issue_state === 'closed' || entry.issue_state === 'open' ? entry.issue_state : 'unknown' })
   MERGED_PRS.add(entry.pr)
 }
-// Issues whose record the merge gate actually consumed. Anything left over at
-// the end is a record this run never matched — surfaced, never silently unused.
 const CONSUMED_MERGE_RECORDS = new Set()
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
 
-// Every routing default derives from the [C<score>] band. Stamped Execution
-// fields (Build model, Effort, fableplan, Plan effort, PR review) override the
-// build/plan/first-review defaults; validation is derived only — never stamped,
-// so no issue can carry a stale validate line that nothing reads. An ABSENT score
-// (no [C..] prefix) is unknown, not small: it routes as the top band. A literal
-// [C0] is a real score and routes to the bottom band — see hasScore below.
-// Fable never runs at xhigh, so the Fable rows cap at high.
 const BANDS = [
   { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
   { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } },
@@ -192,17 +135,6 @@ const BANDS = [
   { name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } },
 ]
 
-// The reviewer escalates on its own, coarser scale, so these boundaries (10, 40
-// and 80) deliberately do not line up with the build/validate bands above. The
-// reviewer is always a fresh agent — sharing the builder's model family is
-// accepted; the fresh context is the isolation that matters. The 11–40 band's
-// review is the standard bare-@claude reviewer: model null means "no override —
-// inherit the session default". Sonnet takes the 0–10 first review, and it is
-// also the cheaper re-review after a pass that addressed nothing blocking, in
-// any band (see runSubagentReviewLoop). Fable reviews only cycle 1: after a
-// fable first review, the blocking re-reviews step down one rung at a time,
-// opus and then the standard bare-@claude reviewer, where the ladder stops —
-// a C81+ PR never steps down to sonnet (see runSubagentReviewLoop).
 const REVIEW_BANDS = [
   { name: '0–10', min: 0, max: 10, review: { model: 'sonnet', effort: 'high' } },
   { name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } },
@@ -210,12 +142,6 @@ const REVIEW_BANDS = [
   { name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } },
 ]
 
-// "No score" and a score of zero are distinct inputs. An absent [C..] prefix
-// arrives as undefined and routes to the top band because the complexity is
-// unknown; a literal [C0] is the smallest real score and routes to the bottom
-// band. The prep normalizer below reconciles the field against the title, so a
-// prep agent that reports a score the title does not carry cannot downgrade
-// routing — any disagreement resolves to unknown, which is the top band.
 function hasScore(complexity) {
   return Number.isInteger(complexity) && complexity >= 0
 }
@@ -230,11 +156,6 @@ function reviewBandFor(complexity) {
   return REVIEW_BANDS.find((band) => complexity >= band.min && complexity <= band.max) || REVIEW_BANDS[REVIEW_BANDS.length - 1]
 }
 
-// Rank a first-review model on the REVIEW_BANDS order — the scale the reviewer
-// escalates on, which is independent of the build bands. Used to decide whether
-// a rescored band's default reviewer actually outranks an operator's stamped
-// one; a stamped haiku posts the sonnet trigger, so it ranks where sonnet does.
-// A null model is the bare standard trigger, which is its own rung.
 const REVIEW_MODEL_RANK = new Map(REVIEW_BANDS.map((band, index) => [band.review.model, index]))
 function reviewModelRank(model) {
   const resolved = model === 'haiku' ? 'sonnet' : (model ?? null)
@@ -242,29 +163,12 @@ function reviewModelRank(model) {
   return rank === undefined ? -1 : rank
 }
 
-// Codex exposes one flagship, so the heavy Claude reviewer tiers (opus and
-// fable) and the bare-@claude tier collapse onto its bare default trigger; only
-// the cheap tier — the C0–C10 band and the non-blocking re-review — has a
-// distinct shorthand. A null entry means "no shorthand — bare trigger".
 const CODEX_REVIEW_SHORTHAND = { fable: null, opus: null, sonnet: 'luna', haiku: 'luna' }
 
-// The Claude column of the same table. claude.yml resolves only opus/opus5,
-// sonnet/sonnet5 and fable/fable5, and it takes the first token after @claude
-// that is NOT one of those as the ROUTE KEYWORD — so `@claude haiku review`
-// reads `haiku` as the keyword, which is not `review`, and a trusted-author PR
-// then takes the write-capable fix-pr route instead of the reviewer. Haiku is a
-// legal BUILD model, so an operator can stamp it; map it onto the cheapest
-// reviewer the Action actually admits, exactly as the Codex column maps it onto
-// luna. Never emit a shorthand absent from this table.
 const CLAUDE_REVIEW_SHORTHAND = { fable: 'fable', opus: 'opus', sonnet: 'sonnet', haiku: 'sonnet' }
 
-// The cheaper re-review shorthand after a pass that addressed nothing blocking,
-// per fix-pr-review step 10.
 const NONBLOCKING_RETRIGGER = { claude: '@claude sonnet review', codex: '@codex luna review' }
 
-// The github-mode cycle-1 trigger comment, derived from the review band unless
-// the issue stamps its own `@<bot> <model> review …` line. The C11–C40 band is
-// the bare standard trigger; the Action picks its configured default model.
 function firstReviewTrigger(ex) {
   const stamped = MODEL_IDS[ex.first_review_model]
   const review = reviewBandFor(ex.review_complexity ?? ex.complexity).review
@@ -285,20 +189,12 @@ function firstReviewTrigger(ex) {
   return `@claude ${review.model} review effort:${review.effort}`
 }
 
-// The trigger for a BLOCKING re-review, keyed to the reviewer that actually ran
-// cycle 1 — never to the band, which only ever selected that reviewer. Fable
-// reviews the first cycle only, so a Fable cycle 1 steps down one rung per
-// blocking re-review (opus, then the bare trigger, where it stops). Every other
-// cycle-1 reviewer repeats its own trigger, so an operator's stamped `PR review:`
-// line survives every cycle. Codex has one flagship and no Fable tier, so its
-// cycle-1 trigger always repeats. Mirrors runSubagentReviewLoop's FABLE_STEP_DOWN.
 function blockingRetrigger(ex) {
   const cycle1 = firstReviewTrigger(ex)
   if (REVIEW_BOT !== 'codex' && /^@claude\s+fable\b/.test(cycle1)) return '@claude opus review'
   return cycle1
 }
 
-// Band-derived build for an issue with no Execution block: the band default.
 function derivedBuild(complexity) {
   const band = bandFor(complexity)
   return { model: band.build.model, effort: band.build.effort, fableplan: band.fableplan, band }
@@ -398,9 +294,6 @@ const REVIEW_FIX_SCHEMA = {
   },
 }
 
-// A bounded github-mode review batch: the standing verdict after one or two
-// cycles. The build agent handles cycle 1; every later agent handles at most
-// two cycles. All durable state lives on the PR, so rotation loses no history.
 const githubReviewBatchSchema = (cycleLimit) => ({
   type: 'object',
   required: ['status', 'nonblocking_remaining', 'cycles_run', 'summary', 'head_ref', 'head_sha'],
@@ -528,9 +421,6 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: status (the verdict now standing on the PR: lgtm / needs_updates, or blocked), nonblocking_remaining, cycles_run (${cycleLimit === 1 ? 'exactly 1' : `1 or ${cycleLimit}`}, never above ${cycleLimit}), a summary of what you fixed or refuted, the exact head_ref and head_sha, and any blocker.`
 }
 
-// Script-owned github-mode loop: the build agent completes cycle 1, then each
-// fresh fix agent completes at most two cycles. The stopping rules and return
-// shape remain compatible with the merge gate.
 async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initialReview) {
   const modelId = MODEL_IDS[ex.model]
   if (initialReview.status === 'not_run') {
@@ -623,31 +513,9 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: fixed_count, refuted_count, the exact head_ref and head_sha after your push, a summary of what was fixed and what was refuted, and blocker ONLY if the pass could not complete.`
 }
 
-// Orchestrates reviewer ↔ fixer cycles in-session: the reviewer posts a
-// pr-review comment and returns its verdict; a fixer resolves it; repeat.
-// First review runs on the issue's "PR review:" model/effort when one is
-// stamped, else on the [C..] score's REVIEW_BANDS default;
-// a re-review after a fix pass that addressed only non-blocking findings drops
-// to sonnet/high, mirroring the fix-pr-review skill's @claude-sonnet routing.
-// A fable first review is first-review-only, and the blocking re-reviews after
-// it step down one rung at a time: opus/high for the first, then the standard
-// bare-@claude reviewer (model null) for every one after that. The ladder stops
-// there — it never steps down to sonnet, which is a band tier and the
-// non-blocking tier, never a C81+ blocking rung.
-// Returns the same shape as the github-mode review-loop agent. A needs_updates
-// verdict on the final cycle ends the loop unfixed (max_cycles_exhausted) —
-// never a fix push that no reviewer would see.
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
-  // model null means "no override — inherit the session default", the
-  // subagent equivalent of the bare @claude trigger (band 0).
   const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
-  // Fable reviews the first cycle only, then the reviewer steps down one rung
-  // per blocking re-review: opus for the first, the standard bare-@claude
-  // reviewer for every one after that, where the ladder stops — it never drops
-  // to sonnet. A non-fable first review keeps its own model for every blocking
-  // re-review. Non-blocking cycles route to sonnet separately and never consume
-  // a rung.
   const FABLE_STEP_DOWN = [{ model: 'opus', effort: 'high' }, { model: null, effort: 'high' }]
   let stepDown = 0
   const nextBlockingReview = () => {
@@ -702,7 +570,6 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
   return { final_status: 'max_cycles_exhausted', cycles_run: cycles, summary: notes.join('\n'), head_ref: head.ref, head_sha: head.sha }
 }
 
-// ---- Prep: one agent reads every issue's Execution block ----
 const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - title: the issue title EXACTLY as \`gh issue view --json title\` reports it, including any [C<score>] prefix. Never shorten, reword, or strip the prefix: the runtime reconciles the complexity you report against this title, so a trimmed title makes a scored issue look unscored and routes the whole run to the most expensive band
@@ -721,12 +588,6 @@ if (!prep) throw new Error('prep agent failed — cannot resolve Execution block
 const SCORE_PREFIX = /^\s*\[C(\d+)\]/
 const normalizedIssues = prep.issues.map((issue) => {
   const normalized = { ...issue }
-  // Prep reads complexity from the [C<score>] title prefix and nothing else, so
-  // the runtime can check its work against the title it already has. Reconcile
-  // the reported value against the prefix and drop to unknown on ANY
-  // disagreement, not just a reported 0: a reported 0 on a [C50] title would
-  // take the CHEAPEST band, and a reported 5 on a [C90] title the second
-  // cheapest. Unknown takes the top band, so this only ever escalates routing.
   const prefixMatch = SCORE_PREFIX.exec(normalized.title || '')
   const prefixScore = prefixMatch ? Number(prefixMatch[1]) : undefined
   if (hasScore(normalized.complexity) && normalized.complexity !== prefixScore) {
@@ -734,11 +595,6 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: prep reported C${normalized.complexity} but the title ${titleSays} — routing as unscored (unknown), which takes the top band`)
     delete normalized.complexity
   } else if (!hasScore(normalized.complexity) && hasScore(prefixScore)) {
-    // The mirror slip: the title carries a real prefix and the agent omitted the
-    // field. The prefix is already authoritative in the disagreement case above,
-    // so use it here rather than discarding a score the runtime just parsed and
-    // sending the whole run to the top band. A trimmed title still yields no
-    // prefix and still routes as unknown, so this never weakens the guard.
     log(`#${normalized.number}: prep omitted the score but the title reads [C${prefixScore}] — routing on the title prefix`)
     normalized.complexity = prefixScore
   }
@@ -746,12 +602,10 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
   }
-  // Fable never runs at xhigh — high is its ceiling on every stage. Clamp, never dispatch.
   if (normalized.model === 'fable' && normalized.effort === 'xhigh') {
     log(`#${normalized.number}: normalized build effort xhigh → high (Fable never runs at xhigh)`)
     normalized.effort = 'high'
   }
-  // The planner is always Fable 5, so a stamped xhigh Plan effort is illegal on every issue.
   if (normalized.plan_effort === 'xhigh') {
     log(`#${normalized.number}: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)`)
     normalized.plan_effort = 'high'
@@ -760,14 +614,6 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized first-review effort xhigh → high (Fable never runs at xhigh)`)
     normalized.first_review_effort = 'high'
   }
-  // A stamped Plan effort on a fableplan: false issue is never read. Say so once
-  // rather than dropping it silently — the operator set a tier that does nothing.
-  // Presence is the "operator stamped a tier" signal, which only holds because
-  // prep is instructed to OMIT plan_effort when the line is absent (the default
-  // is applied at dispatch instead). Never give prep a fill-in default for this
-  // field or every unstamped issue starts logging here.
-  // Skipped when the block was missing entirely: the defaults we filled in are
-  // already reported by the missing-block warning below.
   if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
     log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
   }
@@ -777,8 +623,6 @@ const EX = new Map(normalizedIssues.map((i) => [i.number, i]))
 const missing = normalizedIssues.filter((i) => i.missing_block).map((i) => `#${i.number}`)
 if (missing.length) log(`WARNING: no Execution block on ${missing.join(', ')} — build routing derives from each issue's validated score band`)
 
-// ---- Dependency graph: unrelated tracks run concurrently; every successor
-// waits for its predecessors' stable readiness boundary. ----
 const results = []
 const recordedIssues = new Set()
 
@@ -858,8 +702,6 @@ async function executeTrack(trackIndex) {
 
   const localCompleted = []
   const localSkipped = []
-  // Merged predecessor heads live on the base branch already — they satisfy the
-  // hard edge without a baseRef, so successors build from the updated base.
   let baseRefs = dedupeBaseRefs(hardPredecessors.map(({ outcome }) => outcome.head).filter((candidate) => candidate && !candidate.merged))
   let head = null
   let status = 'ready'
@@ -904,14 +746,6 @@ async function executeTrack(trackIndex) {
       blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
       break
     }
-    // Escalation: the validator's own score outranks the title prefix upward,
-    // never downward. An under-scored issue got the weakest validator — the
-    // one least likely to catch the under-score — so a higher rescored band
-    // re-validates once on that band's stronger route before the verdict
-    // stands. The escalated score also drives downstream band defaults.
-    // The validator returns 0 both for "I scored it zero" and for "I could not
-    // score it", so an unscored issue with no usable rescore stays unknown
-    // rather than collapsing onto the bottom band.
     const rescored = Number.isInteger(validation.rescored_complexity) && validation.rescored_complexity > 0 ? validation.rescored_complexity : undefined
     let effectiveComplexity = hasScore(ex.complexity) ? ex.complexity : rescored
     if (hasScore(rescored) && BANDS.indexOf(bandFor(rescored)) > BANDS.indexOf(validateBand)) {
@@ -925,17 +759,6 @@ async function executeTrack(trackIndex) {
         log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
       }
     }
-    // Review routing is clamped the way the validate band above is: upward only.
-    // An issue with no [C<score>] prefix has UNKNOWN complexity, which reviews on
-    // the heaviest row, so a validator rescore of 5 must not hand it the cheapest
-    // reviewer. Nothing outranks the top band, so an unscored issue simply stays
-    // unknown here.
-    // The review scale has its OWN boundaries (10/40/80), which do not line up
-    // with the build bands, so the escalation above cannot stand in for this one:
-    // a [C10] rescored to 15 stays inside build band 10–20 and never raises
-    // effectiveComplexity, while it does cross the review boundary at 10/11.
-    // Compare the REVIEW band index directly so a rescore escalates whenever it
-    // crosses a review boundary, whether or not it crosses a build one.
     let reviewComplexity = effectiveComplexity
     if (hasScore(reviewComplexity) && hasScore(rescored) &&
         REVIEW_BANDS.indexOf(reviewBandFor(rescored)) > REVIEW_BANDS.indexOf(reviewBandFor(reviewComplexity))) {
@@ -944,16 +767,6 @@ async function executeTrack(trackIndex) {
     }
     ex.review_complexity = hasScore(ex.complexity) ? reviewComplexity : undefined
 
-    // A stamped first-review trigger predates the rescore too, so a rescore that
-    // raises the REVIEW band re-evaluates it. Key that on the review band, never
-    // on the build one: the review boundary at 10/11 sits inside build band
-    // 10–20, so a [C10] stamped `@claude sonnet review` rescored to 15 crosses no
-    // build boundary while its review band does move to 11–40 — gating on the
-    // build index would keep a stamp this code itself ranks below the new
-    // default. Replace the stamp only when that default OUTRANKS it on
-    // REVIEW_BANDS; otherwise the operator's stronger choice stands, because a
-    // rescore never lowers routing. An unrescored issue never enters here, so a
-    // stamped reviewer still survives every cycle at its own band.
     if (ex.first_review_model && hasScore(ex.complexity) && hasScore(ex.review_complexity) &&
         REVIEW_BANDS.indexOf(reviewBandFor(ex.review_complexity)) > REVIEW_BANDS.indexOf(reviewBandFor(ex.complexity))) {
       const rescoredBand = reviewBandFor(ex.review_complexity)
@@ -976,11 +789,6 @@ async function executeTrack(trackIndex) {
       break
     }
 
-    // A validated rescore that lands in a higher band re-routes the stamped
-    // build too: the stamp predates the rescore, so the stronger band default
-    // replaces it (upward only — a downward rescore never weakens routing).
-    // The rescore rides on the issue's result record so the orchestrator can
-    // restamp the [C..] title and Execution block and tell the user.
     let rescore = null
     if (!ex.missing_block && hasScore(ex.complexity) && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
       const derived = derivedBuild(effectiveComplexity)
@@ -996,15 +804,6 @@ async function executeTrack(trackIndex) {
       log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
     }
 
-    // An issue with no Execution block now has a validated score — derive its
-    // build and fableplan from the band instead of a conservative constant.
-    // Clamped upward only, exactly like the review clamp above and for the same
-    // reason with more force: an issue with no [C<score>] prefix has UNKNOWN
-    // complexity, which builds on the top band, and the BUILDER writes the code,
-    // so a validator rescore of 5 must not hand it the cheapest route. Passing
-    // undefined IS the upward clamp — unknown is already the top band, so
-    // nothing can raise it. A missing-block issue whose title DOES carry a score
-    // still derives from that score, and the escalation above still raises it.
     if (ex.missing_block) {
       const buildComplexity = hasScore(ex.complexity) ? effectiveComplexity : undefined
       const derived = derivedBuild(buildComplexity)
@@ -1016,7 +815,6 @@ async function executeTrack(trackIndex) {
         : `band ${derived.band.name} (complexity unknown — no [C<score>] prefix, so a validator rescore never lowers the build route)`
       log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from ${source}`)
     }
-    // Fable is never a build fallback — it builds only on an explicit user stamp.
     const modelId = MODEL_IDS[ex.model] || 'opus'
 
     let plan = null
@@ -1122,18 +920,8 @@ async function executeTrack(trackIndex) {
     }
 
     if (MERGE) {
-      // No merge agent runs in this workflow: merging is the orchestrator's
-      // job, in-session. A PR recorded in args.merged already landed (the
-      // orchestrator verified it MERGED before recording); an unrecorded PR
-      // pauses the track here so the orchestrator can gate on CI, merge it
-      // pinned to this reviewed head, and resume with the record appended.
       const recordedMerge = MERGED.get(issue)
       if (recordedMerge && recordedMerge.pr !== impl.pr_number) {
-        // The record claims a different PR closed this issue. One of the two
-        // numbers is wrong, so neither can be trusted: refuse to count this as
-        // merged, and block descendants rather than build them from a base
-        // branch that may not contain the code. The record stays unconsumed so
-        // the end-of-run report names it.
         blocker = `merged record for issue #${issue} names PR #${recordedMerge.pr}, but this run opened PR #${impl.pr_number} for it — correct the record before resuming`
         record.status = 'merge_record_mismatch'
         record.blocker = blocker
@@ -1203,10 +991,6 @@ await parallel(TRACKS.map((_track, trackIndex) => () => runTrack(trackIndex)))
 const resultOrder = new Map(ALL_ISSUES.map((issue, index) => [issue, index]))
 results.sort((left, right) => resultOrder.get(left.issue) - resultOrder.get(right.issue))
 
-// A record the merge gate never consumed means the orchestrator's bookkeeping
-// and this run disagree — the issue never reached the gate, or its record was
-// rejected as a mismatch. Name each one so a wrong record can never look like
-// a silently accepted merge.
 const unmatched_merged_records = MERGED_INPUT
   .filter((entry) => !CONSUMED_MERGE_RECORDS.has(entry.issue))
   .map((entry) => ({ issue: entry.issue, pr: entry.pr, reason: results.find((result) => result.issue === entry.issue)?.status === 'merge_record_mismatch' ? 'record names a different PR than the run opened for this issue' : 'issue never reached the merge gate in this run' }))
@@ -1214,9 +998,6 @@ for (const entry of unmatched_merged_records) {
   log(`merged record for issue #${entry.issue} (PR #${entry.pr}) was not used — ${entry.reason}`)
 }
 
-// ---- Release: only when every issue in the run reached merged — a partial
-// milestone never publishes. No agent runs here either: the release lands a
-// doc change and publishes, so it belongs to the orchestrator in-session. ----
 let release = null
 if (RELEASE) {
   const mergedRecords = results.filter((result) => result.status === 'merged')
@@ -1231,8 +1012,6 @@ if (RELEASE) {
   }
 }
 
-// Every LGTM PR still waiting on an orchestrator merge, so the orchestrator
-// can merge each one and resume without re-parsing per-issue results.
 const awaiting_merge = results
   .filter((result) => result.status === 'awaiting_merge')
   .map((result) => ({ issue: result.issue, pr: result.pr, pr_url: result.pr_url, head_ref: result.head_ref, head_sha: result.head_sha }))

@@ -1,14 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Pins for the @codex GitHub Actions bundle that only a live YAML edit can
- * break. The routing SHELL is covered by
- * templates/codex-workflow/scripts/test_workflow_logic.py, which extracts and
- * executes the real classifier out of the TEMPLATE workflow. These tests cover
- * what that extractor cannot see: that this repo's vendored copy carries the
- * identical classifier, and that the permission / credential boundaries around
- * it stay where they are.
- */
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
@@ -22,7 +13,6 @@ const [repoTrigger, templateTrigger, runBody] = await Promise.all([
   read(RUN_BODY),
 ])
 
-/** Dedented body of a step's `run: |` block, verbatim from the YAML. */
 function stepRunBlock(source, stepName) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line.trim() === `- name: ${stepName}`)
@@ -62,7 +52,6 @@ const CLASSIFIER_STEPS = [
   'Classify invocation route (review, implement, or fix-pr)',
 ]
 
-/** Value of a `permissions:` block for a named top-level job. */
 function jobPermissions(source, jobName) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line === `  ${jobName}:`)
@@ -86,8 +75,6 @@ function jobPermissions(source, jobName) {
 
 describe('Codex workflow bundle', () => {
   test('the vendored trigger carries the template classifier verbatim', () => {
-    // The Python routing tests extract from the TEMPLATE. Without this pin,
-    // this repo's own copy could drift and run unpinned routing logic.
     for (const step of CLASSIFIER_STEPS) {
       const fromTemplate = stepRunBlock(templateTrigger, step)
       const fromRepo = stepRunBlock(repoTrigger, step)
@@ -111,10 +98,6 @@ describe('Codex workflow bundle', () => {
     '%s keeps every job on contents: read and never grants id-token',
     async (path) => {
       const source = await read(path)
-      // openai/codex-action mints no App token via OIDC, and a GITHUB_TOKEN
-      // push would not retrigger CI — so the job token must never carry push
-      // rights on ANY route. That makes "no GITHUB_TOKEN fallback for push" a
-      // permission boundary rather than an intention.
       for (const job of ['review', 'implement', 'fix-pr']) {
         expect(jobPermissions(source, job), `${path}: ${job}`).toEqual([
           'contents: read',
@@ -177,8 +160,6 @@ describe('Codex workflow bundle', () => {
       expect(fixPr, path).toContain(
         "contains(fromJSON('[\"OWNER\", \"MEMBER\", \"COLLABORATOR\"]'), github.event.issue.author_association)",
       )
-      // Bot-author trust must be gated on the variable being set, so an unset
-      // CODEX_BOT_LOGIN cannot make an empty login match an empty variable.
       expect(fixPr, path).toContain(
         "vars.CODEX_BOT_LOGIN != '' && github.event.issue.user.login == vars.CODEX_BOT_LOGIN",
       )
@@ -193,7 +174,6 @@ describe('Codex workflow bundle', () => {
       expect(block).toContain('CODEX_APP_PRIVATE_KEY')
       expect(block).toContain('exit 1')
       expect(runBody).toContain('uses: actions/create-github-app-token@v2')
-      // The mint step and the checkout token must both stay off the review route.
       expect(runBody).toMatch(
         /- name: Mint the GitHub App installation token\n\s+if: inputs\.mode != 'review'/,
       )
@@ -202,8 +182,6 @@ describe('Codex workflow bundle', () => {
     test('the review route posts through a trusted step, never the agent', () => {
       const block = stepRunBlock(runBody, 'Post the Codex review comment')
       expect(block).toBeTruthy()
-      // --body-file keeps model output that read untrusted PR content out of
-      // any shell evaluation; the run link is what RUN_ID selection matches.
       expect(block).toContain('--body-file')
       expect(block).not.toMatch(/--body\s+"/)
       expect(runBody).toContain(
@@ -212,8 +190,6 @@ describe('Codex workflow bundle', () => {
     })
 
     test('worktree cleanup is scoped to the Codex subdirectory', () => {
-      // A Claude run and a Codex run can share a persistent self-hosted runner;
-      // neither may remove the other's worktree.
       for (const step of [
         'Prune stale Codex worktrees before Codex runs',
         'Clean up Codex worktrees after Codex runs',
@@ -227,8 +203,6 @@ describe('Codex workflow bundle', () => {
     test('write routes enable sandbox network, review gets no config at all', () => {
       const block = stepRunBlock(runBody, 'Prepare the Codex home directory')
       expect(block).toBeTruthy()
-      // git push and gh need outbound network; the workspace-write sandbox
-      // denies it by default. Review must never receive this file.
       expect(block).toContain('[sandbox_workspace_write]')
       expect(block).toContain('network_access = true')
       expect(block).toMatch(/if \[ "\$MODE" = "review" \]; then[\s\S]*?else[\s\S]*?network_access/)
@@ -239,8 +213,6 @@ describe('Codex workflow bundle', () => {
     })
 
     test('comment patch steps are skipped when no bot login is configured', () => {
-      // patch_claude_comment.sh defaults BOT_LOGIN to claude[bot]; running it
-      // with an empty login would stamp a Claude comment on a Codex run.
       const guarded = runBody.match(/if:.*env\.BOT_LOGIN != ''/g)
       expect(guarded).not.toBeNull()
       expect(guarded.length).toBeGreaterThanOrEqual(3)
@@ -257,17 +229,10 @@ describe('Codex workflow bundle', () => {
       read('templates/claude-workflow/prompts/pr-review-format.md'),
       read('templates/codex-workflow/prompts/pr-review-format.md'),
     ])
-    // Harness-specific framing (final message is the comment, no network) is
-    // appended by codex-run.yml, so the shared contract text stays one file's
-    // worth of wording in two places and cannot drift.
     expect(codexPrompt).toBe(claudePrompt)
   })
 
   test('the minimal review template appends the run link the merge gates key on', async () => {
-    // fix-pr-review-loop / work-on-issue-loop select a Codex review comment by
-    // its /actions/runs/<run-id> link, and milestone-workflow's merge recency
-    // gate only accepts comments carrying one — a template without it makes
-    // every merge unapprovable.
     const minimalReview = await read('templates/codex-review.yml')
     expect(minimalReview).toContain(
       'RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',

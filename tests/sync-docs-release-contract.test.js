@@ -1,17 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-/**
- * Semantic guard for the docs-sync / release procedure, which exists in three
- * independently-consumed copies: two local skill files under skills/ (installed
- * by bin/install.mjs) and the CI prompt (templates/claude-workflow/prompts/
- * sync-docs-release.md, fetched standalone by consumer repos' Actions runs).
- * The copies cannot reference each other at run time, so drift is guarded here.
- * Checks shared semantics, not exact prose.
- *
- * Known, unguarded divergence: the CLAUDE.md size-cap numbers differ today
- * (CI prompt: condense over 40000 bytes back under 38000; local skill:
- * condense over 35000 back under 30000). Unify or document before guarding.
- */
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
@@ -78,7 +66,6 @@ describe('sync-docs / release contract', () => {
   })
 
   test('CI prompts complete history and tags before any range analysis', () => {
-    // CI checkouts can be shallow; the local skills never need this.
     for (const path of CI_PROMPTS) {
       const text = normalized[path]
       expect(text, path).toMatch(/--unshallow/)

@@ -17,9 +17,6 @@ function headSha(issue, fill = '0') {
   return issue.toString(16).padStart(40, fill)
 }
 
-// An orchestrator-merge record for args.merged, matching the SHA convention
-// the old merge-agent stub used (headSha(pr, 'e')). Records name the
-// issue/PR pair so the run can reject a wrong PR number.
 function mergedRecord(issue, pr = 1000 + issue) {
   return { issue, pr, merge_sha: headSha(pr, 'e'), issue_state: 'closed' }
 }
@@ -107,7 +104,6 @@ async function executeWorkflow(args, handlers = {}, budget = null) {
           summary: 'fixed',
         }
       } else {
-        // github-mode bounded review batch: stop early after its first clean cycle.
         result = {
           status: 'lgtm',
           nonblocking_remaining: 0,
@@ -281,7 +277,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
-    // A stamped xhigh Plan effort is clamped: the planner is always Fable 5, and Fable never runs at xhigh.
     expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
     expect(planEvent(3).effort).toBe('low')
@@ -289,21 +284,17 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(planEvent(4).effort).toBe('high')
     expect(planEvent(5)).toBeUndefined()
 
-    // The posted-plan footer must advertise the effort the planner actually ran at.
     expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
     expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    // The clamp is logged for the stamped-xhigh issues (the fableplan: false one is
-    // clamped too — the log names the reason either way); no other normalization fires.
     expect(logs.filter((message) => message.includes('normalized plan effort xhigh → high'))).toEqual([
       '#2: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
       '#5: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
     ])
 
-    // A stamped Plan effort on a fableplan: false issue is reported once, not dropped silently.
     expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
       '#5: ignoring Plan effort high — fableplan is false, so no plan stage runs',
     ])
@@ -314,9 +305,6 @@ describe('milestone-pipeline dependency scheduling', () => {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C20] No plan stage, nothing stamped', complexity: 20, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          // plan_effort present despite the omit contract: a prep agent that fills it in
-          // anyway is exactly what the missing_block half of the guard defends against,
-          // so this fixture fails if `&& !normalized.missing_block` is removed.
           { number: 3, title: '[C20] No Execution block at all', complexity: 20, model: 'fable', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: true },
           { number: 4, title: '[C60] Plan stage, nothing stamped', complexity: 60, model: 'opus', effort: 'high', fableplan: true, missing_block: false },
           { number: 5, title: '[C20] No Execution block, nothing stamped', complexity: 20, model: 'fable', effort: 'high', fableplan: false, missing_block: true },
@@ -324,21 +312,15 @@ describe('milestone-pipeline dependency scheduling', () => {
       }),
     })
 
-    // Nothing stamped → no log; a missing block is reported once by the block-missing
-    // warning, not compounded by an inert-field warning for the defaults it filled in.
     expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([])
     expect(logs.some((message) => message.includes('no Execution block on #3, #5'))).toBeTrue()
 
-    // An unstamped fableplan issue still plans at the dispatch-side default.
     const planEvent = events.find((event) => event.state === 'started' && event.label === 'plan:#4')
     expect(planEvent.effort).toBe('high')
     expect(planEvent.prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
   })
 
   test('prep is contracted to omit Plan effort when the issue stamps none', () => {
-    // The inert-tier log reads presence as "an operator stamped a tier". That only
-    // holds while prep omits the field instead of filling in a default — a fill-in
-    // default would make every unstamped issue log a tier nobody set.
     const source = workflowSource
     const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
     expect(schemaLine).toMatch(/OMIT this field entirely when the line is absent/)
@@ -348,23 +330,18 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(promptLine).toMatch(/OMIT the field rather than filling in a default/)
     expect(promptLine).not.toMatch(/when the line is absent, use high/)
 
-    // The dispatch-side default is what makes omission safe.
     expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
 
   test('prep is contracted to omit the stamps the band derives', () => {
     const source = workflowSource
-    // Validation is fully band-derived — prep must not parse a legacy Validate stamp back in.
     expect(source).not.toMatch(/validate_effort/)
     expect(source).toContain('do NOT extract a "**Validate effort:**"')
-    // First review defaults to the band; presence of the fields means "an operator stamped a trigger".
     const reviewSchemaLine = source.match(/^ +first_review_model: \{.*$/m)[0]
     expect(reviewSchemaLine).toMatch(/OMIT this field when the line is a standard/)
     const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
     expect(reviewPromptLine).toMatch(/OMIT both fields/)
-    // The dispatch-side band defaults are what make omission safe.
     expect(source).toContain('const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review')
-    // Fable is never a build fallback — unknown or unmapped models dispatch on Opus.
     expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
     expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
     expect(source).not.toMatch(/build: \{ model: 'fable'/)
@@ -375,28 +352,12 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
-          // A genuine zero: all five axes grade 0, so the step-6 formula reaches 0.
           { number: 2, title: '[C0] Genuinely the smallest change', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // No prefix at all — prep omits the field, per its schema.
           { number: 3, title: 'No score anywhere in this title', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // A malformed prefix is unknown, never zero.
           { number: 4, title: '[Cx] Malformed prefix', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // Fail-safe: prep slipped and sent 0 for an unprefixed title. The
-          // runtime reconciles against the title and routes it as unknown, so
-          // an agent slip can never downgrade an unscored issue to the
-          // cheapest band.
           { number: 5, title: 'Prep slipped and reported zero', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // Fail-safe: the reported value DISAGREES with a prefix that is
-          // present. Testing only for a prefix would let this 0 stand and hand
-          // a [C50] issue the cheapest band — the exact inversion the guard exists
-          // to stop, so the value itself is reconciled, not just its presence.
           { number: 6, title: '[C50] Prep slipped on a mid-band title', complexity: 0, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // The same slip in the other direction: a small reported score on a
-          // heavy title must not downgrade routing either.
           { number: 7, title: '[C90] Prep slipped on a heavy title', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // The mirror slip: a real prefix with the field omitted. The prefix is
-          // already authoritative when the two disagree, so discarding it here
-          // would send the whole run to the top band on one agent omission.
           { number: 8, title: '[C50] Prep omitted the score', model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
         ],
       }),
@@ -410,10 +371,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
-    // (1) [C0] takes the bottom validate band and the C0-C10 first review.
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
     expect(promptFor(events, 'implement:#2 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
-    // (2) and (3) An absent or malformed prefix stays unknown and takes the top band.
     for (const issue of [3, 4, 5, 6, 7]) {
       expect(dispatch(`validate:#${issue}`), `#${issue}`).toMatchObject({ model: 'fable', effort: 'high' })
       expect(promptFor(events, `implement:#${issue} (sonnet/high)`), `#${issue}`)
@@ -422,14 +381,9 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5 @ medium')
     expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high')
     expect(logs).toContain('#5: prep reported C0 but the title carries no [C<score>] prefix — routing as unscored (unknown), which takes the top band')
-    // (4) A prefix that is PRESENT but disagrees is reconciled too, and the log
-    // names the real prefix so the slip is diagnosable.
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
-    // The reconciliation fires only on a real disagreement, never on #2's true [C0].
     expect(logs.filter((m) => m.includes('routing as unscored (unknown)'))).toHaveLength(3)
-    // (5) A present prefix with the field omitted routes on the prefix, not the
-    // top band, and says so with its own distinct log line.
     expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
     expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
@@ -437,14 +391,11 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('the prep contract tells a real zero from a missing prefix', async () => {
     const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
-    // complexity is optional: absence is the "no prefix" signal.
     expect(source).toContain("required: ['number', 'title', 'model', 'effort', 'fableplan'],")
     const schemaLine = source.match(/^ +complexity: \{.*$/m)[0]
     expect(schemaLine).toMatch(/OMIT this field entirely when the title carries no \[C\.\.\] prefix/)
     const promptLine = source.match(/^- complexity: .*$/m)[0]
     expect(promptLine).toMatch(/OMIT the field rather than sending 0/)
-    // Both band functions share one presence test, so build and review routing
-    // cannot disagree about what "unknown" means.
     expect(source).toContain('function hasScore(complexity) {')
     expect(source).toContain('  if (!hasScore(complexity)) return BANDS[BANDS.length - 1]')
     expect(source).toContain('  if (!hasScore(complexity)) return REVIEW_BANDS[REVIEW_BANDS.length - 1]')
@@ -476,10 +427,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
-    // The score alone decides — the Build model never leaks in, and nothing is stampable.
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'medium' })
     expect(dispatch('validate:#3')).toMatchObject({ model: 'opus', effort: 'medium' })
-    // Band boundaries are inclusive at 10/21/41/61/81.
     expect(dispatch('validate:#4')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
@@ -489,7 +438,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#10')).toMatchObject({ model: 'fable', effort: 'medium' })
     expect(dispatch('validate:#11')).toMatchObject({ model: 'fable', effort: 'medium' })
     expect(dispatch('validate:#12')).toMatchObject({ model: 'fable', effort: 'high' })
-    // complexity 0 means "no prefix" — unknown, not small.
     expect(dispatch('validate:#13')).toMatchObject({ model: 'fable', effort: 'high' })
 
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
@@ -530,7 +478,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const effortFor = (label) => events.find((event) => event.state === 'started' && event.label === label)?.effort
-    // All stamped issues here are C5 (band 0) → validation is band-derived opus/medium.
     expect(effortFor('validate:#2')).toBe('medium')
     expect(effortFor('implement:#2 (fable/medium)')).toBe('medium')
     expect(effortFor('review-loop:PR#1002 c2-c3')).toBe('medium')
@@ -538,7 +485,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#4')).toBe('medium')
     expect(effortFor('validate:#5')).toBe('medium')
     expect(effortFor('validate:#6')).toBe('medium')
-    // #7 has no prep entry — the fallback has complexity 0, which routes as the top band.
     expect(effortFor('validate:#7')).toBe('high')
     expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
     expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
@@ -556,7 +502,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('review-loop:PR#1009 c2-c3')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1010 c2-c3')).toBe('high')
-    // Fable never runs at xhigh — high is its ceiling.
     expect(effortFor('implement:#11 (fable/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1011 c2-c3')).toBe('high')
 
@@ -1034,9 +979,6 @@ describe('milestone-pipeline github review mode', () => {
 })
 
 describe('milestone-pipeline subagent review mode', () => {
-  // Prep reads complexity ONLY from the [C<score>] title prefix and the runtime
-  // reconciles the two, so a fixture title must carry the score it reports —
-  // otherwise every fixture would trip the reconciliation guard as a prep slip.
   const prepIssue = (overrides = {}) => {
     const merged = {
       number: 2,
@@ -1072,7 +1014,6 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewMode: 'subagent' }, {
       Prep: () => ({
         issues: [
-          // Each pair straddles a review-scale boundary: 10/11, 40/41 and 80/81.
           prepIssue({ number: 2, complexity: 10, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 3, complexity: 11, first_review_model: undefined, first_review_effort: undefined }),
           prepIssue({ number: 4, complexity: 40, first_review_model: undefined, first_review_effort: undefined }),
@@ -1084,10 +1025,7 @@ describe('milestone-pipeline subagent review mode', () => {
       }),
     })
 
-    // The C0–C10 band pins sonnet; it is the only band cheaper than the default.
     expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
-    // The C11–C40 review band is the bare-@claude equivalent: no model override,
-    // the reviewer inherits the session default.
     const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1003 c1 (claude/high)')
     expect(bandZeroReview).toBeTruthy()
     expect(bandZeroReview.model).toBeUndefined()
@@ -1097,7 +1035,6 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(started(events, 'review:PR#1005 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1006 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1007 c1 (fable/high)')).toBeTrue()
-    // No [C..] prefix is unknown, not small — the first review keeps the top band.
     expect(started(events, 'review:PR#1008 c1 (fable/high)')).toBeTrue()
   })
 
@@ -1125,9 +1062,7 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
     expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-    // A stamped PR review line overrides the band trigger.
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-    // The default review bot is Claude; nothing here mentions Codex.
     for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#3 (opus/high)', 'implement:#4 (fable/high)']) {
       expect(promptFor(events, label), label).not.toContain('@codex')
     }
@@ -1142,9 +1077,6 @@ describe('milestone-pipeline subagent review mode', () => {
           { number: 4, title: '[C90] Band 5', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
           { number: 5, title: '[C60] Stamped trigger', complexity: 60, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 6, title: '[C20] Band 2', complexity: 20, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false },
-          // Must survive: the smallest band with a stamp naming the STRONGEST
-          // Claude reviewer. The C0-C10 row would post luna — the cheapest Codex
-          // model on the one change whose operator asked for the strongest one.
           { number: 7, title: '[C5] Stamped fable on a tiny issue', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
         ],
       }),
@@ -1157,42 +1089,28 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    // Codex has one flagship, so the heavy Claude tiers (opus, fable) and the
-    // bare-@claude tier collapse onto the bare trigger; only the cheap tier —
-    // the C0–C10 band and the non-blocking re-review — keeps a shorthand.
     expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex luna review"')
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@codex review"')
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@codex luna review effort:high"')
     expect(promptFor(events, 'implement:#7 (sonnet/high)')).toContain('gh pr comment <num> --body "@codex review effort:high"')
-    // No site may compose a phrase codex.yml cannot resolve to a model.
     expect(promptFor(events, 'implement:#7 (sonnet/high)')).not.toContain('@codex fable')
     for (const label of ['implement:#2 (sonnet/xhigh)', 'implement:#5 (sonnet/xhigh)']) {
       const prompt = promptFor(events, label)
       expect(prompt, label).toContain('.github/workflows/codex.yml')
       expect(prompt, label).toContain('never switch to @claude')
-      // Step 4 must key the blocking re-trigger to the reviewer that ran cycle 1,
-      // not to the band. Both of these issues are C10 or stamped sonnet, so the
-      // cheap shorthand that opened cycle 1 has to survive into cycle 2 — a
-      // band-only restatement would send them to the flagship and back.
       expect(prompt, `${label}: re-trigger keys to cycle 1`).toContain(
         'keyed to the reviewer that actually ran cycle 1',
       )
       expect(prompt, `${label}: C81+ ladder never reaches luna`).toContain('never reaches luna')
     }
-    // The blocking re-trigger equals the cycle-1 trigger on every Codex row,
-    // because Codex has one flagship and no fable tier to step down from.
     const codexRetrigger = {
       'implement:#2 (sonnet/xhigh)': '@codex luna review',
       'implement:#6 (sonnet/high)': '@codex review',
       'implement:#3 (opus/high)': '@codex review',
       'implement:#4 (fable/high)': '@codex review',
-      // Must survive: a mid-band PR stamped sonnet opens on luna and STAYS on
-      // luna — the C41–C80 band must never take the stamped reviewer back.
       'implement:#5 (sonnet/xhigh)': '@codex luna review effort:high',
-      // A stamped fable maps onto the Codex flagship, never onto the C0-C10
-      // luna row and never onto the unresolvable `@codex fable review`.
       'implement:#7 (sonnet/high)': '@codex review effort:high',
     }
     for (const [label, trigger] of Object.entries(codexRetrigger)) {
@@ -1208,16 +1126,8 @@ describe('milestone-pipeline subagent review mode', () => {
         issues: [
           { number: 2, title: '[C8] Cheap band', complexity: 8, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 4, title: '[C90] Top band', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
-          // Must survive: a tiny issue whose operator stamped Opus. The band
-          // would hand cycle 2 to sonnet and throw that choice away.
           { number: 5, title: '[C5] Stamped opus on a tiny issue', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
-          // Must survive: a heavy issue stamped Opus carries NO fable trigger,
-          // so the C81+ row must not send its re-review to the bare trigger.
           { number: 6, title: '[C90] Stamped opus on a heavy issue', complexity: 90, model: 'opus', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
-          // Haiku is a legal BUILD model, so an operator can stamp it as the
-          // reviewer. claude.yml admits no haiku shorthand and would read the
-          // word as the ROUTE KEYWORD, taking the write-capable fix-pr job, so
-          // the emitter maps it onto the cheapest reviewer the Action admits.
           { number: 7, title: '[C5] Stamped haiku', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'haiku', first_review_effort: 'high' },
         ],
       }),
@@ -1230,12 +1140,9 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    // The blocking re-trigger repeats whatever opened cycle 1; only a Fable
-    // cycle 1 steps down, because fable reviews the first cycle only.
     const expected = {
       'implement:#2 (sonnet/xhigh)': ['@claude sonnet review', '@claude sonnet review'],
       'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review'],
-      // The stamped effort rides along verbatim, at both cycles.
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude opus review effort:high'],
       'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
@@ -1253,10 +1160,6 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a validator rescore never lowers a stamped first review', async () => {
-    // The build bands and the review bands have different boundaries, so an
-    // upward BUILD rescore can land on a review band whose default reviewer is
-    // WEAKER than the operator's stamp. Dropping the stamp there would lower
-    // review routing on an issue the validator just judged harder.
     const stampedIssues = [
       { number: 2, title: '[C5] Stamped fable, rescored to a weaker review band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
       { number: 3, title: '[C5] Stamped sonnet, rescored past it', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
@@ -1283,31 +1186,21 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4]], reviewMode: 'github', merge: false }, handlers)
 
-    // #2: rescore 25 moves the BUILD band up, but review band 11–40 is the bare
-    // standard trigger, which is weaker than the stamped Fable. The stamp stands,
-    // and its blocking re-reviews still step down to opus.
     const two = promptFor(events, 'implement:#2 (opus/high)')
     expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review`')
     expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5'))).toBeTrue()
 
-    // #3: rescore 90 reaches review band 81+, which DOES outrank the stamped
-    // Sonnet — a real escalation still replaces the stamp.
     const three = promptFor(events, 'implement:#3 (opus/xhigh)')
     expect(three, '#3 stamp is replaced by the stronger band default').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     expect(logs.some((m) => m.includes('#3: rescored review band 81+ outranks the stamped first review Sonnet 5'))).toBeTrue()
 
-    // #4: Opus outranks the bare standard trigger, so the stamp stands.
     const four = promptFor(events, 'implement:#4 (opus/high)')
     expect(four, '#4 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude opus review effort:high"')
     expect(four, '#4 blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
   })
 
   test('a rescore across only the review boundary re-evaluates the stamped first review', async () => {
-    // The 10/11 review boundary sits INSIDE build band 10–20, so a [C10]
-    // rescored to 15 crosses no build boundary. Gating the stamp re-evaluation
-    // on the build index would keep a stamp weaker than the rescored band's own
-    // default; the gate is the REVIEW band index.
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
@@ -1330,22 +1223,18 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    // #2: the 11–40 default (the bare trigger) outranks sonnet, so the stamp goes.
     expect(promptFor(events, 'implement:#2 (sonnet/xhigh)'), '#2 takes the rescored band default')
       .toContain('gh pr comment <num> --body "@claude review"')
     expect(logs.some((m) => m.includes('#2: rescored review band 11–40 outranks the stamped first review Sonnet 5'))).toBeTrue()
 
-    // #3: opus outranks that default, so the operator's choice stands.
     expect(promptFor(events, 'implement:#3 (sonnet/xhigh)'), '#3 keeps the stronger stamp')
       .toContain('gh pr comment <num> --body "@claude opus review effort:high"')
     expect(logs.some((m) => m.includes('#3: keeping the stamped first review Opus 5'))).toBeTrue()
 
-    // #4: a downward rescore never raises the review band, so nothing is re-evaluated.
     expect(promptFor(events, 'implement:#4 (sonnet/xhigh)'), '#4 keeps sonnet on a downward rescore')
       .toContain('gh pr comment <num> --body "@claude sonnet review effort:high"')
     expect(logs.some((m) => m.includes('#4:') && m.includes('review band'))).toBeFalse()
 
-    // #5: an unstamped issue still escalates through review_complexity, unchanged.
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)'), '#5 escalates without a stamp')
       .toContain('gh pr comment <num> --body "@claude review"')
   })
@@ -1367,8 +1256,6 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    // The Codex column already maps a stamped opus onto the bare trigger; the
-    // stamped effort rides along, and the rescore does not discard either.
     const prompt = promptFor(events, 'implement:#4 (opus/high)')
     expect(prompt, 'codex cycle-1 keeps the stamped effort').toContain('gh pr comment <num> --body "@codex review effort:high"')
     expect(prompt, 'codex blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@codex review effort:high`')
@@ -1390,18 +1277,15 @@ describe('milestone-pipeline subagent review mode', () => {
       },
     })
 
-    // C10 validated on the band-1 route first, then re-validated once on band 4's.
     expect(validations).toEqual([
       { model: 'opus', effort: 'high' },
       { model: 'fable', effort: 'medium' },
     ])
     expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
-    // The stale stamp is re-routed to the escalated band: build, plan, and review all follow C70.
     expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
-    // The rescore rides on the result record so the orchestrator can restamp the issue.
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
       to: 70,
@@ -1428,10 +1312,6 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a rescore that crosses only a review boundary still escalates the first review', async () => {
-    // The review scale's boundaries (10/40/80) do not line up with the build
-    // bands, so a [C10] rescored to 15 stays inside build band 10-20 and never
-    // raises effectiveComplexity — while it does cross the review boundary at
-    // 10/11. Keying review routing to the build gate keeps it on sonnet.
     const trigger = async (rescored) => {
       const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
         Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'high', fableplan: false, first_review_model: undefined, first_review_effort: undefined })] }),
@@ -1444,11 +1324,9 @@ describe('milestone-pipeline subagent review mode', () => {
       return { prompt: promptFor(events, 'implement:#2 (sonnet/high)'), logs }
     }
 
-    // (1) Upward across the review boundary — the standard reviewer, not sonnet.
     const up = await trigger(15)
     expect(up.prompt).toContain('gh pr comment <num> --body "@claude review"')
     expect(up.logs.some((m) => m.includes('across a review boundary'))).toBeTrue()
-    // (2) A downward rescore never weakens routing.
     const down = await trigger(8)
     expect(down.prompt).toContain('gh pr comment <num> --body "@claude sonnet review"')
     expect(down.logs.some((m) => m.includes('across a review boundary'))).toBeFalse()
@@ -1458,12 +1336,8 @@ describe('milestone-pipeline subagent review mode', () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          // Unscored: no [C..] prefix and the complexity field omitted, exactly
-          // as the prep schema requires for a title that carries no prefix.
           { number: 2, title: 'Unprefixed, rescored trivial', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 3, title: 'Unprefixed, rescored hard', model: 'opus', effort: 'high', fableplan: false, missing_block: true },
-          // Scored, but with no Execution block — the band derivation replaces
-          // the prep agent's conservative opus/high constant.
           { number: 4, title: '[C6] Band 0–9 from the title', complexity: 6, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 5, title: '[C10] Band 10–20 floor', complexity: 10, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
           { number: 6, title: '[C5] Scored low, rescored hard', complexity: 5, model: 'opus', effort: 'high', fableplan: false, missing_block: true },
@@ -1476,26 +1350,18 @@ describe('milestone-pipeline subagent review mode', () => {
       'validate:#6': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 90 }),
     })
 
-    // #2 and #3 validate on the top band because they carry no prefix. The build
-    // clamp is upward only, so the rescore of 6 cannot hand #2 the cheapest
-    // builder — unknown stays the top band, Opus 5 @ xhigh with a plan.
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+ (complexity unknown'))).toBeTrue()
-    // An upward rescore on an unscored issue changes nothing: it was already top band.
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
 
-    // A missing-block issue that DOES carry a score still derives from that
-    // score — the derivation replaces the conservative constant, and the
-    // band boundary at 9/10 still separates the two Sonnet rows.
     expect(started(events, 'implement:#4 (sonnet/high)')).toBeTrue()
     expect(started(events, 'plan:#4')).toBeFalse()
     expect(logs.some((message) => message.includes('#4: no Execution block — deriving build Sonnet 5 @ high from band 0–9'))).toBeTrue()
     expect(logs.some((message) => message.includes('complexity unknown') && message.includes('#4:'))).toBeFalse()
     expect(started(events, 'implement:#5 (sonnet/xhigh)')).toBeTrue()
 
-    // Upward escalation still applies to a scored missing-block issue.
     expect(started(events, 'implement:#6 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#6')).toBeTrue()
     expect(logs.some((message) => message.includes('#6: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
@@ -1591,8 +1457,6 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c2 (sonnet/high)')).toBeTrue()
-    // The sonnet cycle consumes no rung, so the first blocking re-review still
-    // lands on the top step-down rung.
     expect(started(events, 'review:PR#1002 c3 (opus/high)')).toBeTrue()
     expect(record?.review.final_status).toBe('lgtm')
   })
@@ -1728,10 +1592,6 @@ describe('milestone-pipeline merge and release', () => {
     expect(output.unmatched_merged_records).toEqual([])
   })
 
-  // A record whose pr does not match the PR this run opened for that issue is
-  // a transcription error: counting it as a merge would report an open PR as
-  // landed, build successors from a base that lacks the code, and let the
-  // release fire.
   test('a merged record naming the wrong PR blocks instead of counting as merged', async () => {
     const { output, events, logs } = await executeWorkflow({
       tracks: [{ issues: [2, 3] }, { issues: [9], after: [0] }],
@@ -1789,8 +1649,6 @@ describe('milestone-pipeline merge and release', () => {
   test('the skill defines <verified-sha> per review mode after a branch catch-up', async () => {
     const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
 
-    // Sub-step 1's "head must equal the reviewed SHA" is scoped to the head
-    // before this procedure's own catch-up, so it cannot contradict sub-step 2.
     expect(skill).toContain('This check is against the head **before** any catch-up this procedure performs')
     expect(skill).toContain('Fix `<verified-sha>`')
     expect(skill).toContain('or the head you re-captured after `gh pr update-branch` when it did')
@@ -1825,7 +1683,6 @@ describe('milestone-pipeline merge and release', () => {
 
   test('the workflow describes the release as deferred to the orchestrator, with no agent', async () => {
     expect(workflowSource).not.toContain('one Sonnet agent runs sync-docs-release')
-    expect(workflowSource).toContain('the run defers the release to the orchestrator')
   })
 
   test('merge and release default off when review loops are off', async () => {

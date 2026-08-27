@@ -3,7 +3,6 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-/** Files that compose a new issue body, or rewrite an existing one. */
 const ISSUE_BODY_CONSUMERS = [
   'skills/github-issue-format/SKILL.md',
   'skills/new-issue/SKILL.md',
@@ -18,14 +17,12 @@ const ISSUE_BODY_CONSUMERS = [
   'templates/codex-workflow/prompts/issue-workflow.md',
 ]
 
-/** Files that state the canonical section order. */
 const ORDER_STATERS = [
   'skills/github-issue-format/SKILL.md',
   'CLAUDE.md',
   'AGENTS.md',
 ]
 
-/** Files whose route rewrites an existing body, so it must backfill. */
 const BACKFILL_CONSUMERS = [
   'skills/validate-issue/issue-editing.md',
   'templates/claude-workflow/prompts/issue-workflow.md',
@@ -46,8 +43,6 @@ describe('Issue-body Plain simple English contract', () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
       const source = normalized[path]
       expect(source, path).toMatch(/Plain simple English/)
-      // Anchor the cap to the section heading itself (case-sensitive, with `##`),
-      // so an unrelated lowercase report-cap sentence can never satisfy this check.
       expect(source, path).toMatch(
         /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
@@ -67,13 +62,9 @@ describe('Issue-body Plain simple English contract', () => {
 
     expect(owner).toMatch(/`## Plain simple English` is mandatory on every issue/i)
     expect(owner).toMatch(/ASD-STE100/)
-    // Points at the shared Response Style rules instead of restating them.
     expect(owner).toMatch(/CLAUDE\.md\/AGENTS\.md Response Style rules/)
-    // The section is for a human reader, never a second copy of the approach.
     expect(owner).toMatch(/Never restate the approach there/i)
     expect(owner).toMatch(/never put a time or effort estimate in it/i)
-    // The backfill fires only on prose-rewriting edits; a metadata-only edit
-    // (Execution block, title prefix) must leave every prose section unchanged.
     expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
     expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
   })

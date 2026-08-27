@@ -35,14 +35,91 @@ CODEX_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "codex.yml"))
 VERIFY_STEP = "Verify @codex is an actual invocation (not in a code block or example)"
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
 RESOLVE_MODEL_STEP = "Resolve model from @codex invocation"
+VERIFY_STRIP_ENV_KEYS = ("PERL_STRIP_FENCED", "SED_STRIP_INLINE")
 
-# The bot login a consumer would put in the CODEX_BOT_LOGIN repository variable.
 BOT_LOGIN = "acme-codex[bot]"
 
 
 def _read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def _unquote_yaml_scalar(raw):
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == "'" and raw[-1] == "'":
+        return raw[1:-1].replace("''", "'")
+    if len(raw) >= 2 and raw[0] == '"' and raw[-1] == '"':
+        out = []
+        i = 1
+        end = len(raw) - 1
+        while i < end:
+            ch = raw[i]
+            if ch == "\\" and i + 1 < end:
+                nxt = raw[i + 1]
+                mapping = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
+                out.append(mapping.get(nxt, nxt))
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+    return raw
+
+
+def extract_step_env(yml_text, step_name, required_keys=()):
+    lines = yml_text.split("\n")
+    name_pat = re.compile(r"^(\s*)- name:\s*" + re.escape(step_name) + r"\s*$")
+    start = None
+    step_indent = None
+    for idx, ln in enumerate(lines):
+        m = name_pat.match(ln)
+        if m:
+            start = idx
+            step_indent = len(m.group(1))
+            break
+    if start is None:
+        raise AssertionError(
+            f"step '{step_name}' not found in workflow — renamed? Update this extractor."
+        )
+
+    next_step_pat = re.compile(r"^ {%d}- name:" % step_indent)
+    env_pat = re.compile(r"^(\s*)env:\s*$")
+    env_idx = None
+    env_indent = None
+    for idx in range(start + 1, len(lines)):
+        if next_step_pat.match(lines[idx]):
+            break
+        m = env_pat.match(lines[idx])
+        if m:
+            env_idx = idx
+            env_indent = len(m.group(1))
+            break
+    if env_idx is None:
+        raise AssertionError(
+            f"no `env:` block found under step '{step_name}' — structure changed?"
+        )
+
+    env = {}
+    key_pat = re.compile(r"^(\s+)([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+    for idx in range(env_idx + 1, len(lines)):
+        ln = lines[idx]
+        if ln.strip() == "":
+            continue
+        cur_indent = len(ln) - len(ln.lstrip())
+        if cur_indent <= env_indent:
+            break
+        m = key_pat.match(ln)
+        if not m:
+            continue
+        env[m.group(2)] = _unquote_yaml_scalar(m.group(3))
+
+    missing = [k for k in required_keys if k not in env or env[k] == ""]
+    if missing:
+        raise AssertionError(
+            f"step '{step_name}' env is missing {missing}."
+        )
+    return env
 
 
 def extract_step_run_block(yml_text, step_name):
@@ -182,7 +259,9 @@ def run_resolve_model(event_name, stripped, docs_release_enabled=""):
 
 
 def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_login=""):
-    script = extract_step_run_block(_read(CODEX_YML), VERIFY_STEP)
+    yml = _read(CODEX_YML)
+    script = extract_step_run_block(yml, VERIFY_STEP)
+    strip_env = extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
     return _run_block(
         script,
         {
@@ -192,12 +271,13 @@ def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_
             "ISSUE_BODY": body,
             "TRIGGER_ACTOR": trigger_actor,
             "CODEX_BOT_LOGIN": codex_bot_login,
+            "PERL_STRIP_FENCED": strip_env["PERL_STRIP_FENCED"],
+            "SED_STRIP_INLINE": strip_env["SED_STRIP_INLINE"],
         },
         "invoked",
     )
 
 
-# A PR issue_comment carries a non-empty pull_request.url; an issue comment does not.
 PR_URL = "https://api.github.com/repos/o/r/pulls/5"
 
 
@@ -221,9 +301,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_fix_pr(self):
-        # work-on-issue PRs opened by the Codex App are authored by its bot
-        # (association NONE) — the login check, not the association, admits them,
-        # and only when CODEX_BOT_LOGIN names that bot.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -232,8 +309,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_codex_bot_authored_pr_is_review_when_bot_login_unset(self):
-        # Must survive: with CODEX_BOT_LOGIN unset, bot-author trust must fail
-        # closed to read-only review rather than defaulting to trusted.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex address the feedback",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -242,8 +317,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_human_routes_still_work_when_bot_login_unset(self):
-        # An unset CODEX_BOT_LOGIN disables ONLY bot trust; a trusted human
-        # author still reaches fix-pr.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="MEMBER",
@@ -252,8 +325,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_other_bot_login_is_review_only(self):
-        # Must survive: a bot that is NOT the configured Codex bot never earns
-        # push, even when the variable is set to a different bot.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix this",
                               pr_url=PR_URL, pr_author_assoc="NONE",
@@ -262,8 +333,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_external_author_pr_comment_is_review_only(self):
-        # An external/fork-authored PR (association NONE) never earns push, even
-        # from a trusted commenter (the job trigger already gated the commenter).
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix the lint error",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -292,10 +361,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_keyword_after_uppercase_model_shorthand_is_review(self):
-        # Must survive: a capitalized shorthand ("Luna") must be skipped
-        # identically to its lowercase form, or the real "review" keyword gets
-        # discarded and a trusted-author PR misroutes to push-capable fix-pr
-        # instead of staying read-only.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex Luna review",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -317,8 +382,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_review_word_later_in_sentence_no_longer_forces_review(self):
-        # Keyword routing: only the FIRST word after @codex counts, so an
-        # instruction that merely mentions review keeps a push-capable route.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr the review comments",
                               pr_url=PR_URL, pr_author_assoc="MEMBER"),
@@ -340,8 +403,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_untrusted_pr_author_is_review_only(self):
-        # Must survive: the fix-pr keyword never earns push over an
-        # external-author PR — fail-closed to read-only review.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="NONE"),
@@ -349,7 +410,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_plain_issue_is_implement(self):
-        # No PR context: the issue path wins before keyword routing.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex fix-pr",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -357,7 +417,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_fix_pr_keyword_on_inline_review_surface_stays_review(self):
-        # PR-review surfaces are always read-only regardless of keyword.
         self.assertEqual(
             run_classify_mode("pull_request_review_comment", "@codex fix-pr",
                               pr_url=PR_URL, pr_author_assoc="OWNER"),
@@ -386,7 +445,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_issue_comment_on_issue_is_implement(self):
-        # No PR_URL: an issue_comment on a plain issue is the issue-workflow path.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex implement this",
                               pr_url="", pr_author_assoc="MEMBER"),
@@ -401,8 +459,6 @@ class ClassifyModeRoutingTest(unittest.TestCase):
         )
 
     def test_flow_wins_over_pr_review_word(self):
-        # A non-empty FLOW routes to implement even on a PR comment mentioning
-        # 'review' — the flow prompt, not fix-pr, governs its push scope.
         self.assertEqual(
             run_classify_mode("issue_comment", "@codex create-release review",
                               pr_url=PR_URL, flow="create-release",
@@ -423,8 +479,6 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_unknown_shorthand_falls_through_to_the_default(self):
-        # Must survive: an unrecognized token must never resolve to an empty or
-        # invalid model id — the run would fail at the API instead of routing.
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex banana review")["model_id"],
             "gpt-5.6-sol",
@@ -455,9 +509,6 @@ class ResolveModelTest(unittest.TestCase):
         )
 
     def test_uppercase_luna_shorthand_selects_the_fast_model(self):
-        # Must survive: a shorthand token that routing recognizes and skips for
-        # every case variant must resolve to the same model for every case
-        # variant — never silently drop to the flagship default.
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex LUNA review")["model_id"],
             "gpt-5.6-luna",
@@ -549,8 +600,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_second_nonblank_line_does_not_fire(self):
-        # Must survive: the guard must not accept a genuinely multi-line body
-        # whose first line is the trigger — that is the loop-prevention boundary.
         self.assertEqual(
             run_verify_invocation(
                 "issue_comment",
@@ -574,10 +623,6 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         )
 
     def test_bot_self_trigger_is_unreachable_when_bot_login_unset(self):
-        # With CODEX_BOT_LOGIN unset the bot branch must not match; the comment
-        # then falls through to the ordinary line-start check. The job-level
-        # gate in codex.yml is what keeps such a comment from ever reaching
-        # here, and it applies the same unset-variable rule.
         self.assertEqual(
             run_verify_invocation("issue_comment", "@codex review", BOT_LOGIN, ""),
             "true",
@@ -606,6 +651,51 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
         self.assertEqual(
             run_verify_invocation("issue_comment", body, "someuser", BOT_LOGIN), "false"
         )
+
+
+class VerifyStepEnvFromWorkflowTest(unittest.TestCase):
+    def test_missing_perl_strip_key_fails(self):
+        yml = _read(CODEX_YML).replace(
+            "          PERL_STRIP_FENCED: 's/```.*?```//gs'\n", ""
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_missing_sed_strip_key_fails(self):
+        yml = _read(CODEX_YML).replace(
+            "          SED_STRIP_INLINE: 's/`[^`]*`//g'\n", ""
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_blank_perl_strip_value_fails(self):
+        yml = _read(CODEX_YML).replace(
+            "PERL_STRIP_FENCED: 's/```.*?```//gs'", "PERL_STRIP_FENCED: ''"
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_changed_fenced_pattern_lets_code_block_mention_fire(self):
+        original = _read(CODEX_YML)
+        broken = original.replace(
+            "PERL_STRIP_FENCED: 's/```.*?```//gs'",
+            "PERL_STRIP_FENCED: 's/NEVERMATCH//g'",
+        )
+        self.assertNotEqual(original, broken)
+        old_read = globals()["_read"]
+
+        def _broken(_path):
+            return broken
+
+        globals()["_read"] = _broken
+        try:
+            body = "here is an example:\n```\n@codex review\n```\nthanks"
+            self.assertEqual(
+                run_verify_invocation("issue_comment", body, "someuser", BOT_LOGIN),
+                "true",
+            )
+        finally:
+            globals()["_read"] = old_read
 
 
 if __name__ == "__main__":

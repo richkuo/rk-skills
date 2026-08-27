@@ -87,8 +87,6 @@ class RewriteCreatePRLinkTest(unittest.TestCase):
         comment = f"first {link} and second {link}"
 
         out = run(comment)
-        # `LLM:` appears URL-encoded inside the `body=` param —
-        # decode the whole output to count occurrences across both links.
         self.assertEqual(urllib.parse.unquote(out).count("LLM:"), 2)
 
     def test_replaces_stale_llm_footer_in_prefilled_body(self):
