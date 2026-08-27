@@ -195,8 +195,6 @@ describe('Codex workflow bundle', () => {
     })
 
     test('worktree cleanup is scoped to the Codex subdirectory', () => {
-      // A Claude run and a Codex run can share a persistent self-hosted runner;
-      // neither may remove the other's worktree.
       for (const step of [
         'Prune stale Codex worktrees before Codex runs',
         'Clean up Codex worktrees after Codex runs',
@@ -210,8 +208,6 @@ describe('Codex workflow bundle', () => {
     test('write routes enable sandbox network, review gets no config at all', () => {
       const block = stepRunBlock(runBody, 'Prepare the Codex home directory')
       expect(block).toBeTruthy()
-      // git push and gh need outbound network; the workspace-write sandbox
-      // denies it by default. Review must never receive this file.
       expect(block).toContain('[sandbox_workspace_write]')
       expect(block).toContain('network_access = true')
       expect(block).toMatch(/if \[ "\$MODE" = "review" \]; then[\s\S]*?else[\s\S]*?network_access/)
@@ -222,8 +218,6 @@ describe('Codex workflow bundle', () => {
     })
 
     test('comment patch steps are skipped when no bot login is configured', () => {
-      // patch_claude_comment.sh defaults BOT_LOGIN to claude[bot]; running it
-      // with an empty login would stamp a Claude comment on a Codex run.
       const guarded = runBody.match(/if:.*env\.BOT_LOGIN != ''/g)
       expect(guarded).not.toBeNull()
       expect(guarded.length).toBeGreaterThanOrEqual(3)
@@ -240,17 +234,10 @@ describe('Codex workflow bundle', () => {
       read('templates/claude-workflow/prompts/pr-review-format.md'),
       read('templates/codex-workflow/prompts/pr-review-format.md'),
     ])
-    // Harness-specific framing (final message is the comment, no network) is
-    // appended by codex-run.yml, so the shared contract text stays one file's
-    // worth of wording in two places and cannot drift.
     expect(codexPrompt).toBe(claudePrompt)
   })
 
   test('the minimal review template appends the run link the merge gates key on', async () => {
-    // fix-pr-review-loop / work-on-issue-loop select a Codex review comment by
-    // its /actions/runs/<run-id> link, and milestone-workflow's merge recency
-    // gate only accepts comments carrying one — a template without it makes
-    // every merge unapprovable.
     const minimalReview = await read('templates/codex-review.yml')
     expect(minimalReview).toContain(
       'RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',

@@ -58,11 +58,6 @@ const WRITING_GH_API = [
   /gh api[^\n`]*(?:(?:\s--input\s)|(?:--input=))/g,
 ]
 
-/**
- * `gh api graphql` is always an HTTP POST and always carries -f/-F parameters, so the
- * parameter forms above cannot distinguish a read from a write there. For GraphQL the
- * operation keyword is what decides: a `query` reads, a `mutation` writes.
- */
 const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
 const GRAPHQL_MUTATION = /\bmutation\b/
 
@@ -198,12 +193,10 @@ describe('Execution block Plan effort contract', () => {
     expect(fableplan).toMatch(/Not every harness's Agent tool accepts `effort`/i)
     expect(fableplan).toMatch(/re-dispatch once without `effort`/i)
     expect(fableplan).toMatch(/degradation, not an error/i)
-    // The footer must then name what actually ran, not the tier that was requested.
     expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
   })
 
   test('fableplan tells the operator when a stamped tier could not be honored', () => {
-    // The degradation is common (Claude Code's Agent tool has no `effort` parameter),
 
     expect(fableplan).toMatch(/report it to the user in step 5/i)
     expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
@@ -252,9 +245,6 @@ describe('milestoneplan table contract', () => {
   })
 
   test('the read-only guard fails on gh commands it does not recognize', () => {
-    // The guarantee is open-world: a step added later that runs some gh subcommand
-    // nobody listed must fail the guard, not pass it by being unrecognized. Seed the
-    // failures here rather than trusting the guard's shape.
     for (const written of [
       'gh release create v1.0.0',
       'gh workflow run ci.yml',
@@ -312,8 +302,6 @@ describe('milestoneplan table contract', () => {
 
   test('marks absent fields as missing and names the pipeline default', () => {
     expect(body).toMatch(/\*missing\* — never blank, never a guessed default/i)
-    // A block-less issue derives its build from the validated score band, so the
-    // preview must never predict a constant fable/high fallback.
     expect(body).toMatch(/derives its build from the validated score band/)
     expect(body).not.toMatch(/`model fable, effort high`/)
     expect(body).toMatch(/never infer edges from prose/i)
@@ -344,7 +332,6 @@ describe('milestoneplan table contract', () => {
 })
 
 describe('new-app-pipeline stage numbering contract', () => {
-  /** The stage table is the single source of truth for the pipeline's order. */
   const stageRows = [...newAppPipeline.matchAll(/^\|\s*(\d+)\s*\|[^|]+\|\s*(?:`([a-z-]+)`|—)\s*\|/gm)].map(
     ([, number, skill]) => ({ number: Number(number), skill: skill ?? null }),
   )

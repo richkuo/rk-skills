@@ -53,3 +53,4 @@ if __name__ == "__main__":
         rewrite_create_pr_link(os.environ["BODY_IN"], os.environ["FOOTER_TEXT"])
     )
     sys.stdout.write("\n")
+

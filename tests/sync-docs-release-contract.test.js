@@ -66,7 +66,6 @@ describe('sync-docs / release contract', () => {
   })
 
   test('CI prompts complete history and tags before any range analysis', () => {
-    // CI checkouts can be shallow; the local skills never need this.
     for (const path of CI_PROMPTS) {
       const text = normalized[path]
       expect(text, path).toMatch(/--unshallow/)

@@ -54,16 +54,12 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: mirror rule`).toMatch(
       /Mirror the plan's steps into the task tracker/,
     )
-    // Trigger scope: every adopted plan, not only a long one.
     expect(body, `${MIRROR_OWNER}: any-length trigger`).toMatch(
       /Before writing any code[\s\S]{0,200}every[\s\S]{0,60}adopted plan[\s\S]{0,80}regardless of length/i,
     )
     expect(body, `${MIRROR_OWNER}: completion keys on the verify point`).toMatch(
       /complete only when its verify point passes/i,
     )
-    // Fallback 1 — the trigger fires on EITHER element missing, not only both.
-    // A numbered plan with no per-step checks must still get checks derived,
-    // because the same bullet forbids an item with no verify point.
     expect(body, `${MIRROR_OWNER}: fallback trigger covers either element`).toMatch(
       /missing its numbers, its verify points, or both/i,
     )
@@ -73,18 +69,15 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: derive whichever element is missing`).toMatch(
       /derive whichever element is missing[\s\S]{0,400}missing both gets \*\*both\*\* derived/i,
     )
-    // The superseded AND-only trigger must not come back.
     expect(body, `${MIRROR_OWNER}: fallback not scoped to both-missing`).not.toMatch(
       /plan carries no numbers or verify points/i,
     )
     expect(body, `${MIRROR_OWNER}: no item without a verify point`).toMatch(
       /never leave an item with no verify point/i,
     )
-    // Fallback 2 — no tracker in the harness still has a compliant action.
     expect(body, `${MIRROR_OWNER}: no-tracker fallback`).toMatch(
       /harness exposes no task tracker[\s\S]{0,400}scratchpad file/i,
     )
-    // Fallback 2 must keep the checklist out of the commit.
     expect(body, `${MIRROR_OWNER}: scratchpad stays unstaged`).toMatch(
       /outside the repository working tree/i,
     )
@@ -95,14 +88,12 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: overridden-step disposition`).toMatch(
       /overridden step closes as a recorded deviation/i,
     )
-    // The deviation carries its own check and reaches the PR body.
     expect(body, `${MIRROR_OWNER}: deviation carries a verify point`).toMatch(
       /deviation carrying its own verify point/i,
     )
     expect(body, `${MIRROR_OWNER}: deviation reaches the PR body`).toMatch(
       /overridden step closes as a recorded deviation[\s\S]{0,900}PR body per step 6/i,
     )
-    // No tracker rule may push the builder to build an overridden step.
     expect(body, `${MIRROR_OWNER}: no pressure to build an overridden step`).toMatch(
       /justifies building a step the traced code, a newer issue comment, or safety has overridden/i,
     )
@@ -118,29 +109,21 @@ describe('numbered plan steps with verify points', () => {
     expect(body, `${MIRROR_OWNER}: borrowed check follows a replacement`).toMatch(
       /re-homes[\s\S]{0,200}replacement step's verify point/i,
     )
-    // With no replacement the borrower still terminates: own check, else a deviation.
     expect(body, `${MIRROR_OWNER}: borrower terminates without a replacement`).toMatch(
       /own observable check[\s\S]{0,200}closes? as a recorded deviation of its own/i,
     )
-    // No borrower is left waiting on a check that can never run.
     expect(body, `${MIRROR_OWNER}: no borrower left unreachable`).toMatch(
       /never left waiting on a check that can never run/i,
     )
-    // The trigger is the cross-reference, not how it arose: a compliant plan may
-    // author a verify point that keys on a later step, and the mirroring agent
-    // copies it verbatim, so the derived-check fallback never fires.
     expect(body, `${MIRROR_OWNER}: re-homing is origin-agnostic`).toMatch(
       /derived by the mirroring agent[\s\S]{0,80}or written by the plan's own author/i,
     )
     expect(body, `${MIRROR_OWNER}: re-homing not scoped to the derived fallback`).not.toMatch(
       /adopted a later step's check \*\*under the first fallback above\*\*/i,
     )
-    // Chains resolve: overriding step 8 must reach step 3, which borrowed step 5,
-    // which borrowed step 8 — not only the direct borrower.
     expect(body, `${MIRROR_OWNER}: re-homing cascades through chains`).toMatch(
       /[Rr]e-homing cascades[\s\S]{0,400}repeats until no open item keys on a check that cannot run/i,
     )
-    // The fallback's forward pointer must name the re-homing paragraph, not the
 
     expect(body, `${MIRROR_OWNER}: fallback points at the re-homing rule`).toMatch(
       /the borrowed check re-homes[\s\S]{0,120}A borrowed verify point re-homes when its source step is overridden/,
