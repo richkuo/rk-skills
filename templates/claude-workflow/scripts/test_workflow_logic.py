@@ -31,13 +31,89 @@ CLAUDE_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "claude.yml")
 VERIFY_STEP = "Verify @claude is an actual invocation (not in a code block or example)"
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
 RESOLVE_MODEL_STEP = "Resolve model from @claude invocation"
-PERL_STRIP_FENCED = "s/```.*?```//gs"
-SED_STRIP_INLINE = "s/`[^`]*`//g"
+VERIFY_STRIP_ENV_KEYS = ("PERL_STRIP_FENCED", "SED_STRIP_INLINE")
 
 
 def _read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def _unquote_yaml_scalar(raw):
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == "'" and raw[-1] == "'":
+        return raw[1:-1].replace("''", "'")
+    if len(raw) >= 2 and raw[0] == '"' and raw[-1] == '"':
+        out = []
+        i = 1
+        end = len(raw) - 1
+        while i < end:
+            ch = raw[i]
+            if ch == "\\" and i + 1 < end:
+                nxt = raw[i + 1]
+                mapping = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
+                out.append(mapping.get(nxt, nxt))
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+    return raw
+
+
+def extract_step_env(yml_text, step_name, required_keys=()):
+    lines = yml_text.split("\n")
+    name_pat = re.compile(r"^(\s*)- name:\s*" + re.escape(step_name) + r"\s*$")
+    start = None
+    step_indent = None
+    for idx, ln in enumerate(lines):
+        m = name_pat.match(ln)
+        if m:
+            start = idx
+            step_indent = len(m.group(1))
+            break
+    if start is None:
+        raise AssertionError(
+            f"step '{step_name}' not found in workflow — renamed? Update this extractor."
+        )
+
+    next_step_pat = re.compile(r"^ {%d}- name:" % step_indent)
+    env_pat = re.compile(r"^(\s*)env:\s*$")
+    env_idx = None
+    env_indent = None
+    for idx in range(start + 1, len(lines)):
+        if next_step_pat.match(lines[idx]):
+            break
+        m = env_pat.match(lines[idx])
+        if m:
+            env_idx = idx
+            env_indent = len(m.group(1))
+            break
+    if env_idx is None:
+        raise AssertionError(
+            f"no `env:` block found under step '{step_name}' — structure changed?"
+        )
+
+    env = {}
+    key_pat = re.compile(r"^(\s+)([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+    for idx in range(env_idx + 1, len(lines)):
+        ln = lines[idx]
+        if ln.strip() == "":
+            continue
+        cur_indent = len(ln) - len(ln.lstrip())
+        if cur_indent <= env_indent:
+            break
+        m = key_pat.match(ln)
+        if not m:
+            continue
+        env[m.group(2)] = _unquote_yaml_scalar(m.group(3))
+
+    missing = [k for k in required_keys if k not in env or env[k] == ""]
+    if missing:
+        raise AssertionError(
+            f"step '{step_name}' env is missing {missing}."
+        )
+    return env
 
 
 def extract_step_run_block(yml_text, step_name):
@@ -170,7 +246,9 @@ def run_resolve_model(event_name, stripped, docs_release_enabled=""):
 
 
 def run_verify_invocation(event_name, body, trigger_actor="someuser"):
-    script = extract_step_run_block(_read(CLAUDE_YML), VERIFY_STEP)
+    yml = _read(CLAUDE_YML)
+    script = extract_step_run_block(yml, VERIFY_STEP)
+    strip_env = extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
     return _run_block(
         script,
         {
@@ -179,8 +257,8 @@ def run_verify_invocation(event_name, body, trigger_actor="someuser"):
             "REVIEW_BODY": body,
             "ISSUE_BODY": body,
             "TRIGGER_ACTOR": trigger_actor,
-            "PERL_STRIP_FENCED": PERL_STRIP_FENCED,
-            "SED_STRIP_INLINE": SED_STRIP_INLINE,
+            "PERL_STRIP_FENCED": strip_env["PERL_STRIP_FENCED"],
+            "SED_STRIP_INLINE": strip_env["SED_STRIP_INLINE"],
         },
         "invoked",
     )
@@ -471,6 +549,50 @@ class VerifyInvocationSelfTriggerTest(unittest.TestCase):
     def test_human_at_claude_only_in_code_block_does_not_fire(self):
         body = "here is an example:\n```\n@claude review\n```\nthanks"
         self.assertEqual(run_verify_invocation("issue_comment", body, "someuser"), "false")
+
+
+class VerifyStepEnvFromWorkflowTest(unittest.TestCase):
+    def test_missing_perl_strip_key_fails(self):
+        yml = _read(CLAUDE_YML).replace(
+            "          PERL_STRIP_FENCED: 's/```.*?```//gs'\n", ""
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_missing_sed_strip_key_fails(self):
+        yml = _read(CLAUDE_YML).replace(
+            "          SED_STRIP_INLINE: 's/`[^`]*`//g'\n", ""
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_blank_perl_strip_value_fails(self):
+        yml = _read(CLAUDE_YML).replace(
+            "PERL_STRIP_FENCED: 's/```.*?```//gs'", "PERL_STRIP_FENCED: ''"
+        )
+        with self.assertRaises(AssertionError):
+            extract_step_env(yml, VERIFY_STEP, VERIFY_STRIP_ENV_KEYS)
+
+    def test_changed_fenced_pattern_lets_code_block_mention_fire(self):
+        original = _read(CLAUDE_YML)
+        broken = original.replace(
+            "PERL_STRIP_FENCED: 's/```.*?```//gs'",
+            "PERL_STRIP_FENCED: 's/NEVERMATCH//g'",
+        )
+        self.assertNotEqual(original, broken)
+        old_read = globals()["_read"]
+
+        def _broken(_path):
+            return broken
+
+        globals()["_read"] = _broken
+        try:
+            body = "here is an example:\n```\n@claude review\n```\nthanks"
+            self.assertEqual(
+                run_verify_invocation("issue_comment", body, "someuser"), "true"
+            )
+        finally:
+            globals()["_read"] = old_read
 
 
 if __name__ == "__main__":
