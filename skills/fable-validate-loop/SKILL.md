@@ -1,13 +1,13 @@
 ---
 name: fable-validate-loop
-description: Use when the user asks to validate a GitHub issue with Fable 5 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan (skipped when the validated score is below 61 with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR.
+description: Use when the user asks to validate a GitHub issue with Fable 5 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5 implementation plan (skipped when the validated score is below 71 with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR.
 ---
 
 # fable-validate-loop
 
 Chain fable-validate → (conditional) update issue → fableplan → work-on-issue-loop into one autonomous run: Fable 5 validates the issue, the main agent fixes the issue description if needed, Fable 5 plans the implementation (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence. This is fable-validate's interactive handoff made unattended — the loop reads its own verdicts and proceeds, instead of waiting for the user to reply.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 61 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
+**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 71 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules below.
 
 ## Input
 
@@ -46,11 +46,11 @@ If **No**, skip straight to step 4.
 
 **Order matters:** the edits land before fableplan runs, so the Fable 5 planner fetches and plans against the corrected issue, not the flawed original.
 
-### 4. Run fableplan — planning phase only (skip when the score is below 61)
+### 4. Run fableplan — planning phase only (skip when the score is below 71)
 
-**Score gate:** if the verdict's validated complexity score is **below 61**, skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for lower-band changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. (If the user wants a plan unconditionally, that's `fable-validate-fableplan-loop` — this same chain with the gate removed.)
+**Score gate:** if the verdict's validated complexity score is **below 71**, skip fableplan and go straight to step 5 — work-on-issue-loop plans adequately for lower-band changes on its own. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. (If the user wants a plan unconditionally, that's `fable-validate-fableplan-loop` — this same chain with the gate removed.)
 
-**Top-band note:** this gate runs fableplan for band-5 issues (score ≥ 81), and their verdict line reads `fableplan: yes` — the signal is `yes` for all of score ≥ 61. This loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a top-band issue here — skipping it would drop Fable from the hardest issues entirely.
+**Top-band note:** this gate runs fableplan for band-6 issues (score ≥ 81), and their verdict line reads `fableplan: yes` — the signal is `yes` for all of score ≥ 71. This loop implements via work-on-issue-loop on the session model, so the posted Fable plan is the only guaranteed Fable 5 involvement for a top-band issue here — skipping it would drop Fable from the hardest issues entirely.
 
 Otherwise, invoke the `fableplan` skill for the same issue number (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 5 of this skill. Instruct fableplan to use the harness suffix `fable-validate-loop` in the posted comment's attribution footer, so the comment records the actual entry point (a delta skill that reuses this step overrides the suffix with its own name).
 
@@ -74,7 +74,7 @@ Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict),
 
 | Situation | Action |
 |---|---|
-| Tempted to skip validation or planning and jump to implementation | Never reorder — validate-then-plan-then-build is the point of this skill; the only sanctioned skip is the step-4 score gate (score < 61, no safety flags) |
+| Tempted to skip validation or planning and jump to implementation | Never reorder — validate-then-plan-then-build is the point of this skill; the only sanctioned skip is the step-4 score gate (score < 71, no safety flags) |
 | `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — the cases the loop can't safely auto-resolve |
 | Tempted to wait for a literal user reply to fable-validate's or fableplan's prompt | Parse the output yourself and proceed per the step rules |
 | Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, so the plan targets the corrected issue |

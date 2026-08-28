@@ -21,7 +21,7 @@ flowchart LR
 
 Several skills mention a **complexity score** (`C0`–`C100`): a model + effort routing signal in the issue title. **Capability** (which LLM / whether a Fable plan runs first) lives in the score band; **Volume** (how hard to push) lives in the depth inside the band — see `validate-issue` step 6. "Fable" skills hand part of the work to a subagent running on the Fable 5 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
 
-Every issue's first line also carries an explicit **`fableplan: yes|no`** signal, so later steps read the planning decision instead of re-deriving it from the score. It's `yes` at score ≥ 61 — a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+. Effort runs `high`/`xhigh` for Opus and Sonnet builds. A Fable build exists only when the user explicitly directs it — no band defaults to one; stamped, it may also run at `medium` or, at the planner's discretion, `low` for issues lighter than the formula's own floor. Fable 5 never runs at `xhigh` — `high` is its ceiling on every stage (build, plan, validate, review, fix).
+Every issue's first line also carries an explicit **`fableplan: yes|no`** signal, so later steps read the planning decision instead of re-deriving it from the score. It's `yes` at score ≥ 71 — a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 71–80, xhigh at 81+. Effort runs `high`/`xhigh` for Opus and Sonnet builds. A Fable build exists only when the user explicitly directs it — no band defaults to one; stamped, it may also run at `medium` or, at the planner's discretion, `low` for issues lighter than the formula's own floor. Fable 5 never runs at `xhigh` — `high` is its ceiling on every stage (build, plan, validate, review, fix).
 
 ### Issue skills
 
@@ -60,10 +60,10 @@ Every issue's first line also carries an explicit **`fableplan: yes|no`** signal
 | `fable-new-issue` | Like `new-issue`, but a read-only Fable 5 subagent researches and drafts the issue; your main session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the new issue all the way to a reviewed PR automatically. |
 | `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5 subagent; your main session presents the verdict and acts on it. |
-| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only when score ≥ 61, or touching safety-critical code), then drives to a reviewed PR. |
+| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only when score ≥ 71, or touching safety-critical code), then drives to a reviewed PR. |
 | `fable-validate-fableplan-loop` | Same as above, but the Fable plan is unconditional — every issue gets a posted plan before implementation, no matter how simple. |
 | `fable-validate-fableplan` | The same chain without the build: Fable validates the issue, issue fixes are applied, and a Fable plan is always posted. It stops there — no worktree, no PR, no review loop. |
-| `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when score ≥ 61 or safety-flagged, then drives to a reviewed PR. |
+| `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when score ≥ 71 or safety-flagged, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | The trimmed chain: Fable 5 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
 | `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
 | `fable-advisor` | Runs on your session's own model (Sonnet, typically). A persistent Fable 5 advisor writes the plan and stays available for mid-build consults (hard-to-reverse decisions, stuck signals, plan deviations); a separate fresh Fable 5 reviewer issues a binding pre-commit verdict. When a GitHub issue is referenced, it gates the issue and runs `work-on-issue`'s build-and-ship pipeline under the advisor instead of a duplicate flow. |

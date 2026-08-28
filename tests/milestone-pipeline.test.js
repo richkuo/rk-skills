@@ -418,9 +418,9 @@ describe('milestone-pipeline dependency scheduling', () => {
           { number: 7, title: '[C40] Band 2 ceiling', complexity: 40, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
           { number: 8, title: '[C41] Band 3 floor', complexity: 41, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 9, title: '[C60] Band 3 ceiling', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 10, title: '[C61] Band 4 floor', complexity: 61, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 11, title: '[C80] Band 4 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 12, title: '[C81] Band 5', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 10, title: '[C61] Band 4 floor', complexity: 61, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 11, title: '[C80] Band 5 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 12, title: '[C81] Band 6', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 13, title: 'No [C..] prefix', complexity: 0, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
       }),
@@ -449,8 +449,8 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#7: C40 (band 21–40) — validating on Opus 5 @ high',
       '#8: C41 (band 41–60) — validating on Opus 5 @ xhigh',
       '#9: C60 (band 41–60) — validating on Opus 5 @ xhigh',
-      '#10: C61 (band 61–80) — validating on Fable 5 @ medium',
-      '#11: C80 (band 61–80) — validating on Fable 5 @ medium',
+      '#10: C61 (band 61–70) — validating on Fable 5 @ medium',
+      '#11: C80 (band 71–80) — validating on Fable 5 @ medium',
       '#12: C81 (band 81+) — validating on Fable 5 @ high',
       '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
     ])
@@ -1281,16 +1281,16 @@ describe('milestone-pipeline subagent review mode', () => {
       { model: 'opus', effort: 'high' },
       { model: 'fable', effort: 'medium' },
     ])
-    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
-    expect(started(events, 'plan:#2')).toBeTrue()
-    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–70) — re-validating on Fable 5 @ medium'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ xhigh (band 61–70); the issue needs a [C70] restamp'))).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeFalse()
+    expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
       to: 70,
       previous: { model: 'sonnet', effort: 'xhigh', fableplan: false },
-      rerouted: { model: 'opus', effort: 'high', fableplan: true },
+      rerouted: { model: 'opus', effort: 'xhigh', fableplan: false },
     })
   })
 
