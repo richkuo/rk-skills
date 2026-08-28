@@ -12,7 +12,7 @@ Before every `gh issue edit`, read the complete assembled body. List each value 
 
 ## Edit the title
 
-Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention. Keep the body rationale and `fableplan` signal synchronized with the title; `yes` starts at score 61.
+Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention. Keep the body rationale and `fableplan` signal synchronized with the title; `yes` starts at score 71.
 
 ## Edit the body
 

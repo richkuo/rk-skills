@@ -264,14 +264,17 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c2-c3')).toHaveLength(1)
   })
 
-  test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+  test('dispatches the plan stage at high and normalizes legacy stamps', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C60] Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
           { number: 3, title: '[C60] Stamped low', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
           { number: 4, title: '[C60] No stamp', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: true, missing_block: false },
-          { number: 5, title: '[C20] No plan stage', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+          { number: 5, title: '[C20] No plan stage, stamped xhigh', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+          { number: 6, title: '[C20] No plan stage, stamped low', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'low', missing_block: false },
+          { number: 7, title: '[C20] No plan stage, stamped medium', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'medium', missing_block: false },
+          { number: 8, title: '[C20] No plan stage, stamped high', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'high', missing_block: false },
         ],
       }),
     })
@@ -279,25 +282,31 @@ describe('milestone-pipeline dependency scheduling', () => {
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
     expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
-    expect(planEvent(3).effort).toBe('low')
+    expect(planEvent(3).effort).toBe('high')
     expect(planEvent(3).model).toBe('fable')
     expect(planEvent(4).effort).toBe('high')
     expect(planEvent(5)).toBeUndefined()
 
     expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
-    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    expect(logs.filter((message) => message.includes('normalized plan effort xhigh → high'))).toEqual([
-      '#2: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
-      '#5: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
-    ])
+    expect(logs.filter((message) => message.includes('normalized plan effort')).sort()).toEqual([
+      '#2: normalized plan effort xhigh → high (fableplan always runs at high)',
+      '#3: normalized plan effort low → high (fableplan always runs at high)',
+      '#5: normalized plan effort xhigh → high (fableplan always runs at high)',
+      '#6: normalized plan effort low → high (fableplan always runs at high)',
+      '#7: normalized plan effort medium → high (fableplan always runs at high)',
+    ].sort())
 
-    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
-      '#5: ignoring Plan effort high — fableplan is false, so no plan stage runs',
-    ])
+    expect(logs.filter((message) => message.includes('ignoring Plan effort')).sort()).toEqual([
+      '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
+      '#6: ignoring Plan effort low — fableplan is false, so no plan stage runs',
+      '#7: ignoring Plan effort medium — fableplan is false, so no plan stage runs',
+      '#8: ignoring Plan effort high — fableplan is false, so no plan stage runs',
+    ].sort())
   })
 
   test('reports an inert Plan effort only when one was actually stamped', async () => {
@@ -323,12 +332,12 @@ describe('milestone-pipeline dependency scheduling', () => {
   test('prep is contracted to omit Plan effort when the issue stamps none', () => {
     const source = workflowSource
     const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
-    expect(schemaLine).toMatch(/OMIT this field entirely when the line is absent/)
-    expect(schemaLine).not.toMatch(/default high when absent/)
+    expect(schemaLine).toMatch(/OMIT when absent/)
+    expect(schemaLine).toMatch(/always runs fableplan at high/)
 
-    const promptLine = source.match(/^- plan_effort: from the optional.*$/m)[0]
-    expect(promptLine).toMatch(/OMIT the field rather than filling in a default/)
-    expect(promptLine).not.toMatch(/when the line is absent, use high/)
+    const promptLine = source.match(/^- plan_effort: from an optional legacy.*$/m)[0]
+    expect(promptLine).toMatch(/OMIT the field/)
+    expect(promptLine).toMatch(/always runs at high/)
 
     expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
@@ -384,7 +393,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
     expect(logs.filter((m) => m.includes('routing as unscored (unknown)'))).toHaveLength(3)
-    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
     expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
   })
@@ -415,10 +424,10 @@ describe('milestone-pipeline dependency scheduling', () => {
           { number: 4, title: '[C10] Band 1 floor', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 5, title: '[C20] Band 1 ceiling', complexity: 20, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 6, title: '[C21] Band 2 floor', complexity: 21, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 7, title: '[C40] Band 2 ceiling', complexity: 40, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 8, title: '[C41] Band 3 floor', complexity: 41, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 9, title: '[C60] Band 3 ceiling', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 10, title: '[C61] Band 4 floor', complexity: 61, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 7, title: '[C50] Band 2 ceiling', complexity: 50, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: '[C51] Band 3 floor', complexity: 51, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 9, title: '[C70] Band 3 ceiling', complexity: 70, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 10, title: '[C71] Band 4 floor', complexity: 71, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
           { number: 11, title: '[C80] Band 4 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
           { number: 12, title: '[C81] Band 5', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 13, title: 'No [C..] prefix', complexity: 0, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
@@ -445,12 +454,12 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#3: C9 (band 0–9) — validating on Opus 5 @ medium',
       '#4: C10 (band 10–20) — validating on Opus 5 @ high',
       '#5: C20 (band 10–20) — validating on Opus 5 @ high',
-      '#6: C21 (band 21–40) — validating on Opus 5 @ high',
-      '#7: C40 (band 21–40) — validating on Opus 5 @ high',
-      '#8: C41 (band 41–60) — validating on Opus 5 @ xhigh',
-      '#9: C60 (band 41–60) — validating on Opus 5 @ xhigh',
-      '#10: C61 (band 61–80) — validating on Fable 5 @ medium',
-      '#11: C80 (band 61–80) — validating on Fable 5 @ medium',
+      '#6: C21 (band 21–50) — validating on Opus 5 @ high',
+      '#7: C50 (band 21–50) — validating on Opus 5 @ high',
+      '#8: C51 (band 51–70) — validating on Opus 5 @ xhigh',
+      '#9: C70 (band 51–70) — validating on Opus 5 @ xhigh',
+      '#10: C71 (band 71–80) — validating on Fable 5 @ medium',
+      '#11: C80 (band 71–80) — validating on Fable 5 @ medium',
       '#12: C81 (band 81+) — validating on Fable 5 @ high',
       '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
     ])
@@ -1279,18 +1288,18 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(validations).toEqual([
       { model: 'opus', effort: 'high' },
-      { model: 'fable', effort: 'medium' },
+      { model: 'opus', effort: 'xhigh' },
     ])
-    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 61–80) — re-validating on Fable 5 @ medium'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ high with fableplan (band 61–80); the issue needs a [C70] restamp'))).toBeTrue()
-    expect(started(events, 'plan:#2')).toBeTrue()
-    expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 51–70) — re-validating on Opus 5 @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ xhigh (band 51–70); the issue needs a [C70] restamp'))).toBeTrue()
+    expect(started(events, 'plan:#2')).toBeFalse()
+    expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
       to: 70,
       previous: { model: 'sonnet', effort: 'xhigh', fableplan: false },
-      rerouted: { model: 'opus', effort: 'high', fableplan: true },
+      rerouted: { model: 'opus', effort: 'xhigh', fableplan: false },
     })
   })
 

@@ -1,6 +1,6 @@
 ---
 name: prd-to-issues
-description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, plan effort, review trigger). Stage 4 of the new-app-pipeline.
+description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, review trigger). Stage 4 of the new-app-pipeline.
 ---
 
 # prd-to-issues
@@ -45,7 +45,6 @@ Append to every issue body, before the footer:
 - **Build model:** <Fable 5 | Opus 5 | ...>
 - **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh>
 - **fableplan first:** <Yes — Fable 5 plans, plan posted to this issue, builder implements against it | No>
-- **Plan effort:** <low | medium | high>   (optional — omit for the default, high; only meaningful when fableplan first is Yes)
 - **PR review:** standard `@claude` review trigger
 ```
 
@@ -62,18 +61,18 @@ Assignment — **derive from the complexity score band**. Load the canonical for
 |---|---|---|---|---|
 | 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |
 | 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |
-| 2 | 21–40 | Opus 5 | No | high |
-| 3 | 41–60 | Opus 5 | No | xhigh |
-| 4 | 61–80 | Opus 5 | **Yes** | high |
+| 2 | 21–50 | Opus 5 | No | high |
+| 3 | 51–70 | Opus 5 | No | xhigh |
+| 4 | 71–80 | Opus 5 | **Yes** | high |
 | 5 | 81–99 | Opus 5 | **Yes** | xhigh |
 
 **Never stamp Fable 5 as the Build model** — no band defaults to a Fable build, and this skill never assigns one; a Fable build exists only when the user explicitly directs it on a specific issue.
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
-- **fableplan first: Yes** means score ≥ 61 (bands 4–5): a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 61–80, xhigh at 81+. Never below 61.
+- **fableplan first: Yes** means score ≥ 71 (bands 4–5): a Fable 5 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 71–80, xhigh at 81+. Never below 71.
 - **Validation is fully derived from the score — model and effort, never stamped**: the `validate-issue` step 6 band table owns the Validate mapping. A missing `[C..]` prefix is unknown, not small, so it routes as band 5. Never add a `Validate model:` or `Validate effort:` line to an Execution block — nothing reads either; a legacy `Validate effort:` line on an older issue is ignored.
-- **Plan effort** (the fableplan stage): stamp it only on `fableplan first: Yes` issues — it is ignored everywhere else. The planner is always Fable 5, so the legal tiers are **low, medium, and high — never xhigh** (per the effort-ceiling rule in the next bullet) — this line sets effort only, never a model. Default (and ceiling) high; drop to **medium** when the score cleared 61 through the Coupling bump rather than Risk/Uncertainty, so the plan is mostly sequencing known work. Reserve **low** for an issue whose approach is already settled in the issue body and only needs ordering.
+- **Plan effort** (the fableplan stage): always **high** — never stamp a line. The planner is always Fable 5 at high; Fable never runs at xhigh on any stage (the LLM Attribution Footer section of CLAUDE.md owns this ceiling). Strip a legacy `Plan effort:` line when you touch the block.
 - Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium or low.** Fable builds may drop one tier further to **low**, a discretionary Fable-only tier below the formula's own floor, for a band-5 issue (score 81+) judged lighter than its Volume warrants. **Fable's ceiling is high — never assign or run Fable 5 at xhigh, on any stage (build, plan, validate, review, or fix); the LLM Attribution Footer section of CLAUDE.md owns this ceiling.** When unsure between two tiers, take the higher (best-solution rule) — capped at high on Fable.
 - PR review: the pipeline derives the first-review trigger from the score on the first-review scale, whose boundaries differ from the build bands above — `@claude sonnet review` at 0–10, the standard `@claude review` at 11–40 (no pinned model), `@claude opus review` at 41–80, `@claude fable review effort:high` at 81+ or with no score. The fable trigger is first-review-only, and the blocking re-reviews after it step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that, stopping there rather than dropping to sonnet. Stamp an explicit `@claude <model> review effort:<tier>` line only to override that default, and only with a model the Action admits — `sonnet`, `opus` or `fable`. `claude.yml` resolves no other shorthand, and it reads an unresolved one as the route keyword, which sends the "review" to its write-capable fix-pr job. Stamp `sonnet` where you mean the cheapest reviewer; never stamp `haiku`.
 - Scores filed before the band-encoding change are **not comparable** — re-score if routing matters.

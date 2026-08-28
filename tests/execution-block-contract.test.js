@@ -131,50 +131,32 @@ describe('Execution block ordering contract', () => {
 })
 
 describe('Execution block Plan effort contract', () => {
-  test('prd-to-issues stamps an optional Plan effort defaulting to high', () => {
-    expect(prdToIssues).toContain('- **Plan effort:** <low | medium | high>')
-    expect(prdToIssues).not.toContain('- **Plan effort:** <low | medium | high | xhigh>')
-    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*only on `fableplan first: Yes` issues/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*planner is always Fable 5.*never xhigh/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*sets effort only, never a model/is)
+  test('prd-to-issues never stamps Plan effort and states fableplan always runs at high', () => {
+    expect(prdToIssues).not.toContain('- **Plan effort:**')
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*always \*\*high\*\*/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*never stamp a line/is)
+    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*Fable never runs at xhigh/is)
   })
 
   test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
     expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
-    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
+    expect(executionPlanReview).toMatch(/Plan effort is always `high` on `fableplan first: Yes` issues/i)
     expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
-    expect(executionPlanReview).toMatch(/Revision names a plan model.*Only the effort is stampable/is)
-    expect(executionPlanReview).toMatch(/plan effort at `low` or `medium`.*Allowed/is)
+    expect(executionPlanReview).toMatch(/Revision names a plan model.*effort is always `high`/is)
+    expect(executionPlanReview).toMatch(/plan effort at a tier that is not `high`/i)
   })
 
-  test('milestone-workflow documents the plan stage running at the issue Plan effort', () => {
-    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
-    expect(milestoneWorkflow).toMatch(/Plan effort on every `fableplan: Yes` issue/i)
+  test('milestone-workflow documents the plan stage always at high', () => {
+    expect(milestoneWorkflow).toMatch(/always at \*\*high\*\* effort/i)
+    expect(milestoneWorkflow).not.toMatch(/every tier is legal because the planner is always Fable/i)
   })
 
-  test('README publishes the plan effort field', () => {
-    expect(readme).toMatch(/the effort that plan runs at/i)
+  test('README states fableplan runs at high', () => {
+    expect(readme).toMatch(/Fable plan comes first at high effort/i)
   })
 
-  test('fableplan consumes the same field name every other document publishes', () => {
-    const blockLine = '- **Plan effort:**'
-    expect(prdToIssues).toContain(blockLine)
-    expect(fableplan).toContain(blockLine)
-    for (const doc of [prdToIssues, executionPlanReview, milestoneWorkflow, fableplan]) {
-      expect(doc).toContain('Plan effort')
-    }
-  })
-
-  test('every document that states the plan effort default states high', () => {
-    expect(prdToIssues).toMatch(/Plan effort.*omit for the default, high/is)
-    expect(executionPlanReview).toMatch(/Validate effort is band-derived and Plan effort defaults to high/i)
-    expect(milestoneWorkflow).toMatch(/`Plan effort`.*default high/is)
-    expect(fableplan).toMatch(/Plan effort.*absent.*dispatches at `high` — the repo attribution default/is)
-  })
-
-  test('fableplan dispatches at the stamped tier and never advertises a constant one', () => {
-    expect(fableplan).toMatch(/`effort`.*stamped \*\*Plan effort\*\*/is)
+  test('fableplan always dispatches at high', () => {
+    expect(fableplan).toMatch(/`effort`: always `high`/i)
     expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
     expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
     expect(fableplan).toMatch(/never a constant/i)
@@ -187,31 +169,31 @@ describe('Execution block Plan effort contract', () => {
     expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
   })
 
-  test('fableplan tells the operator when a stamped tier could not be honored', () => {
+  test('fableplan tells the operator when high could not be honored or a legacy stamp was clamped', () => {
     expect(fableplan).toMatch(/report it to the user in step 5/i)
-    expect(fableplan).toMatch(/could not honor an effort tier and the issue had stamped one, say so here/i)
-    expect(fableplan).toMatch(/not a notice/i)
-    expect(fableplan).toMatch(/when the tier \*was\* honored \(no notice/i)
-    expect(fableplan).toMatch(/make no claim about a stamped tier in either direction/i)
+    expect(fableplan).toMatch(/legacy stamped Plan effort that is not `high`/i)
+    expect(fableplan).toMatch(/clamped to `high`/i)
+    expect(fableplan).toMatch(/could not honor `high`/i)
   })
 
-  test('fableplan passes an explicit tier rather than inheriting the session effort', () => {
-    expect(fableplan).toMatch(/otherwise `high`.*Pass it explicitly even in the unstamped case/is)
-    expect(fableplan).toMatch(/may be \*below\* `high`/i)
+  test('fableplan passes high explicitly rather than inheriting the session effort', () => {
+    expect(fableplan).toMatch(/`effort`: always `high`/i)
+    expect(fableplan).toMatch(/Pass it explicitly rather than omitting it/is)
     expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
     expect(fableplan).not.toMatch(/the subagent inherits the session effort/i)
   })
 
   test('execution-plan-review never leaves or masks an inert Plan effort', () => {
     expect(executionPlanReview).toMatch(/flips fableplan `Yes` → `No`.*strip that line during write-back/is)
-    expect(executionPlanReview).toMatch(/only when that band puts fableplan at `Yes`/i)
-    expect(executionPlanReview).toMatch(/show that tier marked `ignored`.*never a bare `—`/is)
+    expect(executionPlanReview).toMatch(/Do not stamp a `Plan effort:` line/i)
+    expect(executionPlanReview).toMatch(/any stamped `Plan effort:` line — including `high` — show `<tier> \(ignored — no plan stage runs\)`/is)
+    expect(executionPlanReview).toMatch(/never a bare `—`/is)
   })
 
-  test('fableplan falls back to the documented default, never a guessed session tier', () => {
-    expect(fableplan).toMatch(/record the repo attribution default `high`/i)
+  test('fableplan records high when the harness accepts no effort parameter', () => {
+    expect(fableplan).toMatch(/record `high`/i)
     expect(fableplan).toMatch(/do not try to name the session's own tier/i)
-    expect(fableplan).toMatch(/falls back to the repo attribution default `high`/i)
+    expect(fableplan).toMatch(/Normally that is `Fable 5 \| high`/i)
     expect(fableplan).not.toMatch(/footer names the session effort/i)
   })
 })
@@ -296,11 +278,18 @@ describe('milestoneplan table contract', () => {
   test('routes validation off the score, never off the Build model or a stamp', () => {
     expect(body).toMatch(/never from the Build model and never stamped/)
     expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C9\]`/)
-    expect(body).toMatch(/`Opus 5 · high` at `\[C10\]`–`\[C40\]`/)
-    expect(body).toMatch(/`Opus 5 · xhigh` at `\[C41\]`–`\[C60\]`/)
-    expect(body).toMatch(/`Fable 5 · medium` at `\[C61\]`–`\[C80\]`/)
+    expect(body).toMatch(/`Opus 5 · high` at `\[C10\]`–`\[C50\]`/)
+    expect(body).toMatch(/`Opus 5 · xhigh` at `\[C51\]`–`\[C70\]`/)
+    expect(body).toMatch(/`Fable 5 · medium` at `\[C71\]`–`\[C80\]`/)
     expect(body).toMatch(/`Fable 5 · high` at `\[C81\]` and above/)
     expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
+  })
+
+  test('shows every legacy Plan-effort stamp on No issues as ignored in the Plan cell', () => {
+    expect(body).toMatch(/Plain `No` when stamped `No` and no legacy `Plan effort:` line/)
+    expect(body).toMatch(/any legacy `Plan effort:` stamp — including `high` — renders in the Plan cell/)
+    expect(body).toMatch(/ignored — no plan stage runs/)
+    expect(body).not.toMatch(/Plan effort column/)
   })
 
   test('hands off to the skills that own the writes and the run', () => {

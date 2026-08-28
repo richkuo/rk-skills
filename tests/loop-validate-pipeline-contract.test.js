@@ -165,11 +165,11 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('gated validate→plan loops state the below-61 score gate plus safety carve-out', () => {
+  test('gated validate→plan loops state the below-71 score gate plus safety carve-out', () => {
     for (const path of CAPABILITY_GATE) {
       const body = procedureBody(texts[path])
       expect(body, path).toMatch(/\*\*Score gate:\*\*/)
-      expect(body, path).toMatch(/below 61|score\s*<\s*61/)
+      expect(body, path).toMatch(/below 71|score\s*<\s*71/)
       expect(body, path).toMatch(
         /safety carve-out[\s\S]{0,300}money[\s\S]{0,120}data integrity[\s\S]{0,120}security[\s\S]{0,120}auto-protective/i,
       )
@@ -182,7 +182,7 @@ describe('loop/validate pipeline contract', () => {
       expect(body, path).toMatch(/no score gate|score gate removed/i)
       expect(body, path).toMatch(/always runs|for EVERY issue/i)
       expect(body, path).not.toMatch(
-        /\*\*Score gate:\*\*[^\n]*below 61[^\n]*skip fableplan/i,
+        /\*\*Score gate:\*\*[^\n]*below 71[^\n]*skip fableplan/i,
       )
     }
   })

@@ -50,7 +50,7 @@ Include **acceptance criteria** an implementer can verify: observable behavior, 
 
 Load and apply the canonical score formula and routing table in `validate-issue` step 6. Do not restate or approximate them here. The score is a **model + effort routing signal**. It is not a time estimate; never put durations in the issue. Derive axes from the concrete touch-set in step 3, not vibes; count the surface that hides from the diff (tests, parity/offline paths, migrations, docs).
 
-From the score, set the **fableplan signal** per the fableplan rule in `github-issue-format` (`yes` when the score is ≥ 61). It goes on the rationale line in step 6 and is always written explicitly.
+From the score, set the **fableplan signal** per the fableplan rule in `github-issue-format` (`yes` when the score is ≥ 71). It goes on the rationale line in step 6 and is always written explicitly.
 
 ### 5. Scope check — one issue or several?
 
@@ -94,7 +94,7 @@ Add `--label`/`--assignee` only when the repo visibly uses them (`gh label list`
 
 Terse: issue URL, number, one-line summary of what it covers, complexity score, and any candidate follow-ups you did **not** file (with why). Offer "validate issue" / "work on issue" as next steps in one line.
 
-**When the issue's signal is `fableplan: yes`, also ask the user explicitly** — one line, e.g. "This issue scored 61 or higher — want a Fable 5 plan posted before building? (fableplan)" — and let the user decide; don't launch fableplan unprompted, and don't silently drop the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
+**When the issue's signal is `fableplan: yes`, also ask the user explicitly** — one line, e.g. "This issue scored 71 or higher — want a Fable 5 plan posted before building? (fableplan)" — and let the user decide; don't launch fableplan unprompted, and don't silently drop the recommendation. (Autonomous loop skills that wrap this one parse the signal and apply their own documented gates instead of asking.)
 
 ## Guardrails
 
