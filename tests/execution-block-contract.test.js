@@ -186,7 +186,8 @@ describe('Execution block Plan effort contract', () => {
   test('execution-plan-review never leaves or masks an inert Plan effort', () => {
     expect(executionPlanReview).toMatch(/flips fableplan `Yes` → `No`.*strip that line during write-back/is)
     expect(executionPlanReview).toMatch(/Do not stamp a `Plan effort:` line/i)
-    expect(executionPlanReview).toMatch(/show that tier marked `ignored`.*never a bare `—`/is)
+    expect(executionPlanReview).toMatch(/any stamped `Plan effort:` line — including `high` — show `<tier> \(ignored — no plan stage runs\)`/is)
+    expect(executionPlanReview).toMatch(/never a bare `—`/is)
   })
 
   test('fableplan records high when the harness accepts no effort parameter', () => {
@@ -282,6 +283,13 @@ describe('milestoneplan table contract', () => {
     expect(body).toMatch(/`Fable 5 · medium` at `\[C71\]`–`\[C80\]`/)
     expect(body).toMatch(/`Fable 5 · high` at `\[C81\]` and above/)
     expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
+  })
+
+  test('shows every legacy Plan-effort stamp on No issues as ignored in the Plan cell', () => {
+    expect(body).toMatch(/Plain `No` when stamped `No` and no legacy `Plan effort:` line/)
+    expect(body).toMatch(/any legacy `Plan effort:` stamp — including `high` — renders in the Plan cell/)
+    expect(body).toMatch(/ignored — no plan stage runs/)
+    expect(body).not.toMatch(/Plan effort column/)
   })
 
   test('hands off to the skills that own the writes and the run', () => {
