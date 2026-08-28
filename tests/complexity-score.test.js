@@ -198,32 +198,29 @@ describe('complexity score band encoding', () => {
     expect(readme).not.toContain('score ≥ 61')
   })
 
-  test('the seven-band routing matrix is stated consistently across docs and the pipeline', async () => {
+  test('the six-band routing matrix is stated consistently across docs and the pipeline', async () => {
     const pipeline = await read('workflows/milestone-pipeline.js')
 
     expect(validateIssue).toContain('| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |')
     expect(validateIssue).toContain('| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |')
-    expect(validateIssue).toContain('| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high |')
-    expect(validateIssue).toContain('| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |')
-    expect(validateIssue).toContain('| 4 | 61–70 | Fable 5 · medium | No | Opus 5 · xhigh |')
-    expect(validateIssue).toContain('| 5 | 71–80 | Fable 5 · medium | **Yes** | Opus 5 · high |')
-    expect(validateIssue).toContain('| 6 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |')
+    expect(validateIssue).toContain('| 2 | 21–50 | Opus 5 · high | No | Opus 5 · high |')
+    expect(validateIssue).toContain('| 3 | 51–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |')
+    expect(validateIssue).toContain('| 4 | 71–80 | Fable 5 · medium | **Yes** | Opus 5 · high |')
+    expect(validateIssue).toContain('| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |')
     expect(validateIssueScoring).toMatch(/Never lower routing from a validator rescore/)
 
     expect(prdToIssues).toContain("| 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |")
     expect(prdToIssues).toContain("| 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |")
-    expect(prdToIssues).toContain('| 2 | 21–40 | Opus 5 | No | high |')
-    expect(prdToIssues).toContain('| 3 | 41–60 | Opus 5 | No | xhigh |')
-    expect(prdToIssues).toContain('| 4 | 61–70 | Opus 5 | No | xhigh |')
-    expect(prdToIssues).toContain('| 5 | 71–80 | Opus 5 | **Yes** | high |')
-    expect(prdToIssues).toMatch(/\| 6 \| 81–99 \| Opus 5 \| \*\*Yes\*\* \| xhigh/)
+    expect(prdToIssues).toContain('| 2 | 21–50 | Opus 5 | No | high |')
+    expect(prdToIssues).toContain('| 3 | 51–70 | Opus 5 | No | xhigh |')
+    expect(prdToIssues).toContain('| 4 | 71–80 | Opus 5 | **Yes** | high |')
+    expect(prdToIssues).toMatch(/\| 5 \| 81–99 \| Opus 5 \| \*\*Yes\*\* \| xhigh/)
     expect(prdToIssues).toMatch(/Validation is fully derived from the score/)
 
     expect(pipeline).toContain("{ name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } }")
-    expect(pipeline).toContain("{ name: '21–40', min: 21, max: 40, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '41–60', min: 41, max: 60, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' } }")
-    expect(pipeline).toContain("{ name: '61–70', min: 61, max: 70, fableplan: false, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'xhigh' } }")
+    expect(pipeline).toContain("{ name: '21–50', min: 21, max: 50, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '51–70', min: 51, max: 70, fableplan: false, validate: { model: 'opus', effort: 'xhigh' }, build: { model: 'opus', effort: 'xhigh' } }")
     expect(pipeline).toContain("{ name: '71–80', min: 71, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } }")
 

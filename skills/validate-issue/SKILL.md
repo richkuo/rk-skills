@@ -86,11 +86,10 @@ Read [complexity-scoring.md](complexity-scoring.md) completely on every validati
 |---|---|---|---|---|
 | 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |
 | 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |
-| 2 | 21–40 | Opus 5 · high | No | Opus 5 · high |
-| 3 | 41–60 | Opus 5 · xhigh | No | Opus 5 · xhigh |
-| 4 | 61–70 | Fable 5 · medium | No | Opus 5 · xhigh |
-| 5 | 71–80 | Fable 5 · medium | **Yes** | Opus 5 · high |
-| 6 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |
+| 2 | 21–50 | Opus 5 · high | No | Opus 5 · high |
+| 3 | 51–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |
+| 4 | 71–80 | Fable 5 · medium | **Yes** | Opus 5 · high |
+| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |
 
 The fableplan signal is yes when the score is 71 or higher. It is no below 71.
 
