@@ -606,6 +606,7 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized build effort xhigh → high (Fable never runs at xhigh)`)
     normalized.effort = 'high'
   }
+  const stampedPlanEffort = normalized.plan_effort
   if (normalized.plan_effort && normalized.plan_effort !== 'high') {
     log(`#${normalized.number}: normalized plan effort ${normalized.plan_effort} → high (fableplan always runs at high)`)
     normalized.plan_effort = 'high'
@@ -614,8 +615,8 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized first-review effort xhigh → high (Fable never runs at xhigh)`)
     normalized.first_review_effort = 'high'
   }
-  if (normalized.plan_effort && !normalized.fableplan && !normalized.missing_block) {
-    log(`#${normalized.number}: ignoring Plan effort ${normalized.plan_effort} — fableplan is false, so no plan stage runs`)
+  if (stampedPlanEffort && !normalized.fableplan && !normalized.missing_block) {
+    log(`#${normalized.number}: ignoring Plan effort ${stampedPlanEffort} — fableplan is false, so no plan stage runs`)
   }
   return normalized
 })

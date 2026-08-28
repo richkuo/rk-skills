@@ -265,13 +265,16 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('dispatches the plan stage at high and normalizes legacy stamps', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C60] Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
           { number: 3, title: '[C60] Stamped low', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
           { number: 4, title: '[C60] No stamp', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: true, missing_block: false },
-          { number: 5, title: '[C20] No plan stage', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+          { number: 5, title: '[C20] No plan stage, stamped xhigh', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
+          { number: 6, title: '[C20] No plan stage, stamped low', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'low', missing_block: false },
+          { number: 7, title: '[C20] No plan stage, stamped medium', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'medium', missing_block: false },
+          { number: 8, title: '[C20] No plan stage, stamped high', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'high', missing_block: false },
         ],
       }),
     })
@@ -290,15 +293,20 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    expect(logs.filter((message) => message.includes('normalized plan effort'))).toEqual([
+    expect(logs.filter((message) => message.includes('normalized plan effort')).sort()).toEqual([
       '#2: normalized plan effort xhigh → high (fableplan always runs at high)',
       '#3: normalized plan effort low → high (fableplan always runs at high)',
       '#5: normalized plan effort xhigh → high (fableplan always runs at high)',
-    ])
+      '#6: normalized plan effort low → high (fableplan always runs at high)',
+      '#7: normalized plan effort medium → high (fableplan always runs at high)',
+    ].sort())
 
-    expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
-      '#5: ignoring Plan effort high — fableplan is false, so no plan stage runs',
-    ])
+    expect(logs.filter((message) => message.includes('ignoring Plan effort')).sort()).toEqual([
+      '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
+      '#6: ignoring Plan effort low — fableplan is false, so no plan stage runs',
+      '#7: ignoring Plan effort medium — fableplan is false, so no plan stage runs',
+      '#8: ignoring Plan effort high — fableplan is false, so no plan stage runs',
+    ].sort())
   })
 
   test('reports an inert Plan effort only when one was actually stamped', async () => {
