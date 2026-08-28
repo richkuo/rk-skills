@@ -143,7 +143,7 @@ describe('Execution block Plan effort contract', () => {
     expect(executionPlanReview).toMatch(/Plan effort is always `high` on `fableplan first: Yes` issues/i)
     expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
     expect(executionPlanReview).toMatch(/Revision names a plan model.*effort is always `high`/is)
-    expect(executionPlanReview).toMatch(/plan effort below `high`/i)
+    expect(executionPlanReview).toMatch(/plan effort at a tier that is not `high`/i)
   })
 
   test('milestone-workflow documents the plan stage always at high', () => {
@@ -171,7 +171,7 @@ describe('Execution block Plan effort contract', () => {
 
   test('fableplan tells the operator when high could not be honored or a legacy stamp was clamped', () => {
     expect(fableplan).toMatch(/report it to the user in step 5/i)
-    expect(fableplan).toMatch(/legacy stamped Plan effort below `high`/i)
+    expect(fableplan).toMatch(/legacy stamped Plan effort that is not `high`/i)
     expect(fableplan).toMatch(/clamped to `high`/i)
     expect(fableplan).toMatch(/could not honor `high`/i)
   })

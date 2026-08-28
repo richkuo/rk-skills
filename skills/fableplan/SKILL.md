@@ -30,7 +30,7 @@ If the command fails (wrong number, no auth, no repo), stop and tell the user �
 
 Record the issue number and URL — you'll need them in step 4. If no issue is referenced, skip this and step 4's posting.
 
-Also note any legacy **Plan effort** line on the fetched body — step 2 always dispatches at `high`; a stamped tier below that is clamped and reported in step 5. When no issue is referenced, step 2 still dispatches at `high`.
+Also note any legacy **Plan effort** line on the fetched body — step 2 always dispatches at `high`; any stamped tier that is not `high` is clamped and reported in step 5. When no issue is referenced, step 2 still dispatches at `high`.
 
 ### 2. Dispatch the Fable 5 Plan subagent
 
@@ -52,7 +52,7 @@ The Plan subagent's final message is returned to you as the tool result; it is n
 
 When the result arrives:
 - Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
-- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the `fable-dispatch` fallback ladder substituted another, and the effort is `high` unless the harness accepted no `effort` at all. Only in that last case does the recorded value become a convention rather than an observation — then record `high` and **do not try to name the session's own tier**, which an agent cannot observe. Also record *whether* the tier was honored — step 5 tells the user when a legacy stamped tier below `high` was clamped. Step 4's footer names these recorded values, so resolve them now rather than assuming the run took effect.
+- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the `fable-dispatch` fallback ladder substituted another, and the effort is `high` unless the harness accepted no `effort` at all. Only in that last case does the recorded value become a convention rather than an observation — then record `high` and **do not try to name the session's own tier**, which an agent cannot observe. Also record *whether* the tier was honored — step 5 tells the user when a legacy stamped tier that is not `high` was clamped. Step 4's footer names these recorded values, so resolve them now rather than assuming the run took effect.
 
 ### 3. Sanity-check the plan against the code
 
@@ -81,7 +81,7 @@ After posting, give the user the comment URL `gh` returns. Follow the repo's CLA
 
 Present the vetted plan to the user (the main agent).
 
-**If step 2 recorded that the harness could not honor `high`, say so here in one line.** **If the issue carried a legacy stamped Plan effort below `high`, say it was clamped to `high`.** When neither applies, stay silent.
+**If step 2 recorded that the harness could not honor `high`, say so here in one line.** **If the issue carried a legacy stamped Plan effort that is not `high`, say it was clamped to `high`.** When neither applies, stay silent.
 
 ### 6. Ask whether to continue building (only if an issue was referenced)
 
