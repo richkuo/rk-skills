@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model and effort derived from its [C..] score band, never stamped' },
-    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at each issue\'s Plan effort; plans posted to the issues', model: 'fable' },
+    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at high effort; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
@@ -215,7 +215,7 @@ const PREP_SCHEMA = {
           complexity: { type: 'integer', minimum: 0, description: 'The integer from the [C<score>] title prefix — a literal [C0] is a real score of 0; OMIT this field entirely when the title carries no [C..] prefix, because absence is how the runtime tells an unscored issue from a genuinely zero-scored one' },
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5→fable, Opus 5→opus, etc.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
-          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from optional "Plan effort:"; OMIT this field entirely when the line is absent — the runtime defaults it to high, and its presence is how the runtime tells a stamped tier from an unstamped one. The planner is always Fable 5, so low/medium/high are legal; preserve a stamped xhigh verbatim so the runtime can clamp it to high and log (Fable never runs at xhigh). Ignored when fableplan is false' },
+          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional legacy "Plan effort:" line — OMIT when absent. The runtime always runs fableplan at high; any stamped tier below high is normalized and logged. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; OMIT this field when the line is a standard `@claude` trigger or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
           first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; OMIT when unspecified — the runtime derives the default from the [C..] band' },
@@ -576,7 +576,7 @@ const prep = await agent(
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
 - effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
-- plan_effort: from the optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field rather than filling in a default: the runtime applies high itself, and it treats the field's presence as "an operator stamped a tier", so a filled-in default would make every unstamped issue look stamped. The fableplan stage always runs on Fable 5, so low and medium are legal here even though they are Fable-only build tiers; preserve a stamped xhigh verbatim so the runtime can clamp and log it (Fable never runs at xhigh). Only the effort is stampable — never read a model from this line
+- plan_effort: from an optional legacy "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field. The fableplan stage always runs at high; preserve a stamped tier verbatim so the runtime can normalize and log it. Only the effort is stampable — never read a model from this line
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
 - do NOT extract a "**Validate effort:**" or "**Validate model:**" line — validation is derived from the [C..] score band by the runtime and a legacy stamp is never read
@@ -606,8 +606,8 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized build effort xhigh → high (Fable never runs at xhigh)`)
     normalized.effort = 'high'
   }
-  if (normalized.plan_effort === 'xhigh') {
-    log(`#${normalized.number}: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)`)
+  if (normalized.plan_effort && normalized.plan_effort !== 'high') {
+    log(`#${normalized.number}: normalized plan effort ${normalized.plan_effort} → high (fableplan always runs at high)`)
     normalized.plan_effort = 'high'
   }
   if (normalized.first_review_model === 'fable' && normalized.first_review_effort === 'xhigh') {

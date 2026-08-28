@@ -264,7 +264,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c2-c3')).toHaveLength(1)
   })
 
-  test('dispatches the plan stage at the stamped Plan effort and defaults it to high', async () => {
+  test('dispatches the plan stage at high and normalizes legacy stamps', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
@@ -279,20 +279,21 @@ describe('milestone-pipeline dependency scheduling', () => {
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
     expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
-    expect(planEvent(3).effort).toBe('low')
+    expect(planEvent(3).effort).toBe('high')
     expect(planEvent(3).model).toBe('fable')
     expect(planEvent(4).effort).toBe('high')
     expect(planEvent(5)).toBeUndefined()
 
     expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
-    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | low | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    expect(logs.filter((message) => message.includes('normalized plan effort xhigh → high'))).toEqual([
-      '#2: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
-      '#5: normalized plan effort xhigh → high (the planner is Fable 5; Fable never runs at xhigh)',
+    expect(logs.filter((message) => message.includes('normalized plan effort'))).toEqual([
+      '#2: normalized plan effort xhigh → high (fableplan always runs at high)',
+      '#3: normalized plan effort low → high (fableplan always runs at high)',
+      '#5: normalized plan effort xhigh → high (fableplan always runs at high)',
     ])
 
     expect(logs.filter((message) => message.includes('ignoring Plan effort'))).toEqual([
@@ -323,12 +324,12 @@ describe('milestone-pipeline dependency scheduling', () => {
   test('prep is contracted to omit Plan effort when the issue stamps none', () => {
     const source = workflowSource
     const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
-    expect(schemaLine).toMatch(/OMIT this field entirely when the line is absent/)
-    expect(schemaLine).not.toMatch(/default high when absent/)
+    expect(schemaLine).toMatch(/OMIT when absent/)
+    expect(schemaLine).toMatch(/always runs fableplan at high/)
 
-    const promptLine = source.match(/^- plan_effort: from the optional.*$/m)[0]
-    expect(promptLine).toMatch(/OMIT the field rather than filling in a default/)
-    expect(promptLine).not.toMatch(/when the line is absent, use high/)
+    const promptLine = source.match(/^- plan_effort: from an optional legacy.*$/m)[0]
+    expect(promptLine).toMatch(/OMIT the field/)
+    expect(promptLine).toMatch(/always runs at high/)
 
     expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
   })
