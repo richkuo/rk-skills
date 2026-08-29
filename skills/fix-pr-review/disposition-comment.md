@@ -15,7 +15,7 @@ Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
 1. **<finding title>** — <what changed> (`file:line`). <Scope rule 1 note, required only when this item kept a finding in the PR that a routing or a rule would have filed: what this PR adds, changes, or endangers that makes rule 1 match.>
 
 ### Corrected scope (partial)
-1. **<finding title>** — <what was real and fixed vs. what wasn't> (`file:line`).
+1. **<finding title>** — <what was real and fixed vs. what wasn't | blocking status refuted: the stated Reachability precondition <trigger>, refuted by <what the code does>; the defect <stands | does not stand>; re-routed to `### Recommended Optional`> (`file:line`).
 
 ### Not changed (refuted)
 1. **<finding title>** — <code-grounded reason the suggestion doesn't apply> (`file:line`).
@@ -34,6 +34,7 @@ Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
 
 - **Copy `<finding title>` verbatim from the review comment** — the reviewer's own bold one-sentence title, word for word, with no paraphrase or shortening. The next reviewer matches its findings to these dispositions by claim (`pr-review` requires that read before it drafts), and a reworded title breaks that match, so a settled finding comes back.
 - Every **Not changed (refuted)** and **Corrected scope (partial)** item states the verdict through its section heading and carries a code-grounded rebuttal with its `file:line` — that rebuttal is the evidence a later reviewer must answer before it re-raises the finding, so make it stand on its own without the thread around it.
+- **A blocking finding whose stated `**Reachability:**` precondition the code refutes goes under `### Corrected scope (partial)`, and nowhere else.** No new section is added for it: `pr-review`'s prior-cycle rule settles a finding only on the dispositions it already names, and `Corrected scope (partial)` is one of them, so a re-route recorded under any other heading settles nothing and the next review re-raises the blocking status. The item names the precondition the review stated, the `file:line` that refutes it, whether the defect itself still stands, and the section the finding moves to. When the re-routed remedy is in scope and gets fixed in this same push, it also gets its own **Fixed** item; this item records the routing change alone.
 - Omit any empty section. Keep each item one line with a `file:line` anchor.
 - **Every test edit in the push appears under `### Test edits`** with its case, that case's checkable ground, and what the replacement asserts; a removal gives the ground in place of the replacement. The reviewer reads this section to tell a deliberate behavior change from a weakened test, so a test edit missing from it reads as undisclosed.
 - The `Growth check:` line appears only when SKILL.md step 4's growth check fired (diff past ~3x the first push, or cycle 4+); omit it otherwise. It is the one place in this comment those numbers live — never fold them into a finding item.

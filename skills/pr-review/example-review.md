@@ -48,7 +48,9 @@ All four H3 sections appear in their fixed order: the two blocking sections
 (`### Needs Fixing`, `### Requires Human Review`) first, then the two non-blocking ones
 (`### Recommended Optional`, `### Create Follow-up Issue`). Omit any section with no items — a
 real review rarely fills all four. Each item shows its full field set in the required order, and
-`**Plain simple English:**` is always the item's last field.
+`**Plain simple English:**` is always the item's last field. The `### Needs Fixing` item below also
+carries `**Reachability:**` as its first field, because its defect needs a precondition; an item on
+the ordinary path omits that field.
 
 ```markdown
 Needs Updates
@@ -57,6 +59,7 @@ Needs Updates
 
 1. **Step 1 caps the merged-PR list at 30 while step 3 requires every PR merged after the previous tag, so a release with more entries loses them with no error.**
 `skills/release-notes/SKILL.md:12` passes `--limit 30`, and line 21 states the completeness rule the notes must satisfy. The listing is also unbounded in the other direction: it carries no filter on the previous tag, so it returns the 30 most recent merged PRs of all time, including PRs already shipped in an earlier release. An agent that follows both lines produces a list that is truncated and over-inclusive at once, and nothing in the file tells it to check the two against each other. Verified by reading the added file in full and comparing line 12 with line 21; both lines are inside this diff. I did not run the commands.
+**Reachability:** Any release cut once more than 30 pull requests have merged in the whole history of the repository — line 12 carries no previous-tag filter, so the 30-item window is drawn from every merged PR of all time, and entries inside the release range fall out of it from that point on.
 **Invariant:** An enumeration step must return the whole set a later step declares mandatory, and must fail loudly when it cannot.
 **Must survive:** more than 30 PRs merged after the previous tag; exactly 30 merged PRs, where the truncation is invisible; the first release of a repo, where no previous tag exists and the range is the whole history.
 **Plain simple English:** Step 1 collects only the 30 newest merged pull requests. Step 3 says the notes must show every pull request merged after the last release. If more landed, the notes lose entries and no message tells the operator. Make step 1 read the full range.

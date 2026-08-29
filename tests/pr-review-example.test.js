@@ -19,13 +19,14 @@ const SECTION_ORDER = [
 ]
 
 const SECTION_FIELDS = {
-  '### Needs Fixing': ['Invariant:', 'Must survive:', 'Plain simple English:'],
+  '### Needs Fixing': ['Reachability:', 'Invariant:', 'Must survive:', 'Plain simple English:'],
   '### Requires Human Review': ['Recommended proposed solution:', 'Plain simple English:'],
   '### Recommended Optional': ['Invariant:', 'Must survive:', 'Plain simple English:'],
   '### Create Follow-up Issue': ['Plain simple English:'],
 }
 
 const DEFINED_FIELDS = new Set([
+  'Reachability:',
   'Invariant:',
   'Must survive:',
   'Recommended proposed solution:',

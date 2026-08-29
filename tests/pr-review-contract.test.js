@@ -1521,4 +1521,173 @@ describe('PR review contract', () => {
       )
     },
   )
+
+  const BLOCKING_TEST_COPIES = [
+    'skills/pr-review/SKILL.md',
+    'templates/claude-workflow/prompts/pr-review-format.md',
+    'templates/codex-workflow/prompts/pr-review-format.md',
+    'templates/claude-review.yml',
+    'templates/codex-review.yml',
+  ]
+
+  const flatten = (source) => source.replace(/\s+/g, ' ').replace(/[`*]/g, '')
+
+  const blockingTestRegion = (flat, copyPath) => {
+    const start = flat.indexOf('Blocking test')
+    expect(start, `${copyPath}: the blocking test is missing`).toBeGreaterThan(-1)
+    return flat.slice(start, start + 1300)
+  }
+
+  const reachabilityFieldRegion = (flat, copyPath) => {
+    const start = flat.indexOf('Reachability field')
+    expect(start, `${copyPath}: the Reachability field rule is missing`).toBeGreaterThan(-1)
+    return flat.slice(start, start + 900)
+  }
+
+  test.each(BLOCKING_TEST_COPIES)(
+    '%s states both blocking-test questions with their routing outcomes',
+    async (copyPath) => {
+      const region = blockingTestRegion(flatten(await read(copyPath)), copyPath)
+      expect(region, `${copyPath}: the test does not run before section placement`).toMatch(
+        /before section placement/i,
+      )
+      expect(region, `${copyPath}: the safety carve-out does not override the test`).toMatch(
+        /safety carve-out above overrides both/i,
+      )
+      expect(region, `${copyPath}: reachability does not ask for a concrete trigger`).toMatch(
+        /Reachability[\s\S]{0,260}concrete trigger: an input, a state, or a timing/i,
+      )
+      expect(region, `${copyPath}: an unreachable trigger does not route to optional`).toMatch(
+        /no reachable trigger goes under (?:### )?Recommended Optional/i,
+      )
+      for (const cost of [
+        'cost money',
+        'lose or corrupt data',
+        'breach security',
+        'disable an auto-protective mechanism',
+        'leave a feature stuck or broken',
+      ]) {
+        expect(region, `${copyPath}: the consequence question omits ${cost}`).toContain(cost)
+      }
+      expect(region, `${copyPath}: a consequence does not route to blocking`).toMatch(
+        /Yes puts it under (?:### )?Needs Fixing/i,
+      )
+      expect(region, `${copyPath}: a recoverable consequence does not route to optional`).toMatch(
+        /recoverable annoyance puts it under (?:### )?Recommended Optional/i,
+      )
+    },
+  )
+
+  test.each(BLOCKING_TEST_COPIES)(
+    '%s forbids likelihood grading inside the blocking test',
+    async (copyPath) => {
+      const region = blockingTestRegion(flatten(await read(copyPath)), copyPath)
+      expect(region, `${copyPath}: likelihood grading is not forbidden`).toMatch(
+        /Never grade likelihood/i,
+      )
+      expect(region, `${copyPath}: a frequency estimate is not stripped of routing weight`).toMatch(
+        /frequency estimate[\s\S]{0,120}carry no routing weight/i,
+      )
+      expect(
+        region,
+        `${copyPath}: an unstatable precondition does not fall back to the materiality filter`,
+      ).toMatch(/cannot state concretely[\s\S]{0,160}(?:no realistic trigger|no-realistic-trigger)/i)
+    },
+  )
+
+  test.each(BLOCKING_TEST_COPIES)(
+    '%s fixes the Reachability field position and keeps it optional',
+    async (copyPath) => {
+      const region = reachabilityFieldRegion(flatten(await read(copyPath)), copyPath)
+      expect(region, `${copyPath}: the field position is not fixed`).toMatch(
+        /Reachability:[\s\S]{0,120}first field, immediately before Invariant:/i,
+      )
+      expect(region, `${copyPath}: an ordinary-path finding is not allowed to omit the field`).toMatch(
+        /ordinary path omits the field/i,
+      )
+      expect(region, `${copyPath}: the field is not confined to Needs Fixing`).toMatch(
+        /never appears in the other three sections/i,
+      )
+      expect(region, `${copyPath}: a refuted precondition does not re-route the finding`).toMatch(
+        /blocking status[\s\S]{0,140}re-routes to (?:### )?Recommended Optional/i,
+      )
+      expect(region, `${copyPath}: the re-route is not tied to a settling disposition`).toMatch(
+        /Corrected scope \(partial\)/i,
+      )
+    },
+  )
+
+  const PRECONDITION_FIXER_COPIES = [
+    'skills/fix-pr-review/SKILL.md',
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ]
+
+  test.each(PRECONDITION_FIXER_COPIES)(
+    '%s validates a stated precondition and re-routes on a code-grounded refutation',
+    async (copyPath) => {
+      const flat = flatten(await read(copyPath))
+      const start = flat.indexOf('stated Reachability: precondition')
+      expect(start, `${copyPath}: the precondition-refutation rule is missing`).toBeGreaterThan(-1)
+      const region = flat.slice(start, start + 1100)
+      expect(region, `${copyPath}: the precondition is not part of the claim`).toMatch(
+        /part of (?:the|that|its) (?:finding's )?claim/i,
+      )
+      expect(region, `${copyPath}: refuting the precondition does not refute the blocking status`).toMatch(
+        /blocking status is refuted/i,
+      )
+      expect(region, `${copyPath}: the finding does not re-route to optional`).toMatch(
+        /re-route the finding to (?:### )?Recommended Optional/i,
+      )
+      expect(region, `${copyPath}: the re-route is not recorded as a settling disposition`).toMatch(
+        /Corrected scope \(partial\)/i,
+      )
+      expect(region, `${copyPath}: a likelihood judgment is still allowed to re-route`).toMatch(
+        /never re-routes on a likelihood judgment/i,
+      )
+      expect(region, `${copyPath}: a finding with no precondition is not validated as written`).toMatch(
+        /states no precondition is validated exactly as written/i,
+      )
+    },
+  )
+
+  test('the disposition comment slots a re-route under the existing partial-scope section', async () => {
+    const flat = flatten(await read('skills/fix-pr-review/disposition-comment.md'))
+    const start = flat.indexOf('A blocking finding whose stated')
+    expect(start, 'disposition-comment.md: the re-route slotting rule is missing').toBeGreaterThan(-1)
+    const region = flat.slice(start, start + 1100)
+    expect(region).toMatch(/goes under ### Corrected scope \(partial\), and nowhere else/i)
+    expect(region).toMatch(/No new section is added for it/i)
+    expect(region).toMatch(/settles a finding only on the dispositions it already names/i)
+    expect(region).toMatch(/next review re-raises the blocking status/i)
+    expect(flat).toMatch(/blocking status refuted: the stated Reachability precondition/i)
+  })
+
+  test('contract inventory carries the blocking-test and Reachability row', async () => {
+    const inventory = await read('docs/contract-inventory.md')
+    const row = inventory
+      .split('\n')
+      .find((line) => line.startsWith('| Blocking test and Reachability field |'))
+    expect(row, 'docs/contract-inventory.md: the row is missing').toBeDefined()
+    for (const consumer of [
+      'skills/pr-review/SKILL.md',
+      'templates/claude-workflow/prompts/pr-review-format.md',
+      'templates/codex-workflow/prompts/pr-review-format.md',
+      'templates/claude-review.yml',
+      'templates/codex-review.yml',
+      'skills/fix-pr-review/SKILL.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'skills/fix-pr-review/disposition-comment.md',
+      'skills/pr-review/example-review.md',
+    ]) {
+      expect(row, `docs/contract-inventory.md: the row omits ${consumer}`).toContain(consumer)
+    }
+    expect(row).toMatch(/tests\/pr-review-contract\.test\.js/)
+    expect(row).toMatch(/tests\/pr-review-example\.test\.js/)
+    expect(row, 'the row omits the prompt shell-safety divergence').toMatch(
+      /without backticks, double quotes, or dollar signs/i,
+    )
+    expect(row).toMatch(/tests\/prompt-shell-safety\.test\.js/)
+  })
 })
