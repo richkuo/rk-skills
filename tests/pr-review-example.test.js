@@ -19,13 +19,14 @@ const SECTION_ORDER = [
 ]
 
 const SECTION_FIELDS = {
-  '### Needs Fixing': ['Invariant:', 'Must survive:', 'Plain simple English:'],
+  '### Needs Fixing': ['Reachability:', 'Invariant:', 'Must survive:', 'Plain simple English:'],
   '### Requires Human Review': ['Recommended proposed solution:', 'Plain simple English:'],
   '### Recommended Optional': ['Invariant:', 'Must survive:', 'Plain simple English:'],
   '### Create Follow-up Issue': ['Plain simple English:'],
 }
 
 const DEFINED_FIELDS = new Set([
+  'Reachability:',
   'Invariant:',
   'Must survive:',
   'Recommended proposed solution:',
@@ -87,6 +88,26 @@ describe('PR review worked example', () => {
       )
       expect(fields, heading).toEqual(SECTION_FIELDS[heading])
       expect(fields[fields.length - 1], `${heading}: last field`).toBe('Plain simple English:')
+    }
+  })
+
+  test('the recap names every field the worked example shows', () => {
+    const start = example.indexOf('What the example demonstrates:')
+    expect(start, 'the recap section is missing').toBeGreaterThan(-1)
+    const recap = example
+      .slice(start, example.indexOf('## Example 2', start))
+      .replace(/-/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+    const shown = new Set(
+      [...needsUpdates.matchAll(/^\*\*([^*]+):\*\*/gm)].map((match) => match[1]),
+    )
+    expect(shown.size).toBeGreaterThanOrEqual(5)
+    for (const field of shown) {
+      expect(
+        recap,
+        `the recap never names ${field}, so the recap and the example disagree`,
+      ).toContain(field.toLowerCase())
     }
   })
 

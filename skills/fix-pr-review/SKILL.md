@@ -84,7 +84,7 @@ For **every** finding — including ones that read as obviously correct — trac
 |---------|---------|--------|
 | ✅ **Confirmed** | Code at `file:line` matches the finding; the defect/improvement is real | Fix it (step 6) |
 | ❌ **Refuted** | Code does not do what the finding claims, or the suggested change would itself be wrong/regressive | Do **not** change; record a one-line, code-grounded rebuttal for the reply |
-| ⚠️ **Partial** | Real but narrower/broader than stated, or true only on one path | Fix the true part; note the correction |
+| ⚠️ **Partial** | Real but narrower/broader than stated, or true only on one path. A `### Needs Fixing` item's stated `**Reachability:**` precondition is part of its claim: trace that trigger to current code, and on a refutation of that trigger the finding's **blocking status** is refuted while the defect itself may still stand | Fix the true part; note the correction. On a refuted precondition, re-route the finding to `### Recommended Optional`, run the scope rules below on its remedy like any other optional item, and record the re-route under `### Corrected scope (partial)` per [disposition-comment.md](disposition-comment.md). Only a code-grounded refutation of the stated trigger re-routes a finding. A finding never re-routes on a likelihood judgment of your own, and a finding that states no precondition is validated exactly as written |
 | ❓ **Judgment** | A real tradeoff or a decision the reviewer couldn't make (most `Requires Human Review` items) | Derive the absolute-best solution and **implement it** — the paragraph below owns the rule |
 
 Validation discipline (this is where fixing a review goes wrong):
