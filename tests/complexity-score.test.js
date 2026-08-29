@@ -140,7 +140,7 @@ describe('complexity score band encoding', () => {
     expect(editing).toContain('GitHub Action identifier')
     expect(editing).not.toContain('Use `Codex` for this interactive harness')
     expect(validateIssueScoring).toContain("main skill's band table")
-    expect(validateIssueScoring).not.toMatch(/first review[^\n]*(?:0–20|21–80|81–99)/i)
+    expect(validateIssueScoring).not.toMatch(/first[- ]review[^\n]*\d+\s*–\s*\d+/i)
     expect(validateIssueScoring).not.toContain('scores 0–20 inherit')
   })
 
@@ -224,15 +224,17 @@ describe('complexity score band encoding', () => {
     expect(pipeline).toContain("{ name: '71–80', min: 71, max: 80, fableplan: true, validate: { model: 'fable', effort: 'medium' }, build: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, fableplan: true, validate: { model: 'fable', effort: 'high' }, build: { model: 'opus', effort: 'xhigh' } }")
 
-    expect(validateIssue).toContain('| 0–10 | Sonnet 5 · high | `@claude sonnet review` |')
-    expect(validateIssue).toContain('| 11–40 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) |')
-    expect(validateIssue).toContain('| 41–80 | Opus 5 · high | `@claude opus review` |')
-    expect(validateIssue).toContain('| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` |')
-    expect(pipeline).toContain("{ name: '0–10', min: 0, max: 10, review: { model: 'sonnet', effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } }")
-    expect(pipeline).toContain("{ name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } }")
+    expect(validateIssue).toContain('| 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |')
+    expect(validateIssue).toContain('| 21–70 | the reviewer\'s default model | `@claude review` (standard trigger, no pinned model) | `@codex review` |')
+    expect(validateIssue).toContain('| 71–80 | Opus 5 · high | `@claude opus review` | `@codex review` |')
+    expect(validateIssue).toContain('| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` | `@codex review` |')
+    expect(pipeline).toContain("{ name: '0–20', min: 0, max: 20, review: { model: 'sonnet', effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '21–70', min: 21, max: 70, review: { model: null, effort: 'high' } }")
+    expect(pipeline).toContain("{ name: '71–80', min: 71, max: 80, review: { model: 'opus', effort: 'high' } }")
     expect(pipeline).toContain("{ name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } }")
     expect(validateIssue).toMatch(/never steps down to Sonnet/i)
+    expect(validateIssue).toContain('| `@claude opus review` | `@claude review` | `@claude review` |')
+    expect(validateIssue).toMatch(/[Ee]very reviewer above the standard trigger runs one blocking cycle only/)
 
     for (const doc of [validateIssue, newIssue, githubIssueFormat]) {
       expect(doc).toMatch(/score is ≥ 71|score is 71 or higher|score ≥ 71/)
