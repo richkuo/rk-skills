@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
           }
           EOF
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@0c53a34dd374d76b672ee40ca35dbb8e0f7fdf1e # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
