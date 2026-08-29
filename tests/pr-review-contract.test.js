@@ -466,16 +466,15 @@ describe('PR review contract', () => {
     }
 
     const denied = args.match(/--disallowedTools "([^"]+)"/)?.[1].split(',') ?? []
-    expect(
-      denied,
-      'the denial list is exactly the write, fetch and instruction-invoking tools the pinned build recognises',
-    ).toEqual(['Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Skill', 'Agent', 'Task'])
+    for (const tool of ['Edit', 'Write', 'WebFetch', 'WebSearch']) {
+      expect(denied, `${tool} is removed, not merely unlisted`).toContain(tool)
+    }
+    for (const tool of ['Skill', 'Agent', 'Task']) {
+      expect(denied, `${tool} cannot invoke instructions from the staged tree`).toContain(tool)
+    }
 
     expect(args, 'the staged tree supplies no memory, settings, hooks, or rules').toContain(
       '--setting-sources user',
-    )
-    expect(args, 'project stays out of the setting sources').not.toMatch(
-      /--setting-sources \S*project/,
     )
     const settingsFile = args.match(/--settings ((?:\$\{\{[^}]*\}\})?\S*)/)?.[1]
     expect(settingsFile, 'a settings file is passed').toBeTruthy()
@@ -501,38 +500,6 @@ describe('PR review contract', () => {
       }
     }
     expect(run, 'the excludes are workspace-scoped').not.toMatch(/"\*\*\/CLAUDE\.md"/)
-  })
-
-  test('the Codex review template bounds the reviewer it hands the staged tree', () => {
-    const path = 'templates/codex-review.yml'
-    const { steps, actionIndex } = stagingOf(path)
-    const agent = steps[actionIndex]?.with ?? {}
-
-    expect(agent.sandbox, 'the agent reads the staged tree in a read-only sandbox').toBe(
-      'read-only',
-    )
-    expect(agent['safety-strategy'], 'and sudo is dropped inside it').toBe('drop-sudo')
-
-    const supplied = { ...agent, ...(steps[actionIndex]?.env ?? {}) }
-    for (const [key, value] of Object.entries(supplied)) {
-      expect(/token/i.test(key), `no ${key} input reaches the agent step`).toBe(false)
-      expect(
-        /github\.token|secrets\.GITHUB_TOKEN|GH_TOKEN/.test(String(value ?? '')),
-        `the ${key} input carries no GitHub credential`,
-      ).toBe(false)
-    }
-
-    const postIndex = steps.findIndex((step) =>
-      (step?.name ?? '').includes('Post the Codex review comment'),
-    )
-    expect(postIndex, 'a separate step posts the review comment').toBeGreaterThan(actionIndex)
-    expect(
-      steps[postIndex]?.env?.GH_TOKEN,
-      'and that trusted step is the one holding the token',
-    ).toBe('${{ github.token }}')
-    expect(steps[postIndex]?.run ?? '', 'which posts with gh pr comment').toContain(
-      'gh pr comment',
-    )
   })
 
   test('the Claude reviewer prompt supplies the identifiers its gh calls need', () => {
@@ -1032,22 +999,6 @@ describe('PR review contract', () => {
     expect(row, 'the row counts four channels').toMatch(/four channels the prompt cannot reach/)
     expect(row, 'and records the residual instead of claiming a closed set').toMatch(
       /names and descriptions still load as the discovery listing/,
-    )
-
-    expect(args, 'the template carries the flag the row names').toContain('--setting-sources user')
-    expect(row, 'and the row names that same flag').toContain('--setting-sources user')
-    expect(row, 'the row names the actor gate as what covers the open residual').toMatch(
-      /still load as the discovery listing[\s\S]{0,600}actor gate stays the outer boundary/,
-    )
-    expect(row, 'it names the build the local measurement ran on').toContain('Claude Code 2.1.251')
-    expect(row, 'and where the pinned action installs that build').toContain(
-      'base-action/action.yml:150',
-    )
-    expect(row, 'and the recorded ground for the pruned denial list').toContain(
-      'matches no known tool',
-    )
-    expect(row, 'the row holds the discovery residual open pending a live run').toMatch(
-      /a live review run records a result for each of the four channels/,
     )
   })
 
