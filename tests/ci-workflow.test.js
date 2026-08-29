@@ -25,7 +25,7 @@ describe('Bun test workflow contract', () => {
     const workflow = await readWorkflow()
 
     expect(topLevelBlock(workflow, 'permissions')).toBe(readOnlyPermissions)
-    expect(workflow).toContain('uses: actions/checkout@v4')
+    expect(workflow).toMatch(/uses: actions\/checkout@[0-9a-f]{40} # v\d+\.\d+\.\d+$/m)
     expect(workflow).not.toMatch(/^\s+ref:/m)
   })
 
@@ -47,7 +47,7 @@ describe('Bun test workflow contract', () => {
   test('pins Bun and runs the repository test command', async () => {
     const workflow = await readWorkflow()
 
-    expect(workflow).toContain('uses: oven-sh/setup-bun@v2')
+    expect(workflow).toMatch(/uses: oven-sh\/setup-bun@[0-9a-f]{40} # v\d+\.\d+\.\d+$/m)
     expect(workflow).toContain('bun-version: 1.3.14')
     expect(workflow).toContain('run: bun run test')
   })

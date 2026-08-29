@@ -173,7 +173,7 @@ describe('Codex workflow bundle', () => {
       expect(block).toContain('CODEX_APP_ID')
       expect(block).toContain('CODEX_APP_PRIVATE_KEY')
       expect(block).toContain('exit 1')
-      expect(runBody).toContain('uses: actions/create-github-app-token@v2')
+      expect(runBody).toMatch(/uses: actions\/create-github-app-token@[0-9a-f]{40} # v\d+\.\d+\.\d+$/m)
       expect(runBody).toMatch(
         /- name: Mint the GitHub App installation token\n\s+if: inputs\.mode != 'review'/,
       )

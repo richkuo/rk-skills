@@ -90,19 +90,19 @@ jobs:
       - name: Mint the GitHub App installation token
         if: inputs.mode != 'review'
         id: app_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.CODEX_APP_ID }}
           private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token || github.token }}
 
       - name: Checkout rk-skills (shared prompts, scripts, and skills)
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: richkuo/rk-skills
           ref: main
@@ -134,7 +134,7 @@ jobs:
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ inputs.go_version }}
 
@@ -279,7 +279,7 @@ jobs:
 
       - name: Run Codex
         id: codex
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         with:
@@ -354,7 +354,7 @@ jobs:
 
       - name: Revise AGENTS.md with session learnings
         if: inputs.mode == 'implement' && steps.codex.outcome == 'success' && steps.codex_changes.outputs.made_commits == 'true'
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         with:

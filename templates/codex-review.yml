@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -43,7 +43,7 @@ jobs:
             printf '%s\n' "# Prior review cycles unavailable: gh pr view failed" > "$CYCLES_FILE"
           fi
 
-      - uses: openai/codex-action@v1
+      - uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         id: codex
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
