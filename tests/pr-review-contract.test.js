@@ -1461,4 +1461,104 @@ describe('PR review contract', () => {
     expect(inventory).toMatch(/@claude opus review.{0,120}@claude fable review effort:high/)
     expect(inventory).toMatch(/@claude sonnet review.{0,120}@claude review/)
   })
+
+  test('the root testing rule states the broken-test relevance check', async () => {
+    const claudeMd = await read('CLAUDE.md')
+    const rule = claudeMd.slice(
+      claudeMd.indexOf('The optimal solution comes first, and the tests follow it'),
+      claudeMd.indexOf('Disclose every test edit'),
+    )
+    expect(rule).toMatch(/A test that breaks in another location is checked before it is edited/)
+    expect(rule).toMatch(/decide whether that assertion is still correct after the change/)
+    expect(rule).toMatch(/If the assertion is stale, edit the test under one of the three cases above and name its ground/)
+    expect(rule).toMatch(/If the assertion is still correct, the change broke real behavior, so leave the test as it is and fix the code/)
+  })
+
+  test('work-on-issue step 3 carries the broken-test relevance check', async () => {
+    const skill = await read('skills/work-on-issue/SKILL.md')
+    const step3 = skill.slice(skill.indexOf('### 3.'), skill.indexOf('### 4.'))
+    expect(step3).toMatch(/A test that breaks in another location is checked before it is edited/)
+    expect(step3).toMatch(/a stale assertion is rewritten under the three cases with its ground/)
+    expect(step3).toMatch(/a still-correct assertion means the change broke real behavior, so the code gets the fix/)
+  })
+
+  test('fix-pr-review step 6 carries the stale-test rule, the relevance check, the correctness floor, and disclosure', async () => {
+    const skill = await read('skills/fix-pr-review/SKILL.md')
+    const step6 = skill.slice(skill.indexOf('### 6. Implement the fixes'), skill.indexOf('### 7.'))
+    expect(step6).toMatch(/The optimal solution comes first, and the tests follow it/)
+    expect(step6).toMatch(/\*\*Outdated\*\*, \*\*Wrong\*\*, or \*\*Obsolete\*\*/)
+    expect(step6).toMatch(/name that case's checkable ground before you touch the test/)
+    expect(step6).toMatch(/a confirmed finding is the ground for a test its fix makes outdated/)
+    expect(step6).toMatch(/A test that breaks in another location is checked before it is edited/)
+    expect(step6).toMatch(/The refute check runs first/)
+    expect(step6).toMatch(/A still-correct assertion means the fix broke real behavior, so leave the test as it is and fix the code/)
+    expect(step6).toMatch(/tests are still a correctness floor/)
+    expect(step6).toMatch(/Never delete, skip, loosen, or narrow a test to reach a green tree/)
+    expect(step6).toMatch(/do not commit: stop before step 8/)
+    expect(step6).toMatch(/Disclose every test edit[\s\S]{0,120}### Test edits/)
+
+    const step11 = skill.slice(skill.indexOf('### 11. Report to the user'), skill.indexOf('## Red Flags'))
+    expect(step11).toMatch(/Name every test edit with its case and ground/)
+    expect(step11).toMatch(/stopped the run on an ungrounded test/)
+
+    const disposition = await read('skills/fix-pr-review/disposition-comment.md')
+    expect(disposition).toMatch(/### Test edits\n1\. \*\*<test name>\*\*/)
+    expect(disposition).toMatch(/Every test edit in the push appears under `### Test edits`/)
+
+    const redFlags = await read('skills/fix-pr-review/red-flags-and-mistakes.md')
+    expect(redFlags).toMatch(/A failing test looks wrong to you and no checkable ground says so \| Leave it and fix the code/)
+
+    const loop = await read('skills/fix-pr-review-loop/SKILL.md')
+    expect(loop).toMatch(/stopped before commit on an ungrounded failing test \| \*\*Blocked on a test\.\*\*/)
+  })
+
+  test.each([
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ])('%s restates the stale-test rule, the relevance check, the correctness floor, and disclosure', async (promptPath) => {
+    const prompt = await read(promptPath)
+    const phase4 = prompt.slice(prompt.indexOf('Phase 4 — Implement'), prompt.indexOf('Phase 5 — Resolve'))
+    expect(phase4).toMatch(/the optimal solution comes first and the tests follow it/)
+    expect(phase4).toMatch(/\(Outdated, Wrong, or Obsolete\) and name that case's checkable ground before you touch it/)
+    expect(phase4).toMatch(/a confirmed finding is the ground for a test its fix makes outdated/)
+    expect(phase4).toMatch(/A test that breaks in another location is checked before it is edited/)
+    expect(phase4).toMatch(/the refute check runs first/)
+    expect(phase4).toMatch(/A still-correct assertion means the fix broke real behavior, so leave the test as it is and fix the code/)
+    expect(phase4).toMatch(/Never delete, skip, loosen, or narrow a test to reach a green tree/)
+    expect(phase4).toMatch(/do not commit: stop before Phase 6/)
+    expect(phase4).toMatch(/Disclose every test edit in the commit message and under a Test edits section of the disposition comment/)
+  })
+
+  test.each([
+    'skills/pr-review/SKILL.md',
+    'templates/claude-workflow/prompts/pr-review-format.md',
+    'templates/codex-workflow/prompts/pr-review-format.md',
+  ])('%s checks every test edit against its disclosure', async (path) => {
+    const text = normalized[path]
+    expect(text).toMatch(/Check every test edit in the diff against its disclosure/)
+    expect(text).toMatch(/Outdated, Wrong, or Obsolete/)
+    expect(text).toMatch(/weakened, deleted, skipped, or narrowed with no such ground is a `?### Needs Fixing`? finding|weakened, deleted, skipped, or narrowed with no such ground is a Needs Fixing finding/)
+    expect(text).toMatch(/a rewrite whose stated ground the current code at `?file:line`? contradicts/)
+    expect(text).toMatch(/A test edit with no disclosure at all is a finding on its own/)
+  })
+
+  test('the contract inventory carries the broken-test relevance row', async () => {
+    const inventory = await read('docs/contract-inventory.md')
+    const rowAt = inventory.indexOf('| Broken-test relevance check')
+    expect(rowAt).toBeGreaterThan(-1)
+    const row = inventory.slice(rowAt, inventory.indexOf('\n|', rowAt))
+    for (const consumer of [
+      'skills/work-on-issue/SKILL.md',
+      'skills/fix-pr-review/SKILL.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+      'templates/codex-workflow/prompts/fix-pr.md',
+      'skills/pr-review/SKILL.md',
+      'templates/claude-workflow/prompts/pr-review-format.md',
+      'templates/codex-workflow/prompts/pr-review-format.md',
+    ]) {
+      expect(row, consumer).toContain(consumer)
+    }
+    expect(row).toMatch(/checked before it is edited/)
+    expect(row).toMatch(/tests\/pr-review-contract\.test\.js/)
+  })
 })
