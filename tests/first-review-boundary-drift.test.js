@@ -12,6 +12,7 @@ const CODEX_PROMPTS = [
   'templates/codex-workflow/prompts/issue-workflow.md',
   'templates/codex-workflow/prompts/fix-pr.md',
 ]
+const CLAUDE_FIX_PR_PROMPT = 'templates/claude-workflow/prompts/fix-pr.md'
 const ACTION_PROMPTS = [...CLAUDE_PROMPTS, ...CODEX_PROMPTS]
 const DOCS = ['README.md', 'docs/contract-inventory.md', 'templates/codex-workflow/README.md']
 
@@ -52,13 +53,13 @@ describe('first-review boundary drift', () => {
 
   test('every Action prompt spells out the owner table boundaries and no others', async () => {
     const rows = await ownerRows()
-    const [cheap, standard, opus] = rows
+    const [cheap, standard, opus, fable] = rows
     for (const path of CLAUDE_PROMPTS) {
       const body = (await read(path)).replace(/\s+/g, ' ')
       expect(body, `${path}: cheap row`).toContain(`C${cheap.min} to C${cheap.max}`)
       expect(body, `${path}: standard row`).toContain(`C${standard.min} to C${standard.max}`)
       expect(body, `${path}: opus row`).toContain(`C${opus.min} to C${opus.max}`)
-      expect(body, `${path}: fable row`).toContain('C81 and above')
+      expect(body, `${path}: fable row`).toContain(`C${fable.min} and above`)
     }
     for (const path of CODEX_PROMPTS) {
       const body = (await read(path)).replace(/\s+/g, ' ')
@@ -77,8 +78,8 @@ describe('first-review boundary drift', () => {
     }
   })
 
-  test('every Claude Action prompt states both step-down ladders', async () => {
-    for (const path of CLAUDE_PROMPTS.slice(1)) {
+  test('the Claude fix-pr Action prompt states both step-down ladders', async () => {
+    for (const path of [CLAUDE_FIX_PR_PROMPT]) {
       const body = (await read(path)).replace(/\s+/g, ' ')
       expect(body, `${path}: one blocking cycle only`).toMatch(
         /above the standard trigger runs one blocking cycle only/i,

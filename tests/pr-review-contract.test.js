@@ -1168,8 +1168,17 @@ describe('PR review contract', () => {
       /consumes no rung|never a ladder position/i,
     )
     expect(body, 'the cheap re-trigger is skipped during the cycle-1 read').toMatch(
-      /skipping every cheap non-blocking re-trigger[^.]{0,200}unless the PR's band is the owner table's cheapest first-review row/i,
+      /skipping every cheap non-blocking re-trigger[^.]{0,200}unless the cheap phrase is what cycle 1 itself would have used/i,
     )
+    expect(body, 'a cheap stamp is exempt from the skip at any band').toMatch(
+      /stamped `?PR review:?`? line[^.]{0,160}names the cheap reviewer[^.]{0,200}at any band/i,
+    )
+    for (const path of ['templates/claude-workflow/prompts/fix-pr.md', 'templates/codex-workflow/prompts/fix-pr.md']) {
+      const prompt = (await read(path)).replace(/\s+/g, ' ')
+      expect(prompt, `${path}: a cheap stamp is exempt from the skip at any band`).toMatch(
+        /unless that same phrase is what cycle 1 itself would have used[^.]{0,240}stamped PR review:? line[^.]{0,160}at any band/i,
+      )
+    }
     for (const path of [
       'templates/claude-workflow/prompts/fix-pr.md',
       'templates/codex-workflow/prompts/fix-pr.md',

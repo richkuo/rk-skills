@@ -1172,6 +1172,40 @@ describe('milestone-pipeline subagent review mode', () => {
     }
   })
 
+  test('a stamped cheap first review is never skipped as a non-blocking re-trigger', async () => {
+    const run = (bot) => executeWorkflow(
+      { tracks: [[2], [3], [4]], reviewMode: 'github', merge: false, ...(bot === 'codex' ? { reviewBot: 'codex' } : {}) },
+      {
+        Prep: () => ({
+          issues: [
+            { number: 2, title: '[C60] Stamped cheap reviewer, no effort tier', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'sonnet' },
+            { number: 3, title: '[C60] Stamped cheap reviewer with an effort tier', complexity: 60, model: 'opus', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
+            { number: 4, title: '[C90] Unstamped, so the cheap phrase is only ever a re-trigger', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false },
+          ],
+        }),
+      },
+    )
+
+    const { events } = await run('claude')
+    const bare = promptFor(events, 'review-loop:PR#1002 c2-c3')
+    expect(bare, '#2 cycle 1 is the cheap phrase itself').toContain('Cycle 1 of this PR was triggered with `@claude sonnet review`')
+    expect(bare, '#2 must not skip its own cycle-1 comment').toContain('do NOT skip the `@claude sonnet review` comments')
+    expect(bare, '#2 never tells the agent to skip that phrase').not.toContain('skipping any `@claude sonnet review` comment')
+
+    const tiered = promptFor(events, 'review-loop:PR#1003 c2-c3')
+    expect(tiered, '#3 carries an effort tier, so its trigger never collides').toContain('skipping any `@claude sonnet review` comment')
+    expect(tiered, '#3 names its own cycle-1 trigger').toContain('cycle 1 was `@claude sonnet review effort:high`')
+
+    const unstamped = promptFor(events, 'review-loop:PR#1004 c2-c3')
+    expect(unstamped, '#4 still skips the cheap phrase').toContain('skipping any `@claude sonnet review` comment')
+    expect(unstamped, '#4 names its own cycle-1 trigger').toContain('cycle 1 was `@claude fable review effort:high`')
+
+    const { events: codexEvents } = await run('codex')
+    const codexBare = promptFor(codexEvents, 'review-loop:PR#1002 c2-c3')
+    expect(codexBare, 'a stamped sonnet maps onto luna and is cycle 1').toContain('Cycle 1 of this PR was triggered with `@codex luna review`')
+    expect(codexBare, 'the Codex cycle-1 comment is not skipped either').toContain('do NOT skip the `@codex luna review` comments')
+  })
+
   test('a validator rescore never lowers a stamped first review', async () => {
     const stampedIssues = [
       { number: 2, title: '[C5] Stamped fable, rescored to a weaker review band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'high' },
