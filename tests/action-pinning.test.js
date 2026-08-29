@@ -1,0 +1,92 @@
+import { describe, expect, test } from 'bun:test'
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const root = new URL('../', import.meta.url)
+const read = (path) => Bun.file(new URL(path, root)).text()
+
+const SCANNED_ROOTS = ['.github/workflows', 'templates']
+const OWN_REPO = 'richkuo/rk-skills'
+const USES = /^\s*(?:-\s+)?uses:\s*(\S+)/gm
+const PINNED = /^[^@]+@[0-9a-f]{40}$/
+
+function walk(relDir) {
+	const absolute = fileURLToPath(new URL(relDir, root))
+	const found = []
+	for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+		const child = `${relDir}/${entry.name}`
+		if (entry.isDirectory()) found.push(...walk(child))
+		else if (/\.ya?ml$/.test(entry.name)) found.push(child)
+	}
+	return found.sort()
+}
+
+const workflowFiles = SCANNED_ROOTS.flatMap((dir) => walk(dir))
+
+const references = (
+	await Promise.all(
+		workflowFiles.map(async (path) => {
+			const source = await read(path)
+			return [...source.matchAll(USES)].map((match) => ({ path, ref: match[1] }))
+		}),
+	)
+).flat()
+
+const isOwnWorkflow = (ref) => ref.startsWith(`${OWN_REPO}/`)
+
+describe('GitHub Actions pinning contract', () => {
+	test('scans both workflow trees and finds references in each', () => {
+		expect(workflowFiles.length).toBeGreaterThan(0)
+		for (const dir of SCANNED_ROOTS) {
+			expect(references.some(({ path }) => path.startsWith(`${dir}/`))).toBe(true)
+		}
+	})
+
+	test('pins every third-party action to a full commit SHA', () => {
+		const mutable = references
+			.filter(({ ref }) => !isOwnWorkflow(ref))
+			.filter(({ ref }) => !PINNED.test(ref))
+			.map(({ path, ref }) => `${path}: ${ref}`)
+
+		expect(mutable).toEqual([])
+	})
+
+	test('labels every pinned SHA with the version it came from', async () => {
+		const unlabelled = []
+		for (const path of workflowFiles) {
+			const source = await read(path)
+			for (const line of source.split('\n')) {
+				const match = /^\s*(?:-\s+)?uses:\s*(\S+)(.*)$/.exec(line)
+				if (match === null || isOwnWorkflow(match[1])) continue
+				if (!/^\s+#\s*\S/.test(match[2])) unlabelled.push(`${path}: ${line.trim()}`)
+			}
+		}
+
+		expect(unlabelled).toEqual([])
+	})
+
+	test('keeps the reusable-workflow self-references on a branch ref', () => {
+		const own = references.filter(({ ref }) => isOwnWorkflow(ref))
+
+		expect(own.length).toBeGreaterThan(0)
+		for (const { ref } of own) expect(ref.endsWith('@main')).toBe(true)
+	})
+
+	test('rejects a mutable tag reintroduced into either tree', () => {
+		const mutated = 'uses: actions/checkout@v7'
+		const match = /^\s*(?:-\s+)?uses:\s*(\S+)/.exec(mutated)
+
+		expect(PINNED.test(match[1])).toBe(false)
+	})
+
+	test('keeps the harness attribution strings on a readable tag', async () => {
+		const harnesses = [
+			['.github/workflows/claude-run.yml', 'anthropics/claude-code-action@v1'],
+			['.github/workflows/codex-run.yml', 'openai/codex-action@v1'],
+		]
+
+		for (const [path, expected] of harnesses) {
+			expect(await read(path)).toContain(`CLAUDE_HARNESS: ${expected}\n`)
+		}
+	})
+})
