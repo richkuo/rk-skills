@@ -182,7 +182,7 @@ Post one comment that tells the reviewer exactly what happened to each finding �
 
 ### 10. Trigger the re-review
 
-Post one trigger comment asking the selected review bot for a fresh review. Compose and post it per [rereview-routing.md](rereview-routing.md) — read it completely; it holds the bot-selection rule, the rule for identifying the cycle-1 reviewer from the earliest trigger comment on the PR, the step-down ladder and its floor, the band table that applies only when no trigger comment exists, the non-blocking shorthand, and the posting commands for both bots. The step-down is keyed to the reviewer that actually ran cycle 1, at any score — never to a band.
+Post one trigger comment asking the selected review bot for a fresh review. Compose and post it per [rereview-routing.md](rereview-routing.md) — read it completely; it holds the bot-selection rule, the rule for identifying the cycle-1 reviewer from the earliest trigger comment on the PR, the step-down ladder and its floor, the fallback table that applies only when no trigger comment exists, the non-blocking shorthand, and the posting commands for both bots. The step-down is keyed to the reviewer that actually ran cycle 1, at any score — never to a band.
 
 Two rules that decide everything there: route by whether the addressed set contained **any blocking finding** (noted in step 1), never by the newest review's verdict alone; and post the trigger as its **own** comment, never bundled into the disposition comment.
 

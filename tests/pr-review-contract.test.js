@@ -837,7 +837,8 @@ describe('PR review contract', () => {
     expect(flags).toContain('Red Flags — STOP')
     expect(flags).toContain('Common Mistakes')
     expect(flags).toContain('Blind-implementing the review')
-    expect(routing).toMatch(/C0.{0,4}C10/)
+    expect(routing).toMatch(/`validate-issue` step 6 owns the authoritative band table/)
+    expect(routing).not.toMatch(/C\d+\s*[–-]\s*C?\d+/)
     expect(routing).toContain('@claude sonnet review')
     expect(routing).toContain('@claude opus review')
     expect(routing).toContain('@claude fable review effort:high')
@@ -877,20 +878,45 @@ describe('PR review contract', () => {
       'skills/work-on-issue-loop/SKILL.md',
       'templates/claude-workflow/prompts/issue-workflow.md',
     ])
+    const ACTION_PROMPTS = new Set([
+      'templates/claude-workflow/prompts/issue-workflow.md',
+      'templates/claude-workflow/prompts/fix-pr.md',
+    ])
+    const TIERLESS_FABLE_SITE = 'skills/work-on-issue-loop/SKILL.md'
     for (const path of consumers) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: C41–C80 opus tier`).toMatch(/@claude opus review/)
-      expect(body, `${path}: C0–C10 sonnet tier`).toMatch(/@claude sonnet review/)
-      expect(body, `${path}: band read from a C score`).toMatch(/C0.{0,4}C10/)
+      expect(body, `${path}: opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: sonnet tier`).toMatch(/@claude sonnet review/)
+      if (ACTION_PROMPTS.has(path)) {
+        expect(body, `${path}: spells out the moved boundaries`).toMatch(/C0 to C20/)
+        expect(body, `${path}: spells out the standard-trigger row`).toMatch(/C21 to C70/)
+        expect(body, `${path}: spells out the opus row`).toMatch(/C71 to C80/)
+      } else {
+        expect(body, `${path}: states no first-review boundary of its own`).not.toMatch(
+          /C\d+\s*(?:–|-|to )\s*C?\d+/,
+        )
+        expect(body, `${path}: points at the owner table`).toMatch(
+          /`validate-issue` step 6[^.]{0,120}(?:table|owns)|owner table/i,
+        )
+      }
       if (FIRST_REVIEW_SITES.has(path)) {
-        expect(body, `${path}: C81+ fable tier`).toMatch(/@claude fable review effort:high/)
+        if (path !== TIERLESS_FABLE_SITE) {
+          expect(body, `${path}: fable tier`).toMatch(/@claude fable review effort:high/)
+        } else {
+          expect(body, `${path}: fable tier, tier stated separately`).toMatch(
+            /@claude fable review`?,? each keeping the stamped `?effort:<tier>/,
+          )
+        }
       } else {
         expect(body, `${path}: fixer must not post a fable trigger`).not.toMatch(
           /--body "@claude fable review|body the .{0,20}words @claude fable review/,
         )
-        expect(body, `${path}: fable steps down`).toMatch(/steps? down|step-down/i)
-        expect(body, `${path}: fable never repeats`).toMatch(
-          /only ever runs once|reviews the first cycle only|first cycle only/i,
+        expect(body, `${path}: the heavy reviewers step down`).toMatch(/steps? down|step-down/i)
+        expect(body, `${path}: one blocking cycle only`).toMatch(
+          /runs one blocking cycle only|reviews one cycle only|never repeated on a blocking re-review/i,
+        )
+        expect(body, `${path}: an opus cycle 1 steps down too`).toMatch(
+          /opus[^.]{0,200}(?:steps? down|single rung|@claude review)/i,
         )
         expect(body, `${path}: ladder floors above sonnet`).toMatch(
           /never (?:steps? down|drops?) to (?:`?@claude )?sonnet|stops (?:there|at `@claude review`)[^.]{0,80}sonnet/i,
@@ -906,10 +932,10 @@ describe('PR review contract', () => {
     ]
     for (const path of CODEX_CONSUMERS) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: C0–C10 cheap tier`).toMatch(/@codex luna review/)
-      expect(body, `${path}: band read from a C score`).toMatch(/C0 to C10/)
-      expect(body, `${path}: C11+ collapses onto the bare trigger`).toMatch(
-        /@codex review at C11 and above/,
+      expect(body, `${path}: cheap tier`).toMatch(/@codex luna review/)
+      expect(body, `${path}: band read from a C score`).toMatch(/C0 to C20/)
+      expect(body, `${path}: C21+ collapses onto the bare trigger`).toMatch(
+        /@codex review at C21 and above/,
       )
       expect(body, `${path}: never posts a @claude trigger`).not.toMatch(
         /body[^.]{0,40}@claude|--body "@claude/,
@@ -1031,8 +1057,10 @@ describe('PR review contract', () => {
     for (const path of consumers) {
       const body = (await read(path)).replace(/\s+/g, ' ')
       expect(body, `${path}: names the cheap Codex tier`).toMatch(/@codex luna review/)
-      expect(body, `${path}: ties the cheap tier to C0-C10`).toMatch(
-        /@codex luna review[^.]{0,120}C0.{0,4}C10|C0.{0,4}C10[^.]{0,120}@codex luna review/,
+      expect(body, `${path}: ties the cheap tier to the cheapest band`).toMatch(
+        path.startsWith('templates/')
+          ? /@codex luna review[^.]{0,120}C0 to C20|C0 to C20[^.]{0,120}@codex luna review/
+          : /@codex luna review[^.]{0,160}cheapest|cheapest[^.]{0,160}@codex luna review/i,
       )
       expect(body, `${path}: no band-free "post @codex review instead"`).not.toMatch(
         /post `?@codex review`? instead/i,
@@ -1118,8 +1146,11 @@ describe('PR review contract', () => {
 
   test('the routing page lets a band row apply only with no cycle-1 trigger comment', async () => {
     const body = (await read('skills/fix-pr-review/rereview-routing.md')).replace(/\s+/g, ' ')
-    expect(body, 'band table is gated on having no cycle-1 trigger comment').toMatch(
-      /band table[^.]{0,80}ONLY when the PR carries no cycle-1 trigger comment/i,
+    expect(body, 'fallback table is gated on having no cycle-1 trigger comment').toMatch(
+      /fallback table[^.]{0,80}ONLY when the PR carries no cycle-1 trigger comment/i,
+    )
+    expect(body, 'the fallback never hands out a fresh opus rung').toMatch(
+      /@claude opus review`?,? but only when no `?@claude opus review`? comment already exists/i,
     )
     expect(body, 'the gate covers a PR left with no trigger after the skip').toMatch(
       /none left after the cheap non-blocking re-triggers are skipped/i,
@@ -1140,8 +1171,17 @@ describe('PR review contract', () => {
       /consumes no rung|never a ladder position/i,
     )
     expect(body, 'the cheap re-trigger is skipped during the cycle-1 read').toMatch(
-      /skipping every cheap non-blocking re-trigger[^.]{0,160}unless the PR's band is C0–C10/i,
+      /skipping every cheap non-blocking re-trigger[^.]{0,200}unless the cheap phrase is what cycle 1 itself would have used/i,
     )
+    expect(body, 'a cheap stamp is exempt from the skip at any band').toMatch(
+      /stamped `?PR review:?`? line[^.]{0,160}names the cheap reviewer[^.]{0,200}at any band/i,
+    )
+    for (const path of ['templates/claude-workflow/prompts/fix-pr.md', 'templates/codex-workflow/prompts/fix-pr.md']) {
+      const prompt = (await read(path)).replace(/\s+/g, ' ')
+      expect(prompt, `${path}: a cheap stamp is exempt from the skip at any band`).toMatch(
+        /unless that same phrase is what cycle 1 itself would have used[^.]{0,240}stamped PR review:? line[^.]{0,160}at any band/i,
+      )
+    }
     for (const path of [
       'templates/claude-workflow/prompts/fix-pr.md',
       'templates/codex-workflow/prompts/fix-pr.md',
@@ -1199,7 +1239,7 @@ describe('PR review contract', () => {
     )
   })
 
-  test('every step-down statement keys the ladder to a Fable first review, never to a band', async () => {
+  test('every step-down statement keys the ladder to the cycle-1 reviewer, never to a band', async () => {
     const consumers = [
       'skills/fix-pr-review/rereview-routing.md',
       'skills/fix-pr-review/SKILL.md',
@@ -1223,11 +1263,17 @@ describe('PR review contract', () => {
     }
     for (const path of ['skills/fix-pr-review/rereview-routing.md', 'templates/claude-workflow/prompts/fix-pr.md']) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: stamped fable steps down at any score`).toMatch(
-        /stamped[^.]{0,120}[Ff]able[^.]{0,120}any score|PR review[^.]{0,120}[Ff]able[^.]{0,140}any score/,
+      expect(body, `${path}: a stamped heavy reviewer steps down at any score`).toMatch(
+        /stamp[^.]{0,140}(?:[Ff]able|[Oo]pus)[^.]{0,140}any score|PR review[^.]{0,140}(?:[Ff]able|[Oo]pus)[^.]{0,160}any score/,
       )
-      expect(body, `${path}: non-fable first review keeps its trigger`).toMatch(
-        /(?:any )?other (?:model|than Fable)[^.]{0,120}keeps its own trigger|first review on any model other than Fable keeps its own trigger/i,
+      expect(body, `${path}: an opus cycle 1 steps down to the standard trigger`).toMatch(
+        /opus[^.]{0,220}@claude review/i,
+      )
+      expect(body, `${path}: only reviewers at or below the floor repeat`).toMatch(
+        /(?:standard trigger|@claude review)[^.]{0,200}(?:repeats?|keeps its own trigger)|at or below the ladder floor/i,
+      )
+      expect(body, `${path}: no consumer exempts opus from the ladder`).not.toMatch(
+        /(?:any )?(?:model )?other than Fable[^.]{0,140}keeps its own trigger|first review on any model other than Fable keeps its own trigger/i,
       )
     }
   })

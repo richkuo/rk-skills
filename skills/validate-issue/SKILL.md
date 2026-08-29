@@ -93,16 +93,27 @@ Read [complexity-scoring.md](complexity-scoring.md) completely on every validati
 
 The fableplan signal is yes when the score is 71 or higher. It is no below 71.
 
-The **first review** escalates on its own, coarser scale, so its boundaries do not line up with the bands above:
+The **first review** escalates on its own, coarser scale. Its boundaries fall on the band edges above, so each first-review row groups whole bands rather than cutting across them. It is still a separate table, but each row must start on a band edge above, so a band change that moves an edge this table uses moves this table with it, while a band split that only adds a new edge leaves it unchanged.
 
-| Score | First review | Trigger |
+| Score | First review | Claude trigger | Codex trigger |
+|---|---|---|---|
+| 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |
+| 21–70 | the reviewer's default model | `@claude review` (standard trigger, no pinned model) | `@codex review` |
+| 71–80 | Opus 5 · high | `@claude opus review` | `@codex review` |
+| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` | `@codex review` |
+
+Codex exposes one flagship and no Fable tier, so every row above 0–20 collapses onto the bare `@codex review`. The cheap `@codex luna review` covers the 0–20 row and the non-blocking re-review only.
+
+A missing score reviews on the heaviest row (Fable) because the complexity is unknown. "Missing" means the title carries no `[C<score>]` prefix at all. A literal `[C0]` is a real score — every axis graded 0 — so it takes the `0–9` build band and the `0–20` first-review row like any other score.
+
+**Every reviewer above the standard trigger runs one blocking cycle only.** Each blocking re-review steps down one rung. The ladder floor is `@claude review`, which repeats for every blocking cycle after it:
+
+| Cycle-1 reviewer | Blocking cycle 2 | Blocking cycle 3 and after |
 |---|---|---|
-| 0–10 | Sonnet 5 · high | `@claude sonnet review` |
-| 11–40 | the reviewer's default model | `@claude review` (standard trigger, no pinned model) |
-| 41–80 | Opus 5 · high | `@claude opus review` |
-| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` |
+| `@claude fable review effort:high` | `@claude opus review` | `@claude review` |
+| `@claude opus review` | `@claude review` | `@claude review` |
 
-A missing score reviews on the heaviest row (Fable) because the complexity is unknown. "Missing" means the title carries no `[C<score>]` prefix at all. A literal `[C0]` is a real score — every axis graded 0 — so it takes the `0–9` build band and the `0–10` first-review row like any other score. Fable reviews the first cycle only: after a Fable first review, the blocking re-reviews step down one rung each — `@claude opus review` for the first, `@claude review` for every one after that. The ladder stops at `@claude review`; it never steps down to Sonnet, because a C81+ change keeps a capable reviewer however many cycles it takes. The step-down is keyed to the reviewer that actually ran cycle 1, and the score band does not decide it: a Fable first review steps down however it was selected — the 81–99 row, or a stamped `PR review:` line naming Fable at any score — while a first review on any other model keeps its own model for every blocking re-review. A pass that addressed only non-blocking findings drops to `@claude sonnet review` without consuming a rung.
+The ladder never steps down to Sonnet, because a change that earned a capable first review keeps one however many cycles it takes. Sonnet sits below the floor and takes no rung: a Sonnet cycle 1 repeats `@claude sonnet review` for every blocking re-review, and the ladder never steps up from it. The step-down is keyed to the reviewer that actually ran cycle 1, and the score band does not decide it: a stamped `PR review:` line naming Fable or Opus at any score steps down exactly like a band-selected one. A pass that addressed only non-blocking findings drops to `@claude sonnet review` without consuming a rung. Codex has no ladder — its cycle-1 trigger repeats for every blocking re-review.
 
 Report only `N/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>` plus the traced edit list.
 

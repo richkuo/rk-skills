@@ -136,9 +136,9 @@ const BANDS = [
 ]
 
 const REVIEW_BANDS = [
-  { name: '0–10', min: 0, max: 10, review: { model: 'sonnet', effort: 'high' } },
-  { name: '11–40', min: 11, max: 40, review: { model: null, effort: 'high' } },
-  { name: '41–80', min: 41, max: 80, review: { model: 'opus', effort: 'high' } },
+  { name: '0–20', min: 0, max: 20, review: { model: 'sonnet', effort: 'high' } },
+  { name: '21–70', min: 21, max: 70, review: { model: null, effort: 'high' } },
+  { name: '71–80', min: 71, max: 80, review: { model: 'opus', effort: 'high' } },
   { name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } },
 ]
 
@@ -189,9 +189,20 @@ function firstReviewTrigger(ex) {
   return `@claude ${review.model} review effort:${review.effort}`
 }
 
+const STEP_DOWN_LADDERS = {
+  fable: [{ model: 'opus', effort: 'high' }, { model: null, effort: 'high' }],
+  opus: [{ model: null, effort: 'high' }],
+}
+
+const CLAUDE_STEP_DOWN_TRIGGER = [
+  [/^@claude\s+fable\b/, '@claude opus review'],
+  [/^@claude\s+opus\b/, '@claude review'],
+]
+
 function blockingRetrigger(ex) {
   const cycle1 = firstReviewTrigger(ex)
-  if (REVIEW_BOT !== 'codex' && /^@claude\s+fable\b/.test(cycle1)) return '@claude opus review'
+  if (REVIEW_BOT === 'codex') return cycle1
+  for (const [pattern, rung] of CLAUDE_STEP_DOWN_TRIGGER) if (pattern.test(cycle1)) return rung
   return cycle1
 }
 
@@ -387,7 +398,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
 1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/${REVIEW_BOT}.yml uses a different trigger phrase, match it.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
-4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot. The blocking re-trigger is keyed to the reviewer that actually ran cycle 1 — the trigger you posted in step 1 — and the band does not decide it, because the band only ever selected that reviewer. For this PR that makes the blocking re-trigger exactly \`${blockingRetrigger(ex)}\` and the non-blocking one \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`; post the one that matches what you addressed, verbatim.${REVIEW_BOT === 'claude' ? ' (That value already applies the rule: a `@claude fable review` cycle 1 steps down to `@claude opus review`, because fable reviews the first cycle only and its trigger is never repeated; a cycle 1 on any other model repeats its own trigger, so a stamped reviewer survives every cycle.)' : ' (This run selected Codex — never switch to @claude. Codex exposes one flagship and no fable tier, so its cycle-1 trigger simply repeats; the C81+ ladder stays on the bare trigger and never reaches luna.)'} Then wait for that re-review verdict.
+4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot. The blocking re-trigger is keyed to the reviewer that actually ran cycle 1 — the trigger you posted in step 1 — and the band does not decide it, because the band only ever selected that reviewer. For this PR that makes the blocking re-trigger exactly \`${blockingRetrigger(ex)}\` and the non-blocking one \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`; post the one that matches what you addressed, verbatim.${REVIEW_BOT === 'claude' ? ' (That value already applies the rule: every reviewer above the standard trigger runs one blocking cycle only, so a `@claude fable review` cycle 1 steps down to `@claude opus review` and a `@claude opus review` cycle 1 steps down to `@claude review`, and neither trigger is ever repeated on a blocking re-review; a cycle 1 on the standard trigger or on sonnet sits at or below the ladder floor and repeats its own trigger, so that reviewer survives every cycle.)' : ' (This run selected Codex — never switch to @claude. Codex exposes one flagship and no fable tier, so its cycle-1 trigger simply repeats; the C81+ ladder stays on the bare trigger and never reaches luna.)'} Then wait for that re-review verdict.
 5. Stop after that verdict. Do not fix the re-review's findings; the pipeline gives later cycles to another agent.
 
 Return the standing verdict as github_review_status, the remaining non-blocking count, and a github_review_summary. If cycle 1 cannot finish, return github_review_status blocked and github_review_blocker.`
@@ -410,7 +421,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it, skipping any \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comment while you look — that is the cheap non-blocking re-trigger, which a pass posts at any band and which is never cycle 1 unless the band itself selected it.${REVIEW_BOT === 'claude' ? ' If that cycle-1 trigger names fable, step down one rung per blocking re-review — `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened; that ladder stops at `@claude review` and never reaches sonnet, and the fable trigger is never repeated because fable reviews the first cycle only. If it names any other model, repeat that same trigger verbatim for every blocking re-review, whatever the band, so a stamped reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it, ${firstReviewTrigger(ex) === NONBLOCKING_RETRIGGER[REVIEW_BOT] ? `and do NOT skip the \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comments while you look: cycle 1 of THIS pull request was itself \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`, so the EARLIEST such comment is the genuine cycle 1 and the blocking re-trigger repeats it verbatim` : `skipping any \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comment while you look — that is the cheap non-blocking re-trigger, which a pass posts at any band and which is not cycle 1 here, because cycle 1 was \`${firstReviewTrigger(ex)}\``}.${REVIEW_BOT === 'claude' ? ' Every reviewer above the standard trigger runs one blocking cycle only, so step down one rung per blocking re-review. If that cycle-1 trigger names fable, the rungs are `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened. If it names opus, the single rung is `@claude review`, posted for the first blocking re-review and every one after it. Either ladder stops at `@claude review` and never reaches sonnet, and neither the fable nor the opus trigger is ever repeated on a blocking re-review. If the cycle-1 trigger is the standard `@claude review` or names sonnet, it sits at or below the ladder floor: repeat that same trigger verbatim for every blocking re-review, whatever the band, so that reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -516,11 +527,11 @@ After pushing, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. 
 async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
   const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review
   const firstReview = { model: MODEL_IDS[ex.first_review_model] || bandReview.model, effort: ex.first_review_effort || bandReview.effort }
-  const FABLE_STEP_DOWN = [{ model: 'opus', effort: 'high' }, { model: null, effort: 'high' }]
+  const ladder = STEP_DOWN_LADDERS[firstReview.model]
   let stepDown = 0
   const nextBlockingReview = () => {
-    if (firstReview.model !== 'fable') return firstReview
-    const rung = FABLE_STEP_DOWN[Math.min(stepDown, FABLE_STEP_DOWN.length - 1)]
+    if (!ladder) return firstReview
+    const rung = ladder[Math.min(stepDown, ladder.length - 1)]
     stepDown += 1
     return rung
   }
