@@ -91,6 +91,26 @@ describe('PR review worked example', () => {
     }
   })
 
+  test('the recap names every field the worked example shows', () => {
+    const start = example.indexOf('What the example demonstrates:')
+    expect(start, 'the recap section is missing').toBeGreaterThan(-1)
+    const recap = example
+      .slice(start, example.indexOf('## Example 2', start))
+      .replace(/-/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+    const shown = new Set(
+      [...needsUpdates.matchAll(/^\*\*([^*]+):\*\*/gm)].map((match) => match[1]),
+    )
+    expect(shown.size).toBeGreaterThanOrEqual(5)
+    for (const field of shown) {
+      expect(
+        recap,
+        `the recap never names ${field}, so the recap and the example disagree`,
+      ).toContain(field.toLowerCase())
+    }
+  })
+
   test('uses no field name the Format rules do not define', () => {
     for (const [, field] of needsUpdates.matchAll(/^\*\*([^*]+:)\*\*/gm)) {
       expect(DEFINED_FIELDS.has(field), `undefined field name: ${field}`).toBe(true)

@@ -96,10 +96,12 @@ What the example demonstrates:
 - **The verdict keys off blocking sections only.** Two blocking items are present, so the first
   line is `Needs Updates`. Had only the last two sections carried items, the first line would be
   `LGTM` with those sections below it.
-- **Field order is fixed.** `### Needs Fixing` and `### Recommended Optional` items carry
-  **Invariant:** then **Must survive:**; `### Requires Human Review` items carry **Recommended
-  proposed solution:**; `### Create Follow-up Issue` items carry neither. Every item in every
-  section ends with **Plain simple English:**.
+- **Field order is fixed.** A `### Needs Fixing` item carries **Reachability:** first when the
+  ordinary path does not reach its defect, and omits that field otherwise; `### Needs Fixing` and
+  `### Recommended Optional` items then carry **Invariant:** then **Must survive:**;
+  `### Requires Human Review` items carry **Recommended proposed solution:**;
+  `### Create Follow-up Issue` items carry neither. Every item in every section ends with
+  **Plain simple English:**.
 - **The verification-limitation line is not a finding.** It sits between the last finding
   section and the footer, never under an H3 section, and carries no `Invariant` /
   `Must survive` / `Plain simple English`. Review loops do not treat it as remaining work.
