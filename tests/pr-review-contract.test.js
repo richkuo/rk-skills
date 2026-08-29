@@ -1461,4 +1461,64 @@ describe('PR review contract', () => {
     expect(inventory).toMatch(/@claude opus review.{0,120}@claude fable review effort:high/)
     expect(inventory).toMatch(/@claude sonnet review.{0,120}@claude review/)
   })
+
+  const BROKEN_TEST_CASES = ['Outdated', 'Wrong', 'Obsolete']
+
+  const RELEVANCE_CHECK_COPIES = [
+    'CLAUDE.md',
+    'docs/contract-inventory.md',
+    'skills/work-on-issue/SKILL.md',
+    'skills/fix-pr-review/SKILL.md',
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+  ]
+
+  const relevanceCheckRegion = (flat, copyPath) => {
+    const start = flat.indexOf('breaks in another location')
+    expect(start, `${copyPath}: the broken-test relevance check is missing`).toBeGreaterThan(-1)
+    return flat.slice(start, start + 700)
+  }
+
+  test.each(RELEVANCE_CHECK_COPIES)(
+    '%s names all three cases inside the broken-test relevance check',
+    async (copyPath) => {
+      const flat = (await read(copyPath)).replace(/\s+/g, ' ').replace(/[`*]/g, '')
+      const region = relevanceCheckRegion(flat, copyPath)
+      for (const caseName of BROKEN_TEST_CASES) {
+        expect(region, `${copyPath}: the relevance check omits ${caseName}`).toContain(caseName)
+      }
+    },
+  )
+
+  test.each(RELEVANCE_CHECK_COPIES)(
+    '%s routes a test that is none of the three cases to the code',
+    async (copyPath) => {
+      const flat = (await read(copyPath)).replace(/\s+/g, ' ').replace(/[`*]/g, '')
+      const region = relevanceCheckRegion(flat, copyPath)
+      expect(region, `${copyPath}: the routing does not span all three cases`).toMatch(
+        /none of the three[^.]{0,80}broke real behavior/,
+      )
+    },
+  )
+
+  const CASE_ENUMERATION_COPIES = [
+    'skills/work-on-issue/SKILL.md',
+    'skills/fix-pr-review/SKILL.md',
+    'skills/fix-pr-review/disposition-comment.md',
+    'skills/pr-review/SKILL.md',
+    'templates/claude-workflow/prompts/fix-pr.md',
+    'templates/codex-workflow/prompts/fix-pr.md',
+    'templates/claude-workflow/prompts/pr-review-format.md',
+    'templates/codex-workflow/prompts/pr-review-format.md',
+  ]
+
+  test.each(CASE_ENUMERATION_COPIES)(
+    '%s enumerates the three cases together where a test edit is disclosed',
+    async (copyPath) => {
+      const flat = (await read(copyPath)).replace(/\s+/g, ' ').replace(/[`*]/g, '')
+      expect(flat, `${copyPath}: the three cases are not enumerated together`).toMatch(
+        /Outdated[^.]{0,30}Wrong[^.]{0,30}Obsolete/,
+      )
+    },
+  )
 })

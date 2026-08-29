@@ -20,6 +20,7 @@ Reference for SKILL.md: the stop conditions and the failure patterns this skill 
 | All findings refuted | Still post the disposition comment with the rebuttals and request re-review — don't silently no-op |
 | `Requires Human Review` item | Prefer the item's **Recommended proposed solution:** when present; still verify against the step 4 best-solution standard. Implement the chosen solution; document the decision + rejected alternatives in the comment so the user can override. Never pause for confirmation, punt the bare tradeoff, or guess blindly |
 | Tests/build fail after fixes | Report the failure; don't push or claim success |
+| A failing test looks wrong to you and no checkable ground says so | Leave it and fix the code — your reading is not a ground. Check first whether the red test refutes the finding. If the correct fix still cannot make it pass, stop before step 8 and report the test with its `file:line` and the conflict |
 | PR is `CONFLICTING` with the base branch | Resolve via step 7 (merge base into head, reconcile intent of both sides, re-verify) — never rebase a pushed PR branch, never resolve by blanket `ours`/`theirs`, never leave an approved PR unmergeable |
 | Conflict sides are irreconcilable in intent (esp. money/data/security/auto-protective code) | Stop and surface to the user instead of guessing a resolution |
 
