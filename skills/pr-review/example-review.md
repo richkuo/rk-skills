@@ -49,8 +49,8 @@ All four H3 sections appear in their fixed order: the two blocking sections
 (`### Recommended Optional`, `### Create Follow-up Issue`). Omit any section with no items — a
 real review rarely fills all four. Each item shows its full field set in the required order, and
 `**Plain simple English:**` is always the item's last field. The `### Needs Fixing` item below also
-carries `**Reachability:**` as its first field, because its defect needs a precondition; an item on
-the ordinary path omits that field.
+carries `**Reachability:**` as its first field, because the ordinary path does not reach its
+defect; an item whose defect the ordinary path does reach omits that field.
 
 ```markdown
 Needs Updates

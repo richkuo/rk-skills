@@ -1603,8 +1603,15 @@ describe('PR review contract', () => {
         /Reachability:[\s\S]{0,120}first field, immediately before Invariant:/i,
       )
       expect(region, `${copyPath}: an ordinary-path finding is not allowed to omit the field`).toMatch(
-        /ordinary path omits the field/i,
+        /ordinary path[\s\S]{0,20}omits the field/i,
       )
+      expect(region, `${copyPath}: the field trigger is not stated as reachability alone`).toMatch(
+        /criterion is reachability alone/i,
+      )
+      expect(
+        region,
+        `${copyPath}: the field trigger is stated by frequency, which the blocking test forbids`,
+      ).not.toMatch(/\brare\b|\bunlikely\b|\binfrequent\b/i)
       expect(region, `${copyPath}: the field is not confined to Needs Fixing`).toMatch(
         /never appears in the other three sections/i,
       )

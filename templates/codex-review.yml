@@ -310,18 +310,21 @@ jobs:
             the example that any fix must handle: compound states, inverse
             scenario, boundary).
 
-            Reachability field, on a rare-path blocking finding. A
-            `### Needs Fixing` item whose defect needs a special
-            precondition states that trigger as **Reachability:** — the item's
-            first field, immediately before **Invariant:**. An item on the
-            ordinary path omits the field, and the field never appears in the
-            other three sections. The fixer reads the stated precondition as
-            part of the claim: refuting it from current code refutes the
-            finding's blocking status while the defect itself may still
-            stand, and the finding re-routes to `### Recommended Optional`.
-            That re-route reaches you as a Corrected scope (partial)
-            disposition, which the prior-cycle rule above already treats as
-            settling.
+            Reachability field, on a blocking finding the ordinary path does
+            not reach. A `### Needs Fixing` item whose defect the
+            ordinary path does not reach — reaching it takes a specific input,
+            state, or timing — states that trigger as **Reachability:** — the
+            item's first field, immediately before **Invariant:**. An item
+            whose defect the ordinary path does reach omits the field, and the
+            field never appears in the other three sections. The criterion is
+            reachability alone. How often the trigger occurs decides nothing,
+            in keeping with the blocking test above. The fixer reads the
+            stated precondition as part of the claim: refuting it from current
+            code refutes the finding's blocking status while the defect itself
+            may still stand, and the finding re-routes to
+            `### Recommended Optional`. That re-route reaches you as
+            a Corrected scope (partial) disposition, which the prior-cycle
+            rule above already treats as settling.
 
             Anchor every file:line to the pull request head commit. Resolve
             each citation against the head commit you reviewed. A working-tree
