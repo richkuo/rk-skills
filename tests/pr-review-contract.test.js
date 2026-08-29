@@ -882,12 +882,11 @@ describe('PR review contract', () => {
       'templates/claude-workflow/prompts/issue-workflow.md',
       'templates/claude-workflow/prompts/fix-pr.md',
     ])
+    const TIERLESS_FABLE_SITE = 'skills/work-on-issue-loop/SKILL.md'
     for (const path of consumers) {
       const body = (await read(path)).replace(/\s+/g, ' ')
-      if (path !== 'skills/work-on-issue-loop/SKILL.md') {
-        expect(body, `${path}: opus tier`).toMatch(/@claude opus review/)
-        expect(body, `${path}: sonnet tier`).toMatch(/@claude sonnet review/)
-      }
+      expect(body, `${path}: opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: sonnet tier`).toMatch(/@claude sonnet review/)
       if (ACTION_PROMPTS.has(path)) {
         expect(body, `${path}: spells out the moved boundaries`).toMatch(/C0 to C20/)
         expect(body, `${path}: spells out the standard-trigger row`).toMatch(/C21 to C70/)
@@ -901,8 +900,12 @@ describe('PR review contract', () => {
         )
       }
       if (FIRST_REVIEW_SITES.has(path)) {
-        if (ACTION_PROMPTS.has(path)) {
+        if (path !== TIERLESS_FABLE_SITE) {
           expect(body, `${path}: fable tier`).toMatch(/@claude fable review effort:high/)
+        } else {
+          expect(body, `${path}: fable tier, tier stated separately`).toMatch(
+            /@claude fable review`?,? each keeping the stamped `?effort:<tier>/,
+          )
         }
       } else {
         expect(body, `${path}: fixer must not post a fable trigger`).not.toMatch(

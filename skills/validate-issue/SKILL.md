@@ -93,7 +93,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely on every validati
 
 The fableplan signal is yes when the score is 71 or higher. It is no below 71.
 
-The **first review** escalates on its own, coarser scale. Its boundaries fall on the band edges above, so each first-review row groups whole bands rather than cutting across them. It is still a separate table: a change to the bands above does not move it.
+The **first review** escalates on its own, coarser scale. Its boundaries fall on the band edges above, so each first-review row groups whole bands rather than cutting across them. It is still a separate table, but each row must start on a band edge above, so a band change that moves an edge this table uses moves this table with it, while a band split that only adds a new edge leaves it unchanged.
 
 | Score | First review | Claude trigger | Codex trigger |
 |---|---|---|---|

@@ -29,7 +29,7 @@ gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,
   ```
   Record the trigger timestamp, set `review_count = 1`, and go to step 2 to wait for it.
 
-**First-review trigger — derived from the complexity score.** A heavier change earns a more capable reviewer. **`validate-issue` step 6 owns the first-review table** — its score rows, its Claude triggers and its Codex column. Load it and read the row for this PR's score; this file states no boundary of its own. The first-review scale is coarser than the validate/build bands: each of its rows groups whole bands rather than cutting across them, and it is still a separate table that a band change does not move.
+**First-review trigger — derived from the complexity score.** A heavier change earns a more capable reviewer. **`validate-issue` step 6 owns the first-review table** — its score rows, its Claude triggers and its Codex column. Load it and read the row for this PR's score; this file states no boundary of its own. The first-review scale is coarser than the validate/build bands: each of its rows groups whole bands rather than cutting across them, and it is still a separate table, but each row must start on a band edge above, so a band change that moves an edge this table uses moves this table with it, while a band split that only adds a new edge leaves it unchanged.
 
 Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (an explicit `@claude <model> review effort:<tier>` there overrides the band), the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top row because the complexity is unknown. Fable never runs at xhigh.
 

@@ -100,6 +100,13 @@ describe('first-review boundary drift', () => {
           `${path}: states C${low}–C${high}, which the owner table does not`,
         ).toBeTrue()
       }
+      for (const match of body.matchAll(/C(\d+)\+|C?(\d+) and above/g)) {
+        const min = Number(match[1] ?? match[2])
+        expect(
+          rows.some((row) => row.min === min),
+          `${path}: states an open-ended boundary at ${min}, which starts no owner table row`,
+        ).toBeTrue()
+      }
     }
   })
 
