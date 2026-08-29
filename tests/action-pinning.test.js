@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { readdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const SCANNED_ROOTS = ['.github/workflows', 'templates']
+const SCANNED_ROOTS = ['.github/workflows', '.github/actions', 'templates']
 const OWN_REPO = 'richkuo/rk-skills'
 const USES = /^\s*(?:-\s+)?uses:\s*(\S+)/gm
 const PINNED = /^[^@]+@[0-9a-f]{40}$/
@@ -13,7 +13,14 @@ const PINNED = /^[^@]+@[0-9a-f]{40}$/
 function walk(relDir) {
 	const absolute = fileURLToPath(new URL(relDir, root))
 	const found = []
-	for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+	let entries
+	try {
+		entries = readdirSync(absolute, { withFileTypes: true })
+	} catch (err) {
+		if (err.code === 'ENOENT') return found
+		throw err
+	}
+	for (const entry of entries) {
 		const child = `${relDir}/${entry.name}`
 		if (entry.isDirectory()) found.push(...walk(child))
 		else if (/\.ya?ml$/.test(entry.name)) found.push(child)
@@ -35,10 +42,29 @@ const references = (
 const isOwnWorkflow = (ref) => ref.startsWith(`${OWN_REPO}/`)
 
 describe('GitHub Actions pinning contract', () => {
-	test('scans both workflow trees and finds references in each', () => {
+	test('scans every declared root and finds references where they exist', () => {
 		expect(workflowFiles.length).toBeGreaterThan(0)
-		for (const dir of SCANNED_ROOTS) {
+		for (const dir of ['.github/workflows', 'templates']) {
 			expect(references.some(({ path }) => path.startsWith(`${dir}/`))).toBe(true)
+		}
+	})
+
+	test('catches a mutable ref added under a scanned-but-currently-empty root', () => {
+		const fixtureDir = fileURLToPath(new URL('.github/actions/_pinning-test-fixture', root))
+		mkdirSync(fixtureDir, { recursive: true })
+		writeFileSync(`${fixtureDir}/action.yml`, 'runs:\n  using: composite\n  steps:\n    - uses: actions/checkout@v7\n')
+		try {
+			const fixtureFiles = walk('.github/actions')
+			expect(fixtureFiles).toContain('.github/actions/_pinning-test-fixture/action.yml')
+
+			const fixtureRefs = fixtureFiles.flatMap((path) => {
+				const source = readFileSync(fileURLToPath(new URL(path, root)), 'utf8')
+				return [...source.matchAll(USES)].map((match) => match[1])
+			})
+			const mutable = fixtureRefs.filter((ref) => !isOwnWorkflow(ref) && !PINNED.test(ref))
+			expect(mutable).toEqual(['actions/checkout@v7'])
+		} finally {
+			rmSync(fixtureDir, { recursive: true, force: true })
 		}
 	})
 
