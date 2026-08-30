@@ -489,6 +489,21 @@ describe('standalone review templates', () => {
     }
   })
 
+  test('every claude-run.yml allowlist names only tools the pinned build has', async () => {
+    const workflow = await read('.github/workflows/claude-run.yml')
+    const allowlists = [...workflow.matchAll(/ALLOWED='([^']+)'/g)].map((m) => m[1])
+    expect(allowlists.length).toBeGreaterThanOrEqual(3)
+    for (const list of allowlists) {
+      const names = list.split(',')
+      expect(names, list).not.toContain('MultiEdit')
+      if (names.includes('Edit') || names.includes('Write')) {
+        expect(names, list).toContain('Edit')
+        expect(names, list).toContain('Write')
+      }
+    }
+    expect(workflow).not.toMatch(/MultiEdit/)
+  })
+
   test('the Actions review routes select the guarded prompt with no fetch tool and no write sandbox', async () => {
     const claude = await read('.github/workflows/claude-run.yml')
     expect(claude).toContain('PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md')
