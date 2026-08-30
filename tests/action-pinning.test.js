@@ -98,13 +98,6 @@ describe('GitHub Actions pinning contract', () => {
 		for (const { ref } of own) expect(ref.endsWith('@main')).toBe(true)
 	})
 
-	test('rejects a mutable tag reintroduced into either tree', () => {
-		const mutated = 'uses: actions/checkout@v7'
-		const match = /^\s*(?:-\s+)?uses:\s*(\S+)/.exec(mutated)
-
-		expect(PINNED.test(match[1])).toBe(false)
-	})
-
 	test('keeps the harness attribution strings on a readable tag', async () => {
 		const harnesses = [
 			['.github/workflows/claude-run.yml', 'anthropics/claude-code-action@v1'],

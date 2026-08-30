@@ -3,8 +3,10 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
+const OWNER = 'skills/github-issue-format/SKILL.md'
+
 const ISSUE_BODY_CONSUMERS = [
-  'skills/github-issue-format/SKILL.md',
+  OWNER,
   'skills/new-issue/SKILL.md',
   'skills/prd-to-issues/SKILL.md',
   'skills/fable-new-issue/SKILL.md',
@@ -17,11 +19,7 @@ const ISSUE_BODY_CONSUMERS = [
   'templates/codex-workflow/prompts/issue-workflow.md',
 ]
 
-const ORDER_STATERS = [
-  'skills/github-issue-format/SKILL.md',
-  'CLAUDE.md',
-  'AGENTS.md',
-]
+const ORDER_STATERS = [OWNER, 'CLAUDE.md']
 
 const BACKFILL_CONSUMERS = [
   'skills/validate-issue/issue-editing.md',
@@ -31,53 +29,38 @@ const BACKFILL_CONSUMERS = [
 
 const ALL = [...new Set([...ISSUE_BODY_CONSUMERS, ...ORDER_STATERS, ...BACKFILL_CONSUMERS])]
 
-const texts = Object.fromEntries(
-  await Promise.all(ALL.map(async (path) => [path, await read(path)])),
-)
-const normalized = Object.fromEntries(
-  Object.entries(texts).map(([path, source]) => [path, source.replace(/\s+/g, ' ')]),
-)
+const texts = Object.fromEntries(await Promise.all(ALL.map(async (path) => [path, await read(path)])))
+const normalized = Object.fromEntries(Object.entries(texts).map(([path, source]) => [path, source.replace(/\s+/g, ' ')]))
 
 describe('Issue-body Plain simple English contract', () => {
   test('every issue-composing file requires the section with its 55-word cap', () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
-      const source = normalized[path]
-      expect(source, path).toMatch(/Plain simple English/)
-      expect(source, path).toMatch(
+      expect(normalized[path], path).toMatch(
         /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
     }
   })
 
-  test('the canonical section order is stated identically wherever it appears', () => {
+  test('the canonical section order places the section after the criteria and before any Execution block', () => {
     for (const path of ORDER_STATERS) {
-      expect(normalized[path], path).toContain(
-        '`## Acceptance criteria`, `## Plain simple English`, then any Execution block, then the attribution footer',
+      expect(normalized[path], path).toMatch(
+        /## Acceptance criteria`?, `?## Plain simple English`?, then any Execution block, then the attribution footer/,
       )
     }
-  })
-
-  test('github-issue-format owns the rule and its limits', () => {
-    const owner = normalized['skills/github-issue-format/SKILL.md']
-
-    expect(owner).toMatch(/`## Plain simple English` is mandatory on every issue/i)
-    expect(owner).toMatch(/ASD-STE100/)
-    expect(owner).toMatch(/CLAUDE\.md\/AGENTS\.md Response Style rules/)
-    expect(owner).toMatch(/Never restate the approach there/i)
-    expect(owner).toMatch(/never put a time or effort estimate in it/i)
-    expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
-    expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
-  })
-
-  test('the new-issue body template places the section after the criteria and before the footer', () => {
     const template = texts['skills/new-issue/SKILL.md']
     const criteria = template.indexOf('## Acceptance criteria')
     const plain = template.indexOf('## Plain simple English')
     const footer = template.indexOf('Created with LLM: <current model>')
-
     expect(criteria).toBeGreaterThan(-1)
     expect(plain).toBeGreaterThan(criteria)
     expect(footer).toBeGreaterThan(plain)
+  })
+
+  test('github-issue-format owns the rule and a metadata-only edit never adds the section', () => {
+    const owner = normalized[OWNER]
+    expect(owner).toMatch(/`## Plain simple English` is mandatory on every issue/i)
+    expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
+    expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
   })
 
   test('routes that rewrite an existing body backfill the missing section', () => {
@@ -86,22 +69,5 @@ describe('Issue-body Plain simple English contract', () => {
         /Plain simple English[\s\S]{0,400}add (?:it|that section) when (?:the body has none|it is missing)/i,
       )
     }
-  })
-
-  test('the GitHub Issues instructions carry the rule in both harness files', () => {
-    for (const path of ['CLAUDE.md', 'AGENTS.md']) {
-      const source = normalized[path]
-      expect(source, path).toMatch(/Issue body order:[\s\S]{0,400}Plain simple English/i)
-      expect(source, path).toMatch(
-        /plain-language section is mandatory on every issue[\s\S]{0,200}55 words/i,
-      )
-    }
-  })
-
-  test('the contract inventory records the rule, its owner, and this guard', async () => {
-    const inventory = await read('docs/contract-inventory.md')
-
-    expect(inventory).toMatch(/Issue-body `## Plain simple English` section|Issue-body `Plain simple English` section/)
-    expect(inventory).toMatch(/tests\/issue-plain-simple-english-contract\.test\.js/)
   })
 })

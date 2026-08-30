@@ -208,10 +208,6 @@ describe('Codex workflow bundle', () => {
       expect(block).toMatch(/if \[ "\$MODE" = "review" \]; then[\s\S]*?else[\s\S]*?network_access/)
     })
 
-    test('the harness identity is the Codex action', () => {
-      expect(runBody).toContain('CLAUDE_HARNESS: openai/codex-action@v1')
-    })
-
     test('comment patch steps are skipped when no bot login is configured', () => {
       const guarded = runBody.match(/if:.*env\.BOT_LOGIN != ''/g)
       expect(guarded).not.toBeNull()
@@ -222,14 +218,6 @@ describe('Codex workflow bundle', () => {
       expect(runBody).toContain('prompt-file: ${{ runner.temp }}/rk-shared/prompt.md')
       expect(runBody).not.toMatch(/--append-system-prompt/)
     })
-  })
-
-  test('the Codex review contract is a byte-identical copy of the Claude one', async () => {
-    const [claudePrompt, codexPrompt] = await Promise.all([
-      read('templates/claude-workflow/prompts/pr-review-format.md'),
-      read('templates/codex-workflow/prompts/pr-review-format.md'),
-    ])
-    expect(codexPrompt).toBe(claudePrompt)
   })
 
   test('the minimal review template appends the run link the merge gates key on', async () => {

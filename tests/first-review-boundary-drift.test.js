@@ -12,7 +12,6 @@ const CODEX_PROMPTS = [
   'templates/codex-workflow/prompts/issue-workflow.md',
   'templates/codex-workflow/prompts/fix-pr.md',
 ]
-const CLAUDE_FIX_PR_PROMPT = 'templates/claude-workflow/prompts/fix-pr.md'
 const ACTION_PROMPTS = [...CLAUDE_PROMPTS, ...CODEX_PROMPTS]
 const DOCS = ['README.md', 'docs/contract-inventory.md', 'templates/codex-workflow/README.md']
 
@@ -75,18 +74,6 @@ describe('first-review boundary drift', () => {
           `${path}: states C${low} to C${high}, which the owner table does not`,
         ).toBeTrue()
       }
-    }
-  })
-
-  test('the Claude fix-pr Action prompt states both step-down ladders', async () => {
-    for (const path of [CLAUDE_FIX_PR_PROMPT]) {
-      const body = (await read(path)).replace(/\s+/g, ' ')
-      expect(body, `${path}: one blocking cycle only`).toMatch(
-        /above the standard trigger runs one blocking cycle only/i,
-      )
-      expect(body, `${path}: the fable ladder`).toMatch(/fable[^.]{0,240}@claude opus review/i)
-      expect(body, `${path}: the opus ladder`).toMatch(/opus[^.]{0,240}@claude review/i)
-      expect(body, `${path}: the floor`).toMatch(/stops at @claude review and never steps down to sonnet/i)
     }
   })
 

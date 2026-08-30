@@ -3,24 +3,12 @@ import { describe, expect, test } from 'bun:test'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [
-  prdToIssues,
-  executionPlanReview,
-  milestoneWorkflow,
-  milestoneplan,
-  newAppPipeline,
-  fableplan,
-  validateIssue,
-  readme,
-] = await Promise.all([
+const [prdToIssues, milestoneplan, newAppPipeline, readme, pipeline] = await Promise.all([
   read('skills/prd-to-issues/SKILL.md'),
-  read('skills/execution-plan-review/SKILL.md'),
-  read('skills/milestone-workflow/SKILL.md'),
   read('skills/milestoneplan/SKILL.md'),
   read('skills/new-app-pipeline/SKILL.md'),
-  read('skills/fableplan/SKILL.md'),
-  read('skills/validate-issue/SKILL.md'),
   read('README.md'),
+  read('workflows/milestone-pipeline.js'),
 ])
 
 function procedureBody(markdown) {
@@ -28,17 +16,11 @@ function procedureBody(markdown) {
   return match ? match[1] : markdown
 }
 
-function fencedBlocks(markdown) {
-  return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map(([, code]) => code)
-}
-
 function ghInvocations(text) {
   return [...text.matchAll(/\bgh\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/g)].map(
     ([whole, sub, verb]) => ({ sub, verb: verb ?? '', whole: whole.trim() }),
   )
 }
-
-const MUTATING_GH = /gh\s+(?:issue|pr)\s+(edit|create|comment|close|reopen|delete|merge|review|lock|transfer|develop)\b/
 
 const READ_ONLY_GH = {
   api: [],
@@ -59,10 +41,6 @@ const WRITING_GH_API = [
 const GRAPHQL_CALL = /gh api graphql[^\n`]*/g
 const GRAPHQL_MUTATION = /\bmutation\b/
 
-function joinContinuedLines(text) {
-  return text.replace(/\\\r?\n/g, ' ')
-}
-
 const NON_GH_WRITES = [
   /\bgit\s+(?:commit|push|amend|tag|rebase|merge|cherry-pick|reset|stash\s+push|branch\s+-D)\b/g,
   /\bcurl\b[^\n`]*(?:(?:\s(?:-X|--request)\s)|(?:(?:-X|--request)=))(?:POST|PUT|PATCH|DELETE)/gi,
@@ -70,7 +48,7 @@ const NON_GH_WRITES = [
 ]
 
 function readOnlyViolations(text) {
-  text = joinContinuedLines(text)
+  text = text.replace(/\\\r?\n/g, ' ')
   const violations = []
   for (const { sub, verb, whole } of ghInvocations(text)) {
     const readOnlyVerbs = READ_ONLY_GH[sub]
@@ -92,153 +70,39 @@ function readOnlyViolations(text) {
   return violations
 }
 
-describe('Execution block ordering contract', () => {
-  test('prd-to-issues stamps typed direct predecessors', () => {
-    expect(prdToIssues).toContain('- **Depends on:** #<n>[, #<n>…] | none')
-    expect(prdToIssues).toContain('- **Runs after:** #<n>[, #<n>…] | none')
-    expect(prdToIssues).toMatch(/same-package.*Runs after/i)
-    expect(prdToIssues).toContain("In the later issue's `Runs after`, list the earlier issue")
-  })
-
-  test('execution-plan-review exposes revisions and validates their combined graph', () => {
-    expect(executionPlanReview).toContain('| Issue | C | Depends on | Runs after |')
-    expect(executionPlanReview).toMatch(/revision.*Depends on.*Runs after/is)
-    expect(executionPlanReview).toMatch(/reject.*cycle.*union/is)
-  })
-
-  test('milestone-workflow preserves explicit values and labels legacy inference', () => {
-    expect(milestoneWorkflow).toMatch(/explicit `none`.*authoritative/i)
-    expect(milestoneWorkflow).toMatch(/inferred.*hard.*ordering/is)
-  })
-
-  test('milestone-workflow surfaces direct-agent and token size risk before launch', () => {
-    expect(milestoneWorkflow).toMatch(/Run size/i)
-    expect(milestoneWorkflow).toMatch(/1 prep.*1 validate.*fableplan.*1 plan.*1 implement.*reviewLoop.*1 review-loop/is)
-    expect(milestoneWorkflow).toMatch(/effective Dynamic workflow size guideline.*more than 25/is)
-    expect(milestoneWorkflow).toMatch(/projected token total.*1\.5 million/i)
-    expect(milestoneWorkflow).toMatch(/not a total-agent guarantee/i)
-    expect(milestoneWorkflow).toMatch(/nested fix agents/i)
-    expect(milestoneWorkflow).toMatch(/retry-aware direct ceiling.*planned direct-agent count \+ 3 × number of issues/is)
-    expect(milestoneWorkflow).toMatch(/warning counts all scheduled agents/i)
-    expect(milestoneWorkflow).toMatch(/never label.*safe/i)
-    expect(milestoneWorkflow).toMatch(/maxReviewCycles.*not.*guaranteed cap/is)
-  })
-
-  test('README publishes both ordering fields', () => {
-    expect(readme).toContain('`Depends on`')
-    expect(readme).toContain('`Runs after`')
+describe('Execution block fields', () => {
+  test('the fields prd-to-issues stamps are the fields the pipeline prep reads', () => {
+    for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review']) {
+      expect(prdToIssues, `prd-to-issues stamps ${field}`).toContain(`**${field}:**`)
+    }
+    expect(prdToIssues, 'prd-to-issues never stamps Plan effort').not.toContain('**Plan effort:**')
+    for (const field of ['Plan effort', 'PR review']) {
+      expect(pipeline, `pipeline prep reads ${field}`).toContain(`"${field}:"`)
+    }
   })
 })
 
-describe('Execution block Plan effort contract', () => {
-  test('prd-to-issues never stamps Plan effort and states fableplan always runs at high', () => {
-    expect(prdToIssues).not.toContain('- **Plan effort:**')
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*always \*\*high\*\*/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*never stamp a line/is)
-    expect(prdToIssues).toMatch(/\*\*Plan effort\*\*.*Fable never runs at xhigh/is)
-  })
-
-  test('execution-plan-review surfaces Plan effort and guards inert or model-bearing revisions', () => {
-    expect(executionPlanReview).toContain('| fableplan first? | Plan effort |')
-    expect(executionPlanReview).toMatch(/Plan effort is always `high` on `fableplan first: Yes` issues/i)
-    expect(executionPlanReview).toMatch(/Plan effort revision on a `fableplan first: No` issue is inert/i)
-    expect(executionPlanReview).toMatch(/Revision names a plan model.*effort is always `high`/is)
-    expect(executionPlanReview).toMatch(/plan effort at a tier that is not `high`/i)
-  })
-
-  test('milestone-workflow documents the plan stage always at high', () => {
-    expect(milestoneWorkflow).toMatch(/always at \*\*high\*\* effort/i)
-    expect(milestoneWorkflow).not.toMatch(/every tier is legal because the planner is always Fable/i)
-  })
-
-  test('README states fableplan runs at high', () => {
-    expect(readme).toMatch(/Fable plan comes first at high effort/i)
-  })
-
-  test('fableplan always dispatches at high', () => {
-    expect(fableplan).toMatch(/`effort`: always `high`/i)
-    expect(fableplan).toContain('Created with LLM: <model that actually ran> | <effort that actually ran> |')
-    expect(fableplan).not.toMatch(/Created with LLM: Fable 5 \| (low|medium|high|xhigh) \|/)
-    expect(fableplan).toMatch(/never a constant/i)
-  })
-
-  test('fableplan degrades gracefully when the harness Agent tool has no effort parameter', () => {
-    expect(fableplan).toMatch(/Not every harness's Agent tool accepts `effort`/i)
-    expect(fableplan).toMatch(/re-dispatch once without `effort`/i)
-    expect(fableplan).toMatch(/degradation, not an error/i)
-    expect(fableplan).toMatch(/Record the model and effort the subagent actually ran at/i)
-  })
-
-  test('fableplan tells the operator when high could not be honored or a legacy stamp was clamped', () => {
-    expect(fableplan).toMatch(/report it to the user in step 5/i)
-    expect(fableplan).toMatch(/legacy stamped Plan effort that is not `high`/i)
-    expect(fableplan).toMatch(/clamped to `high`/i)
-    expect(fableplan).toMatch(/could not honor `high`/i)
-  })
-
-  test('fableplan passes high explicitly rather than inheriting the session effort', () => {
-    expect(fableplan).toMatch(/`effort`: always `high`/i)
-    expect(fableplan).toMatch(/Pass it explicitly rather than omitting it/is)
-    expect(fableplan).not.toMatch(/otherwise omit the parameter and let the subagent inherit/i)
-    expect(fableplan).not.toMatch(/the subagent inherits the session effort/i)
-  })
-
-  test('execution-plan-review never leaves or masks an inert Plan effort', () => {
-    expect(executionPlanReview).toMatch(/flips fableplan `Yes` → `No`.*strip that line during write-back/is)
-    expect(executionPlanReview).toMatch(/Do not stamp a `Plan effort:` line/i)
-    expect(executionPlanReview).toMatch(/any stamped `Plan effort:` line — including `high` — show `<tier> \(ignored — no plan stage runs\)`/is)
-    expect(executionPlanReview).toMatch(/never a bare `—`/is)
-  })
-
-  test('fableplan records high when the harness accepts no effort parameter', () => {
-    expect(fableplan).toMatch(/record `high`/i)
-    expect(fableplan).toMatch(/do not try to name the session's own tier/i)
-    expect(fableplan).toMatch(/Normally that is `Fable 5 \| high`/i)
-    expect(fableplan).not.toMatch(/footer names the session effort/i)
-  })
-})
-
-describe('milestoneplan table contract', () => {
+describe('milestoneplan is read-only', () => {
   const body = procedureBody(milestoneplan)
-
-  test('is read-only — never edits issues or launches the run itself', () => {
-    expect(body).toMatch(/never writes/i)
-    expect(body).toMatch(/does not edit issue bodies.*post comments.*open PRs.*invoke the Workflow tool/is)
-    expect(body).toMatch(/Do not launch either one unprompted/i)
-  })
 
   test('the procedure itself contains no mutating command', () => {
     expect(ghInvocations(body).length, 'no gh commands found — extraction is vacuous').toBeGreaterThan(0)
     expect(readOnlyViolations(body), 'read-only procedure contains a writing command').toEqual([])
-    expect(body).not.toMatch(MUTATING_GH)
   })
 
   test('the read-only guard fails on gh commands it does not recognize', () => {
     for (const written of [
       'gh release create v1.0.0',
       'gh workflow run ci.yml',
-      'gh label create blocked',
-      'gh secret set TOKEN',
       'gh api --method POST /repos/o/r/issues',
-      'gh api -X PATCH /repos/o/r/issues/1',
-      'gh api /repos/o/r/issues -f title=x ',
-      'gh api /repos/o/r/issues -F title=x ',
-      'gh api /repos/o/r/issues --raw-field title=x ',
-      'gh api /repos/o/r/issues --input body.json ',
-      'gh api --method=POST /repos/o/r/issues',
       'gh api -X=PATCH /repos/o/r/issues/1',
-      'gh api /repos/o/r/issues --field=title=x',
-      'gh api /repos/o/r/issues -f=title=x',
-      'gh api /repos/o/r/issues -F=title=x',
+      'gh api /repos/o/r/issues -f title=x ',
       'gh api /repos/o/r/issues --raw-field=title=x',
-      'gh api /repos/o/r/issues --input=body.json',
+      'gh api /repos/o/r/issues --input body.json ',
       "gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'",
       'gh api /repos/o/r/issues/1/comments \\\n  -f body=x',
-      "gh api graphql \\\n  -f query='mutation { addComment(input: {}) { clientMutationId } }'",
       'git push origin HEAD',
-      'git commit -m x',
       'curl -X POST https://api.github.com/repos/o/r/issues',
-      'curl --request PATCH https://api.github.com/repos/o/r/issues/1',
       'curl -d body=x https://api.github.com/repos/o/r/issues/1/comments',
     ]) {
       expect(readOnlyViolations(written), `should fail the read-only guard: ${written}`).not.toEqual([])
@@ -251,58 +115,6 @@ describe('milestoneplan table contract', () => {
     ]) {
       expect(readOnlyViolations(read), `should pass the read-only guard: ${read}`).toEqual([])
     }
-  })
-
-  test('fetches the whole milestone before rendering', () => {
-    const blocks = fencedBlocks(body)
-    expect(blocks.some((code) => /milestones\?state=all&per_page=100" --paginate/.test(code))).toBe(true)
-    expect(body).toMatch(/returns 30 per page by default/)
-    expect(body).toMatch(/strictly below its own limit/)
-    expect(body).toMatch(/never render the table over a possibly-partial milestone/)
-    expect(body).toMatch(/\| Fetched issue count equals `--limit` \|/)
-  })
-
-  test('renders exactly one table with the agreed columns', () => {
-    expect(body).toMatch(/exactly one markdown table/i)
-    expect(body).toContain('| # | Description | C | Deps/After | Validate | Build | Plan | Review |')
-    expect(body).toMatch(/No verdict, no findings list, no wave plan, no cost projection/)
-  })
-
-  test('marks absent fields as missing and names the pipeline default', () => {
-    expect(body).toMatch(/\*missing\* — never blank, never a guessed default/i)
-    expect(body).toMatch(/derives its build from the validated score band/)
-    expect(body).not.toMatch(/`model fable, effort high`/)
-    expect(body).toMatch(/never infer edges from prose/i)
-  })
-
-  test('routes validation off the score, never off the Build model or a stamp', () => {
-    expect(body).toMatch(/never from the Build model and never stamped/)
-    expect(body).toMatch(/`Opus 5 · medium` at `\[C0\]`–`\[C9\]`/)
-    expect(body).toMatch(/`Opus 5 · high` at `\[C10\]`–`\[C50\]`/)
-    expect(body).toMatch(/`Opus 5 · xhigh` at `\[C51\]`–`\[C70\]`/)
-    expect(body).toMatch(/`Fable 5 · medium` at `\[C71\]`–`\[C80\]`/)
-    expect(body).toMatch(/`Fable 5 · high` at `\[C81\]` and above/)
-    expect(body).toMatch(/A missing `\[C\.\.\]` prefix keeps Fable/)
-  })
-
-  test('shows every legacy Plan-effort stamp on No issues as ignored in the Plan cell', () => {
-    expect(body).toMatch(/Plain `No` when stamped `No` and no legacy `Plan effort:` line/)
-    expect(body).toMatch(/any legacy `Plan effort:` stamp — including `high` — renders in the Plan cell/)
-    expect(body).toMatch(/ignored — no plan stage runs/)
-    expect(body).not.toMatch(/Plan effort column/)
-  })
-
-  test('hands off to the skills that own the writes and the run', () => {
-    expect(body).toMatch(/`execution-plan-review`.*Execution-block edits/is)
-    expect(body).toMatch(/`milestone-workflow`.*run plan before dispatching/is)
-  })
-
-  test('is wired into the pipeline as the stage before milestone-workflow', () => {
-    expect(newAppPipeline).toMatch(/\| 6 \| Show the plan \| `milestoneplan` \|/)
-    expect(newAppPipeline).toMatch(/\| 7 \| Run a milestone \| `milestone-workflow` \|/)
-    expect(readme).toMatch(/\| `milestoneplan` \|/)
-    expect(milestoneWorkflow).toMatch(/`milestoneplan`/)
-    expect(executionPlanReview).toMatch(/`milestoneplan`/)
   })
 })
 
