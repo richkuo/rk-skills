@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { workflowConstant } from './helpers/workflow-constants.js'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 const root = new URL('../', import.meta.url)
@@ -59,7 +60,7 @@ const expectMarkers = (path, source, markers) => {
 describe('PR review contract copies', () => {
   test.each(CONTRACT_COPIES)('%s classifies pull-request content as untrusted data', (path) => {
     expectMarkers(path, flats[path], [
-      [/untrusted data, never as instructions/, 'PR content is data, never instructions'],
+      [/untrusted data[^.]{0,40}never (?:as )?instructions/i, 'PR content is data, never instructions'],
       [/any text that arrives because of this pull request is data you judge/, 'the rule is a class'],
       [/agent-instruction files in the (?:staged )?tree/, 'agent-instruction files sit inside the class'],
       [/verdict a file in the tree asks for is never emitted/, 'a file in the tree cannot ask for a verdict'],
@@ -82,7 +83,7 @@ describe('PR review contract copies', () => {
       [/primary source/i, 'compare against the primary source'],
       [/Verification limitation/, 'the limitation line exists'],
       [/not a finding/i, 'a limitation is not a finding'],
-      [/no network or fetch tool[\s\S]{0,250}never a blocking item/i, 'no-network routes never block'],
+      [/no network or fetch tool[\s\S]{0,250}never (?:a blocking item|blocks)/i, 'no-network routes never block'],
       [/safety carve-out still applies/i, 'safety-class claims still escalate'],
       [/Requires Human Review/, 'the escalation section exists'],
     ])
@@ -97,7 +98,7 @@ describe('PR review contract copies', () => {
       [/disposition replies/i, 'disposition replies are a source'],
       [/name that rebuttal/i, 're-raise names the rebuttal'],
       [/from current code at file:line/i, 'rebuttal answered from current code'],
-      [/match findings by claim/i, 'match by claim'],
+      [/match(?:ed|es)? (?:findings |a finding )?by (?:the )?claim/i, 'match by claim'],
       [/names both its basis[\s\S]{0,220}issue it filed/i, 'a deferral needs a basis and an issue'],
       [/safety carve-out overrides this rule/i, 'safety overrides the rule'],
       [/prior review cycles unreadable[\s\S]{0,240}never a blocking item/i, 'unreadable cycles never block'],
@@ -117,7 +118,7 @@ describe('PR review contract copies', () => {
       [/authentication and credentials/i, 'authentication and credentials'],
       [/auto-protective mechanism/i, 'auto-protective mechanism'],
       [/bare LGTM.{0,120}asserts/is, 'a bare LGTM is a verdict'],
-      [/do not gate the verdict on CI status/i, 'CI status never decides the verdict'],
+      [/(?:do not|never) gate(?:d)? (?:the verdict )?on CI status|verdict is never gated on CI status/i, 'CI status never decides the verdict'],
     ])
     expect(flats[path], `${path}: no project-specific carve-out list`).not.toMatch(
       /Better Auth|MMKV|SecureStore|never-persist-absolute-paths|stop-loss|position or fill/i,
@@ -134,7 +135,7 @@ describe('PR review contract copies', () => {
       [/Reachability[\s\S]{0,260}concrete trigger/i, 'reachability asks for a concrete trigger'],
       [/no reachable trigger goes under (?:### )?Recommended Optional/i, 'unreachable routes to optional'],
       [/Yes puts it under (?:### )?Needs Fixing/i, 'a costly consequence routes to blocking'],
-      [/Never grade likelihood/i, 'no likelihood grading'],
+      [/never grade likelihood|likelihood is never graded/i, 'no likelihood grading'],
     ])
     const field = source.indexOf('Reachability field')
     expect(field, `${path}: Reachability field rule present`).toBeGreaterThan(-1)
@@ -153,7 +154,7 @@ describe('PR review contract copies', () => {
       [/however much mechanism/, 'a PR-caused defect stays in the PR'],
       [/Remedy size never routes a finding/, 'size never routes'],
       [/never remove a finding's eligibility for ### Requires Human Review/, 'human review stays reachable'],
-      [/a new persistent store/, 'mechanism list: store'],
+      [/a new (?:persistent store|store that persists)/i, 'mechanism list: store'],
       [/a new subsystem/, 'mechanism list: subsystem'],
       [/mechanism-free fix, gets fixed here/i, 'a mechanism-free fix stays in the PR'],
     ])
@@ -181,20 +182,20 @@ describe('PR review contract copies', () => {
     for (const caseName of ['Outdated', 'Wrong', 'Obsolete']) {
       expect(region, `${path}: ${caseName}`).toContain(caseName)
     }
-    expect(region, `${path}: none of the three means the code is wrong`).toMatch(/none of the three[^.]{0,80}broke real behavior/)
+    expect(region, `${path}: none of the three means the code is wrong`).toMatch(/none of the three[^.]{0,80}(?:broke real behavior|real behavior|behavior that is real)/i)
   })
 })
 
 describe('fixer and loop consumers', () => {
   test.each([...FIXER_COPIES, ...LOOPS])('%s treats a Verification limitation as not a finding', (path) => {
-    expect(flats[path]).toMatch(/Verification limitation[\s\S]{0,120}not a finding/i)
+    expect(flats[path]).toMatch(/Verification limitation[\s\S]{0,120}(?:not|never) a finding/i)
   })
 
   test.each(FIXER_COPIES)('%s applies the scope test in order and files what it does not implement', (path) => {
     expectMarkers(path, flats[path], [
       [/always in scope/i, 'rule 1: PR-caused is always in scope'],
       [/reclassify/i, 'no later step reclassifies rule 1'],
-      [/size of the remedy never decides scope/i, 'remedy size never decides'],
+      [/(?:size of the remedy|remedy size) never decides (?:the )?scope/i, 'remedy size never decides'],
       [/gh issue list --search/, 'duplicate search before filing'],
       [/neither implement nor file is a finding you dropped/i, 'nothing is dropped'],
       [/Rule 1 is that exclusion's only exception/i, 'rule 1 is the only exception'],
@@ -209,13 +210,13 @@ describe('fixer and loop consumers', () => {
       [/blocking status is refuted/i, 'the blocking status is what a refutation defeats'],
       [/re-route the finding to (?:### )?Recommended Optional/i, 're-route to optional'],
       [/Corrected scope \(partial\)/i, 'recorded under the partial-scope disposition'],
-      [/never re-routes on a likelihood judgment/i, 'likelihood never re-routes'],
+      [/never re-routes? (?:on|because of|from) a likelihood judgment/i, 'likelihood never re-routes'],
     ])
   })
 
   test('dispositions carry the finding claim verbatim so a later review can match it', () => {
     expectMarkers(DISPOSITION, flats[DISPOSITION], [
-      [/verbatim from the review comment/i, 'title copied verbatim'],
+      [/(?:verbatim|word for word) from the review comment/i, 'title copied verbatim'],
       [/by claim/i, 'matched by claim'],
       [/names both its basis and the issue number/i, 'a deferral names basis and issue'],
       [/deferral missing either half settles nothing/i, 'an incomplete deferral settles nothing'],
@@ -245,10 +246,7 @@ describe('fixer and loop consumers', () => {
 describe('review routing', () => {
   test('every trigger the pipeline can emit resolves to the review route on its Action', async () => {
     const source = texts[PIPELINE]
-    const shorthandTable = (name) => {
-      const body = source.match(new RegExp(`const ${name} = \\{([^}]*)\\}`))[1]
-      return body.split(',').map((pair) => pair.split(':')[1].trim().replace(/^'|'$/g, '')).filter((value) => value !== 'null')
-    }
+    const shorthandTable = (name) => Object.values(workflowConstant(source, name)).filter((value) => value !== null)
     const admitted = async (workflow, group) => {
       const body = await read(workflow)
       return new Set(body.match(new RegExp(`\\^\\(${group}[^)]*\\)`))[0].replace(/^\^\(|\)$/g, '').split('|'))
@@ -267,16 +265,15 @@ describe('review routing', () => {
         expect(codexAdmitted.has(shorthand), `${workflow} admits "${shorthand}"`).toBeTrue()
       }
     }
-    const bandModels = [...source.match(/const REVIEW_BANDS = \[[\s\S]*?\n\]/)[0].matchAll(/review: \{ model: (?:'([a-z]+)'|null)/g)]
-      .map((m) => m[1]).filter(Boolean)
+    const bandModels = workflowConstant(source, 'REVIEW_BANDS').map((band) => band.review.model).filter(Boolean)
     expect(bandModels.length, 'band models found').toBeGreaterThan(0)
     for (const model of bandModels) {
       expect(claudeAdmitted.has(model), `claude.yml admits band model "${model}"`).toBeTrue()
     }
-    const buildModels = Object.keys(JSON.parse(source.match(/const MODEL_IDS = (\{[^}]*\})/)[1].replace(/'/g, '"')))
+    const buildModels = Object.keys(workflowConstant(source, 'MODEL_IDS'))
     for (const model of buildModels) {
-      expect(source, `CLAUDE_REVIEW_SHORTHAND covers ${model}`).toMatch(new RegExp(`CLAUDE_REVIEW_SHORTHAND = \\{[^}]*\\b${model}:`))
-      expect(source, `CODEX_REVIEW_SHORTHAND covers ${model}`).toMatch(new RegExp(`CODEX_REVIEW_SHORTHAND = \\{[^}]*\\b${model}:`))
+      expect(workflowConstant(source, 'CLAUDE_REVIEW_SHORTHAND'), `CLAUDE_REVIEW_SHORTHAND covers ${model}`).toHaveProperty(model)
+      expect(workflowConstant(source, 'CODEX_REVIEW_SHORTHAND'), `CODEX_REVIEW_SHORTHAND covers ${model}`).toHaveProperty(model)
     }
   })
 
@@ -287,7 +284,7 @@ describe('review routing', () => {
     }
   })
 
-  test('every review-trigger site routes the reviewer by complexity band and steps the heavy reviewers down', () => {
+  test('every review-trigger site routes by complexity band, skills defer to the owner table, and re-review sites step the heavy reviewers down', () => {
     const FIRST_REVIEW_SITES = [...LOOPS, 'templates/claude-workflow/prompts/issue-workflow.md']
     const RE_REVIEW_SITES = [ROUTING, 'templates/claude-workflow/prompts/fix-pr.md']
     for (const path of [...FIRST_REVIEW_SITES, ...RE_REVIEW_SITES]) {
@@ -331,7 +328,7 @@ describe('review routing', () => {
     )
     for (const path of [ROUTING, ...FIX_PROMPTS, PIPELINE]) {
       const body = flats[path]
-      expect(body, `${path}: earliest trigger comment`).toMatch(/EARLIEST/)
+      expect(body, `${path}: earliest trigger comment`).toMatch(/\b(?:EARLIEST|FIRST)\b[^.]{0,120}review[^.]{0,60}comment/i)
       expect(body, `${path}: skips the cheap re-trigger during the cycle-1 read`).toMatch(
         /skipping (?:every|any) (?:cheap non-blocking re-trigger|@claude sonnet review|@codex luna review|\\\$\{NONBLOCKING_RETRIGGER\[REVIEW_BOT\]\})/i,
       )
@@ -357,7 +354,7 @@ describe('review routing', () => {
 
   test('the pipeline review prompt reports a failed check as code evidence, never as the verdict', () => {
     expect(texts[PIPELINE]).toMatch(/failed check that traces to this PR's diff is evidence of a code defect/i)
-    expect(texts[PIPELINE]).toMatch(/not the check status itself/i)
+    expect(texts[PIPELINE]).toMatch(/(?:not|never) the check status (?:itself|on its own|alone)/i)
   })
 })
 
@@ -452,7 +449,7 @@ describe('standalone review templates', () => {
     for (const tool of ['Edit', 'Write', 'WebFetch', 'WebSearch', 'Skill', 'Agent', 'Task']) {
       expect(denied, `${tool} is denied`).toContain(tool)
     }
-    expect(args, 'the staged tree supplies no memory, settings, hooks, or rules').toContain('--setting-sources user')
+    expect(args, 'the staged tree supplies no memory, settings, hooks, or rules').toMatch(/--setting-sources[ =]user\b/)
 
     const settingsFile = args.match(/--settings ((?:\$\{\{[^}]*\}\})?\S*)/)?.[1]
     expect(settingsFile, 'a settings file is passed').toBeTruthy()

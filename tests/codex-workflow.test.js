@@ -170,9 +170,10 @@ describe('Codex workflow bundle', () => {
     test('fails closed when a write route has no App credential', () => {
       const block = stepRunBlock(runBody, 'Require GitHub App credentials on write routes')
       expect(block).toBeTruthy()
-      expect(block).toContain('CODEX_APP_ID')
-      expect(block).toContain('CODEX_APP_PRIVATE_KEY')
-      expect(block).toContain('exit 1')
+      expect(runBody).toMatch(/- name: Require GitHub App credentials on write routes\n\s+if: inputs\.mode != 'review'/)
+      expect(block).toMatch(/if \[ -z "\$APP_ID" \]/)
+      expect(block).toMatch(/if \[ -z "\$APP_PRIVATE_KEY" \]/)
+      expect(block).toMatch(/if \[ -n "\$MISSING" \]; then[\s\S]{0,600}exit 1/)
       expect(runBody).toMatch(/uses: actions\/create-github-app-token@[0-9a-f]{40} # v\d+\.\d+\.\d+$/m)
       expect(runBody).toMatch(
         /- name: Mint the GitHub App installation token\n\s+if: inputs\.mode != 'review'/,
@@ -205,7 +206,9 @@ describe('Codex workflow bundle', () => {
       expect(block).toBeTruthy()
       expect(block).toContain('[sandbox_workspace_write]')
       expect(block).toContain('network_access = true')
-      expect(block).toMatch(/if \[ "\$MODE" = "review" \]; then[\s\S]*?else[\s\S]*?network_access/)
+      const [reviewBranch, writeBranch] = block.split(/if \[ "\$MODE" = "review" \]; then/)[1].split(/\n\s*else\n/)
+      expect(reviewBranch, 'the review branch writes no Codex config').not.toMatch(/config\.toml|network_access/)
+      expect(writeBranch).toMatch(/network_access = true[\s\S]{0,80}config\.toml/)
     })
 
     test('comment patch steps are skipped when no bot login is configured', () => {
@@ -216,7 +219,7 @@ describe('Codex workflow bundle', () => {
 
     test('the prompt reaches Codex as a file, never as shell-evaluated args', () => {
       expect(runBody).toContain('prompt-file: ${{ runner.temp }}/rk-shared/prompt.md')
-      expect(runBody).not.toMatch(/--append-system-prompt/)
+      expect(runBody).not.toMatch(/prompt: \$\{\{/)
     })
   })
 

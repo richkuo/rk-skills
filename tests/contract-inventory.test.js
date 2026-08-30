@@ -8,17 +8,10 @@ const inventory = await Bun.file(new URL('docs/contract-inventory.md', root)).te
 const REPO_PATH = /`((?:skills|templates|workflows|docs|tests|\.github)\/[\w./-]+?|CLAUDE\.md|AGENTS\.md|README\.md)(?::\d+)?`/g
 
 describe('contract inventory', () => {
-  test('every guard cell names a test file that exists', () => {
-    const guards = [...new Set([...inventory.matchAll(/tests\/[\w-]+\.test\.js/g)].map((m) => m[0]))]
-    expect(guards.length).toBeGreaterThan(0)
-    for (const guard of guards) {
-      expect(existsSync(fileURLToPath(new URL(guard, root))), `${guard} no longer exists`).toBe(true)
-    }
-  })
-
-  test('every repository path the inventory names exists', () => {
+  test('every repository path and guard test the inventory names exists', () => {
     const paths = [...new Set([...inventory.matchAll(REPO_PATH)].map((m) => m[1]))]
     expect(paths.length).toBeGreaterThan(20)
+    expect(paths.filter((path) => /^tests\/.*\.test\.js$/.test(path)).length, 'guard tests are named').toBeGreaterThan(0)
     for (const path of paths) {
       expect(existsSync(fileURLToPath(new URL(path, root))), `${path} no longer exists`).toBe(true)
     }

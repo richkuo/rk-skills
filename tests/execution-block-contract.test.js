@@ -71,13 +71,13 @@ function readOnlyViolations(text) {
 }
 
 describe('Execution block fields', () => {
-  test('the fields prd-to-issues stamps are the fields the pipeline prep reads', () => {
+  test('prd-to-issues stamps every routing field the pipeline prep reads, and never Plan effort', () => {
     for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review']) {
       expect(prdToIssues, `prd-to-issues stamps ${field}`).toContain(`**${field}:**`)
     }
     expect(prdToIssues, 'prd-to-issues never stamps Plan effort').not.toContain('**Plan effort:**')
-    for (const field of ['Plan effort', 'PR review']) {
-      expect(pipeline, `pipeline prep reads ${field}`).toContain(`"${field}:"`)
+    for (const field of ['Build model', 'Effort', 'fableplan first', 'PR review', 'Plan effort']) {
+      expect(pipeline, `pipeline prep reads ${field}`).toMatch(new RegExp(`"\\*{0,2}${field}:`))
     }
   })
 })

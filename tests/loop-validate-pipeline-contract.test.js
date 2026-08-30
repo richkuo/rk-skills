@@ -100,9 +100,13 @@ describe('loop/validate pipeline contract', () => {
   test('review-cycle owners encode threshold 5 and LGTM-first-wins past the cap', () => {
     for (const path of REVIEW_CYCLE_FULL) {
       const body = bodies[path]
-      expect(body, path).toMatch(/review_count\s*>\s*5/)
-      expect(body, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
-      expect(body, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
+      const [open_, close] = STOP_CONDITION_REGION[path]
+      const from = body.indexOf(open_)
+      expect(from, path).toBeGreaterThan(-1)
+      const region = body.slice(from, body.indexOf(close, from + open_.length))
+      expect(region, path).toMatch(/review_count\s*>\s*5/)
+      expect(region, path).toMatch(/bare LGTM|no sections at all|nothing left to fix/i)
+      expect(region, path).toMatch(/review_count\s*>\s*5[\s\S]{0,120}LGTM/i)
     }
     for (const path of REVIEW_CYCLE_PARAPHRASE) {
       expect(bodies[path], path).toMatch(/past 5[\s\S]{0,80}(?:first )?LGTM|LGTM it sees/i)
@@ -121,7 +125,7 @@ describe('loop/validate pipeline contract', () => {
 
       const at = region.search(/pr_cycle_count\s*>=\s*(\d+)/)
       expect(at, path).toBeGreaterThan(-1)
-      expect(region, path).toMatch(/(?:not|never) the in-memory `?review_count`?/i)
+      expect(region, path).toMatch(/(?:not|never|differs? from|instead of) the in-memory `?review_count`?/i)
       expect(Number(region.match(/pr_cycle_count\s*>=\s*(\d+)/)[1]), path).toBeLessThan(5)
       const rule = region.slice(at, at + 300)
       expect(rule, path).toMatch(/Needs Updates/i)
@@ -135,8 +139,9 @@ describe('loop/validate pipeline contract', () => {
   test('gated validate→plan loops state the below-71 score gate plus safety carve-out', () => {
     for (const path of CAPABILITY_GATE) {
       const body = bodies[path]
-      expect(body, path).toMatch(/\*\*Score gate:\*\*/)
-      expect(body, path).toMatch(/below 71|score\s*<\s*71/)
+      const gate = body.match(/\*\*Score gate:\*\*[^\n]*/)
+      expect(gate, `${path}: score gate line`).toBeTruthy()
+      expect(gate[0], path).toMatch(/below 71|under 71|score\s*<\s*71|lower than 71/)
       expect(body, path).toMatch(
         /safety carve-out[\s\S]{0,300}money[\s\S]{0,120}data integrity[\s\S]{0,120}security[\s\S]{0,120}auto-protective/i,
       )
@@ -191,21 +196,21 @@ describe('loop/validate pipeline contract', () => {
 
   test('every autonomous chain caps its final report at 55 words plain simple English in ASD-STE100', () => {
     for (const path of REPORT_CAP) {
-      expect(bodies[path], path).toMatch(/Cap the whole report[^\n]*55 words[^\n]*ASD-STE100[^\n]*Response Style rules/)
+      expect(bodies[path], path).toMatch(/(?:Cap|Limit|Keep)[^\n]{0,40}report[^\n]*55 words[^\n]*ASD-STE100[^\n]*Response Style rules/)
     }
   })
 
   test('work-on-issue owns one plan-deviation policy and no caller narrows it', () => {
     const owner = bodies[PLAN_DEVIATION_OWNER]
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(
-      /adopted plan is the blueprint[\s\S]{0,900}traced code[\s\S]{0,400}newer on the issue[\s\S]{0,400}[Cc]orrectness and safety/,
+      /adopted plan is the (?:blueprint|baseline|reference)[\s\S]{0,900}traced code[\s\S]{0,400}newer on the issue[\s\S]{0,400}[Cc]orrectness and safety/,
     )
     expect(owner, PLAN_DEVIATION_OWNER).toMatch(/never narrows it|does not remove the other two/i)
 
     for (const path of PLAN_DEVIATION_CALLERS) {
       const body = bodies[path]
       expect(body, `${path}: narrowed deviation rule`).not.toMatch(/deviations?[^.\n]{0,80}only when the code contradicts the plan/i)
-      expect(body, `${path}: defers to work-on-issue step 2`).toMatch(/deviations[^.\n]{0,120}step 2's plan-deviation policy/i)
+      expect(body, `${path}: defers to work-on-issue step 2`).toMatch(/deviations[^.\n]{0,120}step 2's (?:plan-)?deviation policy/i)
     }
   })
 

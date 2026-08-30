@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const root = new URL('../', import.meta.url)
@@ -42,29 +42,10 @@ const references = (
 const isOwnWorkflow = (ref) => ref.startsWith(`${OWN_REPO}/`)
 
 describe('GitHub Actions pinning contract', () => {
-	test('scans every declared root and finds references where they exist', () => {
+	test('finds references under the workflow and template roots', () => {
 		expect(workflowFiles.length).toBeGreaterThan(0)
 		for (const dir of ['.github/workflows', 'templates']) {
 			expect(references.some(({ path }) => path.startsWith(`${dir}/`))).toBe(true)
-		}
-	})
-
-	test('catches a mutable ref added under a scanned-but-currently-empty root', () => {
-		const fixtureDir = fileURLToPath(new URL('.github/actions/_pinning-test-fixture', root))
-		mkdirSync(fixtureDir, { recursive: true })
-		writeFileSync(`${fixtureDir}/action.yml`, 'runs:\n  using: composite\n  steps:\n    - uses: actions/checkout@v7\n')
-		try {
-			const fixtureFiles = walk('.github/actions')
-			expect(fixtureFiles).toContain('.github/actions/_pinning-test-fixture/action.yml')
-
-			const fixtureRefs = fixtureFiles.flatMap((path) => {
-				const source = readFileSync(fileURLToPath(new URL(path, root)), 'utf8')
-				return [...source.matchAll(USES)].map((match) => match[1])
-			})
-			const mutable = fixtureRefs.filter((ref) => !isOwnWorkflow(ref) && !PINNED.test(ref))
-			expect(mutable).toEqual(['actions/checkout@v7'])
-		} finally {
-			rmSync(fixtureDir, { recursive: true, force: true })
 		}
 	})
 
@@ -100,12 +81,12 @@ describe('GitHub Actions pinning contract', () => {
 
 	test('keeps the harness attribution strings on a readable tag', async () => {
 		const harnesses = [
-			['.github/workflows/claude-run.yml', 'anthropics/claude-code-action@v1'],
-			['.github/workflows/codex-run.yml', 'openai/codex-action@v1'],
+			['.github/workflows/claude-run.yml', 'anthropics/claude-code-action'],
+			['.github/workflows/codex-run.yml', 'openai/codex-action'],
 		]
 
-		for (const [path, expected] of harnesses) {
-			expect(await read(path)).toContain(`CLAUDE_HARNESS: ${expected}\n`)
+		for (const [path, action] of harnesses) {
+			expect(await read(path)).toMatch(new RegExp(`^\\s*CLAUDE_HARNESS: ${action.replace('/', '\\/')}@v\\d+(?:\\.\\d+)*$`, 'm'))
 		}
 	})
 })

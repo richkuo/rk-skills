@@ -19,7 +19,7 @@ const skillDirs = (await readdir(new URL('skills/', root), { withFileTypes: true
   .map((entry) => `skills/${entry.name}/SKILL.md`)
 
 const skillTexts = Object.fromEntries(
-  await Promise.all(skillDirs.map(async (path) => [path, await Bun.file(new URL(path, root)).text().catch(() => '')])),
+  await Promise.all(skillDirs.map(async (path) => [path, await Bun.file(new URL(path, root)).text()])),
 )
 
 const namesFableModel = (source) => /model:\s*'?fable'?/.test(source.replace(/`/g, ''))

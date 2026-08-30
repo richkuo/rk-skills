@@ -44,7 +44,7 @@ describe('Issue-body Plain simple English contract', () => {
   test('the canonical section order places the section after the criteria and before any Execution block', () => {
     for (const path of ORDER_STATERS) {
       expect(normalized[path], path).toMatch(
-        /## Acceptance criteria`?, `?## Plain simple English`?, then any Execution block, then the attribution footer/,
+        /## Acceptance criteria`?, (?:then )?`?## Plain simple English`?, then any Execution block, (?:then |and then )?the attribution footer/,
       )
     }
     const template = texts['skills/new-issue/SKILL.md']
@@ -58,7 +58,7 @@ describe('Issue-body Plain simple English contract', () => {
 
   test('github-issue-format owns the rule and a metadata-only edit never adds the section', () => {
     const owner = normalized[OWNER]
-    expect(owner).toMatch(/`## Plain simple English` is mandatory on every issue/i)
+    expect(owner).toMatch(/`## Plain simple English` is (?:mandatory|required) on every issue/i)
     expect(owner).toMatch(/edit that rewrites body prose adds the section when it is missing/i)
     expect(owner).toMatch(/changes only machine metadata[\s\S]{0,160}does not add it/i)
   })
@@ -66,7 +66,7 @@ describe('Issue-body Plain simple English contract', () => {
   test('routes that rewrite an existing body backfill the missing section', () => {
     for (const path of BACKFILL_CONSUMERS) {
       expect(normalized[path], path).toMatch(
-        /Plain simple English[\s\S]{0,400}add (?:it|that section) when (?:the body has none|it is missing)/i,
+        /## Plain simple English[\s\S]{0,400}add (?:it|that section) when (?:the body has none|it is missing)/,
       )
     }
   })

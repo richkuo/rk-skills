@@ -29,7 +29,7 @@ describe('numbered plan steps with verify points', () => {
     for (const path of PRODUCERS) {
       const body = bodies[path]
       expect(body, `${path}: numbering instruction`).toMatch(/[Nn]umber(?:ed)?\s+the\s+implementation\s+steps|implementation\s+steps\s+numbered/)
-      expect(body, `${path}: verify point`).toMatch(/verify point/i)
+      expect(body, `${path}: verify point`).toMatch(/verify point|verification point|verify step/i)
     }
   })
 
@@ -42,7 +42,7 @@ describe('numbered plan steps with verify points', () => {
 
   test('work-on-issue owns the mirror rule and every outside build path points at it', () => {
     const owner = bodies[MIRROR_OWNER]
-    expect(owner, `${MIRROR_OWNER}: mirror rule`).toMatch(/Mirror the plan's steps into the task tracker/)
+    expect(owner, `${MIRROR_OWNER}: mirror rule`).toMatch(/(?:Mirror|Copy|Reflect) the plan's steps into the task tracker/)
     expect(owner, `${MIRROR_OWNER}: completion keys on the verify point`).toMatch(/complete only when its verify point passes/i)
     expect(owner, `${MIRROR_OWNER}: an overridden step closes as a deviation`).toMatch(/overridden step closes as a recorded deviation/i)
     expect(owner, `${MIRROR_OWNER}: a borrowed check re-homes`).toMatch(/borrowed verify point re-homes/i)

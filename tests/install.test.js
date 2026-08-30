@@ -105,6 +105,17 @@ describe('install.sh Codex links', () => {
     expect(lstatSync(join(home, '.codex/AGENTS.md')).isSymbolicLink()).toBe(true)
   })
 
+  test('replaces an existing symlink in place and writes no backup for it', () => {
+    const home = makeTempDir()
+    mkdirSync(join(home, '.codex'), { recursive: true })
+    symlinkSync(join(home, 'elsewhere/AGENTS.md'), join(home, '.codex/AGENTS.md'))
+
+    expect(runInstall(home).exitCode).toBe(0)
+
+    expect(readlinkSync(join(home, '.codex/AGENTS.md'))).toBe(join(repoRoot, 'AGENTS.md'))
+    expect(stillThere(join(home, '.codex/AGENTS.md.bak'))).toBe(false)
+  })
+
   test('never destroys a backup an earlier run wrote', () => {
     const home = makeTempDir()
     mkdirSync(join(home, '.codex'), { recursive: true })

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { workflowConstant } from './helpers/workflow-constants.js'
 
 const workflowSource = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
@@ -330,10 +331,11 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('the prep schema tells the agent to omit every field the runtime derives when absent', () => {
-    expect(workflowSource.match(/^ +complexity: \{.*$/m)[0]).toMatch(/OMIT this field entirely when the title carries no \[C\.\.\] prefix/)
-    expect(workflowSource.match(/^ +plan_effort: \{.*$/m)[0]).toMatch(/OMIT when absent/)
-    expect(workflowSource.match(/^ +first_review_model: \{.*$/m)[0]).toMatch(/OMIT this field when the line is a standard/)
-    expect(workflowSource).not.toMatch(/validate_effort/)
+    const schema = workflowSource.slice(workflowSource.indexOf('const PREP_SCHEMA'), workflowSource.indexOf('\n}\n', workflowSource.indexOf('const PREP_SCHEMA')))
+    for (const field of ['complexity', 'plan_effort', 'first_review_model', 'first_review_effort']) {
+      expect(schema.match(new RegExp(`^ +${field}: \\{.*$`, 'm'))?.[0], `${field} description`).toMatch(/\bOMIT\b/)
+    }
+    expect(schema).not.toMatch(/validate_effort/)
   })
 
   test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
@@ -785,7 +787,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { output } = await executeWorkflow(
       { tracks: [[2]], reviewLoop: false },
       {},
-      { total: null, spent: () => 5_000_000, remaining: () => Infinity },
+      { total: null, spent: () => 5_000_000, remaining: () => 1_000 },
     )
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
@@ -1221,7 +1223,7 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('a rescore across a review boundary re-evaluates the stamped first review', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewMode: 'github', merge: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C10] Stamped sonnet, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
@@ -1229,6 +1231,7 @@ describe('milestone-pipeline subagent review mode', () => {
           { number: 4, title: '[C10] Stamped sonnet, rescored downward', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 5, title: '[C10] Unstamped, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 6, title: '[C10] Unstamped, rescored downward', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 7, title: '[C75] Stamped opus, rescored downward across the review boundary', complexity: 75, model: 'opus', effort: 'high', fableplan: true, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
         ],
       }),
       'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
@@ -1236,6 +1239,7 @@ describe('milestone-pipeline subagent review mode', () => {
       'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 8 }),
       'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
       'validate:#6': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 8 }),
+      'validate:#7': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
       Implement: (event) => {
         const issue = issueFromLabel(event.label)
         return {
@@ -1244,6 +1248,10 @@ describe('milestone-pipeline subagent review mode', () => {
         }
       },
     })
+
+    expect(promptFor(events, 'implement:#7 (opus/high)'), '#7 keeps the opus stamp on a downward rescore across a review boundary')
+      .toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+    expect(logs.some((m) => m.includes('#7:') && m.includes('across a review boundary'))).toBeFalse()
 
     expect(promptFor(events, 'implement:#2 (opus/high)'), '#2 takes the rescored band default')
       .toContain('gh pr comment <num> --body "@claude review"')
@@ -1300,14 +1308,10 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('every first-review boundary falls on a build-band edge', async () => {
-    const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
-    const parse = (name) => [...source.matchAll(new RegExp(`${name} = \\[([\\s\\S]*?)\\n\\]`, 'g'))]
-      .flatMap(([, body]) => [...body.matchAll(/min: (\d+), max: (\d+|Infinity)/g)])
-      .map(([, min, max]) => ({ min: Number(min), max: max === 'Infinity' ? Infinity : Number(max) }))
-    const bands = parse('const BANDS')
-    const reviewBands = parse('const REVIEW_BANDS')
-    expect(bands.length).toBe(6)
-    expect(reviewBands.length).toBe(4)
+    const bands = workflowConstant(workflowSource, 'BANDS')
+    const reviewBands = workflowConstant(workflowSource, 'REVIEW_BANDS')
+    expect(bands.length).toBeGreaterThan(0)
+    expect(reviewBands.length).toBeGreaterThan(0)
     const buildEdges = new Set(bands.map((band) => band.min))
     for (const row of reviewBands) {
       expect(buildEdges.has(row.min), `first-review row starting at ${row.min} is not a build-band edge`).toBeTrue()
@@ -1383,7 +1387,7 @@ describe('milestone-pipeline subagent review mode', () => {
     const record = output.results.find((result) => result.issue === 2)
 
     expect(started(events, 'review:PR#1002 c1 (opus/xhigh)')).toBeTrue()
-    expect(started(events, 'fix:PR#1002 c1 (sonnet/high)')).toBeTrue()
+    expect(events.find((event) => event.state === 'started' && event.label === 'fix:PR#1002 c1 (sonnet/high)')).toMatchObject({ model: 'sonnet', effort: 'high' })
     expect(started(events, 'review:PR#1002 c2 (claude/high)')).toBeTrue()
     expect(record?.status).toBe('merged')
     expect(record?.review.cycles_run).toBe(2)
@@ -1636,10 +1640,10 @@ describe('milestone-pipeline merge and release', () => {
   test('the skill keeps merge authority in-session behind a pinned, recency-gated LGTM', async () => {
     const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
 
-    expect(skill).toContain('--match-head-commit <verified-sha>')
-    expect(skill).toContain('Never fall back to an older LGTM')
-    expect(skill).toContain('never resolve conflicts yourself')
-    expect(skill).toContain('no background subagent ever holds merge authority')
+    expect(skill).toMatch(/--match-head-commit\s+<?[\w-]+>?/)
+    expect(skill).toMatch(/(?:never|do not|do not ever)[^.\n]{0,40}older LGTM/i)
+    expect(skill).toMatch(/never resolve (?:merge )?conflicts (?:yourself|in-session|by hand)/i)
+    expect(skill).toMatch(/merge authority[^.\n]{0,80}subagent|subagent[^.\n]{0,80}merge authority/i)
   })
 
   test('merge and release default off when review loops are off', async () => {

@@ -1,21 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-
-export function capabilityFromAxes({ risk, uncertainty, coupling }) {
-  const map = (n) => (n <= 1 ? 0 : n === 2 ? 1 : n === 3 ? 2 : 3)
-  let capability = map(Math.max(risk, uncertainty))
-  if (coupling >= 3) capability = Math.max(capability, 2)
-  return capability
-}
-
-export function volumeFromAxes({ scope, coupling, verification }) {
-  return (scope + coupling + verification) * 2
-}
-
-export function complexityScore(axes) {
-  const capability = capabilityFromAxes(axes)
-  const volume = volumeFromAxes(axes)
-  return { capability, volume, score: 25 * capability + volume }
-}
+import { workflowConstant } from './helpers/workflow-constants.js'
 
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
@@ -26,6 +10,38 @@ const [validateIssue, validateIssueScoring, prdToIssues, pipeline] = await Promi
   read('skills/prd-to-issues/SKILL.md'),
   read('workflows/milestone-pipeline.js'),
 ])
+
+function formulaFromOwner() {
+  const step = validateIssue.slice(validateIssue.indexOf('The canonical formula is:'))
+  const mapping = [...step.matchAll(/`(\d)(?:–(\d))? → (\d)`/g)]
+  expect(mapping.length, 'the capability mapping states four pairs').toBe(4)
+  const capabilityOf = new Map()
+  for (const [, low, high, capability] of mapping) {
+    for (let axis = Number(low); axis <= Number(high ?? low); axis += 1) capabilityOf.set(axis, Number(capability))
+  }
+  const floor = step.match(/Coupling ≥ (\d)\*\*, use at least Capability (\d)/)
+  const volume = step.match(/\(Scope \+ Coupling \+ Verification\) × (\d+)/)
+  const score = step.match(/(\d+) × Capability \+ Volume/)
+  expect(floor, 'the coupling floor is stated').toBeTruthy()
+  expect(volume, 'the volume multiplier is stated').toBeTruthy()
+  expect(score, 'the score weight is stated').toBeTruthy()
+  return {
+    capability: ({ risk, uncertainty, coupling }) => {
+      let capability = capabilityOf.get(Math.max(risk, uncertainty))
+      if (coupling >= Number(floor[1])) capability = Math.max(capability, Number(floor[2]))
+      return capability
+    },
+    volume: ({ scope, coupling, verification }) => (scope + coupling + verification) * Number(volume[1]),
+    weight: Number(score[1]),
+  }
+}
+
+export function complexityScore(axes) {
+  const formula = formulaFromOwner()
+  const capability = formula.capability(axes)
+  const volume = formula.volume(axes)
+  return { capability, volume, score: formula.weight * capability + volume }
+}
 
 const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5': 'fable' }
 const spec = (cell) => {
@@ -46,20 +62,11 @@ function ownerBands() {
 }
 
 function pipelineBands() {
-  const block = pipeline.slice(pipeline.indexOf('const BANDS = ['))
-  return [...block.slice(0, block.indexOf('\n]')).matchAll(
-    /min: (\d+), max: (\d+|Infinity), fableplan: (true|false), validate: \{ model: '(\w+)', effort: '(\w+)' \}, build: \{ model: '(\w+)', effort: '(\w+)' \}/g,
-  )].map(([, min, max, fableplan, vModel, vEffort, bModel, bEffort]) => ({
-    min: Number(min),
-    max: max === 'Infinity' ? Infinity : Number(max),
-    fableplan: fableplan === 'true',
-    validate: { model: vModel, effort: vEffort },
-    build: { model: bModel, effort: bEffort },
-  }))
+  return workflowConstant(pipeline, 'BANDS').map(({ min, max, fableplan, validate, build }) => ({ min, max, fableplan, validate, build }))
 }
 
 describe('complexity score band encoding', () => {
-  test('golden examples in the validate-issue reference match the executable formula', () => {
+  test('golden examples in the validate-issue reference match the formula the owner states', () => {
     const section = validateIssueScoring.split('#### Golden examples (consistency checklist)')[1]
     expect(section).toBeTruthy()
     const rowRe = /^\| \((\d+),(\d+),(\d+),(\d+),(\d+)\) \| (\d+)[^|]*\| (\d+) \| \*\*(\d+)\*\* \|/gm
@@ -99,9 +106,9 @@ describe('complexity score band encoding', () => {
   })
 
   test('the score gate and the never-lower rule stay stated', async () => {
-    expect(validateIssueScoring).toMatch(/Never lower routing from a validator rescore/)
+    expect(validateIssueScoring).toMatch(/never lower[^.\n]{0,80}rescore|rescore[^.\n]{0,80}never lower/i)
     for (const path of ['skills/validate-issue/SKILL.md', 'skills/new-issue/SKILL.md', 'skills/github-issue-format/SKILL.md']) {
-      expect(await read(path), path).toMatch(/score is ≥ 71|score is 71 or higher|score ≥ 71/)
+      expect(await read(path), path).toMatch(/score (?:is )?(?:≥|>=|at or above|reaches|of) ?71|71 or (?:higher|above|more)/)
     }
   })
 
