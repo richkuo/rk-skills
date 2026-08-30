@@ -121,6 +121,8 @@ mkdir -p .github/workflows && \
   -o .github/workflows/claude.yml
 ```
 
+Before this copied workflow can run, add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App for write-capable routes. It uses `self-hosted` for `classify` and all route jobs; change `runs-on` and `runs_on` to `ubuntu-latest` or your own label when your repo has no self-hosted runner. See the bundle [Install](./templates/claude-workflow/README.md#install) and [Customization inputs](./templates/claude-workflow/README.md#customization-inputs) sections.
+
 Also included:
 
 - `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). `AGENTS.md` is a symlink to it in this repo, so both files are one source of truth. Use it as a reference for your own `~/.claude/CLAUDE.md`.
