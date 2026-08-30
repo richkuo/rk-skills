@@ -56,7 +56,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: ${{ inputs.mode == 'review' && '0' || '1' }}
 
       - name: Checkout rk-skills (shared prompts and scripts)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -83,6 +83,39 @@ jobs:
             esac
           done
           git worktree prune
+
+      - name: Stage the pull request under review
+        if: inputs.mode == 'review'
+        id: pr_context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          SETTINGS_FILE: ${{ runner.temp }}/claude-review-settings.json
+        run: |
+          BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
+          git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-claude/pr-head"
+          git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-claude/pr-base"
+          git checkout --quiet --detach refs/rk-claude/pr-head
+          echo "base_sha=$(git merge-base refs/rk-claude/pr-base refs/rk-claude/pr-head)" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          cat > "$SETTINGS_FILE" <<EOF
+          {
+            "claudeMdExcludes": [
+              "${GITHUB_WORKSPACE}/CLAUDE.md",
+              "${GITHUB_WORKSPACE}/CLAUDE.local.md",
+              "${GITHUB_WORKSPACE}/AGENTS.md",
+              "${GITHUB_WORKSPACE}/.claude/CLAUDE.md",
+              "${GITHUB_WORKSPACE}/.claude/rules/**",
+              "${GITHUB_WORKSPACE}/**/CLAUDE.md",
+              "${GITHUB_WORKSPACE}/**/CLAUDE.local.md",
+              "${GITHUB_WORKSPACE}/**/AGENTS.md",
+              "${GITHUB_WORKSPACE}/**/.claude/CLAUDE.md",
+              "${GITHUB_WORKSPACE}/**/.claude/rules/**"
+            ]
+          }
+          EOF
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
@@ -120,6 +153,9 @@ jobs:
           FLOW: ${{ inputs.flow }}
           EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+          BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
+          SETTINGS_FILE: ${{ runner.temp }}/claude-review-settings.json
         run: |
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
           if [ -n "$FLOW" ]; then
@@ -191,7 +227,13 @@ jobs:
           if [ -n "$FLOW" ]; then
             PROMPT="$PROMPT The requested operation mode for this run is ${FLOW}."
           fi
+          if [ "$MODE" = "review" ]; then
+            PROMPT="$PROMPT The pull request head is checked out in this workspace already, as a detached HEAD at commit ${HEAD_SHA}. Its merge base with the target branch is ${BASE_SHA}."
+          fi
           ARGS="--model ${MODEL_ID} --effort ${EFFORT} --append-system-prompt \"${PROMPT}\" --allowedTools \"${ALLOWED}\""
+          if [ "$MODE" = "review" ]; then
+            ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task\" --setting-sources user --settings ${SETTINGS_FILE}"
+          fi
           {
             printf 'claude_args<<CLAUDE_ARGS_EOF\n'
             printf '%s\n' "$ARGS"

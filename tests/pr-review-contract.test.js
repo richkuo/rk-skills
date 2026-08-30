@@ -11,7 +11,9 @@ const FORMAT_PROMPTS = [
   'templates/claude-workflow/prompts/pr-review-format.md',
   'templates/codex-workflow/prompts/pr-review-format.md',
 ]
-const REVIEW_TEMPLATES = ['templates/claude-review.yml', 'templates/codex-review.yml']
+const REVIEW_TEMPLATES = ['templates/codex-review.yml']
+const CLAUDE_CALLER = 'templates/claude-workflow/workflows/claude.yml'
+const CLAUDE_ENGINE = '.github/workflows/claude-run.yml'
 const CONTRACT_COPIES = [SKILL, ...FORMAT_PROMPTS, ...REVIEW_TEMPLATES]
 
 const FIXER = 'skills/fix-pr-review/SKILL.md'
@@ -45,6 +47,8 @@ const texts = Object.fromEntries(
         'skills/validate-issue/SKILL.md',
         'skills/pr-review/example-review.md',
         'CLAUDE.md',
+        CLAUDE_CALLER,
+        CLAUDE_ENGINE,
       ]),
     ].map(async (path) => [path, await read(path)]),
   ),
@@ -277,11 +281,14 @@ describe('review routing', () => {
     }
   })
 
-  test('the standalone review workflow resolves every band shorthand it is sent', () => {
-    const workflow = texts['templates/claude-review.yml']
+  test('the Claude review caller resolves every band shorthand it is sent', () => {
+    const workflow = texts[CLAUDE_CALLER]
     for (const [shorthand, modelId] of [['sonnet', 'claude-sonnet-5'], ['opus', 'claude-opus-5'], ['fable', 'claude-fable-5']]) {
-      expect(workflow, `${shorthand} shorthand`).toMatch(new RegExp(`@claude ${shorthand}'\\)\\s*&&\\s*'${modelId}'`))
+      expect(workflow, `${shorthand} shorthand`).toMatch(
+        new RegExp(`${shorthand}\\|${shorthand}5\\)\\s+MODEL_ID="${modelId}"`),
+      )
     }
+    expect(workflow, 'effort suffix').toMatch(/effort:\(low\|medium\|xhigh\|high\)/)
   })
 
   test('every review-trigger site routes by complexity band, skills defer to the owner table, and re-review sites step the heavy reviewers down', () => {
@@ -430,60 +437,97 @@ describe('standalone review templates', () => {
     expect(workflow).toMatch(/Prior review cycles unavailable/)
   })
 
-  test('the Claude review template binds the agent to the job token and bounds its tools', () => {
-    const path = 'templates/claude-review.yml'
-    const { job, steps, stagingIndex, actionIndex } = stagingOf(path)
+  test('the engine review route binds the agent to the job token and bounds its tools', async () => {
+    const engine = Bun.YAML.parse(texts[CLAUDE_ENGINE])
+    const caller = Bun.YAML.parse(texts[CLAUDE_CALLER])
+    const runSteps = engine?.jobs?.run?.steps ?? []
+    const actionIndex = runSteps.findIndex((step) => /anthropics\/claude-code-action@/.test(step?.uses ?? ''))
+    const composeIndex = runSteps.findIndex((step) => step?.id === 'compose_prompt')
+    expect(actionIndex, 'the reviewer action exists').toBeGreaterThan(-1)
+    expect(runSteps[actionIndex]?.with?.github_token, 'review uses the job token').toBe(
+      "${{ inputs.mode == 'review' && github.token || '' }}",
+    )
 
-    expect(steps[actionIndex]?.with?.github_token, 'the job token is supplied').toBe('${{ github.token }}')
-    expect(job?.permissions?.['id-token'], 'no id-token scope invites an App token').toBeUndefined()
-    expect(job?.permissions?.contents, 'the agent stays read-only on code').toBe('read')
+    const reviewJob = caller?.jobs?.review
+    expect(reviewJob?.permissions?.['id-token'], 'no id-token scope invites an App token').toBeUndefined()
+    expect(reviewJob?.permissions?.contents, 'the agent stays read-only on code').toBe('read')
 
-    const args = (steps[actionIndex]?.with?.claude_args ?? '').replace(/\s+/g, ' ')
-    expect(args, 'allowlist is present').toMatch(/--allowedTools "[^"]+"/)
-    const allowed = args.match(/--allowedTools "([^"]+)"/)[1].split(',')
+    const compose = runSteps[composeIndex].run ?? ''
+    expect(compose, 'review allowlist is present').toMatch(/ALLOWED='Bash\(git status\*\)[^']+'/)
+    const reviewAllowed = compose.match(
+      /PROMPT_FILE=\$PROMPTS_DIR\/pr-review-format\.md[\s\S]{0,1500}?ALLOWED='([^']+)'/,
+    )
+    expect(reviewAllowed, 'review-route ALLOWED').not.toBeNull()
+    const allowed = reviewAllowed[1].split(',')
     expect(allowed, 'the agent can post its one comment').toContain('Bash(gh pr comment*)')
     for (const forbidden of [/^Bash\(gh api/, /^Bash\(git push/, /^Bash\(git commit/]) {
       expect(allowed.some((entry) => forbidden.test(entry)), `allowlist admits no ${forbidden}`).toBe(false)
     }
-    const denied = args.match(/--disallowedTools "([^"]+)"/)?.[1].split(',') ?? []
-    for (const tool of ['Edit', 'Write', 'WebFetch', 'WebSearch', 'Skill', 'Agent', 'Task']) {
-      expect(denied, `${tool} is denied`).toContain(tool)
-    }
-    expect(args, 'the staged tree supplies no memory, settings, hooks, or rules').toMatch(/--setting-sources[ =]user\b/)
+    expect(compose, 'review route denies write, fetch, and instruction tools').toMatch(
+      /--disallowedTools \\"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task\\"/,
+    )
+    expect(compose, 'review route closes project setting sources').toMatch(/--setting-sources user/)
+  })
 
-    const settingsFile = args.match(/--settings ((?:\$\{\{[^}]*\}\})?\S*)/)?.[1]
-    expect(settingsFile, 'a settings file is passed').toBeTruthy()
-    expect(steps[stagingIndex]?.env?.SETTINGS_FILE, 'the flag loads the file the staging step writes').toBe(settingsFile)
-    const run = steps[stagingIndex]?.run ?? ''
-    expect(run, 'the staging step writes that settings file').toContain('claudeMdExcludes')
+  test('the engine review route stages the head and carries the harness-isolation boundary', async () => {
+    const source = await read('.github/workflows/claude-run.yml')
+    const workflow = Bun.YAML.parse(source)
+    const steps = workflow?.jobs?.run?.steps ?? []
+    const checkout = steps.find((step) => /^actions\/checkout@/.test(step?.uses ?? '') && !step?.with?.repository)
+    expect(String(checkout?.with?.['fetch-depth'] ?? ''), 'review route fetches full history').toMatch(/review/)
+    expect(String(checkout?.with?.['fetch-depth'] ?? ''), 'review fetch-depth is 0').toMatch(/0/)
+
+    const stagingIndex = steps.findIndex((step) => step?.id === 'pr_context')
+    const composeIndex = steps.findIndex((step) => step?.id === 'compose_prompt')
+    const actionIndex = steps.findIndex((step) => /anthropics\/claude-code-action@/.test(step?.uses ?? ''))
+    expect(stagingIndex, 'a step with id pr_context exists').toBeGreaterThan(-1)
+    expect(steps[stagingIndex]?.if, 'staging is review-only').toMatch(/inputs\.mode == 'review'/)
+    expect(composeIndex, 'compose_prompt exists').toBeGreaterThan(-1)
+    expect(actionIndex, 'the reviewer action exists').toBeGreaterThan(-1)
+    expect(stagingIndex, 'staging precedes compose').toBeLessThan(composeIndex)
+    expect(stagingIndex, 'staging precedes the reviewer').toBeLessThan(actionIndex)
+
+    const run = steps[stagingIndex].run ?? ''
+    expect(run, 'resolves the base ref from the PR').toMatch(/gh pr view "\$PR_NUMBER" --repo "\$REPO" --json baseRefName/)
+    expect(run, 'fetches the PR head into rk-claude').toContain(
+      'git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-claude/pr-head"',
+    )
+    expect(run, 'fetches the base ref into rk-claude').toContain(
+      'git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-claude/pr-base"',
+    )
+    expect(run, 'checks the head out detached').toContain('git checkout --quiet --detach refs/rk-claude/pr-head')
+    expect(run, 'records the merge base').toContain('git merge-base refs/rk-claude/pr-base refs/rk-claude/pr-head')
+    const checkoutAt = run.indexOf('git checkout --quiet --detach')
+    for (const output of ['base_sha', 'head_sha']) {
+      const publish = new RegExp(`echo "${output}=[^"]*" >> "\\$GITHUB_OUTPUT"`)
+      expect(run, `publishes ${output}`).toMatch(publish)
+      expect(run.search(publish), `publishes ${output} only after the head is checked out`).toBeGreaterThan(checkoutAt)
+    }
+    expect(run, 'the staging step writes the settings file').toContain('claudeMdExcludes')
     expect(run, 'it writes to the path the flag names').toContain('cat > "$SETTINGS_FILE"')
     for (const name of ['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.claude/CLAUDE.md', '.claude/rules/**']) {
       for (const prefix of ['', '**/']) {
-        expect(run, `claudeMdExcludes covers ${prefix}${name} under the workspace`).toContain(`"\${GITHUB_WORKSPACE}/${prefix}${name}"`)
+        expect(run, `claudeMdExcludes covers ${prefix}${name} under the workspace`).toContain(
+          `"\${GITHUB_WORKSPACE}/${prefix}${name}"`,
+        )
       }
     }
     expect(run, 'the excludes are workspace-scoped').not.toMatch(/"\*\*\/CLAUDE\.md"/)
-  })
 
-  test('the Claude reviewer prompt names its identifiers and posts its comment off the command line', () => {
-    const path = 'templates/claude-review.yml'
-    const { steps, actionIndex, prompt } = stagingOf(path)
-
-    expect(prompt, 'the prompt names the pull request number').toContain('${{ github.event.issue.number }}')
-    expect(prompt, 'the prompt names the repository').toContain('${{ github.repository }}')
-    expect(prompt, 'the prior-cycle read passes them').toContain(
-      'gh pr view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json comments,reviews',
+    const compose = steps[composeIndex].run ?? ''
+    expect(compose, 'review route denies write, fetch, and instruction tools').toMatch(
+      /--disallowedTools \\"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task\\"/,
     )
-    expect(prompt, 'no placeholder number survives').not.toMatch(/gh pr \w+ <N>/)
-
-    expect(prompt, 'the body goes in on standard input').toContain('--body-file -')
-    expect(prompt, 'delimited by a QUOTED heredoc').toMatch(/<<'RK_REVIEW_EOF'/)
-    const raw = steps[actionIndex]?.with?.prompt ?? ''
-    const terminators = raw.split('\n').filter((line) => line.trimEnd().endsWith('RK_REVIEW_EOF') && !line.includes('<<'))
-    expect(terminators.length, 'the example closes its heredoc').toBeGreaterThan(0)
-    for (const line of terminators) {
-      expect(line, 'the terminator begins at column 0').toBe('RK_REVIEW_EOF')
-    }
+    expect(compose, 'review route closes project setting sources').toMatch(/--setting-sources user/)
+    expect(compose, 'review route passes the settings file').toMatch(/--settings \$\{SETTINGS_FILE\}/)
+    expect(steps[composeIndex].env?.SETTINGS_FILE, 'compose loads the file staging writes').toBe(
+      '${{ runner.temp }}/claude-review-settings.json',
+    )
+    expect(steps[stagingIndex].env?.SETTINGS_FILE, 'staging writes the file the flag names').toBe(
+      '${{ runner.temp }}/claude-review-settings.json',
+    )
+    expect(compose, 'compose names the staged head').toMatch(/HEAD_SHA/)
+    expect(compose, 'compose names the staged merge base').toMatch(/BASE_SHA/)
   })
 
   test('every claude-run.yml allowlist names only tools the pinned build has', async () => {
