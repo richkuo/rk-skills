@@ -129,15 +129,15 @@ jobs:
                 ALLOWED='Read,Glob,Grep,Bash(git status*),Bash(git log*),Bash(git tag --sort*),Bash(git fetch*),Bash(git rev-parse*),Bash(gh auth status),Bash(gh release create*),Bash(gh release view*)'
                 ;;
               *)
-                ALLOWED='Read,Edit,Write,MultiEdit,Glob,Grep,Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git tag --sort*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout -b docs-sync/*),Bash(git checkout -b docs-release/*),Bash(git add*),Bash(git commit*),Bash(git push origin docs-sync/*),Bash(git push origin docs-release/*),Bash(gh pr create*),Bash(gh pr view*),Bash(gh issue view*)'
+                ALLOWED='Read,Edit,Write,Glob,Grep,Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git tag --sort*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout -b docs-sync/*),Bash(git checkout -b docs-release/*),Bash(git add*),Bash(git commit*),Bash(git push origin docs-sync/*),Bash(git push origin docs-release/*),Bash(gh pr create*),Bash(gh pr view*),Bash(gh issue view*)'
                 ;;
             esac
           elif [ "$MODE" = "implement" ]; then
             PROMPT_FILE=$PROMPTS_DIR/issue-workflow.md
-            ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,MultiEdit,Glob,Grep,Skill,EnterWorktree'
+            ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,Glob,Grep,Skill,EnterWorktree'
           elif [ "$MODE" = "fix-pr" ] || [ "$MODE" = "fix-pr-review" ]; then
             PROMPT_FILE=$PROMPTS_DIR/fix-pr.md
-            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,MultiEdit,Glob,Grep'
+            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,Glob,Grep'
           else
             PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md
             ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
