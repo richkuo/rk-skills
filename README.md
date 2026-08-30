@@ -99,10 +99,9 @@ Every new issue records direct predecessors as `**Depends on:** #<n>[, #<n>…] 
 
 ### Review bot prerequisite
 
-The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships two Claude options plus a Codex twin of each:
+The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships one Claude install path plus a Codex twin of each:
 
-- **Full bundle (recommended): [`templates/claude-workflow/`](./templates/claude-workflow/)** — the complete least-privilege setup: `@claude review` (read-only), any other `@claude ...` comment on a trusted-author PR (re-validate and fix all review feedback in place, folding in any extra text as additional scope), plain `@claude` asks on an issue (implement via the issue-workflow prompt), optional docs/release flows, prompt files, comment-patching scripts, and regression tests. The agent never executes the project's code in any mode (no test suites, builds, or scripts — CI owns checks). See its [README](./templates/claude-workflow/README.md) for install and triggers.
-- **Minimal: [`templates/claude-review.yml`](./templates/claude-review.yml)** — a single review-only workflow; copy it into `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret, and the bot and skills speak the same format out of the box. It resolves the `sonnet` / `opus` / `fable` shorthand that follows `@claude`, so band-routed triggers reach the right reviewer; it ignores an `effort:` suffix, which only the full bundle parses.
+- **Claude bundle: [`templates/claude-workflow/`](./templates/claude-workflow/)** — the complete least-privilege setup: `@claude review` (read-only), any other `@claude ...` comment on a trusted-author PR (re-validate and fix all review feedback in place, folding in any extra text as additional scope), plain `@claude` asks on an issue (implement via the issue-workflow prompt), optional docs/release flows, prompt files, comment-patching scripts, and regression tests. The agent never executes the project's code in any mode (no test suites, builds, or scripts — CI owns checks). See its [README](./templates/claude-workflow/README.md) for install and triggers.
 - **Codex full bundle: [`templates/codex-workflow/`](./templates/codex-workflow/)** — the same three routes, router, review contract, and install shape driven by `openai/codex-action` instead. It needs an `OPENAI_API_KEY` secret, your own GitHub App for the write routes (`CODEX_APP_ID` / `CODEX_APP_PRIVATE_KEY`, because that action mints no App token), and the `CODEX_BOT_LOGIN` repository variable. Its review route holds no write credential at all and runs the read-only Codex sandbox, which denies the agent network too, so the run body stages the pull request on disk first and a trusted step posts the result. See its [README](./templates/codex-workflow/README.md).
 - **Codex minimal: [`templates/codex-review.yml`](./templates/codex-review.yml)** — the review-only Codex companion; copy it into `.github/workflows/` and add an `OPENAI_API_KEY` secret.
 
@@ -118,7 +117,7 @@ Grab the workflow directly into a repo:
 
 ```sh
 mkdir -p .github/workflows && \
-  curl -fsSL https://raw.githubusercontent.com/richkuo/rk-skills/main/templates/claude-review.yml \
+  curl -fsSL https://raw.githubusercontent.com/richkuo/rk-skills/main/templates/claude-workflow/workflows/claude.yml \
   -o .github/workflows/claude.yml
 ```
 

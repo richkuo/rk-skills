@@ -46,6 +46,22 @@ rk-skills at run time by the reusable workflow. Then:
 4. Run the tests from the rk-skills clone:
    `python3 -m unittest discover -s /tmp/rk-skills/templates/claude-workflow/scripts -p 'test_*.py'`.
 
+## Migrating from the old minimal review template
+
+If your repo still has `.github/workflows/claude.yml` from the retired
+review-only install (single workflow, `ANTHROPIC_API_KEY`):
+
+1. Replace that workflow file with `workflows/claude.yml` from this bundle (see
+   Install above).
+2. Add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App
+   on the repository.
+3. Remove `ANTHROPIC_API_KEY` when nothing else in the repo uses it.
+
+The shared engine at `richkuo/rk-skills/.github/workflows/claude-run.yml@main`
+now carries the review-route safety limits (staged pull request head,
+`--disallowedTools`, `--setting-sources user`, and workspace-scoped
+`claudeMdExcludes`) that the old minimal template held alone.
+
 ## Customization inputs
 
 The vendored `claude.yml` ships with `classify` on `runs-on: self-hosted` and
