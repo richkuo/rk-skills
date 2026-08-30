@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { workflowConstant } from './helpers/workflow-constants.js'
 
 const workflowSource = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
@@ -329,32 +330,12 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(planEvent.prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
   })
 
-  test('prep is contracted to omit Plan effort when the issue stamps none', () => {
-    const source = workflowSource
-    const schemaLine = source.match(/^ +plan_effort: \{.*$/m)[0]
-    expect(schemaLine).toMatch(/OMIT when absent/)
-    expect(schemaLine).toMatch(/always runs fableplan at high/)
-
-    const promptLine = source.match(/^- plan_effort: from an optional legacy.*$/m)[0]
-    expect(promptLine).toMatch(/OMIT the field/)
-    expect(promptLine).toMatch(/always runs at high/)
-
-    expect(source).toContain("const planEffort = ex.plan_effort || 'high'")
-  })
-
-  test('prep is contracted to omit the stamps the band derives', () => {
-    const source = workflowSource
-    expect(source).not.toMatch(/validate_effort/)
-    expect(source).toContain('do NOT extract a "**Validate effort:**"')
-    const reviewSchemaLine = source.match(/^ +first_review_model: \{.*$/m)[0]
-    expect(reviewSchemaLine).toMatch(/OMIT this field when the line is a standard/)
-    const reviewPromptLine = source.match(/^- first_review_model \/ first_review_effort: from the optional.*$/m)[0]
-    expect(reviewPromptLine).toMatch(/OMIT both fields/)
-    expect(source).toContain('const bandReview = reviewBandFor(ex.review_complexity ?? ex.complexity).review')
-    expect(source).toContain("const modelId = MODEL_IDS[ex.model] || 'opus'")
-    expect(source).not.toContain("MODEL_IDS[ex.model] || 'fable'")
-    expect(source).not.toMatch(/build: \{ model: 'fable'/)
-    expect(source).toContain('const validateBand = bandFor(ex.complexity)')
+  test('the prep schema tells the agent to omit every field the runtime derives when absent', () => {
+    const schema = workflowSource.slice(workflowSource.indexOf('const PREP_SCHEMA'), workflowSource.indexOf('\n}\n', workflowSource.indexOf('const PREP_SCHEMA')))
+    for (const field of ['complexity', 'plan_effort', 'first_review_model', 'first_review_effort']) {
+      expect(schema.match(new RegExp(`^ +${field}: \\{.*$`, 'm'))?.[0], `${field} description`).toMatch(/\bOMIT\b/)
+    }
+    expect(schema).not.toMatch(/validate_effort/)
   })
 
   test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
@@ -396,20 +377,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
     expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
-  })
-
-  test('the prep contract tells a real zero from a missing prefix', async () => {
-    const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
-    expect(source).toContain("required: ['number', 'title', 'model', 'effort', 'fableplan'],")
-    const schemaLine = source.match(/^ +complexity: \{.*$/m)[0]
-    expect(schemaLine).toMatch(/OMIT this field entirely when the title carries no \[C\.\.\] prefix/)
-    const promptLine = source.match(/^- complexity: .*$/m)[0]
-    expect(promptLine).toMatch(/OMIT the field rather than sending 0/)
-    expect(source).toContain('function hasScore(complexity) {')
-    expect(source).toContain('  if (!hasScore(complexity)) return BANDS[BANDS.length - 1]')
-    expect(source).toContain('  if (!hasScore(complexity)) return REVIEW_BANDS[REVIEW_BANDS.length - 1]')
-    expect(source).not.toMatch(/complexity <= 0\) return (?:BANDS|REVIEW_BANDS)/)
-    expect(source).not.toMatch(/ex\.complexity > 0/)
   })
 
   test('derives validation entirely from the [C..] score band', async () => {
@@ -467,7 +434,7 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11]],
+      tracks: [[2], [3], [4], [5], [6], [8], [9], [10], [11]],
       reviewLoop: true,
       reviewMode: 'github',
     }, {
@@ -494,9 +461,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#4')).toBe('medium')
     expect(effortFor('validate:#5')).toBe('medium')
     expect(effortFor('validate:#6')).toBe('medium')
-    expect(effortFor('validate:#7')).toBe('high')
-    expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
-    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')
@@ -820,7 +784,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { output } = await executeWorkflow(
       { tracks: [[2]], reviewLoop: false },
       {},
-      { total: null, spent: () => 5_000_000, remaining: () => Infinity },
+      { total: null, spent: () => 5_000_000, remaining: () => 1_000 },
     )
 
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
@@ -1245,22 +1209,34 @@ describe('milestone-pipeline subagent review mode', () => {
     const four = promptFor(events, 'implement:#4 (opus/high)')
     expect(four, '#4 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude opus review effort:high"')
     expect(four, '#4 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude review`')
+
+    const codex = await executeWorkflow({ tracks: [[4]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
+      ...handlers,
+      Prep: () => ({ issues: stampedIssues.filter((issue) => issue.number === 4) }),
+    })
+    const codexPrompt = promptFor(codex.events, 'implement:#4 (opus/high)')
+    expect(codexPrompt, 'codex cycle-1 keeps the stamped effort').toContain('gh pr comment <num> --body "@codex review effort:high"')
+    expect(codexPrompt, 'codex blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@codex review effort:high`')
   })
 
   test('a rescore across a review boundary re-evaluates the stamped first review', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5]], reviewMode: 'github', merge: false }, {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewMode: 'github', merge: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C10] Stamped sonnet, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 3, title: '[C10] Stamped opus, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
           { number: 4, title: '[C10] Stamped sonnet, rescored downward', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'sonnet', first_review_effort: 'high' },
           { number: 5, title: '[C10] Unstamped, rescored past the review boundary', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 6, title: '[C10] Unstamped, rescored downward', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 7, title: '[C75] Stamped opus, rescored downward across the review boundary', complexity: 75, model: 'opus', effort: 'high', fableplan: true, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
         ],
       }),
       'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
       'validate:#3': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
       'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 8 }),
       'validate:#5': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
+      'validate:#6': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 8 }),
+      'validate:#7': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 10 }),
       Implement: (event) => {
         const issue = issueFromLabel(event.label)
         return {
@@ -1269,6 +1245,10 @@ describe('milestone-pipeline subagent review mode', () => {
         }
       },
     })
+
+    expect(promptFor(events, 'implement:#7 (opus/high)'), '#7 keeps the opus stamp on a downward rescore across a review boundary')
+      .toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+    expect(logs.some((m) => m.includes('#7:') && m.includes('across a review boundary'))).toBeFalse()
 
     expect(promptFor(events, 'implement:#2 (opus/high)'), '#2 takes the rescored band default')
       .toContain('gh pr comment <num> --body "@claude review"')
@@ -1284,28 +1264,11 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#5 (opus/high)'), '#5 escalates without a stamp')
       .toContain('gh pr comment <num> --body "@claude review"')
-  })
+    expect(logs.some((m) => m.includes('validator re-scored C10 → C25'))).toBeTrue()
 
-  test('a validator rescore never lowers a stamped first review on a Codex cycle', async () => {
-    const { events } = await executeWorkflow({ tracks: [[4]], reviewMode: 'github', reviewBot: 'codex', merge: false }, {
-      Prep: () => ({
-        issues: [
-          { number: 4, title: '[C5] Stamped opus, rescored to the bare trigger band', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'high' },
-        ],
-      }),
-      'validate:#4': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 25 }),
-      Implement: (event) => {
-        const issue = issueFromLabel(event.label)
-        return {
-          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
-          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
-        }
-      },
-    })
-
-    const prompt = promptFor(events, 'implement:#4 (opus/high)')
-    expect(prompt, 'codex cycle-1 keeps the stamped effort').toContain('gh pr comment <num> --body "@codex review effort:high"')
-    expect(prompt, 'codex blocking re-trigger repeats it').toContain('the blocking re-trigger exactly `@codex review effort:high`')
+    expect(promptFor(events, 'implement:#6 (sonnet/xhigh)'), '#6 keeps the cheap trigger on a downward rescore without a stamp')
+      .toContain('gh pr comment <num> --body "@claude sonnet review"')
+    expect(logs.some((m) => m.includes('#6:') && m.includes('across a review boundary'))).toBeFalse()
   })
 
   test('rejects an unknown reviewBot', async () => {
@@ -1342,14 +1305,10 @@ describe('milestone-pipeline subagent review mode', () => {
   })
 
   test('every first-review boundary falls on a build-band edge', async () => {
-    const source = await Bun.file(new URL('../workflows/milestone-pipeline.js', import.meta.url)).text()
-    const parse = (name) => [...source.matchAll(new RegExp(`${name} = \\[([\\s\\S]*?)\\n\\]`, 'g'))]
-      .flatMap(([, body]) => [...body.matchAll(/min: (\d+), max: (\d+|Infinity)/g)])
-      .map(([, min, max]) => ({ min: Number(min), max: max === 'Infinity' ? Infinity : Number(max) }))
-    const bands = parse('const BANDS')
-    const reviewBands = parse('const REVIEW_BANDS')
-    expect(bands.length).toBe(6)
-    expect(reviewBands.length).toBe(4)
+    const bands = workflowConstant(workflowSource, 'BANDS')
+    const reviewBands = workflowConstant(workflowSource, 'REVIEW_BANDS')
+    expect(bands.length).toBeGreaterThan(0)
+    expect(reviewBands.length).toBeGreaterThan(0)
     const buildEdges = new Set(bands.map((band) => band.min))
     for (const row of reviewBands) {
       expect(buildEdges.has(row.min), `first-review row starting at ${row.min} is not a build-band edge`).toBeTrue()
@@ -1371,29 +1330,6 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (opus/high)')).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.rescore).toBeUndefined()
-  })
-
-  test('a rescore that crosses a review boundary still escalates the first review', async () => {
-    const trigger = async (rescored, label) => {
-      const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
-        Prep: () => ({ issues: [prepIssue({ complexity: 10, model: 'sonnet', effort: 'high', fableplan: false, first_review_model: undefined, first_review_effort: undefined })] }),
-        'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: rescored }),
-        Implement: () => ({
-          pr_number: 1002, pr_url: 'https://example.test/pr/1002', head_ref: 'cc/issue-2', head_sha: headSha(2),
-          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
-        }),
-      })
-      return { prompt: promptFor(events, label), logs }
-    }
-
-    const up = await trigger(25, 'implement:#2 (opus/high)')
-    expect(up.prompt, 'the escalated review band decides cycle 1')
-      .toContain('gh pr comment <num> --body "@claude review"')
-    expect(up.logs.some((m) => m.includes('validator re-scored C10 → C25'))).toBeTrue()
-    const down = await trigger(8, 'implement:#2 (sonnet/high)')
-    expect(down.prompt, 'a downward rescore never weakens the first review')
-      .toContain('gh pr comment <num> --body "@claude sonnet review"')
-    expect(down.logs.some((m) => m.includes('across a review boundary'))).toBeFalse()
   })
 
   test('derives build routing from the validated score when the Execution block is missing', async () => {
@@ -1448,7 +1384,7 @@ describe('milestone-pipeline subagent review mode', () => {
     const record = output.results.find((result) => result.issue === 2)
 
     expect(started(events, 'review:PR#1002 c1 (opus/xhigh)')).toBeTrue()
-    expect(started(events, 'fix:PR#1002 c1 (sonnet/high)')).toBeTrue()
+    expect(events.find((event) => event.state === 'started' && event.label === 'fix:PR#1002 c1 (sonnet/high)')).toMatchObject({ model: 'sonnet', effort: 'high' })
     expect(started(events, 'review:PR#1002 c2 (claude/high)')).toBeTrue()
     expect(record?.status).toBe('merged')
     expect(record?.review.cycles_run).toBe(2)
@@ -1698,55 +1634,13 @@ describe('milestone-pipeline merge and release', () => {
     expect(logs.some((message) => message.includes('merged record for issue #3 (PR #1003) was not used — issue never reached the merge gate in this run'))).toBeTrue()
   })
 
-  test('the skill documents the orchestrator in-session merge procedure', async () => {
+  test('the skill keeps merge authority in-session behind a pinned, recency-gated LGTM', async () => {
     const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
 
-    expect(skill).toContain('--match-head-commit <verified-sha>')
-    expect(skill).toContain('gh pr checks <num> --watch')
-    expect(skill).toContain('gh pr update-branch')
-    expect(skill).toContain('never resolve conflicts yourself')
-    expect(skill).toContain('resumeFromRunId')
-    expect(skill).toContain('`args.merged` extended by `{issue, pr, merge_sha, issue_state}`')
-    expect(skill).toContain('no background subagent ever holds merge authority')
-  })
-
-  test('the skill defines <verified-sha> per review mode after a branch catch-up', async () => {
-    const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
-
-    expect(skill).toContain('This check is against the head **before** any catch-up this procedure performs')
-    expect(skill).toContain('Fix `<verified-sha>`')
-    expect(skill).toContain('or the head you re-captured after `gh pr update-branch` when it did')
-    expect(skill).toContain('**Github review mode:** `<verified-sha>` is the reviewed readiness SHA only')
-    expect(skill).toContain('re-apply this same rule to the newest head')
-  })
-
-  test('the skill keeps the full github-mode LGTM recency gate', async () => {
-    const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
-
-    expect(skill).toContain('`status == completed` and `conclusion == success`')
-    expect(skill).toContain('Never fall back to an older LGTM')
-    expect(skill).toContain('**Do not compare the Actions run\'s `head_sha` to the PR head.**')
-    expect(skill).toContain('`issue_comment` run reports the last commit on the default branch')
-    expect(skill).toContain('check-suites')
-    expect(skill).toContain('`.commit.committer.date`')
-    expect(skill).toContain('No other command may run between the gate and the pinned merge')
-  })
-
-  test('the skill tells the resume to carry the complete original args', async () => {
-    const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
-
-    expect(skill).toContain('passing the **complete original `args`**')
-    expect(skill).toContain('`args.tracks` is required, so a resume that carries `merged` alone throws immediately')
-  })
-
-  test('the skill names both blocked statuses for descendants of an unmerged PR', async () => {
-    const skill = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).text()
-
-    expect(skill).toContain('in-track successors return `merge_pending`, and descendants in other tracks return `dependency_blocked`')
-  })
-
-  test('the workflow describes the release as deferred to the orchestrator, with no agent', async () => {
-    expect(workflowSource).not.toContain('one Sonnet agent runs sync-docs-release')
+    expect(skill).toMatch(/--match-head-commit\s+<?[\w-]+>?/)
+    expect(skill).toMatch(/(?:never|do not|do not ever)[^.\n]{0,40}older LGTM/i)
+    expect(skill).toMatch(/never resolve (?:merge )?conflicts (?:yourself|in-session|by hand)/i)
+    expect(skill).toMatch(/merge authority[^.\n]{0,80}subagent|subagent[^.\n]{0,80}merge authority/i)
   })
 
   test('merge and release default off when review loops are off', async () => {

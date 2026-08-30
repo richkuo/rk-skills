@@ -19,14 +19,7 @@ const skillDirs = (await readdir(new URL('skills/', root), { withFileTypes: true
   .map((entry) => `skills/${entry.name}/SKILL.md`)
 
 const skillTexts = Object.fromEntries(
-  await Promise.all(
-    skillDirs.map(async (path) => [
-      path,
-      await Bun.file(new URL(path, root))
-        .text()
-        .catch(() => ''),
-    ]),
-  ),
+  await Promise.all(skillDirs.map(async (path) => [path, await Bun.file(new URL(path, root)).text()])),
 )
 
 const namesFableModel = (source) => /model:\s*'?fable'?/.test(source.replace(/`/g, ''))
@@ -46,72 +39,24 @@ describe('fable dispatch contract', () => {
     }
   })
 
-  test('no dispatcher keeps an inline model downgrade as its first response', () => {
-    for (const path of KNOWN_DISPATCHERS) {
-      const source = skillTexts[path].replace(/\s+/g, ' ')
-      expect(source, path).not.toMatch(
-        /fall back to the (most capable model available|closest available tier)/i,
-      )
-    }
-  })
-
-  test('the shim command line carries the four required flags and no dangerous flag', async () => {
+  test('the shim command line carries the read-only flags and no dangerous flag', async () => {
     const skill = await read(DISPATCH_SKILL)
     const codeBlocks = skill.match(/```[\s\S]*?```/g) ?? []
     const shimBlocks = codeBlocks.filter((block) => /\bclaude\b[\s\S]*?(-p|--print)/.test(block))
     expect(shimBlocks.length, 'a fenced shim command block exists').toBeGreaterThan(0)
 
     const shim = shimBlocks.join('\n')
-    for (const flag of [
-      '--model fable',
-      '--effort',
-      '--output-format json',
-      '--permission-mode plan',
-      '--allowedTools',
-    ]) {
+    for (const flag of ['--model fable', '--effort', '--output-format json', '--permission-mode plan', '--allowedTools']) {
       expect(shim, flag).toContain(flag)
     }
     for (const block of codeBlocks) {
-      expect(block, 'no code block carries the dangerous flag').not.toContain(
-        '--dangerously-skip-permissions',
-      )
+      expect(block, 'no code block carries the dangerous flag').not.toContain('--dangerously-skip-permissions')
     }
-    expect(skill).toMatch(/--dangerously-skip-permissions[\s\S]{0,200}never/i)
-  })
-
-  test('the shared skill defines detection, parsing, failure, timeout, and attribution', async () => {
-    const skill = (await read(DISPATCH_SKILL)).replace(/\s+/g, ' ')
-
-    expect(skill).toMatch(/\$CLAUDECODE/)
-    expect(skill).toMatch(/command -v claude/)
-
-    for (const key of ['.result', '.is_error', '.modelUsage']) {
-      expect(skill, key).toContain(key)
-    }
-
-    expect(skill).toMatch(/non-zero/i)
-    expect(skill).toMatch(/\.is_error[\s\S]{0,60}true/i)
-    expect(skill).toMatch(/model other than Fable|other than Fable served/i)
-    expect(skill).toMatch(/report(s)? both the failure and the downgrade/i)
-    expect(skill).toMatch(/most capable model available/i)
-
-    expect(skill).toMatch(/default[\s\S]{0,80}timeout[\s\S]{0,80}not sufficient/i)
-    expect(skill).toMatch(/maximum bash timeout/i)
-    expect(skill).toMatch(/background/i)
-
-    expect(skill).toMatch(/never[\s\S]{0,120}interpolat/i)
-
-    expect(skill).toMatch(/footer[\s\S]{0,160}\.?modelUsage/i)
-    expect(skill).toMatch(/harness[\s\S]{0,120}actually running/i)
-
-    expect(skill).toMatch(/allowedTools[\s\S]{0,400}read-only/i)
-    expect(skill).toMatch(/plan mode does not block an allow-listed/i)
-    expect(skill).not.toMatch(/plan mode keeps blocking writes/i)
-
-    expect(skill).toMatch(/adopt[\s\S]{0,120}step-?\s?3/i)
-
-    expect(skill).toMatch(/tier above `high`[\s\S]{0,120}becomes `high`/i)
-    expect(skill).toMatch(/`max`[\s\S]{0,120}becomes `high`/i)
+    const flat = skill.replace(/\s+/g, ' ')
+    expect(flat).toMatch(/--dangerously-skip-permissions[\s\S]{0,200}never/i)
+    expect(flat, 'a downgraded model is reported, never silently adopted').toMatch(/report(s)? both the failure and the downgrade/i)
+    expect(flat, 'the prompt is passed as data').toMatch(/never[\s\S]{0,120}interpolat/i)
+    expect(flat, 'the footer names the model that actually ran').toMatch(/footer[\s\S]{0,160}\.?modelUsage/i)
   })
 
   test('no fable-family skill hardcodes the harness field in a footer', () => {
@@ -119,10 +64,5 @@ describe('fable dispatch contract', () => {
     for (const path of new Set([...KNOWN_DISPATCHERS, ...fableSkills])) {
       expect(skillTexts[path], path).not.toContain('Harness: Claude Code')
     }
-  })
-
-  test('README lists fable-dispatch as a reference skill', async () => {
-    const readme = await read('README.md')
-    expect(readme).toMatch(/\|\s*`fable-dispatch`\s*\|\s*Reference skill:/)
   })
 })

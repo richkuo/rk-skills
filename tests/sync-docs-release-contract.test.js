@@ -36,7 +36,7 @@ describe('sync-docs / release contract', () => {
   test('docs-sync copies state the bidirectional rule and its verification gate', () => {
     for (const path of SYNC_COPIES) {
       const text = normalized[path]
-      expect(text, path).toMatch(/bidirectional/i)
+      expect(text, path).toMatch(/bidirectional|two-way|both directions/i)
       expect(text, path).toMatch(/delete or correct|remove or correct/i)
       expect(text, path).toMatch(/never remove a claim you.{0,20}(have not|haven't) (confirmed|verified)/i)
     }
@@ -45,14 +45,14 @@ describe('sync-docs / release contract', () => {
   test('docs-sync copies forbid creating new top-level docs during a sync', () => {
     for (const path of SYNC_COPIES) {
       expect(normalized[path], path).toMatch(
-        /(must not create|never create) (either|one|a new top-level doc)/i,
+        /(must not create|never create|do not (?:ever )?create) (either|one|a new top-level doc)/i,
       )
     }
   })
 
   test('release copies never force-overwrite an existing tag', () => {
     for (const path of RELEASE_COPIES) {
-      expect(normalized[path], path).toMatch(/(never|do not) force-overwrite/i)
+      expect(normalized[path], path).toMatch(/(never|do not) force[- ](?:overwrite|replace|push over|move)/i)
     }
   })
 

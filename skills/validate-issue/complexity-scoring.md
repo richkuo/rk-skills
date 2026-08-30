@@ -27,6 +27,8 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 | (4,0,0,0,0) | 0 | 8 | **8** | Scope raises Volume without raising Capability |
 | (0,0,0,4,0) | 3 | 0 | **75** | Uncertainty 4 maps to Capability 3 |
 | (0,4,1,1,0) | 2 | 8 | **58** | Coupling 4 forces Capability 2 |
+| (0,3,0,0,0) | 2 | 6 | **56** | Coupling 3 is the floor boundary and forces Capability 2 |
+| (0,2,0,0,0) | 0 | 4 | **4** | Coupling 2 sits below the floor and forces nothing |
 | (0,0,4,0,0) | 3 | 0 | **75** | Risk 4 maps to Capability 3 |
 | (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2 |
 
