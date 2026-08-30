@@ -997,9 +997,10 @@ describe('PR review contract', () => {
     )
 
     expect(row, 'the row counts four channels').toMatch(/four channels the prompt cannot reach/)
-    expect(row, 'and records the residual instead of claiming a closed set').toMatch(
-      /names and descriptions still load as the discovery listing/,
+    expect(row, 'and names the flag as the measured boundary for all four').toMatch(
+      /--setting-sources user[\s\S]{0,600}skill discovery and subagent discovery/,
     )
+    expect(row, 'on the build the pinned action installs').toContain('Claude Code 2.1.251')
   })
 
   test('contract inventory carries the prior-cycle read row', async () => {
