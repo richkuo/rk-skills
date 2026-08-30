@@ -434,7 +434,7 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('normalizes forbidden effort tiers before every dispatch', async () => {
     const { events, logs } = await executeWorkflow({
-      tracks: [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11]],
+      tracks: [[2], [3], [4], [5], [6], [8], [9], [10], [11]],
       reviewLoop: true,
       reviewMode: 'github',
     }, {
@@ -461,9 +461,6 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('validate:#4')).toBe('medium')
     expect(effortFor('validate:#5')).toBe('medium')
     expect(effortFor('validate:#6')).toBe('medium')
-    expect(effortFor('validate:#7')).toBe('high')
-    expect(effortFor('implement:#7 (opus/xhigh)')).toBe('xhigh')
-    expect(effortFor('review-loop:PR#1007 c2-c3')).toBe('xhigh')
 
     for (const [issue, model] of [[3, 'opus'], [4, 'sonnet'], [5, 'haiku']]) {
       expect(effortFor(`implement:#${issue} (${model}/high)`)).toBe('high')

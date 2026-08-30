@@ -4,13 +4,28 @@ const workflowUrl = new URL('../.github/workflows/test.yml', import.meta.url)
 const readWorkflow = () => Bun.file(workflowUrl).text()
 
 function topLevelBlock(source, key) {
-  const lines = source.split('\n')
-  const start = lines.findIndex((line) => line.startsWith(`${key}:`))
-  if (start === -1) return null
+  return blocksOf(source, key, 0)[0] ?? null
+}
 
-  let end = start + 1
-  while (end < lines.length && (lines[end] === '' || /^\s/.test(lines[end]))) end += 1
-  return lines.slice(start, end).join('\n').trimEnd()
+function blocksOf(source, key, onlyIndent = null) {
+  const lines = source.split('\n')
+  const blocks = []
+  lines.forEach((line, start) => {
+    const match = line.match(new RegExp(`^(\\s*)(?:-\\s+)?${key}:(.*)$`))
+    if (!match || (onlyIndent !== null && match[1].length !== onlyIndent)) return
+    const indent = match[1].length
+    let end = start + 1
+    while (end < lines.length && (lines[end].trim() === '' || lines[end].search(/\S/) > indent)) end += 1
+    blocks.push(lines.slice(start, end).join('\n').trimEnd())
+  })
+  return blocks
+}
+
+function grantsOf(block) {
+  const [head, ...rest] = block.split('\n')
+  const inline = head.replace(/#.*$/, '').split(':').slice(1).join(':').trim()
+  const nested = rest.map((line) => line.replace(/#.*$/, '').trim()).filter(Boolean)
+  return inline ? [inline, ...nested] : nested
 }
 
 describe('Bun test workflow contract', () => {
@@ -25,11 +40,15 @@ describe('Bun test workflow contract', () => {
     expect(on).toMatch(/branches:[\s\S]{0,40}\bmain\b/)
   })
 
-  test('uses read-only permissions and the event-default checkout', async () => {
+  test('every permissions block, top-level or job-level, grants contents read only, with the event-default checkout', async () => {
     const workflow = await readWorkflow()
 
-    const grants = topLevelBlock(workflow, 'permissions').split('\n').slice(1).map((line) => line.replace(/#.*$/, '').trim()).filter(Boolean)
-    expect(grants).toEqual(['contents: read'])
+    const blocks = blocksOf(workflow, 'permissions')
+    expect(blocks.length, 'a top-level permissions block exists').toBeGreaterThan(0)
+    expect(topLevelBlock(workflow, 'permissions')).toBeTruthy()
+    for (const block of blocks) {
+      expect(grantsOf(block), block).toEqual(['contents: read'])
+    }
     expect(workflow).toMatch(/uses: actions\/checkout@[0-9a-f]{40} # \S+/m)
     expect(workflow).not.toMatch(/^\s+ref:/m)
   })
