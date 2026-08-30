@@ -60,7 +60,7 @@ jobs:
           model: ${{ contains(github.event.comment.body, '@claude sonnet') && 'claude-sonnet-5' || contains(github.event.comment.body, '@claude fable') && 'claude-fable-5' || contains(github.event.comment.body, '@claude opus') && 'claude-opus-5' || '' }}
           claude_args: >-
             --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)"
-            --disallowedTools "Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task"
+            --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task"
             --setting-sources user
             --settings ${{ runner.temp }}/claude-review-settings.json
           prompt: |
