@@ -4,11 +4,12 @@ import { workflowConstant } from './helpers/workflow-constants.js'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [validateIssue, validateIssueScoring, prdToIssues, pipeline] = await Promise.all([
+const [validateIssue, validateIssueScoring, prdToIssues, pipeline, milestoneplan] = await Promise.all([
   read('skills/validate-issue/SKILL.md'),
   read('skills/validate-issue/complexity-scoring.md'),
   read('skills/prd-to-issues/SKILL.md'),
   read('workflows/milestone-pipeline.js'),
+  read('skills/milestoneplan/SKILL.md'),
 ])
 
 function formulaFromOwner() {
@@ -103,6 +104,23 @@ describe('complexity score band encoding', () => {
       expect(fableplan === '**Yes**', `row ${band} fableplan`).toBe(row.fableplan)
       expect({ model: MODEL_KEY[model], effort }, `row ${band} build`).toEqual(row.build)
     })
+  })
+
+  test('the milestoneplan validate copy covers every owner band with the owner routing', () => {
+    const owner = ownerBands()
+    const line = milestoneplan.match(/^- \*\*Validate\*\*[^\n]*$/m)?.[0]
+    expect(line, 'milestoneplan states its Validate mapping').toBeTruthy()
+    const ranges = [...line.matchAll(/`((?:Sonnet|Opus|Fable) 5 · \w+)` at `\[C(\d+)\]`(?:–`\[C(\d+)\]`| and above)/g)]
+      .map(([, cell, min, max]) => ({ validate: spec(cell), min: Number(min), max: max === undefined ? Infinity : Number(max) }))
+    expect(ranges.length, 'milestoneplan states validate ranges').toBeGreaterThan(0)
+    for (const row of owner) {
+      const covering = ranges.filter((range) => range.min <= row.min && row.max <= range.max)
+      expect(covering.length, `band ${row.band} (${row.min}–${row.max}) is covered by exactly one milestoneplan range`).toBe(1)
+      expect(covering[0].validate, `band ${row.band} validate`).toEqual(row.validate)
+    }
+    for (let score = 0; score <= owner.at(-1).max; score += 1) {
+      expect(ranges.filter((range) => range.min <= score && score <= range.max).length, `score ${score} maps to one range`).toBe(1)
+    }
   })
 
   test('the score gate and the never-lower rule stay stated', async () => {

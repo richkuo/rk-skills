@@ -126,7 +126,7 @@ Also included:
 
 - `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). `AGENTS.md` is a symlink to it in this repo, so both files are one source of truth. Use it as a reference for your own `~/.claude/CLAUDE.md`.
 - `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
-- `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently. The guards check required markers (threshold numbers, stop keywords, field names), never exact sentences, so a wording edit does not break them.
+- `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently. The guards check the smallest marker that proves a rule is present (a threshold number, a stop keyword, a field name), and pin a sentence only where that sentence is itself the contract, so most wording edits do not break them.
 
 ## Install (from a clone)
 
