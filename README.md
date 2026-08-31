@@ -96,7 +96,7 @@ Every new issue records direct predecessors as `**Depends on:** #<n>[, #<n>…] 
 | Skill | What it does |
 |-------|--------------|
 | `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English) under 55 words, one sentence per line. |
-| `wans` | Answers "what are next steps?" for the current work: up to five ordered steps in ASD-STE100 (Simplified Technical English), each marked `You:` or `Me:`. |
+| `wans` | Answers "what are next steps?" for the current work in ASD-STE100 (Simplified Technical English) — a numbered list when there are several steps, each marked `You:` or `Me:`. |
 
 ### Review bot prerequisite
 
