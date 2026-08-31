@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review
-description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "/fix-pr-review". Optional PR number/URL (defaults to the current branch's PR); optional `codex` argument selects Codex as the review bot.
+description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "/fix-pr-review". Optional PR number/URL (defaults to the current branch's PR); optional `codex` argument selects Codex.
 ---
 
 # fix-pr-review
@@ -9,7 +9,7 @@ Resolve every unaddressed review finding autonomously: validate, fix or refute, 
 
 ## Input
 
-In any order: an optional PR reference (number or URL; default = the current branch's PR) and an optional literal `codex` token selecting Codex as this cycle's re-review bot. Any other token doesn't block — use the defaults and name it in the step 11 report as an unrecognized argument. No PR found and none given → say so and stop.
+In any order: an optional PR reference (number or URL; default = the current branch's PR) and an optional literal `codex` token selecting Codex as this cycle's re-review bot. Any other token doesn't block — use the defaults and name it in the step 11 report. No PR found and none given → say so and stop.
 
 ## Steps
 
@@ -74,7 +74,7 @@ If the PR is `CONFLICTING`: `git fetch origin <baseRefName> && git merge origin/
 
 ### 8. Commit and push
 
-Only after verification passes: `git status`; stage **each fix file by name** (never `git add -A`); `git commit -F <msg-file>`; `git push` to the tracked upstream (a fork's head is not on `origin`). Message: "Address review on #<N>: <summary>" plus the LLM Attribution Footer — verb **Updated**, per the global CLAUDE.md/AGENTS.md rule, `Harness: Claude Code`.
+Only after verification passes: `git status`; stage **each fix file by name** (never `git add -A`); `git commit -F <msg-file>`; `git push` to the tracked upstream (a fork's head is not on `origin`). Message: "Address review on #<N>: <summary>" plus the **Updated**-verb LLM Attribution Footer per the global CLAUDE.md/AGENTS.md rule, `Harness: Claude Code`.
 
 ### 9. Post the disposition comment
 
@@ -86,4 +86,4 @@ Post one trigger comment per [rereview-routing.md](rereview-routing.md), read co
 
 ### 11. Report to the user
 
-Terse summary: reviews/threads acted on, per-disposition counts, commit SHA, verification result, and the re-review reviewer. Name every test edit with its case and ground. If step 6 stopped on an ungrounded test, say no commit or push exists and name the test, its `file:line`, what it asserts, and the conflict. Include growth-check numbers, `**Verification limitation:**` sources, and any unrecognized argument only when present. Flag resolved judgment calls for override — the work is done. Edge cases: the stop-condition table in [red-flags-and-mistakes.md](red-flags-and-mistakes.md).
+Terse summary: reviews/threads acted on, per-disposition counts, commit SHA, verification result, and the re-review reviewer. Name every test edit with its case and ground. If step 6 stopped on an ungrounded test, say no commit or push exists and name the test, its `file:line`, what it asserts, and the conflict. Include growth-check numbers, unexpected dirty files left unstaged (step 8), `**Verification limitation:**` sources, and any unrecognized argument only when present. Flag resolved judgment calls for override — the work is done. Edge cases: the stop-condition table in [red-flags-and-mistakes.md](red-flags-and-mistakes.md).
