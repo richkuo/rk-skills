@@ -16,12 +16,9 @@ Reference for SKILL.md; step numbers refer to it.
 |-----------|--------|
 | Finding cites a line that no longer matches current code | Re-validate against current `file:line`; it may already be fixed — Refuted with the reason |
 | Suggested fix touches money/data/security/auto-protective logic | Never blind-apply; implement the safest correct design from first principles |
-| Only some feedback channels checked | Fetch every channel (step 1) and the CI snapshot (step 2) before extracting findings |
-| `git status` shows dirty files you didn't edit | Stage only your fix files; mention the rest in the report |
 | On the base branch or a divergent branch | Check out the PR head first; never commit review fixes to the base |
 | All findings refuted | Still post the disposition with the rebuttals and request re-review — never silently no-op |
 | `Requires Human Review` item | Verify the **Recommended proposed solution:** against the step 4 standard, implement the chosen solution, document decision + rejected alternatives. Never pause, punt, or guess blindly |
-| Tests/build fail after fixes | Report the failure; don't push or claim success |
 | A failing test looks wrong and no checkable ground says so | Leave it and fix the code — your reading is not a ground. Check first whether the red test refutes the finding; if the correct fix still can't pass, stop before step 8 and report the test with its `file:line` |
 | PR `CONFLICTING` with the base | Resolve via step 7 (merge base into head, reconcile intent, re-verify) — never rebase a pushed branch or blanket `ours`/`theirs` |
 | Conflict sides irreconcilable in intent (esp. safety-class code) | Stop and surface to the user instead of guessing |

@@ -52,7 +52,8 @@ Post a **separate** comment (`gh pr comment <N> --body "@claude review"` etc.) �
 
 ## Growth check
 
-Inputs for fix-pr-review step 4's growth check, both read from the PR itself so a resumed loop sees the same values:
+For fix-pr-review step 4's growth check, all read from the PR itself so a resumed loop sees the same values:
 
 - **`<first-push-sha>`** — from `gh pr view <N> --json commits`, the newest commit whose `committedDate` is at or before the cycle-1 trigger comment's timestamp; with no trigger comment, use the PR's `createdAt`. A first push of several commits resolves to the last of them.
+- **Measurement** — `git diff --stat $(git merge-base origin/<baseRefName> HEAD)..HEAD` against the same reading at `<first-push-sha>`. Never a plain `<first-push-sha>..HEAD` two-dot diff, which counts every base change since the branch point — including commits a step 7 merge brought in — as PR growth.
 - **`pr_cycle_count`** — the PR's `@<bot> … review` trigger comments read chronologically per the cycle-1 rule, skipping the cheap non-blocking re-triggers, plus one when review feedback predates every trigger comment. This is never the loop's in-memory `review_count`.
