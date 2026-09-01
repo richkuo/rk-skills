@@ -6,21 +6,19 @@ description: >-
 
 # issueplan
 
-Plan with the current large language model (LLM) in the current session. Keep planning and building in this session.
-
-Do not create or use a subagent during this workflow. The current agent owns every step.
+The current session's large language model (LLM) plans and builds. Never call the Agent tool, Task tool, workflow delegation, or any subagent mechanism at any step.
 
 ## Input
 
-Accept a task description and an optional GitHub issue:
+A task description, with an optional GitHub issue:
 
-- Accept prose, such as "issueplan adding X to Y."
-- Accept a full issue URL, `#<N>`, bare `<N>`, or `owner/repo#N`.
-- Ask what to plan only when the task is unclear.
+- Prose, such as "issueplan adding X to Y".
+- An issue reference: full URL, `#<N>`, bare `<N>`, or `owner/repo#N`. The plan is then also posted as an issue comment.
+- Ask what to plan only when the task is unclear. With no issue referenced, never invent one or post anywhere.
 
 ## Steps
 
-### 1. Resolve the GitHub issue when one is referenced
+### 1. Resolve the GitHub issue (only if one is referenced)
 
 Fetch the issue before planning:
 
@@ -28,110 +26,55 @@ Fetch the issue before planning:
 gh issue view <N> --json number,title,body,url
 ```
 
-Add `-R owner/repo` for another repository. A bare command resolves against the current repository.
+Add `-R owner/repo` for another repository. Stop and tell the user if the command fails. Never plan from a paraphrase of an issue you could not fetch.
 
-Stop if the command fails. Do not plan from a paraphrase when the referenced issue is unavailable.
-
-Record the issue number, URL, title, and full body. Skip issue posting in step 4 when the user gave no issue.
-
-Read any `## Execution` block as a task constraint. Keep the current session model and effort for planning.
+Record the number, URL, title, and full body for steps 2 and 4. Read any `## Execution` block as a task constraint. Planning still runs on the current session model and effort.
 
 ### 2. Produce the plan in the current session
 
-Do not call the Agent tool, Task tool, workflow delegation, or any subagent mechanism.
-
 Inspect the repository with read-only commands. Read its instruction files and the code that controls the requested behavior.
 
-Produce a concrete, ordered implementation plan. Include:
+Produce a concrete, ordered plan: files to create or modify, the approach, build sequence, correctness and safety risks, edge cases, and verification. Number the implementation steps (`1.`, `2.`, …) and end each step with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state).
 
-- Files to create or modify.
-- The implementation approach and build sequence.
-- Correctness risks, safety risks, and edge cases.
-- Tests and other verification.
+Plan the absolute-best solution. Cost, time, token use, and code volume never narrow the option space. Only correctness and safety override "best".
 
-Number the implementation steps (`1.`, `2.`, …). End each step with a verify point: the observable check that proves the step is done (a command to run, a test that passes, a file state to confirm). Builders mirror these steps into their progress tracker during long builds.
-
-Select the best solution for correctness and safety. Ignore cost, time, token use, and code volume during solution selection.
-
-Keep the plan in clean Markdown. Make it suitable for direct use and for a GitHub issue comment.
-
-Save the plan to a temporary scratchpad immediately. Preserve its exact text for step 4 and the later build.
-
-Use the current session model and effort in attribution. Use a repository-defined fallback only when its instructions require one.
-
-Never infer unavailable attribution values. State the limitation before posting when repository instructions provide no fallback.
+Write the plan in clean Markdown, fit to act on directly and to post verbatim as an issue comment. Save it to a scratchpad file at once. It must survive context summarization during a long build, and step 4 posts from it.
 
 ### 3. Check the plan against the code
 
-Verify each load-bearing claim against the repository. Confirm that named files, symbols, commands, and conventions exist.
+Verify each load-bearing claim: the files, symbols, commands, and conventions the plan names exist. Fix small errors yourself, note them, and update the scratchpad file. If the plan depends on a missing mechanism or a major false assumption, stop and ask the user whether to revise the task or the plan.
 
-Correct small errors and update the scratchpad. Tell the user what changed.
+### 4. Post the plan to the GitHub issue (only if one was resolved in step 1)
 
-Stop when the plan depends on a missing mechanism or a major false assumption. Ask the user whether to revise the task or plan.
-
-### 4. Post the plan when an issue was resolved
-
-Add this heading before the checked plan:
-
-```
-## Implementation plan (current session)
-```
-
-End the comment with the repository's required attribution footer. Use this form when the repository has no stronger rule:
+Post the checked plan before building, so it is preserved whatever happens to the build. Build the body from the scratchpad file: a heading line `## Implementation plan (current session)`, the plan, then the repository's required attribution footer. Use this form when the repository has no stronger rule:
 
 ```
 ---
 Created with LLM: <current session model> | <current session effort> | Harness: issueplan
 ```
 
-Post the prepared file:
+Fill the model and effort from the current session. Never guess a value the session cannot observe; when the repository gives no fallback, tell the user the limitation before posting.
 
 ```
 gh issue comment <N> --body-file <tmpfile>
 ```
 
-Add `-R owner/repo` for another repository. Give the returned comment URL to the user.
-
-Skip this step when the user gave no issue. Do not create or select an issue on the user's behalf.
+Add `-R owner/repo` for another repository. Follow the repository's comment conventions (for example no bare `#N` list numbering). Give the user the comment URL.
 
 ### 5. Present the plan
 
-Show the checked plan to the user. Include the issue comment URL when step 4 posted it.
+Show the checked plan, with the comment URL when step 4 posted it. State any attribution limitation or repository constraint that affects the plan.
 
-State any attribution limitation or repository constraint that affects the plan.
+### 6. Ask whether to continue building (only if an issue was referenced)
 
-### 6. Confirm issue builds or continue prose tasks
+The plan is safely posted, so do not assume an immediate build. Ask (for example via `AskUserQuestion`) whether to build now or stop. On stop, end the skill; the user can resume later with `work-on-issue`. With no issue, there is nothing posted to fall back to, so skip the question and build.
 
-Ask whether to continue building or stop after the posted plan. Use the harness question tool when one is available.
+### 7. Set up an isolated git worktree
 
-End the workflow when the user stops. They can resume later with `work-on-issue`.
+Never build in the user's current checkout. If the directory is not a git repository, tell the user and ask how to proceed. Create the worktree and branch per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"). Deltas: the name is `<agent-prefix>/issueplan/<short-task-name>`, and there is no `baseRefs` input, so the base is always the fetched `origin/<default-branch>`.
 
-For a task with no issue, continue directly into worktree creation, implementation, and pull request creation after presenting the checked plan.
+### 8. Build
 
-Ask first only when the plan exposes a required product decision or unsafe ambiguity.
+Build per the plan in the worktree with the current session LLM. Before writing any code, mirror the plan's numbered steps into the task tracker per `work-on-issue` step 2 (its "Mirror the plan's steps into the task tracker" paragraph). That paragraph owns the mirroring rule, both fallbacks, and the disposition of a step an override cancels. Confirm with the user first only when the plan exposes a product decision or an unsafe ambiguity.
 
-### 7. Create an isolated git worktree
-
-Keep all changes out of the user's current checkout. Stop and ask how to proceed when the directory is not a git repository.
-
-Create the worktree and branch per `work-on-issue` step 1, "Create the isolated worktree on a verified base". Use the name `<agent-prefix>/issueplan/<short-task-name>`. Supply no `baseRefs`; the base is the fetched `origin/<default-branch>`.
-
-Verify the working directory before every later write.
-
-### 8. Build from the plan
-
-Implement the checked plan in the worktree with the current session LLM. Do not delegate implementation to a subagent.
-
-Before you write any code, copy the plan's numbered steps into the task tracker per `work-on-issue` step 2, "Mirror the plan's steps into the task tracker". That step owns the rule, the two fallbacks, and what to do with a step that an override cancels.
-
-Follow repository test, commit, push, and pull request rules. Record any plan deviation in the pull request.
-
-Remove the worktree only after repository rules permit removal.
-
-## Rules
-
-- Keep the same session and current LLM for planning and building.
-- Use no subagent at any point.
-- Post only to an issue the user referenced.
-- Preserve the checked plan for the build.
-- Follow repository instructions for attribution and git workflow.
+Follow the repository's test, commit, push, and pull request rules. Record every plan deviation in the pull request body. Remove the worktree once it is no longer needed and repository rules permit.
