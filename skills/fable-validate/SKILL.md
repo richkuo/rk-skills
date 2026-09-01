@@ -1,11 +1,11 @@
 ---
 name: fable-validate
-description: Use when the user wants a GitHub issue validated by a Fable 5 subagent. Spins up a read-only subagent running on Fable 5 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
+description: Use when the user wants a GitHub issue validated by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
 ---
 
 # fable-validate
 
-Delegate issue validation to a **Fable 5** subagent, then act on its verdict in the main agent. The subagent only validates — it never edits files or the issue; the main agent handles all follow-on actions.
+Delegate issue validation to a **Fable 5.1** subagent, then act on its verdict in the main agent. The subagent only validates — it never edits files or the issue; the main agent handles all follow-on actions.
 
 ## Input
 
@@ -29,12 +29,12 @@ Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–8 of the procedure, including fetching. If no issue was referenced, the subagent resolves the latest open issue itself per the procedure.
 
-### 2. Dispatch the Fable 5 validation subagent
+### 2. Dispatch the Fable 5.1 validation subagent
 
 Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps validation side-effect-free)
-- `model`: `fable` (the whole point — the validation must come from Fable 5)
+- `model`: `fable` (the whole point — the validation must come from Fable 5.1)
 - `run_in_background`: `false` — everything downstream depends on the verdict
 - `description`: `Validate issue #<N>` (or `Validate latest issue`)
 - `prompt`: hand it everything needed to validate independently:
@@ -49,22 +49,22 @@ When the result arrives, save the verdict verbatim to a scratchpad file immediat
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any ❌/⚠️ claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any ❌/⚠️ claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
 
 ### 4. Relay the verdict to the user
 
-Present the vetted verdict in the validate-issue step-8 format, noting it was produced by Fable 5 and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
+Present the vetted verdict in the validate-issue step-8 format, noting it was produced by Fable 5.1 and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
 
 ### 5. Follow-on actions (main agent)
 
 Handle the user's reply per the validate-issue procedure — these are main-agent actions, never re-delegated:
 
-- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5 subagent, use `Validated with LLM: Fable 5 | high | Harness: <harness> | fable-validate`, where `<harness>` names the harness actually running per `fable-dispatch` section 6, and the model names the one that actually served the dispatch (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
+- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5.1 subagent, use `Validated with LLM: Fable 5.1 | high | Harness: <harness> | fable-validate`, where `<harness>` names the harness actually running per `fable-dispatch` section 6, and the model names the one that actually served the dispatch (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → file the proposed parts per validate-issue step 7, each fully specified.
 
 ## Notes
 
-- The validation subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
+- The validation subagent runs on Fable 5.1 regardless of the main agent's model — `model: fable` on the Agent call forces it.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.

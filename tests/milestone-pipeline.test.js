@@ -288,9 +288,9 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(planEvent(4).effort).toBe('high')
     expect(planEvent(5)).toBeUndefined()
 
-    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
-    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
-    expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
+    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
+    expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
@@ -327,7 +327,7 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     const planEvent = events.find((event) => event.state === 'started' && event.label === 'plan:#4')
     expect(planEvent.effort).toBe('high')
-    expect(planEvent.prompt).toContain('Created with LLM: Fable 5 | high | Harness: milestone-pipeline')
+    expect(planEvent.prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
   })
 
   test('the prep schema tells the agent to omit every field the runtime derives when absent', () => {
@@ -369,7 +369,7 @@ describe('milestone-pipeline dependency scheduling', () => {
         .toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     }
     expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5 @ medium')
-    expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high')
+    expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5.1 @ high')
     expect(logs).toContain('#5: prep reported C0 but the title carries no [C<score>] prefix — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
@@ -425,10 +425,10 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#7: C50 (band 21–50) — validating on Opus 5 @ high',
       '#8: C51 (band 51–70) — validating on Opus 5 @ xhigh',
       '#9: C70 (band 51–70) — validating on Opus 5 @ xhigh',
-      '#10: C71 (band 71–80) — validating on Fable 5 @ medium',
-      '#11: C80 (band 71–80) — validating on Fable 5 @ medium',
-      '#12: C81 (band 81+) — validating on Fable 5 @ high',
-      '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5 @ high',
+      '#10: C71 (band 71–80) — validating on Fable 5.1 @ medium',
+      '#11: C80 (band 71–80) — validating on Fable 5.1 @ medium',
+      '#12: C81 (band 81+) — validating on Fable 5.1 @ high',
+      '#13: no [C..] prefix — unknown routes as the top band — validating on Fable 5.1 @ high',
     ])
   })
 
@@ -1200,7 +1200,7 @@ describe('milestone-pipeline subagent review mode', () => {
     const two = promptFor(events, 'implement:#2 (opus/high)')
     expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review`')
-    expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5'))).toBeTrue()
+    expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5.1'))).toBeTrue()
 
     const three = promptFor(events, 'implement:#3 (opus/xhigh)')
     expect(three, '#3 stamp is replaced by the stronger band default').toContain('gh pr comment <num> --body "@claude fable review effort:high"')

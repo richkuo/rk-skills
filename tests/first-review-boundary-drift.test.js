@@ -21,7 +21,7 @@ const RESTATING_SITES = new Set([OWNER, RUNTIME, ...ACTION_PROMPTS, ...DOCS, 'te
 const read = (path) => Bun.file(new URL(`../${path}`, import.meta.url)).text()
 
 const OWNER_TABLE_ROW = /^\| (\d+)–(\d+)(?:, or no score)? \| ([^|]+?) \| ([^|]+?) \| ([^|]+?) \|$/gm
-const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5': 'fable' }
+const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5.1': 'fable' }
 const RANGE = (low, high) => new RegExp(`C${low}\\s*(?:to|–|-)\\s*C${high}\\b`)
 
 async function ownerRows() {

@@ -1,11 +1,11 @@
 ---
 name: fable-new-issue
-description: Use when the user wants a GitHub issue created by a Fable 5 subagent. Spins up a read-only subagent running on Fable 5 that executes the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a fully-composed issue draft, which the main agent spot-checks and files. Trigger on "/fable-new-issue", "fable new issue <description>", or "create this issue with fable".
+description: Use when the user wants a GitHub issue created by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a fully-composed issue draft, which the main agent spot-checks and files. Trigger on "/fable-new-issue", "fable new issue <description>", or "create this issue with fable".
 ---
 
 # fable-new-issue
 
-Delegate issue drafting to a **Fable 5** subagent, then file it from the main agent. The subagent only researches and composes — it never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
+Delegate issue drafting to a **Fable 5.1** subagent, then file it from the main agent. The subagent only researches and composes — it never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
 
 ## Input
 
@@ -28,12 +28,12 @@ Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the input is conversation-derived, write the scratchpad summary now (see Input). Do NOT pre-research or pre-draft the issue yourself — the subagent owns steps 1–6 of the procedure up to (but not including) the `gh issue create` call.
 
-### 2. Dispatch the Fable 5 drafting subagent
+### 2. Dispatch the Fable 5.1 drafting subagent
 
 **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps drafting side-effect-free)
-- `model`: `fable` (the whole point — the draft must come from Fable 5)
+- `model`: `fable` (the whole point — the draft must come from Fable 5.1)
 - `run_in_background`: `false` — filing depends on the draft
 - `description`: `Draft issue: <short topic>`
 - `prompt`: hand it everything needed to draft independently:
@@ -56,7 +56,7 @@ Before filing, spot-check the draft's load-bearing `file:line` citations against
 
 File per new-issue step 6: `gh issue create --title "[C<score>] <title>" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
 
-Footer: since the draft came from the Fable 5 subagent, use `Created with LLM: Fable 5 | high | Harness: <harness> | fable-new-issue`, where `<harness>` names the harness actually running per `fable-dispatch` section 6 and the model names the one that actually served the dispatch. A repo CLAUDE.md footer format overrides.
+Footer: since the draft came from the Fable 5.1 subagent, use `Created with LLM: Fable 5.1 | high | Harness: <harness> | fable-new-issue`, where `<harness>` names the harness actually running per `fable-dispatch` section 6 and the model names the one that actually served the dispatch. A repo CLAUDE.md footer format overrides.
 
 ### 6. Report
 
@@ -64,6 +64,6 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 
 ## Notes
 
-- The drafting subagent runs on Fable 5 regardless of the main agent's model — `model: fable` forces it.
+- The drafting subagent runs on Fable 5.1 regardless of the main agent's model — `model: fable` forces it.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

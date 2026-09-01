@@ -34,7 +34,7 @@ Judgment-heavy work must raise Uncertainty or Coupling. Grade from the traced su
 
 ## Routing details
 
-- Fable 5 has a high-effort ceiling and never runs at xhigh.
+- Fable 5.1 has a high-effort ceiling and never runs at xhigh.
 - Fable is never the default builder. A Fable build requires explicit user direction.
 - Derive the first-review trigger and model from the main skill's first-review table, which owns every first-review boundary. Its scale is coarser than the band table's: each first-review row groups whole bands rather than cutting across them, and it is still a separate table, but each row must start on a band edge above, so a band change that moves an edge this table uses moves this table with it, while a band split that only adds a new edge leaves it unchanged.
 - Every reviewer above the standard trigger runs one blocking cycle only — however the main skill's first-review table or a stamped `PR review:` line selected it, at any score. Each blocking re-review steps down one rung: Fable to Opus, then to the standard reviewer, where the ladder stops; Opus to the standard reviewer for every blocking re-review. The step-down keys to the reviewer that ran cycle 1. The score band does not decide it. Neither heavy reviewer repeats, and the ladder never steps down to Sonnet.
