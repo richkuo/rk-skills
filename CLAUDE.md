@@ -27,8 +27,8 @@
 
 ## Who You're Working With
 
-- A **technical product manager** with a product-engineer streak: owns products end-to-end, sets technical and architectural direction, cares about code-level decisions, and directs and specifies while delegating code authoring to you. Assume fluency with system concepts (latency, races, migrations, API contracts). Do not assume they want to read or write code unless they say so.
-- **Default altitude:** architecture, behavior, and tradeoffs: what the system does, what changes for users, cost and risk. Lead with ASD-STE100. Leave out this codebase's internal names, raw symbols, jargon, and code-level specifics. Exceptions: a code-level task (a specific bug fix, refactor, or review) drops to identifiers and file:line, and an explicit ask about a symbol or file gets a direct answer.
+- A **technical product manager** who sets technical and architectural direction and delegates code authoring to you. Assume fluency with system concepts (latency, races, migrations, API contracts). Do not assume they want to read or write code unless they say so.
+- **Default altitude:** architecture, behavior, and tradeoffs, in ASD-STE100, with no internal names, raw symbols, jargon, or code-level specifics. A code-level task (a specific bug fix, refactor, or review) or an explicit ask about a symbol or file drops to identifiers and file:line.
 
 ## Package Manager
 
@@ -52,13 +52,7 @@
 - Make parallel tool calls when operations are independent.
 - Check git status before commits.
 - Prefer editing existing files over creating new ones.
-- Press `#` in a session to incorporate learnings into CLAUDE.md.
-- Never proactively invoke `superpowers:*` skills; run them only on an explicit `/` trigger.
-- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. The `superpowers:*` ban still wins. In a harness with no skill list, read the skill files directly: `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills repo checkout.
-
-### Local CI via `act`
-
-- **If CI runs via `act` locally** instead of a GitHub-hosted or self-hosted runner: scrub the log for secrets, truncate or split it under GitHub's ~65k-character comment limit, and post the sanitized output as a PR comment ending with the LLM Attribution Footer (a footer-less raw dump is never exempt). Read that comment before merging. Fix or explain any failure first, and never merge past a posted failure without a stated reason. If `act` was not run either, run the project's lint, typecheck, and test commands locally before merging.
+- **Use matching skills when available.** When an available skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. In a harness with no skill list, read the skill files directly: `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills repo checkout.
 
 ## LLM Attribution Footer
 
@@ -86,15 +80,6 @@
 
 - The `github-issue-format` skill owns the issue format: title convention, complexity rationale line, fableplan signal, complete-body rule, footer. Load it before creating or editing any issue.
 - **Issue body order:** complexity rationale line, `## Problem`, `## Goal`, `## Approach`, `## Acceptance criteria`, `## Plain simple English`, then any Execution block, then the attribution footer. The Plain simple English block is mandatory on every issue, and an edit that rewrites a body adds it when it is missing.
-
-## Spec Authoring (PRDs and other executable specs)
-
-- A spec is executable: agents implement its lines literally. Every normative line must survive a literal reading. Ask whether an agent can follow the line exactly as written and still produce the wrong thing.
-- **Verify API claims against the installed SDK or type definitions.** Before a spec names a property, type, or signature, read the declaration at the deployment target (`*.swiftinterface` under `xcrun --sdk iphoneos --show-sdk-path`, or the package's own `.d.ts`). Web documentation alone is insufficient evidence. A sample written against a legacy API (for example the `VN*` Vision types) proves nothing about its modern replacement.
-- **In-repo evidence outranks external documentation.** A code comment that records a compile failure is ground truth. Contradict it only by reproducing the compile.
-- **Terminology edits sweep every dependent.** After a spec renames or forbids a mechanism, search the spec and all open issues for each remaining mention: implementation orders, tables, checklists, acceptance criteria.
-- **Realtime-path lines name the mechanism per component.** When components differ in units, coordinate spaces, or timelines, give each its own explicit statement. A shared phrase that groups them invites a wrong literal reading.
-- Spec pull requests get the same review gate as code pull requests. A spec error multiplies across every issue that cites the section.
 
 ## Git Workflow (all repos)
 
