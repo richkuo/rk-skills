@@ -45,6 +45,15 @@ Structure (adapt section names to the product, keep the skeleton):
 - Garbled or ambiguous input: make the best-effort interpretation in place **and** file the ambiguity in Open Questions. Never silently guess; never ask about things a sensible default covers.
 - Anything you inferred rather than were told (e.g. an implied App Store policy, an implied email type) — say so inline.
 
+### 3b. Executable-spec rules (apply to every PRD edit)
+
+- A spec is executable: agents implement its lines literally. Every normative line must survive a literal reading. Ask whether an agent can follow the line exactly as written and still produce the wrong thing.
+- **Verify API claims against the installed SDK or type definitions.** Before the spec names a property, type, or signature, read the declaration at the deployment target (`*.swiftinterface` under `xcrun --sdk iphoneos --show-sdk-path`, or the package's own `.d.ts`). Web documentation alone is insufficient evidence. A sample written against a legacy API (for example the `VN*` Vision types) proves nothing about its modern replacement.
+- **In-repo evidence outranks external documentation.** A code comment that records a compile failure is ground truth. Contradict it only by reproducing the compile.
+- **Terminology edits sweep every dependent.** After the spec renames or forbids a mechanism, search the spec and all open issues for each remaining mention: implementation orders, tables, checklists, acceptance criteria.
+- **Realtime-path lines name the mechanism per component.** When components differ in units, coordinate spaces, or timelines, give each its own explicit statement. A shared phrase that groups them invites a wrong literal reading.
+- Spec pull requests get the same review gate as code pull requests. A spec error multiplies across every issue that cites the section.
+
 ### 4. Land it
 
 Worktree off latest `origin/main`, branch `cc/prd`, commit `PRD.md`, push, open a PR. Attribution footer on the PRD file itself, the commit, and the PR body (`Created`).
