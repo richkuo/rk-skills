@@ -1,7 +1,5 @@
 # Architecture procedure
 
-Read this file completely when the main skill links it from Architecture.
-
 ## Runtime topology
 
 Trace the hot path from its entrypoint. Identify processes, threads, containers, or requests; who spawns or dispatches them; and each lifetime. Cite the spawn or dispatch site.
@@ -23,7 +21,7 @@ For each shared or authoritative state item, require or derive:
 | Consumer contract | Inject, pull, subscribe, or explicit recompute fallback |
 | Failure policy | Miss, stale value, timeout, and error behavior |
 
-Mark the design ⚠️ when any required answer is absent and supply the code-grounded answer when possible.
+Mark the design ⚠️ when a required answer is absent, and supply the code-grounded answer when possible.
 
 ## Isolation boundaries
 
@@ -42,7 +40,7 @@ Treat every proposed site list as a set claim. Search each affected field or sym
 
 Read the complete load/apply sequence around each proposed edit. Check for an earlier normalization that pre-empts an unset guard and for a later copy/apply site that the issue omitted. An unnamed required site makes architecture ⚠️ or ❌.
 
-For aggregates or shared state, also confirm the enclosing partition boundary and key match the scope that feeds the facility.
+For aggregates or shared state, also confirm that the enclosing partition boundary and key match the scope that feeds the facility.
 
 ## Verdict
 
