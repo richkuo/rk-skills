@@ -20,7 +20,7 @@ class ModelDisplayNameTest(unittest.TestCase):
         self.assertEqual(model_display_name("claude-opus-4-8[1m]"), "Claude Opus 4.8 (1M)")
         self.assertEqual(model_display_name("claude-opus-5"), "Claude Opus 5")
         self.assertEqual(model_display_name("claude-sonnet-5"), "Claude Sonnet 5")
-        self.assertEqual(model_display_name("claude-fable-5"), "Claude Fable 5")
+        self.assertEqual(model_display_name("claude-fable-5-1"), "Claude Fable 5.1")
 
     def test_codex_ids_mapped(self):
         self.assertEqual(model_display_name("gpt-5.6-sol"), "GPT-5.6 Sol")
@@ -60,9 +60,9 @@ class ComposeTest(unittest.TestCase):
 
     def test_replaces_stale_footer(self):
         once = compose("body", "claude-sonnet-5", "medium", HARNESS)
-        twice = compose(once, "claude-fable-5", "xhigh", HARNESS)
+        twice = compose(once, "claude-fable-5-1", "xhigh", HARNESS)
         self.assertEqual(twice.count("LLM:"), 1)
-        self.assertIn("Claude Fable 5 | xhigh", twice)
+        self.assertIn("Claude Fable 5.1 | xhigh", twice)
         self.assertNotIn("medium", twice)
 
     def test_status_note_before_footer(self):

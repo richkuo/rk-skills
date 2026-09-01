@@ -283,7 +283,7 @@ describe('review routing', () => {
 
   test('the Claude review caller resolves every band shorthand it is sent', () => {
     const workflow = texts[CLAUDE_CALLER]
-    for (const [shorthand, modelId] of [['sonnet', 'claude-sonnet-5'], ['opus', 'claude-opus-5'], ['fable', 'claude-fable-5']]) {
+    for (const [shorthand, modelId] of [['sonnet', 'claude-sonnet-5'], ['opus', 'claude-opus-5'], ['fable', 'claude-fable-5-1']]) {
       expect(workflow, `${shorthand} shorthand`).toMatch(
         new RegExp(`${shorthand}\\|${shorthand}5\\)\\s+MODEL_ID="${modelId}"`),
       )

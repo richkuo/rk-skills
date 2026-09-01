@@ -24,7 +24,7 @@ MODEL_DISPLAY_NAMES = {
     "claude-opus-4-8[1m]": "Claude Opus 4.8 (1M)",
     "claude-opus-5": "Claude Opus 5",
     "claude-sonnet-5": "Claude Sonnet 5",
-    "claude-fable-5": "Claude Fable 5",
+    "claude-fable-5-1": "Claude Fable 5.1",
     "gpt-5.6-sol": "GPT-5.6 Sol",
     "gpt-5.6-terra": "GPT-5.6 Terra",
     "gpt-5.6-luna": "GPT-5.6 Luna",

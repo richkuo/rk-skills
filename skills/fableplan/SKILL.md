@@ -1,11 +1,11 @@
 ---
 name: fableplan
-description: Use when the user wants a task planned by a Fable 5 planning subagent before building it. Spins up a Plan subagent running on Fable 5 to produce an implementation plan, relays the plan back to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue and asks the user whether to continue building now before proceeding. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
+description: Use when the user wants a task planned by a Fable 5.1 planning subagent before building it. Spins up a Plan subagent running on Fable 5.1 to produce an implementation plan, relays the plan back to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue and asks the user whether to continue building now before proceeding. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
 ---
 
 # fableplan
 
-Delegate planning to a **Fable 5** Plan subagent, then build from its plan in the main agent. The main agent does the building — the subagent only plans.
+Delegate planning to a **Fable 5.1** Plan subagent, then build from its plan in the main agent. The main agent does the building — the subagent only plans.
 
 ## Input
 
@@ -32,12 +32,12 @@ Record the issue number and URL — you'll need them in step 4. If no issue is r
 
 Also note any legacy **Plan effort** line on the fetched body — step 2 always dispatches at `high`; any stamped tier that is not `high` is clamped and reported in step 5. When no issue is referenced, step 2 still dispatches at `high`.
 
-### 2. Dispatch the Fable 5 Plan subagent
+### 2. Dispatch the Fable 5.1 Plan subagent
 
 Do not re-plan the task yourself first — the subagent owns the plan. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan`
-- `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5)
+- `model`: `fable` (this is the whole point of the skill — the plan must come from Fable 5.1)
 - `run_in_background`: `false` — every later step depends on the plan, so wait for it synchronously instead of doing other work first
 - `effort`: always `high`. Pass it explicitly rather than omitting it — an omitted parameter leaves the subagent on the session's own tier, which the footer cannot name honestly and which may be below `high`. **Not every harness's Agent tool accepts `effort`.** Before passing it, check the Agent tool's own parameter schema in this harness: if it exposes no `effort` property, don't construct the argument — dispatch without it and note that the tier could not be honored. If the schema check is inconclusive and the call fails input validation on the parameter, re-dispatch once without `effort` rather than treating it as the step-2 failure below; a plan at session effort beats no plan. Either way this is a degradation, not an error — never abort the step over it, and report it to the user in step 5. This degradation is Agent-tool-only: on `fable-dispatch`'s CLI-shim path, `--effort high` carries the tier directly.
 - `description`: `Plan <short task name>`
@@ -52,11 +52,11 @@ The Plan subagent's final message is returned to you as the tool result; it is n
 
 When the result arrives:
 - Save the plan verbatim to a scratchpad file immediately, so it survives context summarization during a long build and step 4 can post it exactly as produced.
-- **Record the model and effort the subagent actually ran at** — the model is `Fable 5` unless the `fable-dispatch` fallback ladder substituted another, and the effort is `high` unless the harness accepted no `effort` at all. Only in that last case does the recorded value become a convention rather than an observation — then record `high` and **do not try to name the session's own tier**, which an agent cannot observe. Also record *whether* the tier was honored — step 5 tells the user when a legacy stamped tier that is not `high` was clamped. Step 4's footer names these recorded values, so resolve them now rather than assuming the run took effect.
+- **Record the model and effort the subagent actually ran at** — the model is `Fable 5.1` unless the `fable-dispatch` fallback ladder substituted another, and the effort is `high` unless the harness accepted no `effort` at all. Only in that last case does the recorded value become a convention rather than an observation — then record `high` and **do not try to name the session's own tier**, which an agent cannot observe. Also record *whether* the tier was honored — step 5 tells the user when a legacy stamped tier that is not `high` was clamped. Step 4's footer names these recorded values, so resolve them now rather than assuming the run took effect.
 
 ### 3. Sanity-check the plan against the code
 
-Before posting or presenting it, verify the plan's load-bearing claims against the actual codebase: the files it says to modify exist, the functions/symbols it references are real, and it doesn't contradict repo conventions (CLAUDE.md). Fix small inaccuracies yourself and note them; if the plan is structurally wrong (built on a file or mechanism that doesn't exist), do NOT automatically re-dispatch the Plan subagent — stop and tell the user what's failing, and let them decide whether to re-plan with Fable 5, adjust the task, or proceed anyway. If you fixed small inaccuracies, update the scratchpad file from step 2 so it reflects the corrected plan before step 4 posts it.
+Before posting or presenting it, verify the plan's load-bearing claims against the actual codebase: the files it says to modify exist, the functions/symbols it references are real, and it doesn't contradict repo conventions (CLAUDE.md). Fix small inaccuracies yourself and note them; if the plan is structurally wrong (built on a file or mechanism that doesn't exist), do NOT automatically re-dispatch the Plan subagent — stop and tell the user what's failing, and let them decide whether to re-plan with Fable 5.1, adjust the task, or proceed anyway. If you fixed small inaccuracies, update the scratchpad file from step 2 so it reflects the corrected plan before step 4 posts it.
 
 ### 4. Post the plan to the GitHub issue (only if one was resolved in step 1)
 
@@ -66,14 +66,14 @@ Now that the plan has passed the sanity-check, save it to the issue as a comment
 gh issue comment <N> --body-file <tmpfile>
 ```
 
-Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the scratchpad file from step 2 (with any step-3 corrections) as the body-file base — it avoids shell-escaping problems with Markdown. Prefix the comment so its origin is clear with a heading line `## Implementation plan (Fable 5)` above the plan body, and end the body with the standard metadata footer:
+Add `-R owner/repo` when the issue lives in another repo (as in step 1). Use the scratchpad file from step 2 (with any step-3 corrections) as the body-file base — it avoids shell-escaping problems with Markdown. Prefix the comment so its origin is clear with a heading line `## Implementation plan (Fable 5.1)` above the plan body, and end the body with the standard metadata footer:
 
 ```
 ---
 Created with LLM: <model that actually ran> | <effort that actually ran> | Harness: <harness> | fableplan
 ```
 
-Fill the model and effort fields from the values recorded at the end of step 2 — **never a constant**. `<harness>` names the harness actually running the session (`Claude Code`, `Cursor`, `Codex`, …), per `fable-dispatch` section 6. Normally that is `Fable 5 | high`. It falls back to the substituted model name when the `fable-dispatch` fallback ladder fired. Never invent a tier the run cannot account for. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes.
+Fill the model and effort fields from the values recorded at the end of step 2 — **never a constant**. `<harness>` names the harness actually running the session (`Claude Code`, `Cursor`, `Codex`, …), per `fable-dispatch` section 6. Normally that is `Fable 5.1 | high`. It falls back to the substituted model name when the `fable-dispatch` fallback ladder fired. Never invent a tier the run cannot account for. A footer claiming a tier the run did not use is a false attribution, the same defect the milestone-pipeline plan footer fixes.
 
 After posting, give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply (e.g. avoid `#N` auto-links in list items). If no issue is referenced, skip this step.
 
@@ -101,7 +101,7 @@ In the worktree from step 7, the main agent builds the task per the plan. **Befo
 
 Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`) invoke this skill for planning only. In that mode:
 
-- Run **steps 1 through 5 only**: fetch the issue, dispatch the Fable 5 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it.
+- Run **steps 1 through 5 only**: fetch the issue, dispatch the Fable 5.1 Plan subagent, sanity-check the plan against the code, post the vetted plan as an issue comment, and relay it.
 - **Do NOT execute steps 7–8** (worktree + build), and do not act on step 6's build question. The caller owns implementation; a build here would duplicate the caller's implement chain in the wrong worktree location.
 - When the caller supplies a harness suffix, use it in place of `fableplan` in step 4's posted-comment attribution footer, so the comment records the actual entry point.
 - Keep the vetted plan's scratchpad file; the caller passes it to its implementation or report stage.
@@ -109,5 +109,5 @@ Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`
 
 ## Notes
 
-- The Plan subagent runs on Fable 5 regardless of the main agent's model — `model: fable` on the Agent call forces it.
+- The Plan subagent runs on Fable 5.1 regardless of the main agent's model — `model: fable` on the Agent call forces it.
 - If the user did not reference an issue, never invent one or post anywhere — just plan and build.

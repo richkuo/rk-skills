@@ -44,7 +44,7 @@ export function complexityScore(axes) {
   return { capability, volume, score: formula.weight * capability + volume }
 }
 
-const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5': 'fable' }
+const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5.1': 'fable' }
 const spec = (cell) => {
   const [model, effort] = cell.split('·').map((part) => part.trim())
   return { model: MODEL_KEY[model], effort }
@@ -96,7 +96,7 @@ describe('complexity score band encoding', () => {
 
   test('the prd-to-issues band table states the same build routing as the owner', () => {
     const owner = ownerBands()
-    const rows = [...prdToIssues.matchAll(/^\| (\d) \| (\d+)–(\d+) \| (Sonnet 5|Opus 5|Fable 5)[^|]*\| (\*\*Yes\*\*|No) \| (\w+) ?\|/gm)]
+    const rows = [...prdToIssues.matchAll(/^\| (\d) \| (\d+)–(\d+) \| (Sonnet 5|Opus 5|Fable 5.1)[^|]*\| (\*\*Yes\*\*|No) \| (\w+) ?\|/gm)]
     expect(rows.length, 'prd-to-issues states six bands').toBe(owner.length)
     rows.forEach(([, band, min, max, model, fableplan, effort], index) => {
       const row = owner[index]
@@ -110,7 +110,7 @@ describe('complexity score band encoding', () => {
     const owner = ownerBands()
     const line = milestoneplan.match(/^- \*\*Validate\*\*[^\n]*$/m)?.[0]
     expect(line, 'milestoneplan states its Validate mapping').toBeTruthy()
-    const ranges = [...line.matchAll(/`((?:Sonnet|Opus|Fable) 5 · \w+)` at `\[C(\d+)\]`(?:–`\[C(\d+)\]`| and above)/g)]
+    const ranges = [...line.matchAll(/`((?:Sonnet 5|Opus 5|Fable 5\.1) · \w+)` at `\[C(\d+)\]`(?:–`\[C(\d+)\]`| and above)/g)]
       .map(([, cell, min, max]) => ({ validate: spec(cell), min: Number(min), max: max === undefined ? Infinity : Number(max) }))
     expect(ranges.length, 'milestoneplan states validate ranges').toBeGreaterThan(0)
     for (const row of owner) {

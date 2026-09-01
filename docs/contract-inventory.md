@@ -30,9 +30,9 @@ This inventory records every shared pipeline rule those families restate in pros
 | `skills/fix-pr-review/SKILL.md` | Fixer classifier — states the `**Verification limitation:**` not-a-finding carve-out |
 | `skills/pr-review/SKILL.md` | Review-format owner — states the verification method every review route copies, including the prior-cycle read and the untrusted-content classification |
 | `skills/work-on-issue/SKILL.md` | Canonical owner of the adopted-plan deviation policy the plan-handoff chains restate, and of the plan-step mirror rule its step 2 states |
-| `skills/fableplan/SKILL.md` | Plan producer (Fable 5 subagent); its step 8 builds outside `work-on-issue` step 2 |
+| `skills/fableplan/SKILL.md` | Plan producer (Fable 5.1 subagent); its step 8 builds outside `work-on-issue` step 2 |
 | `skills/issueplan/SKILL.md` | Plan producer (session model, no subagent); its step 8 builds outside `work-on-issue` step 2 |
-| `skills/fable-advisor/SKILL.md` | Plan producer (Fable 5 advisor); its issue path inherits `work-on-issue` steps 1–6, its prose path builds outside them |
+| `skills/fable-advisor/SKILL.md` | Plan producer (Fable 5.1 advisor); its issue path inherits `work-on-issue` steps 1–6, its prose path builds outside them |
 | `skills/fableplan-work-on-issue/SKILL.md` | Plan handoff — restates the deviation policy; no loop stage |
 | `skills/validate-issue/issue-editing.md` | Canonical owner of the issue-edit attribution verb |
 | `skills/github-issue-format/SKILL.md` | Format skill every issue editor loads — lists the three footer verbs |
@@ -91,13 +91,13 @@ If the skill review-cycle threshold and the workflow default must stay locked to
 
 ---
 Updated with LLM: Opus 5 | high | Harness: Claude Code
-Updated with LLM: Fable 5 | medium | Harness: Claude Code
-Updated with LLM: Fable 5 | high | Harness: Claude Code
+Updated with LLM: Fable 5.1 | medium | Harness: Claude Code
+Updated with LLM: Fable 5.1 | high | Harness: Claude Code
 Updated with LLM: Opus 5 | high | Harness: Claude Code
-Updated with LLM: Fable 5 | high | Harness: Claude Code
-Updated with LLM: Fable 5 | high | Harness: Claude Code
+Updated with LLM: Fable 5.1 | high | Harness: Claude Code
+Updated with LLM: Fable 5.1 | high | Harness: Claude Code
 Updated with LLM: Opus 5 | high | Harness: work-on-issue
 Updated with LLM: Opus 5 | high | Harness: fix-pr-review
 Updated with LLM: Opus 5 | high | Harness: Claude Code
 Updated with LLM: Opus 5 | high | Harness: agent
-Updated with LLM: Fable 5 | high | Harness: work-on-issue
+Updated with LLM: Fable 5.1 | high | Harness: work-on-issue

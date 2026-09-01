@@ -1,11 +1,11 @@
 ---
 name: fable-orchestrate
-description: Use when the user wants a task decomposed and driven by a Fable 5 orchestrator delegating implementation to Sonnet 5 workers. The Fable session decomposes into self-contained worker specs, dispatches Sonnet subagents (plain Agents for 1–2 pieces, a Workflow for genuine fan-out), reviews each result inline against its spec, merges into one task branch, and gets a binding final verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
+description: Use when the user wants a task decomposed and driven by a Fable 5.1 orchestrator delegating implementation to Sonnet 5 workers. The Fable session decomposes into self-contained worker specs, dispatches Sonnet subagents (plain Agents for 1–2 pieces, a Workflow for genuine fan-out), reviews each result inline against its spec, merges into one task branch, and gets a binding final verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
 ---
 
 # fable-orchestrate
 
-Run a task with **Fable 5 as orchestrator** and **Sonnet 5 workers**. The main agent (you, on Fable) owns decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Principle: mechanical volume on Sonnet, every judgment call on Fable.
+Run a task with **Fable 5.1 as orchestrator** and **Sonnet 5 workers**. The main agent (you, on Fable) owns decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Principle: mechanical volume on Sonnet, every judgment call on Fable.
 
 ## Input
 
@@ -13,7 +13,7 @@ The user provides a task description in prose. If no task is obvious from the in
 
 ## Model check
 
-This skill assumes the session model IS Fable 5 — the orchestrator's judgment is the point. If you are not running on Fable 5, tell the user and ask whether to switch (`/model fable`) or proceed with the current model as orchestrator anyway.
+This skill assumes the session model IS Fable 5.1 — the orchestrator's judgment is the point. If you are not running on Fable 5.1, tell the user and ask whether to switch (`/model fable`) or proceed with the current model as orchestrator anyway.
 
 ## Steps
 
@@ -59,7 +59,7 @@ Integration is your job — the merge proving clean is not the same as the piece
 
 ### 6. Binding final review (fresh reviewer — you don't grade your own decomposition)
 
-You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Spawn a **new one-shot** Fable 5 reviewer; on the Agent-tool path:
+You wrote the specs, so you are anchored on them. **Load the `fable-dispatch` skill before dispatching the reviewer**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Spawn a **new one-shot** Fable 5.1 reviewer; on the Agent-tool path:
 
 - `subagent_type`: `Plan`, `model`: `fable`, `run_in_background`: `false`
 - `prompt`: the original task, **the spec map** — the full decomposition as spec → files → worker result → disposition (accepted / re-dispatched / taken over), so it can review piece-by-piece plus the seams rather than one unreviewable blob — the pinned interfaces, the full merged diff, and the integration verification results. It must return a verdict — **approve**, or **blocked** with numbered blocking findings (each with file:line and a concrete failure scenario) — plus non-blocking suggestions kept separate. It reviews only — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.

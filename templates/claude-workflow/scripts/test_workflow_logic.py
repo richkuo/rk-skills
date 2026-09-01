@@ -481,7 +481,7 @@ class ResolveModelTest(unittest.TestCase):
     def test_fable5_shorthand_selects_fable_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude fable5 review")["model_id"],
-            "claude-fable-5",
+            "claude-fable-5-1",
         )
 
     def test_flow_matches_create_release_with_model_shorthand(self):
