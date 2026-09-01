@@ -1,6 +1,6 @@
 # Proposal self-consistency procedure
 
-Read this file completely when the main skill links it from Self-consistency. Apply it after claim tracing and alongside Architecture.
+Apply this after claim tracing and alongside Architecture.
 
 ## Lifetime and population
 
