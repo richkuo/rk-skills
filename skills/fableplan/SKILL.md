@@ -57,7 +57,7 @@ Verify the plan's load-bearing claims against the codebase: the files it modifie
 
 ### 4. Post the plan to the GitHub issue (only if one was resolved in step 1)
 
-Post the checked plan before building, so it survives whatever happens to the build. Never update the comment afterwards. Build the body from the scratchpad file: a heading line `## Implementation plan (Fable 5.1)`, the plan, then the attribution footer:
+Post the checked plan before building. Never update the comment afterwards. Build the body from the scratchpad file: a heading line `## Implementation plan (Fable 5.1)`, the plan, then the attribution footer:
 
 ```
 ---
