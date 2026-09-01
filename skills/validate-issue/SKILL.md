@@ -68,8 +68,8 @@ Read [complexity-scoring.md](complexity-scoring.md) completely on every validati
 | 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |
 | 2 | 21–50 | Opus 5 · high | No | Opus 5 · high |
 | 3 | 51–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |
-| 4 | 71–80 | Fable 5 · medium | **Yes** | Opus 5 · high |
-| 5 | 81–99 | Fable 5 · high | **Yes** | Opus 5 · xhigh |
+| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · high |
+| 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5 · xhigh |
 
 The fableplan signal is yes when the score is 71 or higher. The **first review** escalates on a coarser scale; rows start on band edges above.
 
@@ -78,7 +78,7 @@ The fableplan signal is yes when the score is 71 or higher. The **first review**
 | 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |
 | 21–70 | reviewer default | `@claude review` | `@codex review` |
 | 71–80 | Opus 5 · high | `@claude opus review` | `@codex review` |
-| 81–99, or no score | Fable 5 · high | `@claude fable review effort:high` | `@codex review` |
+| 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
 
 Blocking re-reviews step down one rung at a time, keyed to the reviewer that actually ran cycle 1, never to the score band (`skills/fix-pr-review/rereview-routing.md`).
 

@@ -1,11 +1,11 @@
 ---
 name: fableplan-loop
-description: Use when the user wants a GitHub issue planned by Fable 5 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
+description: Use when the user wants a GitHub issue planned by Fable 5.1 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
 ---
 
 # fableplan-loop
 
-Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
+Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5.1 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
 
 This is **fableplan-work-on-issue with the review loop added back** — the handoff goes to `work-on-issue-loop` (implement → PR → trigger `@claude` → fix-pr-review cycles until LGTM) instead of `work-on-issue` (single-shot, ends at the open PR). Equivalently, it's **validate-fableplan-loop with the validation stage removed**: no `validate-issue`, no update-issue edits, and no score gate — fableplan always runs. Reach for this when you already trust the issue, want a Fable-vetted plan, and want the PR reviewed to convergence without coming back.
 
@@ -34,7 +34,7 @@ Keep the vetted plan's scratchpad file — step 2 passes it through. On a struct
 
 ### 2. Hand off to work-on-issue-loop
 
-Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5)`), and tell it deviations follow `work-on-issue` step 2's plan-deviation policy — the traced code, anything posted on the issue after the plan, then correctness and safety — and must each be named in the PR body. Don't narrow that policy here.
+Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" — and instruct it that the implementation must follow the Fable 5.1 plan: point it at the plan's scratchpad file and the posted issue comment (`## Implementation plan (Fable 5.1)`), and tell it deviations follow `work-on-issue` step 2's plan-deviation policy — the traced code, anything posted on the issue after the plan, then correctness and safety — and must each be named in the PR body. Don't narrow that policy here.
 
 It runs its full loop: work-on-issue implements in a fresh worktree and opens the PR (`Closes #<N>`), the loop triggers `@claude` review, and fix-pr-review cycles until convergence — a bare LGTM, or past 5 cycles the first LGTM it sees. Gate on its outcome: if work-on-issue stopped with no PR, or the review bot never responded, relay that terminal state faithfully in step 3 — never imply an approved PR exists when it doesn't.
 

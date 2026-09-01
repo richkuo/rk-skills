@@ -1,11 +1,11 @@
 ---
 name: fable-validate-fableplan
-description: Use when the user asks to validate a GitHub issue with Fable 5 and always plan it with Fable 5, stopping once the plan is posted — "fable-validate-fableplan", "fable validate and fable plan #N", "validate and plan #N with fable, don't build it". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, then has fableplan produce and post a Fable 5 implementation plan for EVERY issue (no score gate), and stops at the posted plan — no worktree, no build, no PR, no review loop. Stops earlier when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The no-implementation counterpart to fable-validate-fableplan-loop.
+description: Use when the user asks to validate a GitHub issue with Fable 5.1 and always plan it with Fable 5.1, stopping once the plan is posted — "fable-validate-fableplan", "fable validate and fable plan #N", "validate and plan #N with fable, don't build it". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, then has fableplan produce and post a Fable 5.1 implementation plan for EVERY issue (no score gate), and stops at the posted plan — no worktree, no build, no PR, no review loop. Stops earlier when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The no-implementation counterpart to fable-validate-fableplan-loop.
 ---
 
 # fable-validate-fableplan
 
-Chain fable-validate → (conditional) update issue → fableplan into one autonomous run, and stop there: Fable 5 validates the issue, the main agent fixes the issue description if needed, and Fable 5 plans the implementation. The vetted plan is posted to the issue as a comment. **Nothing is built.**
+Chain fable-validate → (conditional) update issue → fableplan into one autonomous run, and stop there: Fable 5.1 validates the issue, the main agent fixes the issue description if needed, and Fable 5.1 plans the implementation. The vetted plan is posted to the issue as a comment. **Nothing is built.**
 
 This is **fable-validate-fableplan-loop with the implementation stage removed** — the head of that chain is identical (same validation, same scope gate, same issue edits, same unconditional Fable plan), but the handoff to `work-on-issue-loop` is dropped. Reach for this when you want the issue fact-checked, corrected, and planned so a human (or a later run) can decide what to do with the plan. When the plan should be built and driven through review in the same run, use `fable-validate-fableplan-loop` instead.
 

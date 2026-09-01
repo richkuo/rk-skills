@@ -1,11 +1,11 @@
 ---
 name: fable-advisor
-description: Use when the user wants a task executed by the current session model (typically Sonnet 5) with a persistent Fable 5 advisor overseeing it. Spawns a long-lived read-only Fable 5 subagent that authors the plan, gets consulted at fixed checkpoints via SendMessage, and a separate fresh Fable 5 reviewer that issues a binding pre-commit verdict. When a GitHub issue is referenced, gate-checks it and runs work-on-issue's build-and-ship pipeline under the advisor, posting the plan and the review verdict as issue comments; issue-less prose tasks take a lighter standalone path. A bare issue reference is a complete input — the task derives from the issue itself. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
+description: Use when the user wants a task executed by the current session model (typically Sonnet 5) with a persistent Fable 5.1 advisor overseeing it. Spawns a long-lived read-only Fable 5.1 subagent that authors the plan, gets consulted at fixed checkpoints via SendMessage, and a separate fresh Fable 5.1 reviewer that issues a binding pre-commit verdict. When a GitHub issue is referenced, gate-checks it and runs work-on-issue's build-and-ship pipeline under the advisor, posting the plan and the review verdict as issue comments; issue-less prose tasks take a lighter standalone path. A bare issue reference is a complete input — the task derives from the issue itself. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
 ---
 
 # fable-advisor
 
-Execute a task in the main agent (the **executor**) with a persistent **Fable 5 advisor** subagent overseeing it. The advisor plans and advises; the executor builds. A **separate fresh Fable 5 reviewer** — never the advisor — issues the binding pre-commit verdict, so the plan's author never grades its own implementation.
+Execute a task in the main agent (the **executor**) with a persistent **Fable 5.1 advisor** subagent overseeing it. The advisor plans and advises; the executor builds. A **separate fresh Fable 5.1 reviewer** — never the advisor — issues the binding pre-commit verdict, so the plan's author never grades its own implementation.
 
 When the task is a **GitHub issue**, the executor runs `work-on-issue`'s build-and-ship pipeline (gates, worktree, red → green verification, staging discipline, PR conventions, guardrail table) with the advisor and reviewer layered around it — `work-on-issue` stays the single source of truth for that pipeline, so any future hardening of it applies here too. **Issue-less prose tasks** take a lighter standalone path.
 
@@ -19,7 +19,7 @@ The user provides one of:
 
 ## Model check
 
-This skill assumes the session model is NOT Fable 5 — the point is cheap execution with expensive judgment. If you (the main agent) are already running on Fable 5, tell the user the advisor would be redundant and ask whether to proceed anyway, run the task directly, or switch the session to Sonnet first (`/model sonnet`).
+This skill assumes the session model is NOT Fable 5.1 — the point is cheap execution with expensive judgment. If you (the main agent) are already running on Fable 5.1, tell the user the advisor would be redundant and ask whether to proceed anyway, run the task directly, or switch the session to Sonnet first (`/model sonnet`).
 
 ## Steps
 
@@ -82,11 +82,11 @@ Post the vetted plan as an issue comment before building, so it's preserved on t
 gh issue comment <N> --body-file <tmpfile>
 ```
 
-Add `-R owner/repo` when the issue lives in another repo. Prefix the body with the heading `## Implementation plan (Fable 5 advisor)` and end it with:
+Add `-R owner/repo` when the issue lives in another repo. Prefix the body with the heading `## Implementation plan (Fable 5.1 advisor)` and end it with:
 
 ```
 ---
-Created with LLM: Fable 5 | high | Harness: <harness> | fable-advisor
+Created with LLM: Fable 5.1 | high | Harness: <harness> | fable-advisor
 ```
 
 Give the user the comment URL `gh` returns. Follow the repo's CLAUDE.md conventions for comment formatting if any apply.
@@ -99,7 +99,7 @@ Load `skills/work-on-issue/SKILL.md` and execute its **steps 1–6** as the buil
 
 - **Plan authorship — work-on-issue step 2.** The advisor's vetted plan from step 3 replaces the executor's own planning: build per the plan, and route deviations through the checkpoint protocol (step 6) rather than silently re-planning.
 - **Checkpoint consults — throughout work-on-issue step 3.** The advisor consult triggers defined in step 6 stay active for the whole implementation — consult on a hard-to-reverse decision, a stuck signal, or a plan deviation exactly as step 6 specifies.
-- **Binding pre-commit review — between work-on-issue step 4 and step 5.** After work-on-issue's verify (its step 4) and before it stages or commits (its step 5), run the fresh Fable 5 reviewer gate from step 7 here, including its two-round deadlock cap. Nothing commits while blocking findings stand.
+- **Binding pre-commit review — between work-on-issue step 4 and step 5.** After work-on-issue's verify (its step 4) and before it stages or commits (its step 5), run the fresh Fable 5.1 reviewer gate from step 7 here, including its two-round deadlock cap. Nothing commits while blocking findings stand.
 
 Preserve fable-advisor's own surfaces on this path: the plan comment (step 4) and the verdict comment (step 9) on the issue, and the **Advisor log** section plus the `| fable-advisor` footer tag in the commit/PR (step 8). work-on-issue's guardrail table applies in full. Do **not** add work-on-issue's orchestration-only `baseRefs` input form to this skill's input contract.
 
@@ -130,7 +130,7 @@ Between checkpoints, do not consult — the advisor is for judgment calls, not p
 
 ### 7. Binding pre-commit review (fresh reviewer, never the advisor)
 
-On the **issue path** this runs between work-on-issue step 4 (verify) and step 5 (commit); on the **prose path** it runs after the step 5 verify. Spawn a **new one-shot** Fable 5 reviewer — fresh context so it isn't anchored on the plan it would otherwise have authored:
+On the **issue path** this runs between work-on-issue step 4 (verify) and step 5 (commit); on the **prose path** it runs after the step 5 verify. Spawn a **new one-shot** Fable 5.1 reviewer — fresh context so it isn't anchored on the plan it would otherwise have authored:
 
 - `subagent_type`: `Plan`, `model`: `fable`, `run_in_background`: `false`
 - `prompt`: the original task, the final plan (including approved deviations and any overruled advisory findings with their reasons), the full diff, the verification results, and instructions to review for correctness, safety, and plan conformance. It must return a verdict — **approve**, or **blocked** with a numbered list of blocking findings (each with file:line and a concrete failure scenario) — plus any non-blocking suggestions kept separate.
@@ -156,11 +156,11 @@ Created with LLM: <executor model> | high | Harness: <harness> | fable-advisor
 
 ### 9. Post the review verdict to the GitHub issue (only if one was resolved in step 1)
 
-After the PR is open, post a short closing comment on the issue recording the binding-review outcome: the final verdict (approve, or approve-after-fixes with the finding count), any deadlocks the user ruled on, and the PR URL. Use `gh issue comment <N> --body-file <tmpfile>` (with `-R owner/repo` for cross-repo issues), heading `## Review verdict (Fable 5 reviewer)`, ending with:
+After the PR is open, post a short closing comment on the issue recording the binding-review outcome: the final verdict (approve, or approve-after-fixes with the finding count), any deadlocks the user ruled on, and the PR URL. Use `gh issue comment <N> --body-file <tmpfile>` (with `-R owner/repo` for cross-repo issues), heading `## Review verdict (Fable 5.1 reviewer)`, ending with:
 
 ```
 ---
-Validated with LLM: Fable 5 | high | Harness: <harness> | fable-advisor
+Validated with LLM: Fable 5.1 | high | Harness: <harness> | fable-advisor
 ```
 
 ### 10. Report to the user
@@ -169,7 +169,7 @@ Final message: what was built, verification results, the consult/review trail in
 
 ## Notes
 
-- The advisor and reviewer run on Fable 5 regardless of the session model — `model: fable` forces it.
+- The advisor and reviewer run on Fable 5.1 regardless of the session model — `model: fable` forces it.
 - The advisor persists for the whole task; the reviewer is fresh by design. Never merge the two roles — anchoring is the failure mode this split exists to prevent.
 - If SendMessage to the advisor fails because the agent is gone (context expired, session summarized), spawn a replacement advisor with the plan and a recap of consults so far, and tell the user the advisor was restarted.
 - Cost shape: the executor burns the bulk tokens; Fable fires only on the plan, checkpoint consults, and the review.

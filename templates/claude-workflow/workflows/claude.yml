@@ -98,7 +98,7 @@ jobs:
           case "$MODEL_SHORT" in
             opus|opus5)     MODEL_ID="claude-opus-5" ;;
             sonnet|sonnet5) MODEL_ID="claude-sonnet-5" ;;
-            fable|fable5)   MODEL_ID="claude-fable-5" ;;
+            fable|fable5)   MODEL_ID="claude-fable-5-1" ;;
             *)              MODEL_ID="claude-opus-4-8[1m]" ;;
           esac
 
