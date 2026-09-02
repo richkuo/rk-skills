@@ -174,7 +174,7 @@ function cliShimCommand(harness, cliModel, effort) {
   return `agent -p --output-format json --model '${cliModel}' --force --trust --workspace "$REPO" "$(cat "$PROMPT")" > "$RESULT" 2> "$STDERR"`
 }
 
-function cliDriverPrompt(taskPrompt, ex, kind = 'implement') {
+function cliDriverPrompt(taskPrompt, ex, kind = 'implement', planned = false) {
   const harness = CLI_HARNESSES[ex.model]
   const modelName = footerModelName(ex)
   const cliBinary = ex.model === 'codex' ? 'codex' : 'agent'
@@ -183,7 +183,7 @@ function cliDriverPrompt(taskPrompt, ex, kind = 'implement') {
   const skillName = isFix ? 'fix-pr-review' : 'work-on-issue'
   const footerVerb = isFix ? 'Updated' : 'Created'
   const noTriggerOverride = 'do NOT trigger, post, or wait for any `@claude` or `@codex` re-review; stop after pushing the fixes and posting the per-finding disposition comment, because the driver owns every review trigger'
-  const skillLine = `one line telling the CLI agent to read the \`${skillName}\` skill file directly at the first path that exists among \`~/.codex/skills/${skillName}/SKILL.md\`, \`~/.cursor/skills/${skillName}/SKILL.md\`, and \`~/.claude/skills/${skillName}/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file), and to use the \`${harness.branchPrefix}\` branch prefix, the PR title bracket \`[C<score>, ${modelName}, ${ex.effort}]\`, and the footer \`${footerVerb} with LLM: ${modelName} | ${ex.effort} | Harness: ${harness.footerHarness}\` on every commit and PR body`
+  const skillLine = `one line telling the CLI agent to read the \`${skillName}\` skill file directly at the first path that exists among \`~/.codex/skills/${skillName}/SKILL.md\`, \`~/.cursor/skills/${skillName}/SKILL.md\`, and \`~/.claude/skills/${skillName}/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file), and to use the \`${harness.branchPrefix}\` branch prefix, the PR title bracket \`[C<score>, ${modelName}, ${ex.effort}${planned ? ', fableplan' : ''}]\`, and the footer \`${footerVerb} with LLM: ${modelName} | ${ex.effort} | Harness: ${harness.footerHarness}\` on every commit and PR body`
   const preflightReturn = isFix
     ? 'return the blocked shape the task prompt\'s final paragraph defines (status blocked, or blocker set), with head_ref and head_sha read from `gh pr view <num> --json headRefName,headRefOid` as they stand, and the blocker naming the missing piece'
     : 'return pr_number 0, empty head fields, and the blocker naming the missing piece'
@@ -203,13 +203,13 @@ function cliDriverPrompt(taskPrompt, ex, kind = 'implement') {
 
 Load the \`cli-dispatch\` skill BEFORE doing anything else (mandatory) and follow it exactly. Then:
 1. Preflight: \`command -v ${cliBinary}\` must succeed and \`${loginCheck}\` must report a signed-in account. Either failure is a blocker — ${preflightReturn}.
-2. Snapshot \`git status --porcelain\` in the main checkout before dispatching.
+2. Snapshot \`git status --porcelain --untracked-files=all\` in the main checkout before dispatching.
 3. ${promptFileStep}
 4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit — a full ${isFix ? 'fix pass' : 'build'} exceeds any foreground Bash timeout:
    \`${cliShimCommand(ex.model, ex.cli_model, ex.effort)}\`
    Never add \`--dangerously-bypass-approvals-and-sandbox\`, \`--yolo\`, or any flag the cli-dispatch skill does not name.
-5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker. Read the CLI's final message and, when the output names the model that served the run, compare it with \`${ex.cli_model}\` — a different model is a substitution: report it ${isFix ? 'in the summary' : 'in flags and in the summary'}, never as a ${modelName} ${isFix ? 'fix pass' : 'build'}. An output that names no model is recorded as model unverified beside the requested id.
-6. Diff \`git status --porcelain\` in the main checkout against the snapshot; report any stray change outside the issue's worktree ${isFix ? 'in the summary' : 'in flags'}.
+5. On a non-zero exit, first check for work the failed run already landed (${isFix ? 'a head commit newer than the pre-run head on the PR, or a new disposition comment' : 'a \`' + harness.branchPrefix + 'issue-<issue>-*\` branch on the remote, or an open PR closing the issue'}): landed work is a completed pass, so continue with step 6 and verify it under step 7 instead of re-running. Only when nothing landed, retry the shim once with the same inputs; a second failure is a blocker. A retry never produces a second PR, issue-body edit, or disposition comment. Read the CLI's final message and, when the output names the model that served the run, compare it with \`${ex.cli_model}\` — a different model is a substitution: report it ${isFix ? 'in the summary' : 'in flags and in the summary'}, never as a ${modelName} ${isFix ? 'fix pass' : 'build'}. An output that names no model is recorded as model unverified beside the requested id.
+6. Diff \`git status --porcelain --untracked-files=all\` in the main checkout against the snapshot, ignoring every path under \`.claude/worktrees/\` (a concurrent issue's worktree lives there and is not a stray write); report any other change outside the issue's worktree ${isFix ? 'in the summary' : 'in flags'}.
 7. ${verifyStep}
 8. ${reviewStep}
 
@@ -1016,7 +1016,7 @@ async function executeTrack(trackIndex) {
     let impl
     try {
       const taskPrompt = implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP)
-      impl = await agent(cliBuild ? cliDriverPrompt(taskPrompt, ex) : taskPrompt, {
+      impl = await agent(cliBuild ? cliDriverPrompt(taskPrompt, ex, 'implement', Boolean(plan)) : taskPrompt, {
         model: cliBuild ? CLI_DRIVER.model : modelId,
         effort: cliBuild ? CLI_DRIVER.effort : ex.effort,
         schema: IMPLEMENT_SCHEMA,

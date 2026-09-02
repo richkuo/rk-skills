@@ -43,6 +43,9 @@ describe('cli dispatch contract', () => {
     expect(flat, 'the Cursor model list uses the preflighted binary').toContain('`agent --list-models`')
     expect(skill).not.toContain('cursor-agent --list-models')
     expect(flat, 'the driver owns every trigger').toMatch(/CLI agent[^.]*never posts a trigger/i)
+    expect(flat, 'a retry checks for landed work first').toMatch(/Before any retry, check for work the failed run already landed/)
+    expect(flat, 'the stray-write diff ignores concurrent worktrees').toContain('ignoring every path under `.claude/worktrees/`')
+    expect(flat, 'the bracket carries the fableplan marker').toContain('`, fableplan` appended')
   })
 
   test('the pipeline driver prompt embeds the same shim shape and forbids the dangerous flags', () => {
@@ -69,6 +72,9 @@ describe('cli dispatch contract', () => {
     expect(readme).toContain('**External build harnesses.**')
     expect(readme).toContain('Cursor has no sandbox')
     expect(readme).not.toContain('sandboxed to the workspace')
+    expect(readme).toContain('only when the CLI names one')
+    expect(readme).not.toContain('reports any model the CLI substituted')
+    expect(milestoneWorkflow).toContain('**External CLI spend is outside every number above.**')
     expect(readme).toContain('| `cli-dispatch` |')
   })
 

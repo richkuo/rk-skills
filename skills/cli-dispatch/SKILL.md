@@ -58,7 +58,7 @@ agent -p --output-format json --model '<model-id>' --force --trust \
 - Codex: `$RESULT` holds the agent's final message. `$EVENTS` holds one JSON event per line; when an event names the model that served the turn, that value is the record of what ran.
 - Cursor: `$RESULT` holds one JSON object with the final text; when it names the model that served the call, that value is the record.
 - On the 2026-09-02 smoke runs neither output named a model (codex-cli 0.152.1 `--json` events carry `thread`, `turn`, and `item` records; cursor-agent 2026.09.02 returns `result`, `session_id`, `request_id`, and `usage`), so expect `model unverified` (section 6) to be the usual record until a CLI version adds the field.
-- A non-zero exit is a failure. Retry the shim once with the same inputs; a second failure is a blocker that quotes the last lines of `$STDERR`.
+- A non-zero exit is a failure. Before any retry, check for work the failed run already landed: for a build, a `<prefix>/issue-<N>-*` branch on the remote or an open PR closing the issue; for a fix pass, a head commit newer than the pre-run head or a new disposition comment. Landed work is a completed pass: verify it (section 8) and never re-run, because a second run repeats the issue-body edit, the PR, or the disposition comment. Only when nothing landed, retry the shim once with the same inputs; a second failure is a blocker that quotes the last lines of `$STDERR`.
 
 ## 6. Substitution check
 
@@ -67,12 +67,12 @@ Compare the model the output names with the requested id. A different model mean
 ## 7. Attribution
 
 - Branch prefix: `codex/` for the Codex CLI, `cursor/` for the Cursor CLI (CLAUDE.md Git Workflow).
-- PR title bracket: `[C<score>, <Name>, <tier>]`, e.g. `[C33, Luna, max]`.
+- PR title bracket: `[C<score>, <Name>, <tier>]`, e.g. `[C33, Luna, max]`, with `, fableplan` appended when the caller says a Fable 5.1 plan was posted for the issue and drove the build (CLAUDE.md PR title convention); a failed plan stage earns no marker.
 - Footer: `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`; `Updated` on a fix pass. The name is the stamped display name (`Luna`, `Grok`) unless section 6 found a substitution, and then it is the model the output named.
 
 ## 8. Dispatch hygiene, every caller
 
-- Snapshot `git status --porcelain` in the main checkout before dispatching and diff it after the run; report any change outside the issue's worktree.
+- Snapshot `git status --porcelain --untracked-files=all` in the main checkout before dispatching and diff it after the run, ignoring every path under `.claude/worktrees/`: tracks run concurrently and another issue's Codex or Cursor worktree is created there, so it is not a stray write. Report any other change outside the issue's worktree, including a write under `.claude/` that is no worktree.
 - Verify the pull request with `gh` after the run exactly as a Claude builder would: the PR number, the head ref, and the head commit. A successful exit with no PR is a blocker.
 - Review cycles: the driver owns every step that reads or writes GitHub review state (fetching the standing review, deciding whether to stop, posting the cycle-1 trigger and every re-trigger the caller's routing selects, watching the Actions run, reading the verdict) and forwards each fix pass to the same shim with the fix-pass file section 3 describes. The CLI agent runs `fix-pr-review` through its disposition comment and never posts a trigger; when the caller forbids re-triggering (subagent review mode), the driver posts nothing. After a fix pass the driver verifies the PR head with `gh pr view <num> --json headRefName,headRefOid`, and a pass that exits zero with neither a new head commit nor a disposition comment is a blocker.
 
@@ -82,7 +82,7 @@ Compare the model the output names with the requested id. A different model mean
 |---|---|
 | The CLI binary is absent | Block that issue with the binary named; the caller runs the rest of the milestone |
 | `codex login status` or `agent status` reports signed out | Block that issue with the login named |
-| The shim exits non-zero | Retry once with the same inputs, then block with the last lines of stderr |
+| The shim exits non-zero | Check for landed work first (section 5); when none, retry once with the same inputs, then block with the last lines of stderr |
 | The output names a model other than the requested id | Report the substitution in the summary, flags, and footer; never present it as the stamped build |
 | The run exits zero and no PR exists | Block; never open a PR on the CLI agent's behalf |
 | Writes appear outside the issue's worktree | Report them in flags and leave them for the user to review |

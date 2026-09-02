@@ -1825,6 +1825,10 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(implement.prompt).toContain('Load the `cli-dispatch` skill')
     expect(implement.prompt).toContain('Harness: Codex')
     expect(implement.prompt).toContain('[C<score>, Luna, max]')
+    expect(implement.prompt).not.toContain(', fableplan]')
+    expect(implement.prompt).toContain('first check for work the failed run already landed')
+    expect(implement.prompt).toContain('ignoring every path under `.claude/worktrees/`')
+    expect(implement.prompt).toContain('git status --porcelain --untracked-files=all')
     expect(implement.prompt).not.toMatch(/codex exec[^\n]*(--dangerously-bypass-approvals-and-sandbox|--yolo|danger-full-access)/)
     expect(implement.prompt).toMatch(/Never add `--dangerously-bypass-approvals-and-sandbox`, `--yolo`/)
     expect(implement.prompt).toContain('Created with LLM: Luna | max | Harness: Codex')
@@ -1951,6 +1955,17 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(started(events, 'implement:#2 (cursor:cursor-grok-4.6-high-fast:v1/high)')).toBeTrue()
   })
 
+  test('a CLI build whose plan stage failed carries no fableplan marker', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'codex', build_model_name: 'Luna', effort: 'max', fableplan: true })] }),
+      'plan:#2': () => null,
+    })
+    const prompt = promptFor(events, 'implement:#2 (codex:gpt-5.6-luna/max)')
+
+    expect(prompt).toContain('[C<score>, Luna, max]')
+    expect(prompt).not.toContain(', fableplan]')
+  })
+
   test('a validator rescore keeps a stamped CLI build and only adds fableplan', async () => {
     const { events, logs, output } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
       Prep: () => ({ issues: [prepRecord(2, { model: 'codex', build_model_name: 'Luna', effort: 'max' })] }),
@@ -1960,6 +1975,7 @@ describe('milestone-pipeline external CLI build harnesses', () => {
 
     expect(started(events, 'plan:#2')).toBeTrue()
     expect(started(events, 'implement:#2 (codex:gpt-5.6-luna/max)')).toBeTrue()
+    expect(promptFor(events, 'implement:#2 (codex:gpt-5.6-luna/max)')).toContain('[C<score>, Luna, max, fableplan]')
     expect(record.rescore.rerouted).toEqual({ model: 'codex', effort: 'max', fableplan: true })
     expect(logs.some((message) => message.includes('#2: RESCORED C33 → C85') && message.includes('keeping the stamped Luna (Codex CLI) @ max build'))).toBeTrue()
   })
