@@ -1694,7 +1694,12 @@ describe('milestone-pipeline merge and release', () => {
 
     expect(skill).toMatch(/--match-head-commit\s+<?[\w-]+>?/)
     expect(skill).toMatch(/(?:never|do not|do not ever)[^.\n]{0,40}older LGTM/i)
-    expect(skill).toMatch(/never resolve (?:merge )?conflicts (?:yourself|in-session|by hand)/i)
+    expect(skill).toMatch(/On conflicts[^.\n]{0,80}resolve them in-session/i)
+    expect(skill).toMatch(/Merge one PR at a time/)
+    expect(skill).toMatch(/merges only on a bare LGTM/)
+    expect(skill).toMatch(/every conflicted file ends in `\.md`[^\n]{0,200}standing LGTM holds/)
+    expect(skill).toMatch(/not `\.md`, post `@claude sonnet review`/)
+    expect(skill).toMatch(/first LGTM past 5 cycles/)
     expect(skill).toMatch(/merge authority[^.\n]{0,80}subagent|subagent[^.\n]{0,80}merge authority/i)
   })
 
