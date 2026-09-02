@@ -80,6 +80,8 @@ describe('Execution block fields', () => {
       expect(pipeline, `pipeline prep reads ${field}`).toMatch(new RegExp(`"\\*{0,2}${field}:`))
     }
     expect(pipeline, 'pipeline prep never reads a validate model').toMatch(/do NOT extract a "\*\*Validate model:\*\*" line/)
+    expect(prdToIssues, 'prd-to-issues documents the external CLI Build model form').toContain('(Codex CLI[, <model-id>])')
+    expect(pipeline, 'pipeline prep maps the external CLI Build model form').toContain('map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor')
   })
 })
 

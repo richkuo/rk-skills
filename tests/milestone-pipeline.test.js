@@ -1796,3 +1796,131 @@ describe('milestone-pipeline merge and release', () => {
     expect(output.release).toBeNull()
   })
 })
+
+describe('milestone-pipeline external CLI build harnesses', () => {
+  const prepRecord = (number, overrides) => ({
+    number,
+    title: `[C33] Issue ${number}`,
+    complexity: 33,
+    fableplan: false,
+    missing_block: false,
+    ...overrides,
+  })
+
+  test('a Luna (Codex CLI) stamp at max dispatches an Opus driver carrying the codex exec shim', async () => {
+    const { events, logs, output } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'codex', build_model_name: 'Luna', effort: 'max' })] }),
+    })
+    const implement = events.find((event) => event.state === 'started' && event.phase === 'Implement')
+
+    expect(implement.label).toBe('implement:#2 (codex:gpt-5.6-luna/max)')
+    expect(implement.model).toBe('opus')
+    expect(implement.effort).toBe('high')
+    expect(implement.prompt).toContain('codex exec')
+    expect(implement.prompt).toContain('-m gpt-5.6-luna')
+    expect(implement.prompt).toContain('model_reasoning_effort=max')
+    expect(implement.prompt).toContain('Load the `cli-dispatch` skill')
+    expect(implement.prompt).toContain('Harness: Codex')
+    expect(implement.prompt).toContain('[C<score>, Luna, max]')
+    expect(implement.prompt).not.toMatch(/codex exec[^\n]*(--dangerously-bypass-approvals-and-sandbox|--yolo|danger-full-access)/)
+    expect(implement.prompt).toMatch(/Never add `--dangerously-bypass-approvals-and-sandbox`, `--yolo`/)
+    expect(implement.prompt).toContain('Created with LLM: Luna | max | Harness: Codex')
+    expect(logs.some((message) => message.includes('#2') && message.includes('implementing on Luna (Codex CLI) @ max') && message.includes('driven by a Opus 5 @ high driver'))).toBeTrue()
+    expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
+  })
+
+  test('a Grok (Cursor CLI) stamp at max clamps to xhigh, resolves the effort-suffixed model id, and uses the agent -p shim', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'cursor', build_model_name: 'Grok', effort: 'max' })] }),
+    })
+    const implement = events.find((event) => event.state === 'started' && event.phase === 'Implement')
+
+    expect(implement.label).toBe('implement:#2 (cursor:cursor-grok-4.6-xhigh/xhigh)')
+    expect(implement.model).toBe('opus')
+    expect(implement.prompt).toContain('agent -p --output-format json --model cursor-grok-4.6-xhigh')
+    expect(implement.prompt).toContain('Harness: Cursor')
+    expect(implement.prompt).not.toContain('codex exec')
+    expect(logs).toContain('#2: normalized build effort max → xhigh for Cursor CLI (max is a Codex CLI-only tier)')
+  })
+
+  test('an explicit CLI model id is used verbatim', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'cursor', build_model_name: 'Grok', cli_model: 'cursor-grok-4.6-high-fast', effort: 'high' })] }),
+    })
+    const implement = events.find((event) => event.state === 'started' && event.phase === 'Implement')
+
+    expect(implement.label).toBe('implement:#2 (cursor:cursor-grok-4.6-high-fast/high)')
+    expect(implement.prompt).toContain('--model cursor-grok-4.6-high-fast')
+  })
+
+  test('github review-loop fix agents for a CLI-harness issue go through the same driver shim', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: true, reviewMode: 'github' }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'codex', build_model_name: 'Luna', effort: 'max' })] }),
+    })
+    const batch = events.find((event) => event.state === 'started' && event.label === 'review-loop:PR#1002 c2-c3')
+
+    expect(batch).toBeDefined()
+    expect(batch.model).toBe('opus')
+    expect(batch.effort).toBe('high')
+    expect(batch.prompt).toContain('codex exec')
+    expect(batch.prompt).toContain('Updated with LLM: Luna | max | Harness: Codex')
+    expect(logs.some((message) => message.includes('PR #1002: cycles 2-3 fix pass forwards to Luna (Codex CLI) @ max through a Opus 5 driver'))).toBeTrue()
+  })
+
+  test('subagent-mode reviewers stay on Claude while the fix pass forwards to the CLI', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewLoop: true, reviewMode: 'subagent' }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'cursor', build_model_name: 'Grok', effort: 'high' })] }),
+      'review:PR#1002 c1 (claude/high)': () => ({
+        verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'cursor/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#review', summary: 'one blocker',
+      }),
+    })
+    const review = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
+    const fix = events.find((event) => event.state === 'started' && event.label === 'fix:PR#1002 c1 (cursor/high)')
+
+    expect(review.prompt).not.toContain('agent -p')
+    expect(fix.model).toBe('opus')
+    expect(fix.prompt).toContain('agent -p --output-format json --model cursor-grok-4.6-high')
+  })
+
+  test('a max stamp on a Claude model normalizes to the model ceiling', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'opus', effort: 'max' }), prepRecord(3, { model: 'fable', effort: 'max' })] }),
+    })
+
+    expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
+    expect(started(events, 'implement:#3 (fable/high)')).toBeTrue()
+    expect(logs).toContain('#2: normalized build effort max → xhigh for Opus 5 (max is a Codex CLI-only tier)')
+    expect(logs).toContain('#3: normalized build effort max → high for Fable 5.1 (max is a Codex CLI-only tier)')
+  })
+
+  test('an unknown CLI model name without an explicit id blocks the issue before validation and its hard descendants', async () => {
+    const { events, logs, output } = await executeWorkflow({ tracks: [{ issues: [2, 3] }, { issues: [4] }], reviewLoop: false }, {
+      Prep: () => ({ issues: [
+        prepRecord(2, { model: 'codex', build_model_name: 'Sol', effort: 'high' }),
+        prepRecord(3, { model: 'opus', effort: 'high' }),
+        prepRecord(4, { model: 'opus', effort: 'high' }),
+      ] }),
+    })
+    const blocked = output.results.find((result) => result.issue === 2)
+
+    expect(blocked.status).toBe('blocked')
+    expect(blocked.blocker).toContain('Build model "Sol" on the Codex CLI carries no CLI model id')
+    expect(started(events, 'validate:#2')).toBeFalse()
+    expect(output.results.find((result) => result.issue === 3)?.status).toBe('dependency_blocked')
+    expect(output.results.find((result) => result.issue === 4)?.status).toBe('pr_open')
+    expect(logs.some((message) => message.startsWith('#2: Build model "Sol"'))).toBeTrue()
+  })
+
+  test('a validator rescore keeps a stamped CLI build and only adds fableplan', async () => {
+    const { events, logs, output } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({ issues: [prepRecord(2, { model: 'codex', build_model_name: 'Luna', effort: 'max' })] }),
+      'validate:#2': () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 85 }),
+    })
+    const record = output.results.find((result) => result.issue === 2)
+
+    expect(started(events, 'plan:#2')).toBeTrue()
+    expect(started(events, 'implement:#2 (codex:gpt-5.6-luna/max)')).toBeTrue()
+    expect(record.rescore.rerouted).toEqual({ model: 'codex', effort: 'max', fableplan: true })
+    expect(logs.some((message) => message.includes('#2: RESCORED C33 → C85') && message.includes('keeping the stamped Luna (Codex CLI) @ max build'))).toBeTrue()
+  })
+})

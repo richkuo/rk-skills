@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model derived from its [C..] score band, effort from a stamped Validate effort line when present, else the band default' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at the stamped Plan effort when present, else high (xhigh clamps to high); plans posted to the issues', model: 'fable' },
-    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode' },
+    { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
     { title: 'Release', detail: 'when every issue merged: deferred to the orchestrator, which runs sync-docs-release in-session' },
@@ -126,6 +126,80 @@ const CONSUMED_MERGE_RECORDS = new Set()
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
 const MODEL_NAMES = { fable: 'Fable 5.1', opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
 
+const CLI_HARNESSES = {
+  codex: {
+    label: 'Codex CLI',
+    footerHarness: 'Codex',
+    branchPrefix: 'codex/',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    defaultModels: { luna: () => 'gpt-5.6-luna' },
+  },
+  cursor: {
+    label: 'Cursor CLI',
+    footerHarness: 'Cursor',
+    branchPrefix: 'cursor/',
+    efforts: ['low', 'medium', 'high', 'xhigh'],
+    defaultModels: { grok: (effort) => `cursor-grok-4.6-${effort}` },
+  },
+}
+const CLI_DRIVER = { model: 'opus', effort: 'high' }
+
+function isCliHarness(model) {
+  return Object.prototype.hasOwnProperty.call(CLI_HARNESSES, model)
+}
+
+function buildModelName(ex) {
+  if (isCliHarness(ex.model)) return `${ex.build_model_name || ex.cli_model || ex.model} (${CLI_HARNESSES[ex.model].label})`
+  return MODEL_NAMES[MODEL_IDS[ex.model] || 'opus']
+}
+
+function footerModelName(ex) {
+  if (isCliHarness(ex.model)) return ex.build_model_name || ex.cli_model || ex.model
+  return MODEL_NAMES[MODEL_IDS[ex.model] || 'opus']
+}
+
+function footerHarness(ex) {
+  return isCliHarness(ex.model) ? CLI_HARNESSES[ex.model].footerHarness : 'milestone-pipeline'
+}
+
+function buildLabel(ex) {
+  return isCliHarness(ex.model) ? `${ex.model}:${ex.cli_model}/${ex.effort}` : `${MODEL_IDS[ex.model] || 'opus'}/${ex.effort}`
+}
+
+function cliShimCommand(harness, cliModel, effort) {
+  if (harness === 'codex') {
+    return `codex exec -C "$REPO" -m ${cliModel} -c model_reasoning_effort=${effort} -s workspace-write -c sandbox_workspace_write.network_access=true --json -o "$RESULT" < "$PROMPT" > "$EVENTS" 2> "$STDERR"`
+  }
+  return `agent -p --output-format json --model ${cliModel} --force --trust --workspace "$REPO" "$(cat "$PROMPT")" > "$RESULT" 2> "$STDERR"`
+}
+
+function cliDriverPrompt(taskPrompt, ex) {
+  const harness = CLI_HARNESSES[ex.model]
+  const modelName = footerModelName(ex)
+  const cliBinary = ex.model === 'codex' ? 'codex' : 'agent'
+  const loginCheck = ex.model === 'codex' ? 'codex login status' : 'agent status'
+  return `You are a build DRIVER agent in this repo. The build itself runs on ${modelName} through the ${harness.label} (model id \`${ex.cli_model}\`, effort \`${ex.effort}\`). You never write product code and you never substitute a Claude model for that build: the issue's Execution block stamps this external harness, and silently building on another model is the defect this driver exists to close. If the CLI cannot run, return the blocker.
+
+Load the \`cli-dispatch\` skill BEFORE doing anything else (mandatory) and follow it exactly. Then:
+1. Preflight: \`command -v ${cliBinary}\` must succeed and \`${loginCheck}\` must report a signed-in account. Either failure is a blocker — return pr_number 0, empty head fields, and the blocker naming the missing piece.
+2. Snapshot \`git status --porcelain\` in the main checkout before dispatching.
+3. Write the task prompt below, verbatim, to a file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory), followed by one line telling the CLI agent to read the \`work-on-issue\` skill file directly at the first path that exists among \`~/.codex/skills/work-on-issue/SKILL.md\`, \`~/.cursor/skills/work-on-issue/SKILL.md\`, and \`~/.claude/skills/work-on-issue/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file), and to use the \`${harness.branchPrefix}\` branch prefix, the PR title bracket \`[C<score>, ${modelName}, ${ex.effort}]\`, and the footer \`Created with LLM: ${modelName} | ${ex.effort} | Harness: ${harness.footerHarness}\` on the commit and the PR body.
+4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit — a full build exceeds any foreground Bash timeout:
+   \`${cliShimCommand(ex.model, ex.cli_model, ex.effort)}\`
+   Never add \`--dangerously-bypass-approvals-and-sandbox\`, \`--yolo\`, or any flag the cli-dispatch skill does not name.
+5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker. Read the CLI's final message and, when the output names the model that served the run, compare it with \`${ex.cli_model}\` — a different model is a substitution: report it in flags and in the summary, never as a ${modelName} build.
+6. Diff \`git status --porcelain\` in the main checkout against the snapshot; report any stray change outside the issue's worktree in flags.
+7. Verify the pull request exactly as a Claude builder would (\`gh pr list --search "#<issue> in:title,body" --state open\`, then \`gh pr view <num> --json headRefName,headRefOid\`). No PR after a successful exit is a blocker.
+8. Handle the review directive in the task prompt yourself for the parts that read GitHub state (posting the trigger, watching the Actions run, reading the verdict), and forward every fix pass to the same shim with a fix prompt that names the PR, the findings, and the same skill-path, branch-prefix, and footer rules (footer verb \`Updated\`).
+
+Task prompt for the ${harness.label} agent (write it to the prompt file verbatim):
+----- BEGIN TASK PROMPT -----
+${taskPrompt}
+----- END TASK PROMPT -----
+
+Return via StructuredOutput exactly what the task prompt's final paragraph asks for, plus flags naming any substitution, stray write, or retry.`
+}
+
 const BANDS = [
   { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
   { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'sonnet', effort: 'xhigh' } },
@@ -233,8 +307,10 @@ const PREP_SCHEMA = {
           number: { type: 'integer' },
           title: { type: 'string', description: 'The issue title EXACTLY as gh issue view --json title reports it, including any [C<score>] prefix — the runtime reconciles the reported complexity against this prefix, so a shortened or reworded title makes a scored issue look unscored' },
           complexity: { type: 'integer', minimum: 0, description: 'The integer from the [C<score>] title prefix — a literal [C0] is a real score of 0; OMIT this field entirely when the title carries no [C..] prefix, because absence is how the runtime tells an unscored issue from a genuinely zero-scored one' },
-          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From "Build model:" — Fable 5.1→fable, Opus 5→opus, etc.' },
-          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from "Effort:"; low and medium are Fable-only — runtime normalizes non-Fable low/medium→high' },
+          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor'], description: 'From "Build model:" — Fable 5.1→fable, Opus 5→opus, etc.; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor' },
+          build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
+          cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
+          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low and medium are Fable-only and max is Codex CLI-only — runtime normalizes non-Fable low/medium→high, max→xhigh on Opus/Sonnet, max→high on Fable, max→xhigh on Cursor' },
           validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime clamps xhigh to high on a Fable validate and raises low/medium to high on a non-Fable validate' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim; the runtime clamps xhigh to high (Fable never runs at xhigh). Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
@@ -391,7 +467,8 @@ Return via StructuredOutput: the plan text, and the distilled hard constraints t
 }
 
 function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, reviewLoop) {
-  const footerModel = MODEL_NAMES[ex.model]
+  const footerModel = footerModelName(ex)
+  const harness = footerHarness(ex)
   const corrections = validation.corrections.length
     ? validation.corrections.map((c) => `- ${c}`).join('\n')
     : ''
@@ -416,14 +493,15 @@ Return the standing verdict as github_review_status, the remaining non-blocking 
   return `You are an implementation agent in this repo. Your job: implement GitHub issue #${issue} end-to-end and open a PR.
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
-${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nThe user approved this milestone run plan, which explicitly authorizes applying these validation corrections to this issue.\nFooter: \`Validated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\` — these are validation corrections, so the appended verb is \`Validated\`; stack it under the existing footer lines.\n` : ''}${plan ? `\nA Fable 5.1 implementation plan was posted on the issue — implement against it. Mirror its numbered steps into your task tracker before writing code, per work-on-issue step 2, and complete each item only when its verify point passes. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
-Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`.${reviewDirective}
+${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nThe user approved this milestone run plan, which explicitly authorizes applying these validation corrections to this issue.\nFooter: \`Validated with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\` — these are validation corrections, so the appended verb is \`Validated\`; stack it under the existing footer lines.\n` : ''}${plan ? `\nA Fable 5.1 implementation plan was posted on the issue — implement against it. Mirror its numbered steps into your task tracker before writing code, per work-on-issue step 2, and complete each item only when its verify point passes. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
+Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the default branch or omit a ref after an integration conflict. Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\`.${reviewDirective}
 
 Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact current headRefName after any cycle-1 fixes), head_sha (exact current headRefOid), summary, tests_passed, github_review_status, github_review_nonblocking_remaining, github_review_summary, any github_review_blocker, any implementation blocker, and flags the operator should know about. If implementation is blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
 }
 
 function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit) {
-  const footerModel = MODEL_NAMES[ex.model]
+  const footerModel = footerModelName(ex)
+  const harness = footerHarness(ex)
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   const endCycle = startCycle + cycleLimit - 1
   return `You are a PR review-resolution agent in this repo. You own review cycles ${startCycle} through ${endCycle} of at most ${MAX_REVIEW_CYCLES} for PR #${prNumber}. Read all state from the PR itself; do not assume anything a previous agent did. Run at most ${cycleLimit} cycle${cycleLimit === 1 ? '' : 's'}, and stop early on a bare LGTM or blocker.
@@ -431,7 +509,7 @@ function githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCyc
 For each assigned cycle:
 1. Fetch the latest @${REVIEW_BOT} review on PR #${prNumber} (the github-actions bot comment carrying a verdict line). If a review run is still in flight, find its Actions run and \`gh run watch\` it rather than sleeping.
 2. If that review is an LGTM with no actionable findings left on the current head, stop with status lgtm and nonblocking_remaining 0.
-3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it, ${firstReviewTrigger(ex) === NONBLOCKING_RETRIGGER[REVIEW_BOT] ? `and do NOT skip the \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comments while you look: cycle 1 of THIS pull request was itself \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`, so the EARLIEST such comment is the genuine cycle 1 and the blocking re-trigger repeats it verbatim` : `skipping any \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comment while you look — that is the cheap non-blocking re-trigger, which a pass posts at any band and which is not cycle 1 here, because cycle 1 was \`${firstReviewTrigger(ex)}\``}.${REVIEW_BOT === 'claude' ? ' Every reviewer above the standard trigger runs one blocking cycle only, so step down one rung per blocking re-review. If that cycle-1 trigger names fable, the rungs are `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened. If it names opus, the single rung is `@claude review`, posted for the first blocking re-review and every one after it. Either ladder stops at `@claude review` and never reaches sonnet, and neither the fable nor the opus trigger is ever repeated on a blocking re-review. If the cycle-1 trigger is the standard `@claude review` or names sonnet, it sits at or below the ladder floor: repeat that same trigger verbatim for every blocking re-review, whatever the band, so that reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
+3. Otherwise invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly: RE-VALIDATE every finding against the actual code before changing anything, fix what survives validation, resolve any merge conflicts with main, commit/push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\`), post a per-finding disposition comment, and re-trigger per that skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot (its own one-line comment, no footer): \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` when only non-blocking items were addressed, else the blocking trigger keyed to the reviewer that actually ran cycle 1. The band does not decide the blocking trigger — it only ever selected the cycle-1 reviewer. Cycle 1 of this PR was triggered with \`${firstReviewTrigger(ex)}\`; confirm that against the EARLIEST \`@${REVIEW_BOT} … review\` comment on the PR before you rely on it, ${firstReviewTrigger(ex) === NONBLOCKING_RETRIGGER[REVIEW_BOT] ? `and do NOT skip the \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comments while you look: cycle 1 of THIS pull request was itself \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`, so the EARLIEST such comment is the genuine cycle 1 and the blocking re-trigger repeats it verbatim` : `skipping any \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\` comment while you look — that is the cheap non-blocking re-trigger, which a pass posts at any band and which is not cycle 1 here, because cycle 1 was \`${firstReviewTrigger(ex)}\``}.${REVIEW_BOT === 'claude' ? ' Every reviewer above the standard trigger runs one blocking cycle only, so step down one rung per blocking re-review. If that cycle-1 trigger names fable, the rungs are `@claude opus review` when no `@claude opus review` comment follows the fable one, and `@claude review` once a step-down to opus has already happened. If it names opus, the single rung is `@claude review`, posted for the first blocking re-review and every one after it. Either ladder stops at `@claude review` and never reaches sonnet, and neither the fable nor the opus trigger is ever repeated on a blocking re-review. If the cycle-1 trigger is the standard `@claude review` or names sonnet, it sits at or below the ladder floor: repeat that same trigger verbatim for every blocking re-review, whatever the band, so that reviewer survives every cycle.' : ' Codex exposes one flagship and no fable tier, so repeat that cycle-1 trigger verbatim for every blocking re-review; never switch to @claude, which this run did not select.'}).
 4. Wait for that re-review's verdict. If another assigned cycle remains and the verdict is not a bare LGTM, repeat from step 1. Otherwise stop.
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
@@ -442,8 +520,15 @@ Work ONLY in the PR branch's existing worktree (or add a worktree for the branch
 At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,headRefOid\`. Return via StructuredOutput: status (the verdict now standing on the PR: lgtm / needs_updates, or blocked), nonblocking_remaining, cycles_run (${cycleLimit === 1 ? 'exactly 1' : `1 or ${cycleLimit}`}, never above ${cycleLimit}), a summary of what you fixed or refuted, the exact head_ref and head_sha, and any blocker.`
 }
 
+function fixDispatch(ex, prompt, prNumber, cycleNote) {
+  if (isCliHarness(ex.model)) {
+    log(`PR #${prNumber}: ${cycleNote} fix pass forwards to ${buildModelName(ex)} @ ${ex.effort} through a ${MODEL_NAMES[CLI_DRIVER.model]} driver`)
+    return { prompt: cliDriverPrompt(prompt, ex), model: CLI_DRIVER.model, effort: CLI_DRIVER.effort }
+  }
+  return { prompt, model: MODEL_IDS[ex.model] || 'opus', effort: ex.effort }
+}
+
 async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initialReview) {
-  const modelId = MODEL_IDS[ex.model]
   if (initialReview.status === 'not_run') {
     return { final_status: 'blocked', cycles_run: 0, summary: 'implementation agent did not complete github review cycle 1', head_ref: initialReview.head_ref, head_sha: initialReview.head_sha, blocker: 'github review cycle 1 was not run' }
   }
@@ -465,9 +550,10 @@ async function runGithubReviewLoop(issue, prNumber, ex, validation, plan, initia
     const cycleLimit = Math.min(2, MAX_REVIEW_CYCLES - cycles)
     const endCycle = startCycle + cycleLimit - 1
     const labelCycles = cycleLimit === 1 ? `c${startCycle}` : `c${startCycle}-c${endCycle}`
-    const batchResult = await agent(githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit), {
-      model: modelId,
-      effort: ex.effort,
+    const batch = fixDispatch(ex, githubReviewBatchPrompt(issue, prNumber, ex, validation, plan, startCycle, cycleLimit), prNumber, `cycles ${startCycle}-${endCycle}`)
+    const batchResult = await agent(batch.prompt, {
+      model: batch.model,
+      effort: batch.effort,
       schema: githubReviewBatchSchema(cycleLimit),
       phase: 'Review Loop',
       label: `review-loop:PR#${prNumber} ${labelCycles}`,
@@ -521,11 +607,12 @@ Return via StructuredOutput: verdict (lgtm / needs_updates, matching the posted 
 }
 
 function subagentFixPrompt(issue, prNumber, ex, validation, plan, commentUrl) {
-  const footerModel = MODEL_NAMES[ex.model]
+  const footerModel = footerModelName(ex)
+  const harness = footerHarness(ex)
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   return `You are a PR review-resolution agent in this repo. A fresh review was just posted on PR #${prNumber} (${commentUrl}). Invoke the \`fix-pr-review\` skill with args \`${prNumber}\` and follow it exactly, with ONE override: do NOT trigger, post, or wait for any \`@claude\` or \`@codex\` re-review — this run re-reviews with an in-session subagent after you finish, so stop after pushing your fixes and posting the per-finding disposition comment.
 
-RE-VALIDATE every finding against the actual code before changing anything; fix what survives validation (including filing any ### Create Follow-up Issue items per that skill), refute on the record what doesn't, resolve any merge conflicts with the base branch, run the full test and build suites, then commit and push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: milestone-pipeline\`).
+RE-VALIDATE every finding against the actual code before changing anything; fix what survives validation (including filing any ### Create Follow-up Issue items per that skill), refute on the record what doesn't, resolve any merge conflicts with the base branch, run the full test and build suites, then commit and push (footer \`Updated with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\`).
 
 The issue's Acceptance criteria${constraints.length ? ' and these hard requirements from validation' + (plan ? ' and the Fable plan' : '') : ''} OUTRANK any reviewer suggestion — reject findings that would weaken them and say why in the disposition.
 ${constraints.length ? constraints.map((c) => `- ${c}`).join('\n') + '\n' : ''}
@@ -574,9 +661,10 @@ async function runSubagentReviewLoop(issue, prNumber, ex, validation, plan) {
       }
       break
     }
-    const fix = await agent(subagentFixPrompt(issue, prNumber, ex, validation, plan, review.comment_url), {
-      model: MODEL_IDS[ex.model] || 'opus',
-      effort: ex.effort,
+    const fixDispatched = fixDispatch(ex, subagentFixPrompt(issue, prNumber, ex, validation, plan, review.comment_url), prNumber, `cycle ${cycles}`)
+    const fix = await agent(fixDispatched.prompt, {
+      model: fixDispatched.model,
+      effort: fixDispatched.effort,
       schema: REVIEW_FIX_SCHEMA,
       phase: 'Review Loop',
       label: `fix:PR#${prNumber} c${cycles} (${ex.model}/${ex.effort})`,
@@ -595,8 +683,8 @@ const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - title: the issue title EXACTLY as \`gh issue view --json title\` reports it, including any [C<score>] prefix. Never shorten, reword, or strip the prefix: the runtime reconciles the complexity you report against this title, so a trimmed title makes a scored issue look unscored and routes the whole run to the most expensive band
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
-- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku
-- effort: from "**Effort:**" — one of low/medium/high/xhigh; low and medium are Fable-only tiers, preserve them verbatim (including on a non-Fable model) so the runtime can identify and normalize stale combinations
+- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
+- effort: from "**Effort:**" — one of low/medium/high/xhigh/max; low and medium are Fable-only tiers and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
 - plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the fableplan stage runs at its high default. Preserve a stamped tier verbatim so the runtime can clamp xhigh to high and log it. Only the effort is stampable — never read a model from this line
 - validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can clamp or raise it and log the change
 - fableplan: true when "**fableplan first:**" starts with "Yes"
@@ -620,7 +708,31 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: prep omitted the score but the title reads [C${prefixScore}] — routing on the title prefix`)
     normalized.complexity = prefixScore
   }
-  if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable') {
+  if (isCliHarness(normalized.model)) {
+    const harness = CLI_HARNESSES[normalized.model]
+    if (normalized.effort === 'max' && !harness.efforts.includes('max')) {
+      log(`#${normalized.number}: normalized build effort max → xhigh for ${harness.label} (max is a Codex CLI-only tier)`)
+      normalized.effort = 'xhigh'
+    }
+    if (!harness.efforts.includes(normalized.effort)) {
+      log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${harness.label}`)
+      normalized.effort = 'high'
+    }
+    if (!normalized.cli_model) {
+      const resolveDefault = harness.defaultModels[String(normalized.build_model_name || '').trim().toLowerCase()]
+      if (resolveDefault) {
+        normalized.cli_model = resolveDefault(normalized.effort)
+      } else {
+        normalized.cli_error = `Build model "${normalized.build_model_name || normalized.model}" on the ${harness.label} carries no CLI model id and has no known default — stamp it as "<Name> (${harness.label}, <model-id>)"`
+        log(`#${normalized.number}: ${normalized.cli_error}`)
+      }
+    }
+  } else if (normalized.effort === 'max') {
+    const ceiling = normalized.model === 'fable' ? 'high' : 'xhigh'
+    log(`#${normalized.number}: normalized build effort max → ${ceiling} for ${MODEL_NAMES[normalized.model] || normalized.model} (max is a Codex CLI-only tier)`)
+    normalized.effort = ceiling
+  }
+  if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable' && !isCliHarness(normalized.model)) {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
   }
@@ -746,6 +858,15 @@ async function executeTrack(trackIndex) {
     const ex = EX.get(issue) || { number: issue, title: `#${issue}`, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
+    if (ex.cli_error) {
+      blocker = ex.cli_error
+      log(`#${issue}: blocked before validation — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
+      addResult({ issue, status: 'blocked', blocker })
+      localSkipped.push({ issue, reason: `${blocker} — issue never started` })
+      status = 'blocked'
+      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      break
+    }
 
     const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
     const validateBand = bandFor(ex.complexity)
@@ -816,16 +937,23 @@ async function executeTrack(trackIndex) {
     let rescore = null
     if (!ex.missing_block && hasScore(ex.complexity) && BANDS.indexOf(bandFor(effectiveComplexity)) > BANDS.indexOf(bandFor(ex.complexity))) {
       const derived = derivedBuild(effectiveComplexity)
+      const previousName = buildModelName(ex)
       rescore = {
         from: ex.complexity,
         to: effectiveComplexity,
         previous: { model: ex.model, effort: ex.effort, fableplan: ex.fableplan },
         rerouted: { model: derived.model, effort: derived.effort, fableplan: derived.fableplan },
       }
-      ex.model = derived.model
-      ex.effort = derived.effort
-      ex.fableplan = derived.fableplan
-      log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${MODEL_NAMES[rescore.previous.model]} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
+      if (isCliHarness(ex.model)) {
+        rescore.rerouted = { model: ex.model, effort: ex.effort, fableplan: derived.fableplan }
+        ex.fableplan = derived.fableplan
+        log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — keeping the stamped ${previousName} @ ${ex.effort} build (an external harness stamp is a deliberate override)${derived.fableplan && !rescore.previous.fableplan ? ', adding fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
+      } else {
+        ex.model = derived.model
+        ex.effort = derived.effort
+        ex.fableplan = derived.fableplan
+        log(`#${issue}: RESCORED C${rescore.from} → C${rescore.to} — re-routing build ${previousName} @ ${rescore.previous.effort} → ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan && !rescore.previous.fableplan ? ' with fableplan' : ''} (band ${derived.band.name}); the issue needs a [C${rescore.to}] restamp`)
+      }
     }
 
     if (ex.missing_block) {
@@ -840,6 +968,7 @@ async function executeTrack(trackIndex) {
       log(`#${issue}: no Execution block — deriving build ${MODEL_NAMES[derived.model]} @ ${derived.effort}${derived.fableplan ? ' with fableplan' : ''} from ${source}`)
     }
     const modelId = MODEL_IDS[ex.model] || 'opus'
+    const cliBuild = isCliHarness(ex.model)
 
     let plan = null
     const planEffort = ex.plan_effort || 'high'
@@ -858,15 +987,16 @@ async function executeTrack(trackIndex) {
       if (!plan) log(`#${issue}: fableplan agent failed — building without a posted plan`)
     }
 
-    log(`#${issue} (${hasScore(ex.complexity) ? `C${ex.complexity}` : 'unscored'}): ${validation.verdict} → implementing on ${MODEL_NAMES[modelId]} @ ${ex.effort}${plan ? ` (against Fable plan @ ${planEffort})` : ''}`)
+    log(`#${issue} (${hasScore(ex.complexity) ? `C${ex.complexity}` : 'unscored'}): ${validation.verdict} → implementing on ${buildModelName(ex)} @ ${ex.effort}${cliBuild ? ` (model id ${ex.cli_model}, driven by a ${MODEL_NAMES[CLI_DRIVER.model]} @ ${CLI_DRIVER.effort} driver agent)` : ''}${plan ? ` (against Fable plan @ ${planEffort})` : ''}`)
     let impl
     try {
-      impl = await agent(implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP), {
-        model: modelId,
-        effort: ex.effort,
+      const taskPrompt = implementPrompt(issue, ex, validation, plan, completed, skipped, baseRefs, REVIEW_LOOP)
+      impl = await agent(cliBuild ? cliDriverPrompt(taskPrompt, ex) : taskPrompt, {
+        model: cliBuild ? CLI_DRIVER.model : modelId,
+        effort: cliBuild ? CLI_DRIVER.effort : ex.effort,
         schema: IMPLEMENT_SCHEMA,
         phase: 'Implement',
-        label: `implement:#${issue} (${modelId}/${ex.effort})`,
+        label: `implement:#${issue} (${buildLabel(ex)})`,
       })
     } catch (error) {
       impl = null

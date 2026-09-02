@@ -42,8 +42,8 @@ Append to every issue body, before the footer:
 ## Execution
 - **Depends on:** #<n>[, #<n>…] | none
 - **Runs after:** #<n>[, #<n>…] | none
-- **Build model:** <Fable 5.1 | Opus 5 | ...>
-- **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh>
+- **Build model:** <Fable 5.1 | Opus 5 | ... | <Name> (Codex CLI[, <model-id>]) | <Name> (Cursor CLI[, <model-id>])>
+- **Effort:** <low (Fable-only, discretionary — below the formula floor) | medium (Fable-only) | high | xhigh | max (Codex CLI-only)>
 - **fableplan first:** <Yes — Fable 5.1 plans, plan posted to this issue, builder implements against it | No>
 - **PR review:** standard `@claude` review trigger
 - **Validate effort:** <low | medium | high | xhigh>   (optional — omit to use the band default)
@@ -69,6 +69,8 @@ Assignment — **derive from the complexity score band**. Load the canonical for
 | 5 | 81–99 | Opus 5 | **Yes** | xhigh |
 
 **Never stamp Fable 5.1 as the Build model** — no band defaults to a Fable build, and this skill never assigns one; a Fable build exists only when the user explicitly directs it on a specific issue.
+
+**Never stamp an external CLI harness as the Build model** — no band defaults to a Codex CLI or Cursor CLI build, and this skill never assigns one. A CLI build exists only when the user directs it on a specific issue; `execution-plan-review` writes the form `<Name> (Codex CLI)` or `<Name> (Cursor CLI)`, with an optional model id after a comma inside the parenthetical, and the `cli-dispatch` skill owns how the pipeline reaches that CLI.
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
