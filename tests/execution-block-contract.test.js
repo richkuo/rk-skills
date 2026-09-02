@@ -71,14 +71,15 @@ function readOnlyViolations(text) {
 }
 
 describe('Execution block fields', () => {
-  test('prd-to-issues stamps every routing field the pipeline prep reads, and never Plan effort', () => {
-    for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review']) {
-      expect(prdToIssues, `prd-to-issues stamps ${field}`).toContain(`**${field}:**`)
+  test('prd-to-issues documents every routing field the pipeline prep reads, including the optional effort stamps', () => {
+    for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review', 'Validate effort', 'Plan effort']) {
+      expect(prdToIssues, `prd-to-issues documents ${field}`).toContain(`**${field}:**`)
     }
-    expect(prdToIssues, 'prd-to-issues never stamps Plan effort').not.toContain('**Plan effort:**')
-    for (const field of ['Build model', 'Effort', 'fableplan first', 'PR review', 'Plan effort']) {
+    expect(prdToIssues, 'prd-to-issues never stamps a validate model').not.toContain('**Validate model:**')
+    for (const field of ['Build model', 'Effort', 'fableplan first', 'PR review', 'Validate effort', 'Plan effort']) {
       expect(pipeline, `pipeline prep reads ${field}`).toMatch(new RegExp(`"\\*{0,2}${field}:`))
     }
+    expect(pipeline, 'pipeline prep never reads a validate model').toMatch(/do NOT extract a "\*\*Validate model:\*\*" line/)
   })
 })
 
