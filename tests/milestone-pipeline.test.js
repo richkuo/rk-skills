@@ -265,13 +265,14 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c2-c3')).toHaveLength(1)
   })
 
-  test('dispatches the plan stage at high and normalizes legacy stamps', async () => {
-    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewLoop: false }, {
+  test('dispatches the plan stage at the stamped Plan effort, else high, and clamps xhigh to high', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8], [9]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
           { number: 2, title: '[C60] Stamped xhigh', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'xhigh', missing_block: false },
           { number: 3, title: '[C60] Stamped low', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'low', missing_block: false },
           { number: 4, title: '[C60] No stamp', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: true, missing_block: false },
+          { number: 9, title: '[C60] Stamped medium', complexity: 60, model: 'opus', effort: 'high', fableplan: true, plan_effort: 'medium', missing_block: false },
           { number: 5, title: '[C20] No plan stage, stamped xhigh', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'xhigh', missing_block: false },
           { number: 6, title: '[C20] No plan stage, stamped low', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'low', missing_block: false },
           { number: 7, title: '[C20] No plan stage, stamped medium', complexity: 20, model: 'opus', effort: 'high', fableplan: false, plan_effort: 'medium', missing_block: false },
@@ -283,23 +284,25 @@ describe('milestone-pipeline dependency scheduling', () => {
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
     expect(planEvent(2).effort).toBe('high')
     expect(planEvent(2).model).toBe('fable')
-    expect(planEvent(3).effort).toBe('high')
+    expect(planEvent(3).effort).toBe('low')
     expect(planEvent(3).model).toBe('fable')
     expect(planEvent(4).effort).toBe('high')
+    expect(planEvent(9).effort).toBe('medium')
+    expect(planEvent(9).model).toBe('fable')
     expect(planEvent(5)).toBeUndefined()
 
     expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
-    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
+    expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5.1 | low | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
+    expect(planEvent(9).prompt).toContain('Created with LLM: Fable 5.1 | medium | Harness: milestone-pipeline')
 
     expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#3') && message.includes('against Fable plan @ low'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#9') && message.includes('against Fable plan @ medium'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
     expect(logs.filter((message) => message.includes('normalized plan effort')).sort()).toEqual([
-      '#2: normalized plan effort xhigh → high (fableplan always runs at high)',
-      '#3: normalized plan effort low → high (fableplan always runs at high)',
-      '#5: normalized plan effort xhigh → high (fableplan always runs at high)',
-      '#6: normalized plan effort low → high (fableplan always runs at high)',
-      '#7: normalized plan effort medium → high (fableplan always runs at high)',
+      '#2: normalized plan effort xhigh → high (Fable never runs at xhigh)',
+      '#5: normalized plan effort xhigh → high (Fable never runs at xhigh)',
     ].sort())
 
     expect(logs.filter((message) => message.includes('ignoring Plan effort')).sort()).toEqual([
@@ -332,10 +335,62 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('the prep schema tells the agent to omit every field the runtime derives when absent', () => {
     const schema = workflowSource.slice(workflowSource.indexOf('const PREP_SCHEMA'), workflowSource.indexOf('\n}\n', workflowSource.indexOf('const PREP_SCHEMA')))
-    for (const field of ['complexity', 'plan_effort', 'first_review_model', 'first_review_effort']) {
+    for (const field of ['complexity', 'validate_effort', 'plan_effort', 'first_review_model', 'first_review_effort']) {
       expect(schema.match(new RegExp(`^ +${field}: \\{.*$`, 'm'))?.[0], `${field} description`).toMatch(/\bOMIT\b/)
     }
-    expect(schema).not.toMatch(/validate_effort/)
+    expect(schema).not.toMatch(/validate_model/)
+  })
+
+  test('a stamped Validate effort overrides the band default, clamped to each model\'s allowed tiers', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C85] Fable band stamped medium', complexity: 85, model: 'opus', effort: 'xhigh', fableplan: true, validate_effort: 'medium', missing_block: false },
+          { number: 3, title: '[C75] Fable band stamped low', complexity: 75, model: 'opus', effort: 'high', fableplan: true, validate_effort: 'low', missing_block: false },
+          { number: 4, title: '[C75] Fable band stamped xhigh', complexity: 75, model: 'opus', effort: 'high', fableplan: true, validate_effort: 'xhigh', missing_block: false },
+          { number: 5, title: '[C30] Opus band stamped xhigh', complexity: 30, model: 'opus', effort: 'high', fableplan: false, validate_effort: 'xhigh', missing_block: false },
+          { number: 6, title: '[C30] Opus band stamped medium', complexity: 30, model: 'opus', effort: 'high', fableplan: false, validate_effort: 'medium', missing_block: false },
+          { number: 7, title: '[C60] Opus band stamped low', complexity: 60, model: 'opus', effort: 'xhigh', fableplan: false, validate_effort: 'low', missing_block: false },
+          { number: 8, title: '[C75] Fable band, no stamp', complexity: 75, model: 'opus', effort: 'high', fableplan: true, missing_block: false },
+        ],
+      }),
+    })
+
+    const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
+    expect(dispatch('validate:#2')).toMatchObject({ model: 'fable', effort: 'medium' })
+    expect(dispatch('validate:#3')).toMatchObject({ model: 'fable', effort: 'low' })
+    expect(dispatch('validate:#4')).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'fable', effort: 'medium' })
+
+    expect(logs.filter((message) => message.includes('validating on'))).toEqual([
+      '#2: C85 (band 81+) — validating on Fable 5.1 @ medium (stamped Validate effort medium overrides the band default high)',
+      '#3: C75 (band 71–80) — validating on Fable 5.1 @ low (stamped Validate effort low overrides the band default medium)',
+      '#4: C75 (band 71–80) — validating on Fable 5.1 @ high (stamped Validate effort xhigh → high: Fable never runs at xhigh)',
+      '#5: C30 (band 21–50) — validating on Opus 5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
+      '#6: C30 (band 21–50) — validating on Opus 5 @ high (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#7: C60 (band 51–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
+      '#8: C75 (band 71–80) — validating on Fable 5.1 @ medium',
+    ])
+  })
+
+  test('a stamped Validate effort carries into the escalated re-validation under the escalated model\'s clamp', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C30] Opus band stamped xhigh, rescored into Fable', complexity: 30, model: 'opus', effort: 'high', fableplan: false, validate_effort: 'xhigh', missing_block: false },
+        ],
+      }),
+      Validate: () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 85 }),
+    })
+
+    const attempts = events.filter((event) => event.state === 'started' && event.label === 'validate:#2')
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]).toMatchObject({ model: 'opus', effort: 'xhigh' })
+    expect(attempts[1]).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(logs).toContain('#2: validator re-scored C30 → C85 (band 81+) — re-validating on Fable 5.1 @ high (stamped Validate effort xhigh → high: Fable never runs at xhigh)')
   })
 
   test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
