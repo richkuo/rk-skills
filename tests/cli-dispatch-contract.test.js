@@ -23,10 +23,10 @@ describe('cli dispatch contract', () => {
     const cursorShim = codeBlocks.find((block) => block.includes('agent -p'))
     expect(codexShim, 'a fenced codex exec shim exists').toBeDefined()
     expect(cursorShim, 'a fenced agent -p shim exists').toBeDefined()
-    for (const flag of ['-C "$REPO"', '-m <model-id>', '-c model_reasoning_effort=<tier>', '-s workspace-write', '--json', '-o "$RESULT"', '< "$PROMPT"']) {
+    for (const flag of ['-C "$REPO"', "-m '<model-id>'", '-c model_reasoning_effort=<tier>', '-s workspace-write', '--json', '-o "$RESULT"', '< "$PROMPT"']) {
       expect(codexShim, flag).toContain(flag)
     }
-    for (const flag of ['--output-format json', '--model <model-id>', '--force', '--trust', '--workspace "$REPO"', '"$(cat "$PROMPT")"']) {
+    for (const flag of ['--output-format json', "--model '<model-id>'", '--force', '--trust', '--workspace "$REPO"', '"$(cat "$PROMPT")"']) {
       expect(cursorShim, flag).toContain(flag)
     }
     for (const block of codeBlocks) {
@@ -38,12 +38,18 @@ describe('cli dispatch contract', () => {
     expect(flat, 'the shim runs in the background').toMatch(/background[\s\S]{0,120}poll/i)
     expect(flat, 'a substitution is reported').toMatch(/substitution[\s\S]{0,200}never present/i)
     expect(flat, 'no Claude fallback').toMatch(/never falls back to a Claude build/i)
+    expect(flat, 'the model id is allowlisted').toContain('^[A-Za-z0-9][A-Za-z0-9._:-]*$')
+    expect(flat, 'the Cursor shim is documented as unsandboxed').toMatch(/Cursor shim has no write boundary/i)
+    expect(flat, 'the Cursor model list uses the preflighted binary').toContain('`agent --list-models`')
+    expect(skill).not.toContain('cursor-agent --list-models')
+    expect(flat, 'the driver owns every trigger').toMatch(/CLI agent[^.]*never posts a trigger/i)
   })
 
   test('the pipeline driver prompt embeds the same shim shape and forbids the dangerous flags', () => {
     expect(pipeline).toContain("const CLI_DRIVER = { model: 'opus', effort: 'high' }")
-    expect(pipeline).toContain('codex exec -C "$REPO" -m ${cliModel} -c model_reasoning_effort=${effort} -s workspace-write')
-    expect(pipeline).toContain('agent -p --output-format json --model ${cliModel} --force --trust --workspace "$REPO" "$(cat "$PROMPT")"')
+    expect(pipeline).toContain("const CLI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/")
+    expect(pipeline).toContain(`codex exec -C "$REPO" -m '\${cliModel}' -c model_reasoning_effort=\${effort} -s workspace-write`)
+    expect(pipeline).toContain(`agent -p --output-format json --model '\${cliModel}' --force --trust --workspace "$REPO" "$(cat "$PROMPT")"`)
     expect(pipeline).toContain('Load the \\`cli-dispatch\\` skill BEFORE doing anything else')
     expect(pipeline).toMatch(/Never add \\`--dangerously-bypass-approvals-and-sandbox\\`, \\`--yolo\\`/)
     expect(pipeline).toContain("enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor']")
@@ -61,6 +67,8 @@ describe('cli dispatch contract', () => {
     expect(milestoneWorkflow).toContain('`agent status`')
     expect(validateIssue).toContain('The Build column is the Claude default')
     expect(readme).toContain('**External build harnesses.**')
+    expect(readme).toContain('Cursor has no sandbox')
+    expect(readme).not.toContain('sandboxed to the workspace')
     expect(readme).toContain('| `cli-dispatch` |')
   })
 

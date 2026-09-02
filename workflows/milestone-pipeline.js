@@ -143,6 +143,7 @@ const CLI_HARNESSES = {
   },
 }
 const CLI_DRIVER = { model: 'opus', effort: 'high' }
+const CLI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
 
 function isCliHarness(model) {
   return Object.prototype.hasOwnProperty.call(CLI_HARNESSES, model)
@@ -168,36 +169,56 @@ function buildLabel(ex) {
 
 function cliShimCommand(harness, cliModel, effort) {
   if (harness === 'codex') {
-    return `codex exec -C "$REPO" -m ${cliModel} -c model_reasoning_effort=${effort} -s workspace-write -c sandbox_workspace_write.network_access=true --json -o "$RESULT" < "$PROMPT" > "$EVENTS" 2> "$STDERR"`
+    return `codex exec -C "$REPO" -m '${cliModel}' -c model_reasoning_effort=${effort} -s workspace-write -c sandbox_workspace_write.network_access=true --json -o "$RESULT" < "$PROMPT" > "$EVENTS" 2> "$STDERR"`
   }
-  return `agent -p --output-format json --model ${cliModel} --force --trust --workspace "$REPO" "$(cat "$PROMPT")" > "$RESULT" 2> "$STDERR"`
+  return `agent -p --output-format json --model '${cliModel}' --force --trust --workspace "$REPO" "$(cat "$PROMPT")" > "$RESULT" 2> "$STDERR"`
 }
 
-function cliDriverPrompt(taskPrompt, ex) {
+function cliDriverPrompt(taskPrompt, ex, kind = 'implement') {
   const harness = CLI_HARNESSES[ex.model]
   const modelName = footerModelName(ex)
   const cliBinary = ex.model === 'codex' ? 'codex' : 'agent'
   const loginCheck = ex.model === 'codex' ? 'codex login status' : 'agent status'
-  return `You are a build DRIVER agent in this repo. The build itself runs on ${modelName} through the ${harness.label} (model id \`${ex.cli_model}\`, effort \`${ex.effort}\`). You never write product code and you never substitute a Claude model for that build: the issue's Execution block stamps this external harness, and silently building on another model is the defect this driver exists to close. If the CLI cannot run, return the blocker.
+  const isFix = kind === 'fix'
+  const skillName = isFix ? 'fix-pr-review' : 'work-on-issue'
+  const footerVerb = isFix ? 'Updated' : 'Created'
+  const noTriggerOverride = 'do NOT trigger, post, or wait for any `@claude` or `@codex` re-review; stop after pushing the fixes and posting the per-finding disposition comment, because the driver owns every review trigger'
+  const skillLine = `one line telling the CLI agent to read the \`${skillName}\` skill file directly at the first path that exists among \`~/.codex/skills/${skillName}/SKILL.md\`, \`~/.cursor/skills/${skillName}/SKILL.md\`, and \`~/.claude/skills/${skillName}/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file), and to use the \`${harness.branchPrefix}\` branch prefix, the PR title bracket \`[C<score>, ${modelName}, ${ex.effort}]\`, and the footer \`${footerVerb} with LLM: ${modelName} | ${ex.effort} | Harness: ${harness.footerHarness}\` on every commit and PR body`
+  const preflightReturn = isFix
+    ? 'return the blocked shape the task prompt\'s final paragraph defines (status blocked, or blocker set), with head_ref and head_sha read from `gh pr view <num> --json headRefName,headRefOid` as they stand, and the blocker naming the missing piece'
+    : 'return pr_number 0, empty head fields, and the blocker naming the missing piece'
+  const promptFileStep = isFix
+    ? `The task prompt below is addressed to YOU, the driver. Run every step of it that reads or writes GitHub state yourself (fetching the standing review, deciding whether to stop, watching the Actions run, reading the verdict, posting any re-trigger it authorizes). Where it says to invoke the \`fix-pr-review\` skill, forward that pass to the CLI instead: write a fix prompt to a file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory) that names the PR number and the review comment to address, carries the task prompt's constraints and overrides verbatim, states this override (${noTriggerOverride}), and ends with ${skillLine}.`
+    : `Write the task prompt below, verbatim, to a file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory), followed by one line telling the CLI agent that the driver handles every review trigger and review cycle in the task prompt, so it stops once the pull request is open and verified, and ${skillLine}.`
+  const verifyStep = isFix
+    ? `After each pass, verify \`gh pr view <num> --json headRefName,headRefOid\` and read the PR's newest comments. A pass that exits zero with neither a new head commit nor a disposition comment is a blocker.`
+    : `Verify the pull request exactly as a Claude builder would (\`gh pr list --search "#<issue> in:title,body" --state open\`, then \`gh pr view <num> --json headRefName,headRefOid\`). No PR after a successful exit is a blocker.`
+  const reviewStep = isFix
+    ? `The CLI agent never posts a review trigger. When the task prompt authorizes a re-trigger, post it yourself, as its own one-line comment, exactly as the task prompt's routing selects, after the CLI agent's disposition comment has landed; when the task prompt forbids re-triggering, post nothing.`
+    : `The task prompt's review directive is yours: post the cycle-1 trigger it names yourself (its own one-line comment, no footer), watch the Actions run, read the verdict, and forward each fix pass the directive asks for to the same shim with a fix prompt that names the PR and the review comment, states this override (${noTriggerOverride}), and ends with the same skill-path line for \`fix-pr-review\`, the same branch-prefix rule, and the footer verb \`Updated\`. You post every re-trigger the directive's routing selects; the CLI agent posts none.`
+  const returnShape = isFix
+    ? 'Return via StructuredOutput exactly what the task prompt\'s final paragraph asks for, and name any substitution, stray write, or retry in the summary.'
+    : 'Return via StructuredOutput exactly what the task prompt\'s final paragraph asks for, plus flags naming any substitution, stray write, or retry.'
+  return `You are a ${isFix ? 'fix-pass' : 'build'} DRIVER agent in this repo. The ${isFix ? 'fix pass' : 'build'} itself runs on ${modelName} through the ${harness.label} (model id \`${ex.cli_model}\`, effort \`${ex.effort}\`). You never write product code and you never substitute a Claude model for that ${isFix ? 'fix pass' : 'build'}: the issue's Execution block stamps this external harness, and silently building on another model is the defect this driver exists to close. If the CLI cannot run, return the blocker.
 
 Load the \`cli-dispatch\` skill BEFORE doing anything else (mandatory) and follow it exactly. Then:
-1. Preflight: \`command -v ${cliBinary}\` must succeed and \`${loginCheck}\` must report a signed-in account. Either failure is a blocker — return pr_number 0, empty head fields, and the blocker naming the missing piece.
+1. Preflight: \`command -v ${cliBinary}\` must succeed and \`${loginCheck}\` must report a signed-in account. Either failure is a blocker — ${preflightReturn}.
 2. Snapshot \`git status --porcelain\` in the main checkout before dispatching.
-3. Write the task prompt below, verbatim, to a file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory), followed by one line telling the CLI agent to read the \`work-on-issue\` skill file directly at the first path that exists among \`~/.codex/skills/work-on-issue/SKILL.md\`, \`~/.cursor/skills/work-on-issue/SKILL.md\`, and \`~/.claude/skills/work-on-issue/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file), and to use the \`${harness.branchPrefix}\` branch prefix, the PR title bracket \`[C<score>, ${modelName}, ${ex.effort}]\`, and the footer \`Created with LLM: ${modelName} | ${ex.effort} | Harness: ${harness.footerHarness}\` on the commit and the PR body.
-4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit — a full build exceeds any foreground Bash timeout:
+3. ${promptFileStep}
+4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit — a full ${isFix ? 'fix pass' : 'build'} exceeds any foreground Bash timeout:
    \`${cliShimCommand(ex.model, ex.cli_model, ex.effort)}\`
    Never add \`--dangerously-bypass-approvals-and-sandbox\`, \`--yolo\`, or any flag the cli-dispatch skill does not name.
-5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker. Read the CLI's final message and, when the output names the model that served the run, compare it with \`${ex.cli_model}\` — a different model is a substitution: report it in flags and in the summary, never as a ${modelName} build.
-6. Diff \`git status --porcelain\` in the main checkout against the snapshot; report any stray change outside the issue's worktree in flags.
-7. Verify the pull request exactly as a Claude builder would (\`gh pr list --search "#<issue> in:title,body" --state open\`, then \`gh pr view <num> --json headRefName,headRefOid\`). No PR after a successful exit is a blocker.
-8. Handle the review directive in the task prompt yourself for the parts that read GitHub state (posting the trigger, watching the Actions run, reading the verdict), and forward every fix pass to the same shim with a fix prompt that names the PR, the findings, and the same skill-path, branch-prefix, and footer rules (footer verb \`Updated\`).
+5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker. Read the CLI's final message and, when the output names the model that served the run, compare it with \`${ex.cli_model}\` — a different model is a substitution: report it ${isFix ? 'in the summary' : 'in flags and in the summary'}, never as a ${modelName} ${isFix ? 'fix pass' : 'build'}. An output that names no model is recorded as model unverified beside the requested id.
+6. Diff \`git status --porcelain\` in the main checkout against the snapshot; report any stray change outside the issue's worktree ${isFix ? 'in the summary' : 'in flags'}.
+7. ${verifyStep}
+8. ${reviewStep}
 
-Task prompt for the ${harness.label} agent (write it to the prompt file verbatim):
+Task prompt${isFix ? ' (addressed to the driver; each fix pass reaches the ' + harness.label + ' agent through the fix prompt file step 3 describes)' : ' for the ' + harness.label + ' agent (write it to the prompt file verbatim)'}:
 ----- BEGIN TASK PROMPT -----
 ${taskPrompt}
 ----- END TASK PROMPT -----
 
-Return via StructuredOutput exactly what the task prompt's final paragraph asks for, plus flags naming any substitution, stray write, or retry.`
+${returnShape}`
 }
 
 const BANDS = [
@@ -523,7 +544,7 @@ At the stopping boundary, verify \`gh pr view ${prNumber} --json headRefName,hea
 function fixDispatch(ex, prompt, prNumber, cycleNote) {
   if (isCliHarness(ex.model)) {
     log(`PR #${prNumber}: ${cycleNote} fix pass forwards to ${buildModelName(ex)} @ ${ex.effort} through a ${MODEL_NAMES[CLI_DRIVER.model]} driver`)
-    return { prompt: cliDriverPrompt(prompt, ex), model: CLI_DRIVER.model, effort: CLI_DRIVER.effort }
+    return { prompt: cliDriverPrompt(prompt, ex, 'fix'), model: CLI_DRIVER.model, effort: CLI_DRIVER.effort }
   }
   return { prompt, model: MODEL_IDS[ex.model] || 'opus', effort: ex.effort }
 }
@@ -726,6 +747,10 @@ const normalizedIssues = prep.issues.map((issue) => {
         normalized.cli_error = `Build model "${normalized.build_model_name || normalized.model}" on the ${harness.label} carries no CLI model id and has no known default — stamp it as "<Name> (${harness.label}, <model-id>)"`
         log(`#${normalized.number}: ${normalized.cli_error}`)
       }
+    }
+    if (normalized.cli_model && !CLI_MODEL_ID.test(String(normalized.cli_model))) {
+      normalized.cli_error = `Build model id ${JSON.stringify(String(normalized.cli_model))} on the ${harness.label} carries a character outside the allowed set (letters, digits, ".", "_", ":", "-"; it must start with a letter or digit) — that id would reach a shell command, so the issue is blocked; stamp it as "<Name> (${harness.label}, <model-id>)" with a plain id`
+      log(`#${normalized.number}: ${normalized.cli_error}`)
     }
   } else if (normalized.effort === 'max') {
     const ceiling = normalized.model === 'fable' ? 'high' : 'xhigh'
