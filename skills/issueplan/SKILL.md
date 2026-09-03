@@ -71,7 +71,7 @@ The plan is safely posted, so do not assume an immediate build. Ask (for example
 
 ### 7. Set up an isolated git worktree
 
-Never build in the user's current checkout. If the directory is not a git repository, tell the user and ask how to proceed. Create the worktree and branch per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"). Deltas: the name is `<agent-prefix>/issueplan/<short-task-name>`, and there is no `baseRefs` input, so the base is always the fetched `origin/<default-branch>`.
+Never build in the user's current checkout. If the directory is not a git repository, tell the user and ask how to proceed. Create the worktree and branch per `work-on-issue` step 1 ("Create the isolated worktree on a verified base"). Deltas: the name is `<agent-prefix>/issueplan/<short-task-name>`, and there is no `baseRefs` input, so the base is the fetched `origin/<target>`: the `targetBranch` the user named, else the default branch. The PR opens against that same target.
 
 ### 8. Build
 

@@ -5,11 +5,11 @@ description: Use when the user asks to validate, review, or check a GitHub issue
 
 # validate-issue
 
-Validate every current-behavior claim against code. Input: a full issue URL, `#N`, `N`, or `owner/repo#N`; with none, take the newest open issue and state its number.
+Validate every current-behavior claim against code. Input: a full issue URL, `#N`, `N`, or `owner/repo#N`; with none, take the newest open issue and state its number. The orchestration form `{ issue: <N>, targetBranch?: "<branch>" }` (or a prose "target branch <name>") names the branch the fix will merge into; it replaces the default branch as the baseline in step 0.
 
-### 0. Default-branch baseline
+### 0. Baseline branch
 
-No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)`, run `git fetch origin "$DEFAULT"`, and state `git rev-parse --short "origin/$DEFAULT"` as the baseline in the verdict. Read a working-tree path only when it is tracked and `git diff --quiet "origin/$DEFAULT" -- <path>` exits 0; otherwise read `git show "origin/$DEFAULT":<path>`.
+No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)`; with a `targetBranch`, validate it per `work-on-issue` step 1 ("Target") and set `DEFAULT` to it instead, naming it as the target in the verdict. Run `git fetch origin "$DEFAULT"`, and state `git rev-parse --short "origin/$DEFAULT"` as the baseline in the verdict. Read a working-tree path only when it is tracked and `git diff --quiet "origin/$DEFAULT" -- <path>` exits 0; otherwise read `git show "origin/$DEFAULT":<path>`.
 
 ### 1. Fetch the issue and linked PRs
 

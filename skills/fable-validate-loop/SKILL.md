@@ -13,6 +13,8 @@ Chain fable-validate → (conditional) update issue → fableplan → work-on-is
 
 Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (defaults to the latest open issue in the current repo).
 
+Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to every validate, plan, and build step in the chain, so the baseline and the PR base are that branch instead of the repo default. `work-on-issue` step 1 ("Target") owns its validation.
+
 ## Steps
 
 ### 1. Run fable-validate

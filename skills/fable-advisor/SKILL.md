@@ -72,11 +72,11 @@ Give the user the comment URL.
 - **Checkpoint consults, throughout its step 3.** Step 6 applies for the whole implementation.
 - **Binding review, between its steps 4 and 5.** Run step 7 after verify and before staging.
 
-Steps 4, 8, and 9 still apply; `baseRefs` is never an input here.
+Steps 4, 8, and 9 still apply; `baseRefs` is never an input here, and a `targetBranch` the user names passes through to `work-on-issue` unchanged.
 
 **Prose path.**
 
-1. **Worktree.** Create it per `work-on-issue` step 1, named `cc/fable-advisor/<short-task-name>`, with no `baseRefs`. Outside a git repository, ask the user how to proceed.
+1. **Worktree.** Create it per `work-on-issue` step 1, named `cc/fable-advisor/<short-task-name>`, with no `baseRefs` and with the user's `targetBranch` when one was named. Outside a git repository, ask the user how to proceed.
 2. **Build** per the plan with step 6 consults. Before writing any code, mirror the plan's steps into the task tracker per `work-on-issue` step 2.
 3. **Verify** per `work-on-issue` steps 3 and 4. Never request the binding review on an unverified build.
 4. **Binding review**, the step 7 gate.
