@@ -281,6 +281,14 @@ describe('complexity grading procedure', () => {
       expect(gate, path).toMatch(/`fableplan: no`[^\n]*both \*\*below 71\*\*/)
       expect(gate, path).toMatch(/Never read the raw `Complexity:` value/)
     }
+    const fvl = await read('skills/fable-validate-loop/SKILL.md')
+    expect(fvl).toMatch(/only sanctioned skip is the step-4 score gate \(the verdict's title-floored signal reads `fableplan: no`/)
+    expect(fvl).not.toMatch(/score < 71/)
+    for (const path of ['skills/fable-validate-loop/SKILL.md', 'skills/validate-fableplan-loop/SKILL.md']) {
+      const description = (await read(path)).match(/^description: .*/m)[0]
+      expect(description, path).toMatch(/skipped when the verdict's title-floored signal reads `fableplan: no`/)
+      expect(description, path).not.toMatch(/validated score is below 71/)
+    }
     const routing = validateIssueScoring.slice(validateIssueScoring.indexOf('## Routing details'))
     expect(routing).toMatch(/bands 4 and 5 differ in validate effort and in first reviewer/)
     expect(routing).toMatch(/a moved edge that a first-review row starts on moves that table/)
