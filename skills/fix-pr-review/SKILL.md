@@ -82,7 +82,7 @@ One comment stating what happened to each finding, per [disposition-comment.md](
 
 ### 10. Trigger the re-review
 
-One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. A bare-LGTM run that only merged the base routes by step 7's merge re-review rule: the cheap shorthand when the hand-resolved set holds a non-docs file, no trigger when it is docs-only. The trigger is its **own** comment; a trigger bundled into the disposition does not fire.
+One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. A bare-LGTM run that only merged the base routes by step 7's merge re-review rule: the cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, no trigger when it decided prose only. The trigger is its **own** comment; a trigger bundled into the disposition does not fire.
 
 ### 11. Report to the user
 

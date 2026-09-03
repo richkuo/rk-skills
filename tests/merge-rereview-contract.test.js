@@ -32,6 +32,7 @@ describe('merge re-review rule after a bare LGTM', () => {
     expect(step1).toMatch(/merge re-review rule decides whether step 10 posts a trigger/)
     const step10 = region(skill, '### 10. Trigger the re-review', '### 11. Report to the user')
     expect(step10).toMatch(/bare-LGTM run that only merged the base routes by step 7/)
+    expect(step10).toMatch(/cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, no trigger when it decided prose only/)
   })
 
   test('rereview-routing restates the rule without granting a rung', async () => {
