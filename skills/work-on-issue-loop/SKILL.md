@@ -11,6 +11,7 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 - Nothing — default to the issue just validated this session, else the latest open issue (`gh issue list --limit 1`).
 - `#<N>` / `<N>` / full URL / `owner/repo#N`.
+- Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to `work-on-issue`, which opens the PR against it. The review loop then follows the PR's own base branch.
 
 ## Steps
 

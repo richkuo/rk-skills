@@ -15,6 +15,8 @@ This is **fableplan-work-on-issue with the review loop added back** — the hand
 
 A GitHub issue is **required** (work-on-issue-loop targets an issue): a full URL, `#<N>`, bare `<N>`, or `owner/repo#N`. With nothing supplied, default to the latest open issue in the current repo. If no issue can be resolved, stop and ask — do not plan or implement against a paraphrase.
 
+Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to every validate, plan, and build step in the chain, so the baseline and the PR base are that branch instead of the repo default. `work-on-issue` step 1 ("Target") owns its validation.
+
 ## Steps
 
 ### 0. Pre-plan gate — check the issue is still worth planning

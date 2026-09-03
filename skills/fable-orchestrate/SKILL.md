@@ -29,7 +29,7 @@ Present the decomposition briefly, then proceed; pause only for a decision only 
 
 ### 2. Set up the task worktree
 
-Create the worktree per `work-on-issue` step 1, named `cc/fable-orchestrate/<short-task-name>`, with no `baseRefs`. Everything lands on this one branch; a single PR is the deliverable regardless of worker count.
+Create the worktree per `work-on-issue` step 1, named `cc/fable-orchestrate/<short-task-name>`, with no `baseRefs` and with the user's `targetBranch` when one was named; the single PR opens against that target. Everything lands on this one branch; a single PR is the deliverable regardless of worker count.
 
 ### 3. Dispatch workers
 

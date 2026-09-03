@@ -1796,6 +1796,68 @@ describe('milestone-pipeline merge and release', () => {
     expect(logs.some((message) => message.includes('release skipped — 1 of 2 issues reached merged status'))).toBeTrue()
   })
 
+  test.each([
+    ['empty targetBranch', { tracks: [[2]], targetBranch: '' }, /targetBranch must be a non-empty branch name/],
+    ['non-string targetBranch', { tracks: [[2]], targetBranch: 7 }, /targetBranch must be a non-empty branch name/],
+    ['targetBranch starting with a dash', { tracks: [[2]], targetBranch: '-x' }, /is not a valid branch name/],
+    ['targetBranch with a shell metacharacter', { tracks: [[2]], targetBranch: 'dev;rm' }, /is not a valid branch name/],
+    ['targetBranch with a double dot', { tracks: [[2]], targetBranch: 'a..b' }, /is not a valid branch name/],
+    ['targetBranch under refs/', { tracks: [[2]], targetBranch: 'refs/heads/dev' }, /is not a valid branch name/],
+  ])('rejects %s before prep', async (_name, args, message) => {
+    let prepStarted = false
+    const running = executeWorkflow(args, {
+      Prep: () => {
+        prepStarted = true
+        return { issues: [] }
+      },
+    })
+
+    await expect(running).rejects.toThrow(message)
+    expect(prepStarted).toBeFalse()
+  })
+
+  test('targetBranch reaches the validate, implement, and review prompts', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2, 3]], targetBranch: 'develop', merged: [mergedRecord(2)] })
+
+    expect(promptFor(events, 'validate:#2')).toContain('{ issue: 2, targetBranch: "develop" }')
+    expect(promptFor(events, 'implement:#2 (fable/high)')).toContain('work-on-issue` skill with args `{ issue: 2, targetBranch: "develop" }`')
+    expect(promptFor(events, 'implement:#2 (fable/high)')).toContain('--base develop')
+    expect(promptFor(events, 'implement:#2 (fable/high)')).toContain('never fall back to the target branch')
+    expect(promptFor(events, 'implement:#3 (fable/high)')).toContain('{ issue: 3, targetBranch: "develop" }')
+    expect(promptFor(events, 'review-loop:PR#1002 c2-c3')).toContain('merge conflicts with the PR\'s base branch (`develop`)')
+    expect(output.target_branch).toBe('develop')
+  })
+
+  test('targetBranch keeps predecessor baseRefs ahead of the target base', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2, 3]], targetBranch: 'develop', merge: false })
+
+    expect(promptFor(events, 'implement:#3 (fable/high)')).toContain('{ issue: 3, targetBranch: "develop", baseRefs: [')
+  })
+
+  test('targetBranch defaults release off and rejects nothing else', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]], targetBranch: 'develop', merged: [mergedRecord(2)] })
+
+    expect(output.results[0].status).toBe('merged')
+    expect(output.release).toBeNull()
+    expect(output.target_branch).toBe('develop')
+  })
+
+  test('explicit release with targetBranch defers with the branch named', async () => {
+    const { output } = await executeWorkflow({ tracks: [[2]], targetBranch: 'develop', release: true, merged: [mergedRecord(2)] })
+
+    expect(output.release.deferred).toBeTrue()
+    expect(output.release.summary).toContain('merged into develop')
+    expect(output.release.summary).toContain('only if develop is the repository default branch')
+  })
+
+  test('without targetBranch the output reports null and prompts omit it', async () => {
+    const { output, events } = await executeWorkflow({ tracks: [[2]], merged: [mergedRecord(2)] })
+
+    expect(output.target_branch).toBeNull()
+    expect(promptFor(events, 'implement:#2 (fable/high)')).toContain('work-on-issue` skill with args `{ issue: 2 }`')
+    expect(promptFor(events, 'implement:#2 (fable/high)')).not.toContain('targetBranch')
+  })
+
   test('release: false skips the deferred-release marker while merging stays on', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], release: false, merged: [mergedRecord(2)] })
 
