@@ -21,7 +21,7 @@ In any order: an optional PR reference (number or URL; default = the current bra
 
 Three channels: formal reviews, issue comments, inline diff threads. Fetch and select the unaddressed set per [fetch-recipes.md](fetch-recipes.md), read completely — it owns the cutoff and collection rules. **Never delete, edit, or bury a disposition comment**: the next review reads them on purpose. Record **whether the set contains any blocking finding** (a `Needs Fixing` / `Requires Human Review` item, a thread asserting a real defect, or a step 2 CI failure) — step 10 routes on it.
 
-**LGTM with non-blocking items** still gets them. **Bare `LGTM`** — no finding items, no open threads, and after step 2 no CI failure this PR caused — report approved and stop, naming any `**Verification limitation:**` lines and any CI failure attributed elsewhere; a conflict still gets step 7.
+**LGTM with non-blocking items** still gets them. **Bare `LGTM`** — no finding items, no open threads, and after step 2 no CI failure this PR caused — report approved and stop, naming any `**Verification limitation:**` lines and any CI failure attributed elsewhere. A conflict on a bare-LGTM PR still runs steps 7 through 9, and step 7's merge re-review rule decides whether step 10 posts a trigger.
 
 ### 2. Fetch failing CI checks
 
@@ -70,6 +70,8 @@ Implement every in-scope ✅/⚠️/❓/`Recommended Optional` finding, each fix
 
 If the PR is `CONFLICTING`: `git fetch origin <baseRefName> && git merge origin/<baseRefName>` on the head branch — never rebase a pushed PR branch, never blanket `ours`/`theirs`; preserve the intent of both sides, re-deriving your fix on new base code where they overlap. An irreconcilable conflict in safety-class code → stop and surface it to the user. Re-run verification; give the resolution its own line in the disposition and the report.
 
+**Merge re-review rule.** Record the hand-resolved set: every file git listed as conflicted (`UU`, `AA`, `DU`, `UD`) plus any file you edited by hand while resolving; files git auto-merged are base-branch work and do not count. When the addressed set held findings, step 10 routes as usual. When the addressed set was a bare LGTM, the hand-resolved set alone decides: **docs-only** (every file is a Markdown file or lives under a docs directory) → post no trigger, the prior LGTM stands; **anything else** (source, tests, config, workflows, scripts) → step 10 posts the cheap shorthand, consuming no rung. A hand-resolved code file is new work the approving reviewer never saw.
+
 ### 8. Commit and push
 
 Only after step 6's verification: `git status`; stage **each fix file by name** (never `git add -A`; a step 7 merge commit stays as git created it); `git commit -F <msg-file>`; `git push` to the tracked upstream. Message: "Address review on #<N>: <summary>", every test edit disclosed, plus the **Updated**-verb LLM Attribution Footer per the global CLAUDE.md/AGENTS.md rule, `Harness: Claude Code`. Confirm the push landed: `gh pr view <N> --json headRefOid` must equal `git rev-parse HEAD`; on a mismatch stop, post nothing, and report it.
@@ -80,8 +82,8 @@ One comment stating what happened to each finding, per [disposition-comment.md](
 
 ### 10. Trigger the re-review
 
-One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. The trigger is its **own** comment; a trigger bundled into the disposition does not fire.
+One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. A bare-LGTM run that only merged the base routes by step 7's merge re-review rule: the cheap shorthand when the hand-resolved set holds a non-docs file, no trigger when it is docs-only. The trigger is its **own** comment; a trigger bundled into the disposition does not fire.
 
 ### 11. Report to the user
 
-Terse summary: reviews and threads acted on, per-disposition counts, commit SHA, verification result, re-review reviewer, and every test edit with its case and ground. A step 6 stop on an ungrounded test says no commit or push exists and names the test, its `file:line`, what it asserts, and the conflict. Only when present: growth-check numbers, pre-existing verification failures, unexpected dirty files left unstaged, `**Verification limitation:**` sources, an ignored argument. Flag resolved judgment calls for override — the work is done.
+Terse summary: reviews and threads acted on, per-disposition counts, commit SHA, verification result, re-review reviewer (or that the merge re-review rule posted none, naming the hand-resolved set), and every test edit with its case and ground. A step 6 stop on an ungrounded test says no commit or push exists and names the test, its `file:line`, what it asserts, and the conflict. Only when present: growth-check numbers, pre-existing verification failures, unexpected dirty files left unstaged, `**Verification limitation:**` sources, an ignored argument. Flag resolved judgment calls for override — the work is done.

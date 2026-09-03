@@ -59,7 +59,7 @@ Classify the latest review as fix-pr-review steps 1 and 3 do: verdict (`LGTM` / 
 
 ### 4. Resolve the review and loop
 
-Invoke the `fix-pr-review` skill (Skill tool, `skill: fix-pr-review`). It validates every finding, fixes what is real, resolves merge conflicts (its step 7), commits, pushes, posts the disposition comment, and posts its own re-review trigger (its step 10); never add a second one. It decides its own delegation (its step 5); do not override it. Increment `review_count`, record the new trigger timestamp, go to step 2.
+Invoke the `fix-pr-review` skill (Skill tool, `skill: fix-pr-review`). It validates every finding, fixes what is real, resolves merge conflicts (its step 7), commits, pushes, posts the disposition comment, and posts its own re-review trigger (its step 10); never add a second one. It decides its own delegation (its step 5); do not override it. Increment `review_count`, record the new trigger timestamp, go to step 2. When it posted no trigger because its step 7 merge re-review rule found a docs-only merge on a bare-LGTM PR, re-check mergeability: `MERGEABLE` → the prior LGTM stands, go to step 5 as a clean pass; otherwise go to step 4 again.
 
 ### 5. Report
 
