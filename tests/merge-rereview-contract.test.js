@@ -18,10 +18,9 @@ describe('merge re-review rule after a bare LGTM', () => {
     expect(step7).toContain('**Merge re-review rule.**')
     expect(step7).toMatch(/hand-resolved set/)
     expect(step7).toMatch(/auto-merged are base-branch work and do not count/)
-    expect(step7).toMatch(/\*\*docs-only\*\*[^\n]*prose documentation[^\n]*none of them is agent instruction[^\n]*post no trigger/)
-    expect(step7).toMatch(/\*\*Executable Markdown is code\*\*[^\n]*`SKILL\.md`[^\n]*`CLAUDE\.md`[^\n]*`AGENTS\.md`[^\n]*`\.claude\/`[^\n]*`\.github\/`[^\n]*`skills\/`/)
-    expect(step7).toMatch(/When a file's class is unclear, it is code/)
-    expect(step7).toMatch(/\*\*anything else\*\*[^\n]*cheap shorthand, consuming no rung/)
+    expect(step7).toMatch(/\*\*docs-only\*\* \(every file ends in `\.md` or lives under a docs directory\)[^\n]*post no trigger/)
+    expect(step7).toMatch(/\*\*anything else\*\*[^\n]*`@claude sonnet review`[^\n]*consuming no rung/)
+    expect(step7).toMatch(/same test `milestone-workflow` step 5 sub-step 3/)
   })
 
   test('step 1 sends a bare-LGTM conflict through steps 7 to 9 and step 10 defers to the rule', async () => {
@@ -37,14 +36,20 @@ describe('merge re-review rule after a bare LGTM', () => {
     const routing = await read('skills/fix-pr-review/rereview-routing.md')
     const row = region(routing, '**Bare LGTM, merge only**', '**Blocking** →')
     expect(row).toMatch(/cheap shorthand when the hand-resolved set holds any non-docs file, consuming no rung/)
-    expect(row).toMatch(/\*\*no trigger\*\* when every hand-resolved file is prose documentation[^\n]*none is agent instruction/)
-    expect(row).toMatch(/executable Markdown \(`SKILL\.md`, `CLAUDE\.md`, `AGENTS\.md`/)
+    expect(row).toMatch(/\*\*no trigger\*\* when every hand-resolved file ends in `\.md` or lives under a docs directory/)
+  })
+
+  test('milestone-workflow names the loop skills as applying the same test', async () => {
+    const ms = await read('skills/milestone-workflow/SKILL.md')
+    expect(ms).toMatch(/`fix-pr-review` step 7 and `fix-pr-review-loop` step 4 apply the same test/)
   })
 
   test('fix-pr-review-loop handles a cycle that posted no trigger', async () => {
     const loop = await read('skills/fix-pr-review-loop/SKILL.md')
     const step4 = region(loop, '### 4. Resolve the review and loop', '### 5. Report')
-    expect(step4).toMatch(/posted no trigger because its step 7 merge re-review rule found a docs-only merge/)
+    expect(step4).toMatch(/\*\*Merge re-review rule\*\* \(the same rule as `milestone-workflow` step 5 sub-step 3\)/)
+    expect(step4).toMatch(/all `\.md` or docs-directory files keeps the LGTM and posts no trigger/)
+    expect(step4).toMatch(/any other hand-resolved file means fix-pr-review posted `@claude sonnet review`/)
     expect(step4).toMatch(/`MERGEABLE` → the prior LGTM stands, go to step 5 as a clean pass/)
     expect(step4).toMatch(/`UNKNOWN` is GitHub recomputing after the push: wait/)
     expect(step4).toMatch(/`CONFLICTING`\/`DIRTY` → a new base conflict, go to step 4 again/)
