@@ -29,7 +29,7 @@ Add a **Run size** line: the baseline `1 prep + per issue (1 validate + (fablepl
 
 - `gh auth status` succeeds and `gh api repos/<owner>/<repo> --jq .permissions.push` is `true`.
 - Review mode: the default `reviewMode: 'github'` needs `.github/workflows/claude.yml` (from `templates/claude-workflow/workflows/claude.yml`, plus `CLAUDE_CODE_OAUTH_TOKEN` and the Claude GitHub App) and working Actions; with `reviewBot: 'codex'` it needs `codex.yml` plus the secrets the `fix-pr-review-loop` preflight lists. Set `runs-on` to your runner label when no self-hosted runner exists. Without a bot, pass `reviewMode: 'subagent'` or `reviewLoop: false`. Actions-hosted CI stays a separate dependency.
-- With a `targetBranch`, `git ls-remote --heads origin <branch>` lists exactly one branch; validate the name per `work-on-issue` step 1 ("Target") first. A missing branch stops the run here; never create it silently.
+- With a `targetBranch`, `git ls-remote --heads origin "refs/heads/<branch>"` lists exactly one line; validate the name per `work-on-issue` step 1 ("Target") first. A missing branch stops the run here; never create it silently.
 - With merging on, the account must be allowed to squash-merge and delete branches on the base (the target branch); otherwise relax protection or run `merge: false`.
 - For every issue whose Build model stamps an external CLI: `command -v codex` plus `codex login status` for a Codex CLI stamp, `command -v agent` plus `agent status` for a Cursor CLI stamp. A missing binary or a signed-out status blocks that issue at run time while the rest of the milestone runs; fix it here or restamp the issue through `execution-plan-review`.
 - The target repo's CLAUDE.md covers package manager and test commands.
