@@ -9,7 +9,7 @@ Chain validate-issue → (conditional) update issue → (conditional) fableplan 
 
 This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.1 subagent. Only the *planning* is delegated to Fable 5.1, and only when the issue is complex enough to warrant it. Reach for this over fable-validate-loop when you want cheaper, session-model validation but still want a Fable-vetted plan for the harder issues.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 71 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
+**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a verdict signal of `fableplan: no`, which means both the title score and the recomputed score are below 71, bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -40,7 +40,7 @@ Treat the verdict as structured output to parse yourself, and don't ask the user
 
 **Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5.1` model string in fable-validate-loop's step 3 does not apply here.
 
-**Step 4 (fableplan):** **Score gate:** a validated complexity score **below 71** skips fableplan — go straight to step 5. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
+**Step 4 (fableplan):** **Score gate:** a verdict signal of `fableplan: no`, which validate-issue step 8 emits only when the title score and the recomputed score are both **below 71**, skips fableplan — go straight to step 5. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 

@@ -268,6 +268,25 @@ describe('complexity grading procedure', () => {
     expect(rules).toMatch(/a prefix above the recomputed score keeps its value/)
   })
 
+  test('a rescore restamps the Execution block upward only and never lowers the published fableplan signal', async () => {
+    const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
+    expect(decision).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only/)
+    expect(decision).toMatch(/Fable 5\.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`/)
+    expect(decision).toMatch(/`Complexity:` value is always the recomputed score/)
+    expect(decision).toMatch(/`fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher/)
+    const editing = await read('skills/validate-issue/issue-editing.md')
+    expect(editing).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the new band's defaults[^\n]*upward only: never lower a model or an effort/)
+    for (const path of ['skills/fable-validate-loop/SKILL.md', 'skills/validate-fableplan-loop/SKILL.md']) {
+      const gate = (await read(path)).match(/\*\*Score gate:\*\*[^\n]*/)[0]
+      expect(gate, path).toMatch(/`fableplan: no`[^\n]*both \*\*below 71\*\*/)
+      expect(gate, path).toMatch(/Never read the raw `Complexity:` value/)
+    }
+    const routing = validateIssueScoring.slice(validateIssueScoring.indexOf('## Routing details'))
+    expect(routing).toMatch(/bands 4 and 5 differ in validate effort and in first reviewer/)
+    expect(routing).toMatch(/a moved edge that a first-review row starts on moves that table/)
+    expect(validateIssueScoring).toMatch(/the build model follows Capability alone\. Volume[^\n]*can carry the score across the next band edge/)
+  })
+
   test('the Scope anchors assign every file count to exactly one grade', () => {
     const section = validateIssueScoring.split(/^### Scope \(/m)[1].split(/^#{2,3} /m)[0]
     const anchor = (grade) => section.match(new RegExp(`^\\| ${grade} \\| (.+) \\|$`, 'm'))[1]

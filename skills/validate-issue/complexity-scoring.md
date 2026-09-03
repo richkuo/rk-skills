@@ -14,7 +14,7 @@ Five grades route the issue, and the score encodes them. Each grade answers one 
 | Scope | How many files change? | Volume |
 | Verification | What proof does the builder need, and can it run locally? | Volume |
 
-Capability is the tier: it selects the validate model, the fableplan signal, the build model, and the first reviewer. Volume is the size inside the tier: it selects effort. The title score `25 × Capability + Volume` carries both in one number, and every routing table reads that number. The grades are the source of truth, so a consumer that needs one grade reads it from the rationale line.
+Capability sets the floor of the band: the build model follows Capability alone. Volume is the size inside the band: it selects effort, and it can carry the score across the next band edge, which moves the validate model, the fableplan signal, and the first reviewer (see Reachable scores). The title score `25 × Capability + Volume` carries both in one number, and every routing table reads that number. The grades are the source of truth, so a consumer that needs one grade reads it from the rationale line.
 
 ## Grading rules
 
@@ -134,8 +134,8 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 therefore holds exactly Capabi
 ## Routing details
 
 - Fable 5.1 never runs at xhigh; high is its ceiling. Fable is never the default builder, and a Fable build requires explicit user direction.
-- The main skill's band table owns the `fableplan` signal, planner, builder, and effort. Its first-review table owns every first-review boundary; each row starts on a band edge, so a moved band edge moves that table, and a new edge alone leaves it unchanged.
-- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort only.
+- The main skill's band table owns the `fableplan` signal, planner, builder, and effort. Its first-review table owns every first-review boundary; each row starts on a band edge; a moved edge that a first-review row starts on moves that table, and any other edge change, a new edge or a moved edge inside a row, leaves it unchanged.
+- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer (Opus 5 at 71–80, Fable 5.1 at 81–99).
 - Re-review step-down is owned by `skills/fix-pr-review/rereview-routing.md`. In subagent mode the standard-trigger rows inherit the session reviewer, and Sonnet serves the cheapest first-review row plus every non-blocking re-review; it takes no rung on the ladder.
 - A missing score routes as the highest band at every stage: validate, build, and review. Missing means no `[C<score>]` prefix at all; a literal `[C0]` is a real score and routes on the lowest rows. An issue with no prefix keeps the top band on all three stages even after the validator returns a low score.
-- When validation produces a higher band than the issue title, revalidate once on the higher route and replace all stale routing stamps. Never lower routing from a validator rescore at any stage: the rescore raises validate, build, and review routing and weakens none of them. The safety carve-out for money, data integrity, security, and auto-protective logic forces the capable path when Risk was under-scored.
+- When validation produces a higher band than the issue title, revalidate once on the higher route and replace all stale routing stamps: the title prefix, the rationale line, the fableplan signal, and the Execution block's build and fableplan lines (step 8). Never lower routing from a validator rescore at any stage: the rescore raises validate, build, and review routing and weakens none of them. The safety carve-out for money, data integrity, security, and auto-protective logic forces the capable path when Risk was under-scored.
