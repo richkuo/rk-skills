@@ -62,7 +62,7 @@ Run `git log --since=7.days` on touched paths. Check locking, migrations, reload
 
 ### 6. Score complexity
 
-Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis against its anchors from the traced edit list before you read the issue's rationale line, cite one piece of evidence per grade, and report all five grades. The canonical formula is:
+Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis against its anchors from the traced edit list and write its `Axes:` line with one piece of evidence per grade before you look up the grade the issue's rationale line states; then compare grade by grade and report all five grades. The canonical formula is:
 
 1. Capability maps `max(Risk, Uncertainty)` as `0–1 → 0`, `2 → 1`, `3 → 2`, `4 → 3`. If **Coupling ≥ 3**, use at least Capability 2.
 2. Volume is `(Scope + Coupling + Verification) × 2`.
@@ -127,7 +127,7 @@ Axes:
 <next-step line>
 ```
 
-Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, or required restructure; No only when accurate, feasible, consistent, and complete.
+Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, required restructure, or a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower. The rescore edits restamp the title prefix, the rationale line, and the fableplan signal to the recomputed values per [issue-editing.md](issue-editing.md). A recomputed score below the title score restamps nothing, and the verdict carries the `Differs:` lines only; a title with no prefix gets none from a rescore. A rescore never lowers routing (complexity-scoring.md, Routing details). No only when accurate, feasible, consistent, and complete, with no rescore edit due.
 
 **Next-step line.** Post the first matching string verbatim. With fableplan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 

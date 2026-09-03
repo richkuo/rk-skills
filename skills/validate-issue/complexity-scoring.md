@@ -19,12 +19,12 @@ Capability is the tier: it selects the validate model, the fableplan signal, the
 ## Grading rules
 
 1. Grade from the edit list that the correct implementation needs, after step 5, with the verdict's Optimal included.
-2. At validation, grade blind: grade all five axes before you read the issue's rationale line. Then compare grade by grade. Each difference is a finding, and the traced grade wins.
+2. At validation, grade first and compare second: derive all five grades from the edit list and write each `Axes:` line with its evidence before you look up the grades the issue's rationale line states. Then compare grade by grade. Each difference is a `Differs:` line, and the traced grade wins. Step 1 has already printed the rationale line, so this rule orders the grading; a grade copied from that line has no evidence of its own. An issue with no rationale line yet (`new-issue` step 4) has nothing to compare.
 3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind. A grade with no evidence is a guess.
 4. When two anchors fit, take the higher one.
 5. Grade 2 needs its anchor like every other grade; it is never a default.
 6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
-7. Recompute the score from the five grades before you post it. A score that the grades do not produce is an arithmetic slip, so fix the score. A title prefix that differs from the recomputed score is an update.
+7. Recompute the score from the five grades before you post it. A score that the grades do not produce is an arithmetic slip, so fix the score. A title prefix below the recomputed score, or a rationale line whose grades differ at a recomputed score that is not lower, is an update (step 8); a prefix above the recomputed score keeps its value, per Routing details.
 
 ## Build the edit list first
 
@@ -43,10 +43,10 @@ Every axis takes one integer grade from 0 to 4, and each grade has one anchor be
 | 0 | One file, one localized region |
 | 1 | One file in several regions, or two files in one package (for example a source file and its test) |
 | 2 | Three to five files in one layer or package |
-| 3 | Six or more files, or files in two layers or languages, with no new abstraction |
-| 4 | Many files across layers plus a new abstraction, module, or contract that other code calls |
+| 3 | Six to fourteen files, or files in two layers or languages |
+| 4 | Fifteen or more files, or files in two or more layers plus a new abstraction, module, or contract that other code calls |
 
-Count every file on the edit list, tests and docs included. A mechanical change that touches thirty files is Scope 4 even when each edit is trivial.
+Count every file on the edit list, tests and docs included. A mechanical change that touches fifteen or more files is Scope 4 even when each edit is trivial. A new abstraction inside one layer raises Scope only by its file count.
 
 ### Coupling (feeds Volume and the Capability floor)
 

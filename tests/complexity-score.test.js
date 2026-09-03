@@ -246,14 +246,33 @@ describe('complexity axis anchors and reported grades', () => {
 describe('complexity grading procedure', () => {
   test('validation grades blind, cites evidence, and reports an Axes block', () => {
     const step = validateIssue.slice(validateIssue.indexOf('### 6. Score complexity'), validateIssue.indexOf('### 7.'))
-    expect(step).toMatch(/before you read the issue's rationale line/)
-    expect(step).toMatch(/one piece of evidence per grade/)
-    expect(validateIssueScoring).toMatch(/grade blind/)
+    expect(step).toMatch(/write its `Axes:` line with one piece of evidence per grade before you look up the grade the issue's rationale line states/)
+    expect(validateIssueScoring).toMatch(/grade first and compare second/)
+    expect(validateIssueScoring).toMatch(/before you look up the grades the issue's rationale line states/)
     expect(validateIssueScoring).toMatch(/one piece of evidence per grade/)
     const verdict = validateIssue.slice(validateIssue.indexOf('### 8. Output the verdict'))
     const block = verdict.slice(verdict.indexOf('Axes:'), verdict.indexOf('**#<N>: Update issue description?'))
     for (const line of ['- Scope <s> —', '- Coupling <c> —', '- Risk <r> —', '- Uncertainty <u> —', '- Verification <x> —', '- Differs: <axis> <issue grade> → <traced grade>']) {
       expect(block, line).toContain(line)
     }
+  })
+
+  test('a rescore that raises the score or changes a grade is an update, and a rescore never lowers routing', () => {
+    const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
+    expect(decision).toMatch(/Yes for .*a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower/)
+    expect(decision).toMatch(/restamp the title prefix, the rationale line, and the fableplan signal/)
+    expect(decision).toMatch(/A recomputed score below the title score restamps nothing/)
+    expect(decision).toMatch(/a title with no prefix gets none from a rescore/)
+    expect(decision).toMatch(/No only when .*with no rescore edit due/)
+    const rules = validateIssueScoring.slice(validateIssueScoring.indexOf('## Grading rules'), validateIssueScoring.indexOf('## Build the edit list first'))
+    expect(rules).toMatch(/a prefix above the recomputed score keeps its value/)
+  })
+
+  test('the Scope anchors assign every file count to exactly one grade', () => {
+    const section = validateIssueScoring.split(/^### Scope \(/m)[1].split(/^#{2,3} /m)[0]
+    const anchor = (grade) => section.match(new RegExp(`^\\| ${grade} \\| (.+) \\|$`, 'm'))[1]
+    expect(anchor(3)).toMatch(/^Six to fourteen files/)
+    expect(anchor(4)).toMatch(/^Fifteen or more files/)
+    expect(section).toMatch(/A mechanical change that touches fifteen or more files is Scope 4/)
   })
 })
