@@ -242,3 +242,18 @@ describe('complexity axis anchors and reported grades', () => {
     expect(complexityScore({ scope, coupling, risk, uncertainty, verification })).toEqual({ capability, volume, score })
   })
 })
+
+describe('complexity grading procedure', () => {
+  test('validation grades blind, cites evidence, and reports an Axes block', () => {
+    const step = validateIssue.slice(validateIssue.indexOf('### 6. Score complexity'), validateIssue.indexOf('### 7.'))
+    expect(step).toMatch(/before you read the issue's rationale line/)
+    expect(step).toMatch(/one piece of evidence per grade/)
+    expect(validateIssueScoring).toMatch(/grade blind/)
+    expect(validateIssueScoring).toMatch(/one piece of evidence per grade/)
+    const verdict = validateIssue.slice(validateIssue.indexOf('### 8. Output the verdict'))
+    const block = verdict.slice(verdict.indexOf('Axes:'), verdict.indexOf('**#<N>: Update issue description?'))
+    for (const line of ['- Scope <s> —', '- Coupling <c> —', '- Risk <r> —', '- Uncertainty <u> —', '- Verification <x> —', '- Differs: <axis> <issue grade> → <traced grade>']) {
+      expect(block, line).toContain(line)
+    }
+  })
+})

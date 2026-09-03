@@ -1,6 +1,30 @@
 # Complexity scoring procedure
 
-The canonical formula and both routing tables live only in the main skill. This file owns the axis anchors, the grading rules, the reachable-score lattice, and the golden examples.
+The canonical formula and both routing tables live only in the main skill. This file owns what the score is, the grading rules, the axis anchors, the reachable-score lattice, and the golden examples.
+
+## What the score is
+
+Five grades route the issue, and the score encodes them. Each grade answers one question about the correct implementation:
+
+| Axis | Question | Feeds |
+|---|---|---|
+| Risk | What happens when the change is wrong, and can it be undone? | Capability |
+| Uncertainty | Is the design settled, and does the issue name every site? | Capability |
+| Coupling | How many other things must move together? | Capability floor and Volume |
+| Scope | How many files change? | Volume |
+| Verification | What proof does the builder need, and can it run locally? | Volume |
+
+Capability is the tier: it selects the validate model, the fableplan signal, the build model, and the first reviewer. Volume is the size inside the tier: it selects effort. The title score `25 × Capability + Volume` carries both in one number, and every routing table reads that number. The grades are the source of truth, so a consumer that needs one grade reads it from the rationale line.
+
+## Grading rules
+
+1. Grade from the edit list that the correct implementation needs, after step 5, with the verdict's Optimal included.
+2. At validation, grade blind: grade all five axes before you read the issue's rationale line. Then compare grade by grade. Each difference is a finding, and the traced grade wins.
+3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind. A grade with no evidence is a guess.
+4. When two anchors fit, take the higher one.
+5. Grade 2 needs its anchor like every other grade; it is never a default.
+6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
+7. Recompute the score from the five grades before you post it. A score that the grades do not produce is an arithmetic slip, so fix the score. A title prefix that differs from the recomputed score is an update.
 
 ## Build the edit list first
 
@@ -8,9 +32,9 @@ List the concrete files, functions, references, migrations, tests, and documenta
 
 If architecture or consistency remains Conditional or Refuted after step 5, grade Uncertainty from that gap and report a score-band range. Name the one unknown that drives the range. A design defect cannot route through Capability 0 or 1.
 
-## Grade the axes
+## Axis anchors
 
-Every axis takes one integer grade from 0 to 4, and each grade has one anchor below. Grade from the traced edit list and cite the anchor that matches. When two anchors fit, take the higher one. Grade 2 needs its anchor like every other grade; it is never a default.
+Every axis takes one integer grade from 0 to 4, and each grade has one anchor below. Cite the anchor that matches.
 
 ### Scope (feeds Volume)
 
@@ -56,7 +80,7 @@ Count every file on the edit list, tests and docs included. A mechanical change 
 | 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted |
 | 4 | Open design judgment: the correct behavior itself is undetermined, or an architecture or consistency gap stays unresolved after step 5 |
 
-Judgment-heavy work raises Uncertainty or Coupling. A hard decision is never Uncertainty 0.
+Grades 0 and 1 are checkable: compare the sites the issue names with the sites the trace found. A site the trace found and the issue does not name makes Uncertainty 2 at least. Judgment-heavy work raises Uncertainty or Coupling, and a hard decision is never Uncertainty 0.
 
 ### Verification (feeds Volume)
 
@@ -76,7 +100,7 @@ Apply the step-6 formula to the five grades. Write all five grades in the ration
 
 `Capability 2 (Risk 3, Uncertainty 2 — <driver reason>); Volume 12 (Scope 2, Coupling 2, Verification 2)`
 
-The driver is the axis and grade that set Capability: the higher of Risk and Uncertainty, or the Coupling floor. Recompute the score from the five grades before you post it. A score that the grades do not produce is an arithmetic slip, so fix the score. A title prefix that differs from the recomputed score is an update.
+The driver is the axis and grade that set Capability: the higher of Risk and Uncertainty, or the Coupling floor. The verdict also carries the step-8 `Axes:` block, one line per axis with its grade and evidence, and a `Differs:` line for each grade the issue states differently.
 
 ## Reachable scores
 

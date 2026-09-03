@@ -62,7 +62,7 @@ Run `git log --since=7.days` on touched paths. Check locking, migrations, reload
 
 ### 6. Score complexity
 
-Read [complexity-scoring.md](complexity-scoring.md) completely; grade every axis against its anchors from the traced edit list, and report all five grades. The canonical formula is:
+Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis against its anchors from the traced edit list before you read the issue's rationale line, cite one piece of evidence per grade, and report all five grades. The canonical formula is:
 
 1. Capability maps `max(Risk, Uncertainty)` as `0–1 → 0`, `2 → 1`, `3 → 2`, `4 → 3`. If **Coupling ≥ 3**, use at least Capability 2.
 2. Volume is `(Scope + Coupling + Verification) × 2`.
@@ -115,6 +115,13 @@ Proposal:
 - <status> <consistency gap>  # only when 5b is not ✅
 Scope:  # only for a disposition
 - <disposition> — <reason and parts>
+Axes:
+- Scope <s> — <evidence>
+- Coupling <c> — <evidence>
+- Risk <r> — <evidence>
+- Uncertainty <u> — <evidence>
+- Verification <x> — <evidence>
+- Differs: <axis> <issue grade> → <traced grade>  # only when the issue states a different grade
 **#<N>: Update issue description? <Yes | No>** · Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no> · Scope: <OK | too large — split/umbrella/narrow>
 <specific edits when Yes>
 <next-step line>
