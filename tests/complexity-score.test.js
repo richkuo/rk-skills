@@ -68,7 +68,7 @@ function pipelineBands() {
 
 describe('complexity score band encoding', () => {
   test('golden examples in the validate-issue reference match the formula the owner states', () => {
-    const section = validateIssueScoring.split('#### Golden examples (consistency checklist)')[1]
+    const section = validateIssueScoring.split(/#+ Golden examples \(consistency checklist\)/)[1]
     expect(section).toBeTruthy()
     const rowRe = /^\| \((\d+),(\d+),(\d+),(\d+),(\d+)\) \| (\d+)[^|]*\| (\d+) \| \*\*(\d+)\*\* \|/gm
     const rows = [...section.matchAll(rowRe)]
@@ -143,5 +143,102 @@ describe('complexity score band encoding', () => {
       }
     }
     expect(await read('skills/fable-validate/SKILL.md')).toContain(`${proposalLabels.join('/')} proposal checks`)
+  })
+})
+
+const AXES = ['scope', 'coupling', 'risk', 'uncertainty', 'verification']
+const AXIS_HEADING = { scope: 'Scope', coupling: 'Coupling', risk: 'Risk', uncertainty: 'Uncertainty', verification: 'Verification' }
+
+function everyAxisTuple() {
+  const tuples = []
+  for (let scope = 0; scope <= 4; scope += 1)
+    for (let coupling = 0; coupling <= 4; coupling += 1)
+      for (let risk = 0; risk <= 4; risk += 1)
+        for (let uncertainty = 0; uncertainty <= 4; uncertainty += 1)
+          for (let verification = 0; verification <= 4; verification += 1) tuples.push({ scope, coupling, risk, uncertainty, verification })
+  return tuples
+}
+
+function reachableByCapability() {
+  const ranges = new Map()
+  for (const axes of everyAxisTuple()) {
+    const { capability, score } = complexityScore(axes)
+    const range = ranges.get(capability) ?? { min: Infinity, max: -Infinity }
+    ranges.set(capability, { min: Math.min(range.min, score), max: Math.max(range.max, score) })
+  }
+  return ranges
+}
+
+const bandOf = (bands, score) => bands.find((row) => row.min <= score && score <= row.max)
+
+describe('complexity score lattice', () => {
+  test('the reachable-score table in the scoring reference matches the formula', () => {
+    const section = validateIssueScoring.split(/#+ Reachable scores/)[1]
+    expect(section).toBeTruthy()
+    const rows = [...section.matchAll(/^\| (\d) \| (\d+) to (\d+) \|$/gm)]
+    const ranges = reachableByCapability()
+    expect(rows.length, 'one row per capability').toBe(ranges.size)
+    for (const [, capability, min, max] of rows) {
+      expect(ranges.get(Number(capability)), `capability ${capability}`).toEqual({ min: Number(min), max: Number(max) })
+    }
+  })
+
+  test('a band edge never splits a capability floor from its next volume step', () => {
+    const owner = ownerBands()
+    const formula = formulaFromOwner()
+    for (const [capability, range] of reachableByCapability()) {
+      if (capability === 0) continue
+      const floor = capability * formula.weight
+      expect(range.min, `capability ${capability} floor`).toBe(floor)
+      expect(bandOf(owner, floor)?.band, `score ${floor} shares a band with ${floor + 2}`).toBe(bandOf(owner, floor + 2)?.band)
+    }
+  })
+
+  test('validate and build routing never weaken as the band rises', () => {
+    const owner = ownerBands()
+    const modelRank = { sonnet: 0, opus: 1, fable: 2 }
+    const effortRank = { low: 0, medium: 1, high: 2, xhigh: 3 }
+    const rank = ({ model, effort }) => modelRank[model] * 10 + effortRank[effort]
+    for (let index = 1; index < owner.length; index += 1) {
+      for (const stage of ['validate', 'build']) {
+        expect(rank(owner[index][stage]), `band ${owner[index].band} ${stage}`).toBeGreaterThanOrEqual(rank(owner[index - 1][stage]))
+      }
+    }
+  })
+})
+
+describe('complexity axis anchors and reported grades', () => {
+  test('every axis states one anchor per grade from 0 to 4', () => {
+    for (const axis of AXES) {
+      const section = validateIssueScoring.split(new RegExp(`^### ${AXIS_HEADING[axis]} \\(`, 'm'))[1]?.split(/^#{2,3} /m)[0]
+      expect(section, `${axis} section`).toBeTruthy()
+      const grades = [...section.matchAll(/^\| (\d) \| .+ \|$/gm)].map((match) => Number(match[1]))
+      expect(grades, `${axis} anchors`).toEqual([0, 1, 2, 3, 4])
+    }
+  })
+
+  test('the rationale and verdict templates carry all five grades wherever they are quoted', async () => {
+    const templates = [
+      'skills/validate-issue/SKILL.md',
+      'skills/validate-issue-loop/SKILL.md',
+      'skills/fable-validate-loop/SKILL.md',
+      'skills/validate-fableplan-loop/SKILL.md',
+      'skills/fable-validate-fableplan/SKILL.md',
+      'skills/fable-validate-fableplan-loop/SKILL.md',
+      'skills/new-issue/SKILL.md',
+    ]
+    for (const path of templates) {
+      const line = (await read(path)).split('\n').find((candidate) => /Complexity: <score>\/100/.test(candidate))
+      expect(line, `${path}: template line`).toBeDefined()
+      expect(line, path).toMatch(/Capability <k> \(Risk <r>, Uncertainty <u> — <driver>\); Volume <v> \(Scope <s>, Coupling <c>, Verification <x>\)/)
+    }
+  })
+
+  test('the github-issue-format example line recomputes to its own score under the owner formula', async () => {
+    const body = await read('skills/github-issue-format/SKILL.md')
+    const match = body.match(/\*\*Complexity: (\d+)\/100\*\* — Capability (\d) \(Risk (\d), Uncertainty (\d) — [^)]*\); Volume (\d+) \(Scope (\d), Coupling (\d), Verification (\d)\)/)
+    expect(match, 'example line carries all five grades').toBeTruthy()
+    const [, score, capability, risk, uncertainty, volume, scope, coupling, verification] = match.map(Number)
+    expect(complexityScore({ scope, coupling, risk, uncertainty, verification })).toEqual({ capability, volume, score })
   })
 })

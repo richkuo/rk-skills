@@ -22,7 +22,7 @@ Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose
 Invoke the `validate-issue` skill for the target issue (Skill tool, `skill: validate-issue`). Let it run its full process — steps 0 through 8 — and produce its verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Its final `→` next-step line is written for interactive use — in this loop, treat the verdict block as structured output to parse yourself, not a prompt to wait on. Don't ask the user to confirm; decide from the table in step 2.

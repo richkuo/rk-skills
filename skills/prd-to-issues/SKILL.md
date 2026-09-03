@@ -63,9 +63,9 @@ Assignment — **derive from the complexity score band**. Load the canonical for
 |---|---|---|---|---|
 | 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |
 | 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |
-| 2 | 21–50 | Opus 5 | No | high |
-| 3 | 51–70 | Opus 5 | No | xhigh |
-| 4 | 71–80 | Opus 5 | **Yes** | high |
+| 2 | 21–49 | Opus 5 | No | high |
+| 3 | 50–70 | Opus 5 | No | xhigh |
+| 4 | 71–80 | Opus 5 | **Yes** | xhigh |
 | 5 | 81–99 | Opus 5 | **Yes** | xhigh |
 
 **Never stamp Fable 5.1 as the Build model** — no band defaults to a Fable build, and this skill never assigns one; a Fable build exists only when the user explicitly directs it on a specific issue.
@@ -74,7 +74,7 @@ Assignment — **derive from the complexity score band**. Load the canonical for
 
 Axes already encode the old parallel heuristics (money/security → high Risk; design-heavy → high Uncertainty; mechanical grind → high Scope/Volume at Capability 0). Do **not** override the band with a separate signal table unless a safety carve-out is explicit in the PRD and Risk was under-scored — then raise Risk and re-score, don't bypass the formula.
 
-- **fableplan first: Yes** means score ≥ 71 (bands 4–5): a Fable 5.1 plan is posted before the build; the builder is Opus 5 at both plan bands: high at 71–80, xhigh at 81+. Never below 71.
+- **fableplan first: Yes** means score ≥ 71 (bands 4–5): a Fable 5.1 plan is posted before the build; the builder is Opus 5 at xhigh in both plan bands. Never below 71.
 - **Validate model is derived from the score and never stamped**: the `validate-issue` step 6 band table owns the Validate mapping, and a missing `[C..]` prefix is unknown, not small, so it routes as band 5. Never add a `Validate model:` line — nothing reads it. **Validate effort defaults to the band value and is stampable per issue** through the optional `Validate effort:` line; this skill omits the line at filing time so the band default applies, and `execution-plan-review` adds it when the user wants a different tier. A stamped tier on a Fable validate (bands 4–5) runs as stamped, with `xhigh` clamped to `high`; a stamped `low` or `medium` on an Opus validate (bands 0–3) is raised to `high`, because those tiers are Fable-only.
 - **Plan effort** (the fableplan stage): defaults to **high** and is stampable per issue through the optional `Plan effort:` line, read only when `fableplan first` is Yes. This skill omits the line at filing time; `execution-plan-review` adds it when the user wants the plan at `low` or `medium`. The planner is always Fable 5.1, so a stamped `xhigh` runs at `high` (the LLM Attribution Footer section of CLAUDE.md owns this ceiling).
 - Effort floor is **medium** — never low, and medium is Fable-only: **Opus/Sonnet builds run at high or xhigh, never medium or low.** Fable builds may drop one tier further to **low**, a discretionary Fable-only tier below the formula's own floor, for a band-5 issue (score 81+) judged lighter than its Volume warrants. **Fable's ceiling is high — never assign or run Fable 5.1 at xhigh, on any stage (build, plan, validate, review, or fix); the LLM Attribution Footer section of CLAUDE.md owns this ceiling.** When unsure between two tiers, take the higher (best-solution rule) — capped at high on Fable.

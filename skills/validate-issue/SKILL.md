@@ -62,7 +62,7 @@ Run `git log --since=7.days` on touched paths. Check locking, migrations, reload
 
 ### 6. Score complexity
 
-Read [complexity-scoring.md](complexity-scoring.md) completely; grade axes from the traced edit list. The canonical formula is:
+Read [complexity-scoring.md](complexity-scoring.md) completely; grade every axis against its anchors from the traced edit list, and report all five grades. The canonical formula is:
 
 1. Capability maps `max(Risk, Uncertainty)` as `0–1 → 0`, `2 → 1`, `3 → 2`, `4 → 3`. If **Coupling ≥ 3**, use at least Capability 2.
 2. Volume is `(Scope + Coupling + Verification) × 2`.
@@ -72,9 +72,9 @@ Read [complexity-scoring.md](complexity-scoring.md) completely; grade axes from 
 |---|---|---|---|---|
 | 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |
 | 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |
-| 2 | 21–50 | Opus 5 · high | No | Opus 5 · high |
-| 3 | 51–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |
-| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · high |
+| 2 | 21–49 | Opus 5 · high | No | Opus 5 · high |
+| 3 | 50–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |
+| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · xhigh |
 | 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5 · xhigh |
 
 fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block that stamps `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it, and the pipeline runs that build through the `cli-dispatch` shim. The Validate effort column is the band default; an issue's `## Execution` block can stamp a `Validate effort:` line that overrides it, and a `Plan effort:` line that overrides the fableplan stage's `high` default. The validate model is never stampable. A Fable stage stamped `xhigh` runs at `high`; an Opus validate stamped `low` or `medium` runs at `high`, because those tiers are Fable-only. The **first review** uses the coarser table below; each row starts on a band edge.
@@ -115,7 +115,7 @@ Proposal:
 - <status> <consistency gap>  # only when 5b is not ✅
 Scope:  # only for a disposition
 - <disposition> — <reason and parts>
-**#<N>: Update issue description? <Yes | No>** · Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no> · Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes | No>** · Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no> · Scope: <OK | too large — split/umbrella/narrow>
 <specific edits when Yes>
 <next-step line>
 ```
