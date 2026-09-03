@@ -40,6 +40,9 @@ describe('merge re-review rule after a bare LGTM', () => {
     const row = region(routing, '**Bare LGTM, merge only**', '**Blocking** →')
     expect(row).toMatch(/cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, consuming no rung/)
     expect(row).toMatch(/\*\*no trigger\*\* when step 7 decided it is prose only/)
+    expect(row).toMatch(/never covers a hand-resolved behavior change, whichever file carries it/)
+    expect(row).toMatch(/Step 7's behavior decision is the test; the file class is evidence only/)
+    expect(row).not.toMatch(/never covers hand-resolved code,/)
   })
 
   test('milestone-workflow makes the same behavior decision and names the loop skills', async () => {
