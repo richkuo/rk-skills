@@ -62,5 +62,8 @@ describe('merge re-review rule after a bare LGTM', () => {
     expect(step4).toMatch(/`UNKNOWN` is GitHub recomputing after the push: wait/)
     expect(step4).toMatch(/`CONFLICTING`\/`DIRTY` → a new base conflict, go to step 4 again/)
     expect(step4).toMatch(/Only a genuine conflict re-enters fix-pr-review/)
+    expect(step4).toMatch(/When it posted a trigger, increment `review_count`, record that trigger's timestamp, and go to step 2/)
+    expect(step4).toMatch(/A pass that posted no trigger increments nothing and records no timestamp/)
+    expect(step4).not.toMatch(/Increment `review_count`, record the new trigger timestamp, go to step 2\./)
   })
 })
