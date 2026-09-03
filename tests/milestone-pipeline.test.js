@@ -1827,6 +1827,8 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(implement.prompt).toContain('[C<score>, Luna, max]')
     expect(implement.prompt).not.toContain(', fableplan]')
     expect(implement.prompt).toContain('first check for work the failed run already landed')
+    expect(implement.prompt).toMatch(/\n6\. After every run, pass or fail, read the CLI's final message[^\n]*compare it with `gpt-5.6-luna`[^\n]*model unverified[^\n]*never skipped on a zero exit/)
+    expect(implement.prompt).not.toMatch(/On a non-zero exit[^\n]*model unverified/)
     expect(implement.prompt).toContain('ignoring every path under `.claude/worktrees/`')
     expect(implement.prompt).toContain('git status --porcelain --untracked-files=all')
     expect(implement.prompt).not.toMatch(/codex exec[^\n]*(--dangerously-bypass-approvals-and-sandbox|--yolo|danger-full-access)/)

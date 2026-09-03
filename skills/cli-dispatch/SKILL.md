@@ -55,6 +55,8 @@ agent -p --output-format json --model '<model-id>' --force --trust \
 
 ## 5. Parse the result
 
+Sections 5 and 6 run after every run, pass or fail. A zero exit never skips the result read, the substitution comparison, or the `model unverified` record, because a swapped model on a successful build is the case they exist to catch.
+
 - Codex: `$RESULT` holds the agent's final message. `$EVENTS` holds one JSON event per line; when an event names the model that served the turn, that value is the record of what ran.
 - Cursor: `$RESULT` holds one JSON object with the final text; when it names the model that served the call, that value is the record.
 - On the 2026-09-02 smoke runs neither output named a model (codex-cli 0.152.1 `--json` events carry `thread`, `turn`, and `item` records; cursor-agent 2026.09.02 returns `result`, `session_id`, `request_id`, and `usage`), so expect `model unverified` (section 6) to be the usual record until a CLI version adds the field.

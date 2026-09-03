@@ -44,6 +44,7 @@ describe('cli dispatch contract', () => {
     expect(skill).not.toContain('cursor-agent --list-models')
     expect(flat, 'the driver owns every trigger').toMatch(/CLI agent[^.]*never posts a trigger/i)
     expect(flat, 'a retry checks for landed work first').toMatch(/Before any retry, check for work the failed run already landed/)
+    expect(flat, 'the result parse and substitution check run after every exit').toMatch(/after every run, pass or fail/i)
     expect(flat, 'the stray-write diff ignores concurrent worktrees').toContain('ignoring every path under `.claude/worktrees/`')
     expect(flat, 'the bracket carries the fableplan marker').toContain('`, fableplan` appended')
   })
