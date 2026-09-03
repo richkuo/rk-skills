@@ -18,7 +18,9 @@ describe('merge re-review rule after a bare LGTM', () => {
     expect(step7).toContain('**Merge re-review rule.**')
     expect(step7).toMatch(/hand-resolved set/)
     expect(step7).toMatch(/auto-merged are base-branch work and do not count/)
-    expect(step7).toMatch(/\*\*docs-only\*\*[^\n]*post no trigger/)
+    expect(step7).toMatch(/\*\*docs-only\*\*[^\n]*prose documentation[^\n]*none of them is agent instruction[^\n]*post no trigger/)
+    expect(step7).toMatch(/\*\*Executable Markdown is code\*\*[^\n]*`SKILL\.md`[^\n]*`CLAUDE\.md`[^\n]*`AGENTS\.md`[^\n]*`\.claude\/`[^\n]*`\.github\/`[^\n]*`skills\/`/)
+    expect(step7).toMatch(/When a file's class is unclear, it is code/)
     expect(step7).toMatch(/\*\*anything else\*\*[^\n]*cheap shorthand, consuming no rung/)
   })
 
@@ -35,7 +37,8 @@ describe('merge re-review rule after a bare LGTM', () => {
     const routing = await read('skills/fix-pr-review/rereview-routing.md')
     const row = region(routing, '**Bare LGTM, merge only**', '**Blocking** →')
     expect(row).toMatch(/cheap shorthand when the hand-resolved set holds any non-docs file, consuming no rung/)
-    expect(row).toMatch(/\*\*no trigger\*\* when every hand-resolved file is Markdown or under a docs directory/)
+    expect(row).toMatch(/\*\*no trigger\*\* when every hand-resolved file is prose documentation[^\n]*none is agent instruction/)
+    expect(row).toMatch(/executable Markdown \(`SKILL\.md`, `CLAUDE\.md`, `AGENTS\.md`/)
   })
 
   test('fix-pr-review-loop handles a cycle that posted no trigger', async () => {
@@ -43,5 +46,8 @@ describe('merge re-review rule after a bare LGTM', () => {
     const step4 = region(loop, '### 4. Resolve the review and loop', '### 5. Report')
     expect(step4).toMatch(/posted no trigger because its step 7 merge re-review rule found a docs-only merge/)
     expect(step4).toMatch(/`MERGEABLE` → the prior LGTM stands, go to step 5 as a clean pass/)
+    expect(step4).toMatch(/`UNKNOWN` is GitHub recomputing after the push: wait/)
+    expect(step4).toMatch(/`CONFLICTING`\/`DIRTY` → a new base conflict, go to step 4 again/)
+    expect(step4).toMatch(/Only a genuine conflict re-enters fix-pr-review/)
   })
 })

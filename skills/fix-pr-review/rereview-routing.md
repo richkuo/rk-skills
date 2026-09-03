@@ -12,7 +12,7 @@ Route by whether the addressed set contained **any blocking finding** (fix-pr-re
 
 **Non-blocking only** (optional improvements or follow-ups) → the cheap shorthand, `@claude sonnet review` on Claude or `@codex luna review` on Codex, in any band, consuming no rung.
 
-**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule) → the same cheap shorthand when the hand-resolved set holds any non-docs file, consuming no rung; **no trigger** when every hand-resolved file is Markdown or under a docs directory. The prior LGTM covers a docs-only merge. It never covers hand-resolved code, tests, config, workflows, or scripts.
+**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule) → the same cheap shorthand when the hand-resolved set holds any non-docs file, consuming no rung; **no trigger** when every hand-resolved file is prose documentation (`README`, `CHANGELOG`, `LICENSE`, or under a `docs/` directory) and none is agent instruction. The prior LGTM covers a docs-only merge. It never covers hand-resolved code, tests, config, workflows, scripts, or executable Markdown (`SKILL.md`, `CLAUDE.md`, `AGENTS.md`, anything under `.claude/`, `.cursor/`, `.codex/`, `.github/`, or `skills/`, prompt and agent-definition files); step 7 owns the class test.
 
 **Blocking** → the step-down below, **keyed to the reviewer that actually ran cycle 1**; the score band never decides it.
 
