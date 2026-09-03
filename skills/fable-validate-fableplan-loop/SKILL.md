@@ -24,7 +24,7 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 **Step 1 (fable-validate)** applies unchanged; it produces the standard verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 **Step 2 (scope gate)** applies unchanged — the same four STOP conditions:

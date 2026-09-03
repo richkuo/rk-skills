@@ -369,9 +369,9 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#2: C85 (band 81+) — validating on Fable 5.1 @ medium (stamped Validate effort medium overrides the band default high)',
       '#3: C75 (band 71–80) — validating on Fable 5.1 @ low (stamped Validate effort low overrides the band default medium)',
       '#4: C75 (band 71–80) — validating on Fable 5.1 @ high (stamped Validate effort xhigh → high: Fable never runs at xhigh)',
-      '#5: C30 (band 21–50) — validating on Opus 5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
-      '#6: C30 (band 21–50) — validating on Opus 5 @ high (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
-      '#7: C60 (band 51–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
+      '#5: C30 (band 21–49) — validating on Opus 5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
+      '#6: C30 (band 21–49) — validating on Opus 5 @ high (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#7: C60 (band 50–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
       '#8: C75 (band 71–80) — validating on Fable 5.1 @ medium',
     ])
   })
@@ -429,7 +429,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#7: prep reported C5 but the title reads [C90] — routing as unscored (unknown), which takes the top band')
     expect(logs.filter((m) => m.includes('routing as unscored (unknown)'))).toHaveLength(3)
-    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#8')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     expect(promptFor(events, 'implement:#8 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
     expect(logs).toContain('#8: prep omitted the score but the title reads [C50] — routing on the title prefix')
   })
@@ -446,11 +446,11 @@ describe('milestone-pipeline dependency scheduling', () => {
           { number: 4, title: '[C10] Band 1 floor', complexity: 10, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 5, title: '[C20] Band 1 ceiling', complexity: 20, model: 'sonnet', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 6, title: '[C21] Band 2 floor', complexity: 21, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 7, title: '[C50] Band 2 ceiling', complexity: 50, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 8, title: '[C51] Band 3 floor', complexity: 51, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 7, title: '[C49] Band 2 ceiling', complexity: 49, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 8, title: '[C50] Band 3 floor', complexity: 50, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 9, title: '[C70] Band 3 ceiling', complexity: 70, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
-          { number: 10, title: '[C71] Band 4 floor', complexity: 71, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
-          { number: 11, title: '[C80] Band 4 ceiling', complexity: 80, model: 'opus', effort: 'high', fableplan: false, missing_block: false },
+          { number: 10, title: '[C71] Band 4 floor', complexity: 71, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
+          { number: 11, title: '[C80] Band 4 ceiling', complexity: 80, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 12, title: '[C81] Band 5', complexity: 81, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
           { number: 13, title: 'No [C..] prefix', complexity: 0, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false },
         ],
@@ -476,10 +476,10 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#3: C9 (band 0–9) — validating on Opus 5 @ medium',
       '#4: C10 (band 10–20) — validating on Opus 5 @ high',
       '#5: C20 (band 10–20) — validating on Opus 5 @ high',
-      '#6: C21 (band 21–50) — validating on Opus 5 @ high',
-      '#7: C50 (band 21–50) — validating on Opus 5 @ high',
-      '#8: C51 (band 51–70) — validating on Opus 5 @ xhigh',
-      '#9: C70 (band 51–70) — validating on Opus 5 @ xhigh',
+      '#6: C21 (band 21–49) — validating on Opus 5 @ high',
+      '#7: C49 (band 21–49) — validating on Opus 5 @ high',
+      '#8: C50 (band 50–70) — validating on Opus 5 @ xhigh',
+      '#9: C70 (band 50–70) — validating on Opus 5 @ xhigh',
       '#10: C71 (band 71–80) — validating on Fable 5.1 @ medium',
       '#11: C80 (band 71–80) — validating on Fable 5.1 @ medium',
       '#12: C81 (band 81+) — validating on Fable 5.1 @ high',
@@ -1346,8 +1346,8 @@ describe('milestone-pipeline subagent review mode', () => {
       { model: 'opus', effort: 'high' },
       { model: 'opus', effort: 'xhigh' },
     ])
-    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 51–70) — re-validating on Opus 5 @ xhigh'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ xhigh (band 51–70); the issue needs a [C70] restamp'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 50–70) — re-validating on Opus 5 @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ xhigh (band 50–70); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()

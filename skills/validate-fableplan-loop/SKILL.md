@@ -1,6 +1,6 @@
 ---
 name: validate-fableplan-loop
-description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped when the validated score is below 71 with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The non-Fable-validation counterpart to fable-validate-loop.
+description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped when the verdict's title-floored signal reads `fableplan: no`, which means the title score and the recomputed score are both below 71, with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The non-Fable-validation counterpart to fable-validate-loop.
 ---
 
 # validate-fableplan-loop
@@ -9,7 +9,7 @@ Chain validate-issue → (conditional) update issue → (conditional) fableplan 
 
 This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.1 subagent. Only the *planning* is delegated to Fable 5.1, and only when the issue is complex enough to warrant it. Reach for this over fable-validate-loop when you want cheaper, session-model validation but still want a Fable-vetted plan for the harder issues.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a score below 71 bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
+**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is the step-4 score gate (a verdict signal of `fableplan: no`, which means both the title score and the recomputed score are below 71, bypasses fableplan). Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -24,7 +24,7 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 **Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process — steps 0 through 8 — and produce the standard verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue number; every later step targets exactly this issue.
@@ -40,7 +40,7 @@ Treat the verdict as structured output to parse yourself, and don't ask the user
 
 **Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5.1` model string in fable-validate-loop's step 3 does not apply here.
 
-**Step 4 (fableplan):** **Score gate:** a validated complexity score **below 71** skips fableplan — go straight to step 5. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
+**Step 4 (fableplan):** **Score gate:** a verdict signal of `fableplan: no`, which validate-issue step 8 emits only when the title score and the recomputed score are both **below 71**, skips fableplan — go straight to step 5. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out (overrides the gate):** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. The top-band note applies unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 

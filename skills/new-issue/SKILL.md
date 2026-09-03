@@ -61,7 +61,7 @@ If the deliverables are separable — parts that each land in their own PR, pass
 Compose the title and body per `github-issue-format`. That skill owns the title convention, the complexity rationale line (which carries the score and the fableplan signal from step 4), the body section order, the plain-language section rule, and the attribution footer (full footer format: the `LLM Attribution Footer` section of CLAUDE.md; verb `Created`). Fill each section from the steps above:
 
 ```
-**Complexity: <score>/100** — Capability <k> (<driver>); Volume <v> — <model/effort from band> · fableplan: <yes|no>
+**Complexity: <score>/100** — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) — <model/effort from band> · fableplan: <yes|no>
 
 ## Problem
 <Current behavior, grounded with the file:line citations from step 2 — what is wrong or missing and why it matters.>

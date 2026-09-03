@@ -22,7 +22,7 @@ Follow **fable-validate-loop steps 1 through 4** with the changes below, then ru
 **Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner. It produces the standard verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (<driver>); Volume <v> · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 **Step 2 (scope gate):** the same four STOP conditions apply; the cost here is a wasted or wrong plan rather than a wrong PR:

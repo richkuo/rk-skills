@@ -1,41 +1,141 @@
 # Complexity scoring procedure
 
-The canonical formula and both routing tables live only in the main skill.
+The canonical formula and both routing tables live only in the main skill. This file owns what the score is, the grading rules, the axis anchors, the reachable-score lattice, and the golden examples.
+
+## What the score is
+
+Five grades route the issue, and the score encodes them. Each grade answers one question about the correct implementation:
+
+| Axis | Question | Feeds |
+|---|---|---|
+| Risk | What happens when the change is wrong, and can it be undone? | Capability |
+| Uncertainty | Is the design settled, and does the issue name every site? | Capability |
+| Coupling | How many other things must move together? | Capability floor and Volume |
+| Scope | How many files change? | Volume |
+| Verification | What proof does the builder need, and can it run locally? | Volume |
+
+Capability sets the floor of the band: the build model follows Capability alone. Volume is the size inside the band: it selects effort, and it can carry the score across the next band edge, which moves the validate model, the fableplan signal, and the first reviewer (see Reachable scores). The title score `25 × Capability + Volume` carries both in one number, and every routing table reads that number. The grades are the source of truth, so a consumer that needs one grade reads it from the rationale line.
+
+## Grading rules
+
+1. Grade from the edit list that the correct implementation needs, after step 5, with the verdict's Optimal included.
+2. At validation, grade first and compare second: derive all five grades from the edit list and write each `Axes:` line with its evidence before you look up the grades the issue's rationale line states. Then compare grade by grade. Each difference is a `Differs:` line, and the traced grade wins. Step 1 has already printed the rationale line, so this rule orders the grading; a grade copied from that line has no evidence of its own. An issue with no rationale line yet (`new-issue` step 4) has nothing to compare.
+3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind. A grade with no evidence is a guess.
+4. When two anchors fit, take the higher one.
+5. Grade 2 needs its anchor like every other grade; it is never a default.
+6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
+7. Recompute the score from the five grades before you post it. A score that the grades do not produce is an arithmetic slip, so fix the score. A title prefix below the recomputed score, or a rationale line whose grades differ at a recomputed score that is not lower, is an update (step 8); a prefix above the recomputed score keeps its value, per Routing details.
 
 ## Build the edit list first
 
-List the concrete files, functions, references, migrations, tests, and documentation that the correct implementation must change. Count parallel live/offline paths, schema or config versions, initialization surfaces, startup probes, command-line contracts, and invalidated documentation.
+List the concrete files, functions, references, migrations, tests, and documentation that the correct implementation must change. Count parallel live/offline paths, schema or config versions, initialization surfaces, startup probes, command-line contracts, and invalidated documentation. Count the files on this list: Scope and Verification are graded from it.
 
-If architecture or consistency remains ⚠️ or ❌, raise Uncertainty and report a score-band range. Name the one unknown that drives the range. A design defect cannot route through Capability 0 or 1.
+If architecture or consistency remains Conditional or Refuted after step 5, grade Uncertainty from that gap and report a score-band range. Name the one unknown that drives the range. A design defect cannot route through Capability 0 or 1.
 
-## Grade the axes
+## Axis anchors
 
-| Axis | 0 | 2 | 4 |
-|---|---|---|---|
-| Scope | One localized file | A few files in one layer | Many files across layers plus a new abstraction |
-| Coupling | Pure local change | One shared mechanism | Multiple systems or cross-boundary coordination |
-| Risk | Read-only or offline | Reversible writes with contained impact | Money, security, data integrity, or irreversible effects |
-| Uncertainty | Fully specified | Mechanism known; shape needs discovery | Open design judgment |
-| Verification | Pure helper unit test | Several units and fixtures | Integration, parity, subprocess, or difficult state |
+Every axis takes one integer grade from 0 to 4, and each grade has one anchor below. Cite the anchor that matches.
 
-Judgment-heavy work raises Uncertainty or Coupling. Grade from the traced surface, then apply the step-6 formula.
+### Scope (feeds Volume)
 
-#### Golden examples (consistency checklist)
+| Grade | Anchor |
+|---|---|
+| 0 | One file, one localized region |
+| 1 | One file in several regions, or two files in one package (for example a source file and its test) |
+| 2 | Three to five files in one layer or package |
+| 3 | Six to fourteen files, or files in two layers or languages |
+| 4 | Fifteen or more files, or files in two or more layers plus a new abstraction, module, or contract that other code calls |
+
+Count every file on the edit list, tests and docs included. A mechanical change that touches fifteen or more files is Scope 4 even when each edit is trivial. A new abstraction inside one layer raises Scope only by its file count.
+
+### Coupling (feeds Volume and the Capability floor)
+
+| Grade | Anchor |
+|---|---|
+| 0 | No shared mechanism; the change stays inside its own module |
+| 1 | Calls or reads a shared helper or contract and leaves that contract unchanged |
+| 2 | Changes the behavior or contract of one shared mechanism; its callers or copies must follow |
+| 3 | Two or more shared mechanisms, one contract mirrored in several copies that must stay consistent, or a schema, config-version, or migration step |
+| 4 | Coordination across a process, machine, or service boundary; locking, ordering, or concurrency; live/offline or dual-language parity; hot reload |
+
+### Risk (feeds Capability)
+
+| Grade | Anchor |
+|---|---|
+| 0 | Read-only, docs, tests, or offline tooling; no runtime behavior changes |
+| 1 | Additive runtime behavior that no existing path depends on; a wrong result is visible, and a revert restores it |
+| 2 | Changes existing runtime behavior; reversible, with a contained blast radius; no persisted data and no external side effect |
+| 3 | Writes persisted or shared state, causes a recoverable external side effect, touches a permission or auth surface, or changes an auto-protective mechanism (limit, guard, kill switch, review gate); a wrong result needs cleanup |
+| 4 | Money moves, a write or delete is irreversible, stored records can lose integrity, secrets or credentials are handled, authorization is enforced, or code executes against a live production system |
+
+**Safety class (money, data integrity, security, auto-protective logic):** Risk is never below 3. Risk is 4 when the change is on the enforcing path: the code that moves the money, writes or deletes the record, decides the permission, or fires the guard. A change beside that path (its config, its logging, its tests) is Risk 3. A tiny diff on the enforcing path is still Risk 4.
+
+### Uncertainty (feeds Capability)
+
+| Grade | Anchor |
+|---|---|
+| 0 | Fully specified: the edit list is complete, every site is named, and the behavior is settled |
+| 1 | Mechanism and sites known; small choices of value, wording, or placement remain |
+| 2 | Mechanism known; the site set or the shape needs discovery (which files, which threshold, which format) |
+| 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted |
+| 4 | Open design judgment: the correct behavior itself is undetermined, or an architecture or consistency gap stays unresolved after step 5 |
+
+Grades 0 and 1 are checkable: compare the sites the issue names with the sites the trace found. A site the trace found and the issue does not name makes Uncertainty 2 at least. Judgment-heavy work raises Uncertainty or Coupling, and a hard decision is never Uncertainty 0.
+
+### Verification (feeds Volume)
+
+| Grade | Anchor |
+|---|---|
+| 0 | A pure helper with a unit test and no fixture |
+| 1 | Unit tests with a small fixture or a golden file |
+| 2 | Several units and fixtures, or a contract test that reads several files |
+| 3 | An integration test with a subprocess, a network or service stub, or a database fixture, or a parity test across two implementations |
+| 4 | End-to-end or live-service proof, hardware, timing or concurrency reproduction, or state that is hard to reproduce |
+
+Grade the proof the correct implementation needs, including the tests the change must add or rewrite. The tests the issue happens to mention set no grade.
+
+## Compute and report
+
+Apply the step-6 formula to the five grades. Write all five grades in the rationale line and in the verdict line, in this shape:
+
+`Capability 2 (Risk 3, Uncertainty 2 — <driver reason>); Volume 12 (Scope 2, Coupling 2, Verification 2)`
+
+The driver is the axis and grade that set Capability: the higher of Risk and Uncertainty, or the Coupling floor. The verdict also carries the step-8 `Axes:` block, one line per axis with its grade and evidence, and a `Differs:` line for each grade the issue states differently.
+
+## Reachable scores
+
+Volume is always even. Capability 0 and 1 need Coupling 2 or lower, so their Volume is at most 20.
+
+| Capability | Scores |
+|---|---|
+| 0 | 0 to 20 |
+| 1 | 25 to 45 |
+| 2 | 50 to 74 |
+| 3 | 75 to 99 |
+
+Scores 21 to 24 and 46 to 49 cannot occur. Band 2 therefore holds exactly Capability 1. Band 3 holds Capability 2 up to Volume 20. Band 4 holds Capability 2 at Volume 22 or 24 together with Capability 3 up to Volume 4. Band 5 holds Capability 3 from Volume 6.
+
+## Golden examples (consistency checklist)
 
 | Axes (S,C,R,U,V) | Capability | Volume | Score | Score rationale |
 |---|---|---|---|---|
 | (4,0,0,0,0) | 0 | 8 | **8** | Scope raises Volume without raising Capability |
+| (4,2,1,1,4) | 0 | 20 | **20** | The largest Capability 0 score: a mechanical grind stays on Sonnet at xhigh |
+| (0,0,2,0,0) | 1 | 0 | **25** | Risk 2 alone moves the build to Opus |
 | (0,0,0,4,0) | 3 | 0 | **75** | Uncertainty 4 maps to Capability 3 |
 | (0,4,1,1,0) | 2 | 8 | **58** | Coupling 4 forces Capability 2 |
 | (0,3,0,0,0) | 2 | 6 | **56** | Coupling 3 is the floor boundary and forces Capability 2 |
 | (0,2,0,0,0) | 0 | 4 | **4** | Coupling 2 sits below the floor and forces nothing |
 | (0,0,4,0,0) | 3 | 0 | **75** | Risk 4 maps to Capability 3 |
-| (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2 |
+| (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2, so score 50 opens band 3 |
+| (2,2,3,2,2) | 2 | 12 | **62** | The common shape: one persisted write with a known mechanism |
+| (2,2,4,3,3) | 3 | 14 | **89** | A money path at Risk 4 with an open design choice; fableplan yes |
 
 ## Routing details
 
 - Fable 5.1 never runs at xhigh; high is its ceiling. Fable is never the default builder, and a Fable build requires explicit user direction.
-- The main skill's band table owns the `fableplan` signal, planner, builder, and effort. Its first-review table owns every first-review boundary; each row starts on a band edge, so a moved band edge moves that table, and a new edge alone leaves it unchanged.
+- The main skill's band table owns the `fableplan` signal, planner, builder, and effort. Its first-review table owns every first-review boundary; each row starts on a band edge; a moved edge that a first-review row starts on moves that table, and any other edge change, a new edge or a moved edge inside a row, leaves it unchanged.
+- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer (Opus 5 at 71–80, Fable 5.1 at 81–99).
 - Re-review step-down is owned by `skills/fix-pr-review/rereview-routing.md`. In subagent mode the standard-trigger rows inherit the session reviewer, and Sonnet serves the cheapest first-review row plus every non-blocking re-review; it takes no rung on the ladder.
 - A missing score routes as the highest band at every stage: validate, build, and review. Missing means no `[C<score>]` prefix at all; a literal `[C0]` is a real score and routes on the lowest rows. An issue with no prefix keeps the top band on all three stages even after the validator returns a low score.
-- When validation produces a higher band than the issue title, revalidate once on the higher route and replace all stale routing stamps. Never lower routing from a validator rescore at any stage: the rescore raises validate, build, and review routing and weakens none of them. The safety carve-out for money, data integrity, security, and auto-protective logic forces the capable path when Risk was under-scored.
+- When validation produces a higher band than the issue title, revalidate once on the higher route and replace all stale routing stamps: the title prefix, the rationale line, the fableplan signal, and the Execution block's build and fableplan lines (step 8). Never lower routing from a validator rescore at any stage: the rescore raises validate, build, and review routing and weakens none of them. The safety carve-out for money, data integrity, security, and auto-protective logic forces the capable path when Risk was under-scored.
