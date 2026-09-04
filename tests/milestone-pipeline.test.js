@@ -1088,7 +1088,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
-    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review effort:high"')
     expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 opus cycle 1 steps down to the standard trigger')
       .toContain('the blocking re-trigger exactly `@claude review`')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
@@ -1172,7 +1172,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const expected = {
       'implement:#2 (sonnet/xhigh)': ['@claude sonnet review', '@claude sonnet review'],
-      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review'],
+      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review effort:high'],
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
@@ -1189,6 +1189,30 @@ describe('milestone-pipeline subagent review mode', () => {
         'neither trigger is ever repeated on a blocking re-review',
       )
     }
+  })
+
+  test('a stamped opus or fable first review with no effort tier defaults to effort:high, never the Action\'s xhigh default', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C5] Stamped opus, no effort tier', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus' },
+          { number: 3, title: '[C5] Stamped fable, no effort tier', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable' },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    const opus = promptFor(events, 'implement:#2 (sonnet/high)')
+    expect(opus, '#2 stamped opus defaults to effort:high').toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+
+    const fable = promptFor(events, 'implement:#3 (sonnet/high)')
+    expect(fable, '#3 stamped fable defaults to effort:high').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
   })
 
   test('a stamped cheap first review is never skipped as a non-blocking re-trigger', async () => {
@@ -1254,7 +1278,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const two = promptFor(events, 'implement:#2 (opus/high)')
     expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review`')
+    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
     expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5.1'))).toBeTrue()
 
     const three = promptFor(events, 'implement:#3 (opus/xhigh)')

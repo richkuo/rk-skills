@@ -296,7 +296,7 @@ describe('review routing', () => {
     const RE_REVIEW_SITES = [ROUTING, 'templates/claude-workflow/prompts/fix-pr.md']
     for (const path of [...FIRST_REVIEW_SITES, ...RE_REVIEW_SITES]) {
       const body = flats[path]
-      expect(body, `${path}: opus tier`).toMatch(/@claude opus review/)
+      expect(body, `${path}: opus tier pins effort:high`).toMatch(/@claude opus review effort:high/)
       expect(body, `${path}: sonnet tier`).toMatch(/@claude sonnet review/)
       if (!path.startsWith('templates/')) {
         expect(body, `${path}: states no first-review boundary of its own`).not.toMatch(/C\d+\s*(?:–|-|to )\s*C?\d+/)

@@ -26,11 +26,11 @@ Take the **EARLIEST** `@<bot> … review` trigger comment on the PR (one whose e
 
 | Cycle-1 reviewer | Blocking cycle 2 | Blocking cycle 3 and after |
 |---|---|---|
-| `@claude fable review effort:high` | `@claude opus review` | `@claude review` |
-| `@claude opus review` | `@claude review` | `@claude review` |
+| `@claude fable review effort:high` | `@claude opus review effort:high` | `@claude review` |
+| `@claude opus review effort:high` | `@claude review` | `@claude review` |
 | `@claude review` or `@claude sonnet review` | same trigger | same trigger |
 
-Neither heavy trigger is ever repeated on a blocking re-review, whether the owner-table row or a stamped `PR review:` line selected it. The ladder **never steps down to sonnet**: Sonnet sits below the floor and takes no rung, so a Sonnet cycle 1 repeats its own trigger, as does a cycle 1 already on `@claude review`. Decide the rung from the trigger comments after cycle 1 — a prior `@claude opus review` after a fable cycle 1 means the next rung is `@claude review` — ignoring `@claude sonnet review` comments, which consume no rung. A stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet`, and `fable`, and an unresolved shorthand becomes the route keyword.
+Neither heavy trigger is ever repeated on a blocking re-review, whether the owner-table row or a stamped `PR review:` line selected it. The ladder **never steps down to sonnet**: Sonnet sits below the floor and takes no rung, so a Sonnet cycle 1 repeats its own trigger, as does a cycle 1 already on `@claude review`. Decide the rung from the trigger comments after cycle 1 — a prior `@claude opus review` comment (with or without an effort suffix) after a fable cycle 1 means the next rung is `@claude review` — ignoring `@claude sonnet review` comments, which consume no rung. A stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet`, and `fable`, and an unresolved shorthand becomes the route keyword.
 
 ### Codex cycles
 
@@ -44,7 +44,7 @@ Codex exposes one flagship and has no ladder — its cycle-1 trigger repeats for
 |---|---|---|
 | the sonnet row | `@claude sonnet review` | `@codex luna review` |
 | the standard-trigger row | `@claude review` | `@codex review` |
-| the opus row, the fable row, or no score | `@claude opus review` only when no `@claude opus review` comment already exists on the PR; `@claude review` otherwise | `@codex review` |
+| the opus row, the fable row, or no score | `@claude opus review effort:high` only when no `@claude opus review` comment (with or without an effort suffix) already exists on the PR; `@claude review` otherwise | `@codex review` |
 
 The heavy rows are guarded because Fable and Opus each review one cycle only, and a first review already ran by some other route — never open a Fable cycle on a re-review.
 
