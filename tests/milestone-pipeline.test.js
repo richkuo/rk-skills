@@ -1088,7 +1088,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
-    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review effort:high"')
     expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 opus cycle 1 steps down to the standard trigger')
       .toContain('the blocking re-trigger exactly `@claude review`')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
@@ -1172,7 +1172,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const expected = {
       'implement:#2 (sonnet/xhigh)': ['@claude sonnet review', '@claude sonnet review'],
-      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review'],
+      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review effort:high'],
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
@@ -1254,7 +1254,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const two = promptFor(events, 'implement:#2 (opus/high)')
     expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review`')
+    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
     expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5.1'))).toBeTrue()
 
     const three = promptFor(events, 'implement:#3 (opus/xhigh)')
