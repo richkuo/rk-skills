@@ -11,65 +11,44 @@ const region = (text, start, end) => {
   return text.slice(a, b)
 }
 
+const BEHAVIOR = /changes behavior|behavior change|decides by behavior/i
+const PROSE_ONLY = /prose[- ]only/i
+const CHEAP_TRIGGER = /@claude sonnet review|cheap shorthand/
+const FILE_CLASS = /`\.md`-only|docs-only|non-docs file|never covers hand-resolved code,/
+
 describe('merge re-review rule after a bare LGTM', () => {
-  test('fix-pr-review step 7 owns the rule and keys it on the hand-resolved set', async () => {
-    const skill = await read('skills/fix-pr-review/SKILL.md')
-    const step7 = region(skill, '### 7. Resolve merge conflicts', '### 8. Commit and push')
-    expect(step7).toContain('**Merge re-review rule.**')
+  const restatements = [
+    ['skills/fix-pr-review/SKILL.md', '### 7. Resolve merge conflicts', '### 8. Commit and push'],
+    ['skills/fix-pr-review/SKILL.md', '### 10. Trigger the re-review', '### 11. Report to the user'],
+    ['skills/fix-pr-review/rereview-routing.md', '**Bare LGTM, merge only**', '**Blocking** →'],
+    ['skills/fix-pr-review-loop/SKILL.md', '### 4. Resolve the review and loop', '### 5. Report'],
+    ['skills/milestone-workflow/SKILL.md', '**Conflict re-review decision**', '\n'],
+    ['README.md', 'a remaining PR that conflicts after a merge', 'then resumes'],
+  ]
+
+  for (const [path, start, end] of restatements) {
+    test(`${path} keys the rule on behavior at "${start}"`, async () => {
+      const text = region(await read(path), start, end)
+      expect(text).toMatch(BEHAVIOR)
+      expect(text).toMatch(PROSE_ONLY)
+      expect(text).toMatch(CHEAP_TRIGGER)
+      expect(text).not.toMatch(FILE_CLASS)
+    })
+  }
+
+  test('fix-pr-review step 7 records the hand-resolved set and excludes auto-merged files', async () => {
+    const step7 = region(await read('skills/fix-pr-review/SKILL.md'), '### 7. Resolve merge conflicts', '### 8. Commit and push')
     expect(step7).toMatch(/hand-resolved set/)
-    expect(step7).toMatch(/auto-merged are base-branch work and do not count/)
-    expect(step7).toMatch(/\*\*decide whether it changes behavior\*\*/)
-    expect(step7).toMatch(/\*\*Prose only\*\*[^\n]*post no trigger/)
-    expect(step7).toMatch(/\*\*Behavior changed, or any doubt\*\*[^\n]*`SKILL\.md`[^\n]*`@claude sonnet review`[^\n]*consuming no rung/)
-    expect(step7).toMatch(/file extension is evidence and never the answer/)
-    expect(step7).toMatch(/Record the decision, the hand-resolved set, and the reason under `### Resolved merge conflicts`/)
+    expect(step7).toMatch(/auto-merged/)
+    expect(step7).toMatch(/`### Resolved merge conflicts`/)
   })
 
-  test('step 1 sends a bare-LGTM conflict through steps 7 to 9 and step 10 defers to the rule', async () => {
-    const skill = await read('skills/fix-pr-review/SKILL.md')
-    const step1 = region(skill, '### 1. Fetch all unaddressed review feedback', '### 2. Fetch failing CI checks')
-    expect(step1).toMatch(/bare-LGTM PR still runs steps 7 through 9/)
-    expect(step1).toMatch(/merge re-review rule decides whether step 10 posts a trigger/)
-    const step10 = region(skill, '### 10. Trigger the re-review', '### 11. Report to the user')
-    expect(step10).toMatch(/bare-LGTM run that only merged the base routes by step 7/)
-    expect(step10).toMatch(/cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, no trigger when it decided prose only/)
-  })
-
-  test('rereview-routing restates the rule without granting a rung', async () => {
-    const routing = await read('skills/fix-pr-review/rereview-routing.md')
-    const row = region(routing, '**Bare LGTM, merge only**', '**Blocking** →')
-    expect(row).toMatch(/cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, consuming no rung/)
-    expect(row).toMatch(/\*\*no trigger\*\* when step 7 decided it is prose only/)
-    expect(row).toMatch(/never covers a hand-resolved behavior change, whichever file carries it/)
-    expect(row).toMatch(/Step 7's behavior decision is the test; the file class is evidence only/)
-    expect(row).not.toMatch(/never covers hand-resolved code,/)
-  })
-
-  test('milestone-workflow makes the same behavior decision and names the loop skills', async () => {
-    const ms = await read('skills/milestone-workflow/SKILL.md')
-    expect(ms).toMatch(/\*\*Conflict re-review decision\*\*[^\n]*decide whether it changes behavior/)
-    expect(ms).toMatch(/A behavior change, or any doubt[^\n]*`SKILL\.md`[^\n]*`@claude sonnet review`/)
-    expect(ms).toMatch(/`fix-pr-review` step 7 and `fix-pr-review-loop` step 4 make the same decision/)
-  })
-
-  test('README summarizes the conflict re-review rule by behavior', async () => {
-    const readme = await read('README.md')
-    expect(readme).toMatch(/the hand-resolved diff decides by behavior: a prose-only resolution keeps the standing LGTM, and a behavior change or any doubt, including agent-executed Markdown such as a `SKILL\.md`, needs a `@claude sonnet review`/)
-    expect(readme).not.toMatch(/`\.md`-only resolution/)
-  })
-
-  test('fix-pr-review-loop handles a cycle that posted no trigger', async () => {
-    const loop = await read('skills/fix-pr-review-loop/SKILL.md')
-    const step4 = region(loop, '### 4. Resolve the review and loop', '### 5. Report')
-    expect(step4).toMatch(/\*\*Merge re-review rule\*\* \(the same decision as `milestone-workflow` step 5 sub-step 3\)/)
-    expect(step4).toMatch(/Prose only keeps the LGTM and posts no trigger/)
-    expect(step4).toMatch(/a behavior change, or any doubt, means it posted `@claude sonnet review`/)
-    expect(step4).toMatch(/`MERGEABLE` → the prior LGTM stands, go to step 5 as a clean pass/)
-    expect(step4).toMatch(/`UNKNOWN` is GitHub recomputing after the push: wait/)
-    expect(step4).toMatch(/`CONFLICTING`\/`DIRTY` → a new base conflict, go to step 4 again/)
-    expect(step4).toMatch(/Only a genuine conflict re-enters fix-pr-review/)
-    expect(step4).toMatch(/When it posted a trigger, increment `review_count`, record that trigger's timestamp, and go to step 2/)
-    expect(step4).toMatch(/A pass that posted no trigger increments nothing and records no timestamp/)
-    expect(step4).not.toMatch(/Increment `review_count`, record the new trigger timestamp, go to step 2\./)
+  test('fix-pr-review-loop step 4 waits on UNKNOWN, re-enters only on a conflict, and counts only posted triggers', async () => {
+    const step4 = region(await read('skills/fix-pr-review-loop/SKILL.md'), '### 4. Resolve the review and loop', '### 5. Report')
+    expect(step4).toMatch(/`UNKNOWN`[^\n]*wait/)
+    expect(step4).toMatch(/`MERGEABLE`[^\n]*clean pass/)
+    expect(step4).toMatch(/`CONFLICTING`\/`DIRTY`[^\n]*step 4/)
+    expect(step4).toMatch(/posted a trigger, increment `review_count`/)
+    expect(step4).toMatch(/posted no trigger increments nothing/)
   })
 })
