@@ -204,6 +204,23 @@ describe('install.sh Codex links', () => {
   })
 })
 
+describe('bin/install.mjs symlinked source', () => {
+  test('skips a skill already symlinked to its own source instead of crashing', () => {
+    const project = makeTempDir('rk-skills-selflink-')
+    mkdirSync(join(project, '.claude/skills'), { recursive: true })
+    const skill = shippedSkills[0]
+    symlinkSync(join(repoRoot, 'skills', skill), join(project, '.claude/skills', skill))
+
+    const run = runMjs(project)
+
+    expect(run.exitCode, run.stderr.toString()).toBe(0)
+    const target = join(project, '.claude/skills', skill)
+    expect(lstatSync(target).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(target)).toBe(join(repoRoot, 'skills', skill))
+    expect(run.stdout.toString()).toContain('already symlinked to this checkout')
+  })
+})
+
 describe('retired skill cleanup', () => {
   test('bin/install.mjs retires a leftover retired skill from the destination', () => {
     for (const asSymlink of [false, true]) {
