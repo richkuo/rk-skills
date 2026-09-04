@@ -52,6 +52,12 @@ describe('merge re-review rule after a bare LGTM', () => {
     expect(ms).toMatch(/`fix-pr-review` step 7 and `fix-pr-review-loop` step 4 make the same decision/)
   })
 
+  test('README summarizes the conflict re-review rule by behavior', async () => {
+    const readme = await read('README.md')
+    expect(readme).toMatch(/the hand-resolved diff decides by behavior: a prose-only resolution keeps the standing LGTM, and a behavior change or any doubt, including agent-executed Markdown such as a `SKILL\.md`, needs a `@claude sonnet review`/)
+    expect(readme).not.toMatch(/`\.md`-only resolution/)
+  })
+
   test('fix-pr-review-loop handles a cycle that posted no trigger', async () => {
     const loop = await read('skills/fix-pr-review-loop/SKILL.md')
     const step4 = region(loop, '### 4. Resolve the review and loop', '### 5. Report')
