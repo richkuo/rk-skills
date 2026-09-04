@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,8 +33,16 @@ const agentsDir = join(claudeDir, 'agents');
 const workflowsDir = join(claudeDir, 'workflows');
 
 mkdirSync(skillsDir, { recursive: true });
+const linkedSkills = [];
 for (const name of skills) {
-	cpSync(join(skillsSrc, name), join(skillsDir, name), { recursive: true });
+	const src = join(skillsSrc, name);
+	const dest = join(skillsDir, name);
+	const destStat = lstatSync(dest, { throwIfNoEntry: false });
+	if (destStat?.isSymbolicLink() && resolve(dirname(dest), readlinkSync(dest)) === src) {
+		linkedSkills.push(name);
+		continue;
+	}
+	cpSync(src, dest, { recursive: true });
 }
 
 const retiredSkills = ['pr-review-format'].filter((name) => !skills.includes(name));
@@ -65,17 +73,30 @@ for (const name of removedAgents) {
 const workflows = existsSync(workflowsSrc)
 	? readdirSync(workflowsSrc).filter((name) => name.endsWith('.js')).sort()
 	: [];
+const linkedWorkflows = [];
 if (workflows.length > 0) {
 	mkdirSync(workflowsDir, { recursive: true });
 	for (const name of workflows) {
-		cpSync(join(workflowsSrc, name), join(workflowsDir, name));
+		const src = join(workflowsSrc, name);
+		const dest = join(workflowsDir, name);
+		const destStat = lstatSync(dest, { throwIfNoEntry: false });
+		if (destStat?.isSymbolicLink() && resolve(dirname(dest), readlinkSync(dest)) === src) {
+			linkedWorkflows.push(name);
+			continue;
+		}
+		cpSync(src, dest);
 	}
 }
 
+const copiedSkills = skills.filter((name) => !linkedSkills.includes(name));
 const scope = project ? 'this project' : 'your personal skills';
-console.log(`rk-skills installed ${skills.length} skills into ${scope}:`);
+console.log(`rk-skills installed ${copiedSkills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
-console.log(`  ${skills.join(', ')}`);
+console.log(`  ${copiedSkills.join(', ') || '(none)'}`);
+if (linkedSkills.length > 0) {
+	console.log(`\nLeft ${linkedSkills.length} skills as-is (already symlinked to this checkout):`);
+	console.log(`  ${linkedSkills.join(', ')}`);
+}
 if (removedSkills.length > 0) {
 	console.log(`\nRemoved ${removedSkills.length} renamed skill symlinks from:`);
 	console.log(`  ${skillsDir}`);
@@ -94,9 +115,14 @@ if (removedAgents.length > 0) {
 	console.log(`  ${agentsDir}`);
 	console.log(`  ${removedAgents.map((n) => n.replace(/\.md$/, '')).join(', ')}`);
 }
-if (workflows.length > 0) {
-	console.log(`\nAlso installed ${workflows.length} workflow scripts into:`);
+const copiedWorkflows = workflows.filter((name) => !linkedWorkflows.includes(name));
+if (copiedWorkflows.length > 0) {
+	console.log(`\nAlso installed ${copiedWorkflows.length} workflow scripts into:`);
 	console.log(`  ${workflowsDir}`);
-	console.log(`  ${workflows.map((n) => n.replace(/\.js$/, '')).join(', ')}`);
+	console.log(`  ${copiedWorkflows.map((n) => n.replace(/\.js$/, '')).join(', ')}`);
+}
+if (linkedWorkflows.length > 0) {
+	console.log(`\nLeft ${linkedWorkflows.length} workflows as-is (already symlinked to this checkout):`);
+	console.log(`  ${linkedWorkflows.map((n) => n.replace(/\.js$/, '')).join(', ')}`);
 }
 console.log('\nRestart Claude Code (or start a new session), then invoke any skill by name, e.g.\n  /fableplan <task to plan>');
