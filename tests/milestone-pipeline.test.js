@@ -1191,6 +1191,30 @@ describe('milestone-pipeline subagent review mode', () => {
     }
   })
 
+  test('a stamped opus or fable first review with no effort tier defaults to effort:high, never the Action\'s xhigh default', async () => {
+    const { events } = await executeWorkflow({ tracks: [[2], [3]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C5] Stamped opus, no effort tier', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'opus' },
+          { number: 3, title: '[C5] Stamped fable, no effort tier', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable' },
+        ],
+      }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+
+    const opus = promptFor(events, 'implement:#2 (sonnet/high)')
+    expect(opus, '#2 stamped opus defaults to effort:high').toContain('gh pr comment <num> --body "@claude opus review effort:high"')
+
+    const fable = promptFor(events, 'implement:#3 (sonnet/high)')
+    expect(fable, '#3 stamped fable defaults to effort:high').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+  })
+
   test('a stamped cheap first review is never skipped as a non-blocking re-trigger', async () => {
     const run = (bot) => executeWorkflow(
       { tracks: [[2], [3], [4]], reviewMode: 'github', merge: false, ...(bot === 'codex' ? { reviewBot: 'codex' } : {}) },

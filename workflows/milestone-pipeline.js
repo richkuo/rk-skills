@@ -284,7 +284,8 @@ function firstReviewTrigger(ex) {
   if (stamped) {
     const shorthand = CLAUDE_REVIEW_SHORTHAND[stamped]
     if (shorthand !== stamped) log(`stamped first-review model ${MODEL_NAMES[stamped]} → @claude ${shorthand} review (claude.yml resolves no ${stamped} shorthand, and an unresolved one routes to the write-capable fix-pr job)`)
-    return `@claude ${shorthand} review${ex.first_review_effort ? ` effort:${ex.first_review_effort}` : ''}`
+    const effort = ex.first_review_effort || ((shorthand === 'opus' || shorthand === 'fable') ? 'high' : null)
+    return `@claude ${shorthand} review${effort ? ` effort:${effort}` : ''}`
   }
   if (!review.model) return '@claude review'
   if (review.model === 'opus') return '@claude opus review effort:high'
