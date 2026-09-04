@@ -12,6 +12,8 @@ Route by whether the addressed set contained **any blocking finding** (fix-pr-re
 
 **Non-blocking only** (optional improvements or follow-ups) → the cheap shorthand, `@claude sonnet review` on Claude or `@codex luna review` on Codex, in any band, consuming no rung.
 
+**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule) → the same cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, consuming no rung; **no trigger** when step 7 decided it is prose only. The prior LGTM covers a prose-only merge. It never covers a hand-resolved behavior change, whichever file carries it: source, tests, config, workflows, scripts, or agent-executed Markdown. Step 7's behavior decision is the test; the file class is evidence only. The same decision gates a merge in `milestone-workflow` step 5 sub-step 3.
+
 **Blocking** → the step-down below, **keyed to the reviewer that actually ran cycle 1**; the score band never decides it.
 
 ### Identify cycle 1
