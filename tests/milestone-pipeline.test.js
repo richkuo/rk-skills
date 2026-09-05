@@ -1752,6 +1752,12 @@ describe('milestone-pipeline merge and release', () => {
     expect(skill).toMatch(/merge authority[^.\n]{0,80}subagent|subagent[^.\n]{0,80}merge authority/i)
   })
 
+  test('the skill stays under the 10,000 byte cap', async () => {
+    const bytes = await Bun.file(new URL('../skills/milestone-workflow/SKILL.md', import.meta.url)).arrayBuffer()
+
+    expect(bytes.byteLength).toBeLessThan(10_000)
+  })
+
   test('merge and release default off when review loops are off', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewLoop: false })
 
