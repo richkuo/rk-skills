@@ -1021,6 +1021,31 @@ describe('milestone-pipeline subagent review mode', () => {
     return merged
   }
 
+  test('a stamped Fable first-review effort of xhigh dispatches unclamped in both review modes', async () => {
+    const subagent = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
+      Prep: () => ({ issues: [prepIssue({ first_review_effort: 'xhigh' })] }),
+    })
+    expect(started(subagent.events, 'review:PR#1002 c1 (fable/xhigh)')).toBeTrue()
+    expect(subagent.logs.some((message) => message.includes('normalized first-review effort'))).toBeFalse()
+
+    const github = await executeWorkflow({ tracks: [[3], [4]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [
+        { number: 3, title: '[C90] Stamped xhigh', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'xhigh' },
+        { number: 4, title: '[C90] Unstamped', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable' },
+      ] }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+    expect(promptFor(github.events, 'implement:#3 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:xhigh"')
+    expect(promptFor(github.events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    expect(github.logs.some((message) => message.includes('normalized first-review effort'))).toBeFalse()
+  })
+
   test('a clean first-cycle LGTM reviews once on the issue first-review spec and dispatches no fixer', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
       Prep: () => ({ issues: [prepIssue()] }),
