@@ -265,7 +265,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(events.filter((event) => event.state === 'started' && event.label === 'review-loop:PR#1004 c2-c3')).toHaveLength(1)
   })
 
-  test('dispatches the plan stage at the stamped Plan effort, else high, and clamps xhigh to high', async () => {
+  test('dispatches the plan stage at the stamped Plan effort, else high, and runs a stamped xhigh as xhigh', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8], [9]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
@@ -282,7 +282,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     })
 
     const planEvent = (issue) => events.find((event) => event.state === 'started' && event.label === `plan:#${issue}`)
-    expect(planEvent(2).effort).toBe('high')
+    expect(planEvent(2).effort).toBe('xhigh')
     expect(planEvent(2).model).toBe('fable')
     expect(planEvent(3).effort).toBe('low')
     expect(planEvent(3).model).toBe('fable')
@@ -291,19 +291,16 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(planEvent(9).model).toBe('fable')
     expect(planEvent(5)).toBeUndefined()
 
-    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
+    expect(planEvent(2).prompt).toContain('Created with LLM: Fable 5.1 | xhigh | Harness: milestone-pipeline')
     expect(planEvent(3).prompt).toContain('Created with LLM: Fable 5.1 | low | Harness: milestone-pipeline')
     expect(planEvent(4).prompt).toContain('Created with LLM: Fable 5.1 | high | Harness: milestone-pipeline')
     expect(planEvent(9).prompt).toContain('Created with LLM: Fable 5.1 | medium | Harness: milestone-pipeline')
 
-    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ high'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2') && message.includes('against Fable plan @ xhigh'))).toBeTrue()
     expect(logs.some((message) => message.includes('#3') && message.includes('against Fable plan @ low'))).toBeTrue()
     expect(logs.some((message) => message.includes('#9') && message.includes('against Fable plan @ medium'))).toBeTrue()
     expect(logs.some((message) => message.includes('#5') && message.includes('against Fable plan'))).toBeFalse()
-    expect(logs.filter((message) => message.includes('normalized plan effort')).sort()).toEqual([
-      '#2: normalized plan effort xhigh → high (Fable never runs at xhigh)',
-      '#5: normalized plan effort xhigh → high (Fable never runs at xhigh)',
-    ].sort())
+    expect(logs.filter((message) => message.includes('normalized plan effort'))).toEqual([])
 
     expect(logs.filter((message) => message.includes('ignoring Plan effort')).sort()).toEqual([
       '#5: ignoring Plan effort xhigh — fableplan is false, so no plan stage runs',
@@ -359,7 +356,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
     expect(dispatch('validate:#2')).toMatchObject({ model: 'fable', effort: 'medium' })
     expect(dispatch('validate:#3')).toMatchObject({ model: 'fable', effort: 'low' })
-    expect(dispatch('validate:#4')).toMatchObject({ model: 'fable', effort: 'high' })
+    expect(dispatch('validate:#4')).toMatchObject({ model: 'fable', effort: 'xhigh' })
     expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'xhigh' })
     expect(dispatch('validate:#6')).toMatchObject({ model: 'opus', effort: 'high' })
     expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
@@ -368,7 +365,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
       '#2: C85 (band 81+) — validating on Fable 5.1 @ medium (stamped Validate effort medium overrides the band default high)',
       '#3: C75 (band 71–80) — validating on Fable 5.1 @ low (stamped Validate effort low overrides the band default medium)',
-      '#4: C75 (band 71–80) — validating on Fable 5.1 @ high (stamped Validate effort xhigh → high: Fable never runs at xhigh)',
+      '#4: C75 (band 71–80) — validating on Fable 5.1 @ xhigh (stamped Validate effort xhigh overrides the band default medium)',
       '#5: C30 (band 21–49) — validating on Opus 5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
       '#6: C30 (band 21–49) — validating on Opus 5 @ high (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
       '#7: C60 (band 50–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
@@ -376,7 +373,7 @@ describe('milestone-pipeline dependency scheduling', () => {
     ])
   })
 
-  test('a stamped Validate effort carries into the escalated re-validation under the escalated model\'s clamp', async () => {
+  test('a stamped Validate effort carries into the escalated re-validation unchanged', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
@@ -389,8 +386,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     const attempts = events.filter((event) => event.state === 'started' && event.label === 'validate:#2')
     expect(attempts).toHaveLength(2)
     expect(attempts[0]).toMatchObject({ model: 'opus', effort: 'xhigh' })
-    expect(attempts[1]).toMatchObject({ model: 'fable', effort: 'high' })
-    expect(logs).toContain('#2: validator re-scored C30 → C85 (band 81+) — re-validating on Fable 5.1 @ high (stamped Validate effort xhigh → high: Fable never runs at xhigh)')
+    expect(attempts[1]).toMatchObject({ model: 'fable', effort: 'xhigh' })
+    expect(logs).toContain('#2: validator re-scored C30 → C85 (band 81+) — re-validating on Fable 5.1 @ xhigh (stamped Validate effort xhigh overrides the band default high)')
   })
 
   test('a literal [C0] is a real score, and only an absent prefix routes as unknown', async () => {
@@ -530,8 +527,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(effortFor('review-loop:PR#1009 c2-c3')).toBe('low')
     expect(effortFor('implement:#10 (opus/high)')).toBe('high')
     expect(effortFor('review-loop:PR#1010 c2-c3')).toBe('high')
-    expect(effortFor('implement:#11 (fable/high)')).toBe('high')
-    expect(effortFor('review-loop:PR#1011 c2-c3')).toBe('high')
+    expect(effortFor('implement:#11 (fable/xhigh)')).toBe('xhigh')
+    expect(effortFor('review-loop:PR#1011 c2-c3')).toBe('xhigh')
 
     expect(promptFor(events, 'implement:#9 (fable/low)')).toContain('| low | Harness: milestone-pipeline')
     expect(promptFor(events, 'review-loop:PR#1009 c2-c3')).toContain('| low | Harness: milestone-pipeline')
@@ -544,7 +541,6 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
       '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
       '#10: normalized build effort low → high for Opus 5 (low/medium are Fable-only)',
-      '#11: normalized build effort xhigh → high (Fable never runs at xhigh)',
     ])
   })
 
@@ -1024,6 +1020,31 @@ describe('milestone-pipeline subagent review mode', () => {
     }
     return merged
   }
+
+  test('a stamped Fable first-review effort of xhigh dispatches unclamped in both review modes', async () => {
+    const subagent = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
+      Prep: () => ({ issues: [prepIssue({ first_review_effort: 'xhigh' })] }),
+    })
+    expect(started(subagent.events, 'review:PR#1002 c1 (fable/xhigh)')).toBeTrue()
+    expect(subagent.logs.some((message) => message.includes('normalized first-review effort'))).toBeFalse()
+
+    const github = await executeWorkflow({ tracks: [[3], [4]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [
+        { number: 3, title: '[C90] Stamped xhigh', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable', first_review_effort: 'xhigh' },
+        { number: 4, title: '[C90] Unstamped', complexity: 90, model: 'fable', effort: 'high', fableplan: false, missing_block: false, first_review_model: 'fable' },
+      ] }),
+      Implement: (event) => {
+        const issue = issueFromLabel(event.label)
+        return {
+          pr_number: 1000 + issue, pr_url: `https://example.test/pr/${1000 + issue}`, head_ref: `cc/issue-${issue}`, head_sha: headSha(issue),
+          summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+        }
+      },
+    })
+    expect(promptFor(github.events, 'implement:#3 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:xhigh"')
+    expect(promptFor(github.events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
+    expect(github.logs.some((message) => message.includes('normalized first-review effort'))).toBeFalse()
+  })
 
   test('a clean first-cycle LGTM reviews once on the issue first-review spec and dispatches no fixer', async () => {
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
@@ -1993,15 +2014,15 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(fix.prompt).toContain('do NOT trigger, post, or wait for any `@claude` or `@codex` re-review')
   })
 
-  test('a max stamp on a Claude model normalizes to the model ceiling', async () => {
+  test('a max stamp on a Claude model normalizes to xhigh', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3]], reviewLoop: false }, {
       Prep: () => ({ issues: [prepRecord(2, { model: 'opus', effort: 'max' }), prepRecord(3, { model: 'fable', effort: 'max' })] }),
     })
 
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
-    expect(started(events, 'implement:#3 (fable/high)')).toBeTrue()
+    expect(started(events, 'implement:#3 (fable/xhigh)')).toBeTrue()
     expect(logs).toContain('#2: normalized build effort max → xhigh for Opus 5 (max is a Codex CLI-only tier)')
-    expect(logs).toContain('#3: normalized build effort max → high for Fable 5.1 (max is a Codex CLI-only tier)')
+    expect(logs).toContain('#3: normalized build effort max → xhigh for Fable 5.1 (max is a Codex CLI-only tier)')
   })
 
   test('an unknown CLI model name without an explicit id blocks the issue before validation and its hard descendants', async () => {

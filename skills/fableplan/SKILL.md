@@ -27,7 +27,7 @@ gh issue view <N> --json number,title,body,url
 
 Add `-R owner/repo` for another repository. Stop and tell the user if the command fails. Never plan from a paraphrase of an issue you could not fetch.
 
-Record the number and URL for step 4. Read any **Plan effort** line in the body's `## Execution` block: planning runs at that tier when present and at `high` otherwise, and a stamped `xhigh` runs at `high` because Fable never runs at xhigh. Step 5 reports the clamp.
+Record the number and URL for step 4. Read any **Plan effort** line in the body's `## Execution` block: planning runs at that tier when present and at `high` otherwise; a stamped `xhigh` runs at `xhigh`, since the stamp is the user's explicit choice.
 
 ### 2. Dispatch the Fable 5.1 Plan subagent
 
@@ -36,7 +36,7 @@ Do not plan the task yourself first. **Load the `fable-dispatch` skill before di
 - `subagent_type`: `Plan`
 - `model`: `fable`. This forces Fable 5.1 whatever the main agent's model.
 - `run_in_background`: `false`. Every later step needs the plan, so wait for it.
-- `effort`: the tier from step 1 (the stamped Plan effort, else `high`; `xhigh` clamped to `high`), passed explicitly, when the Agent tool's schema exposes an `effort` property. When it does not, dispatch without it. When the schema check is inconclusive and the call fails input validation on that parameter, re-dispatch once without it. Dispatching without `effort` is a degradation to report in step 5, never a step failure. On the CLI-shim path, `--effort <tier>` carries the tier directly.
+- `effort`: the tier from step 1 (the stamped Plan effort, else `high`), passed explicitly, when the Agent tool's schema exposes an `effort` property. When it does not, dispatch without it. When the schema check is inconclusive and the call fails input validation on that parameter, re-dispatch once without it. Dispatching without `effort` is a degradation to report in step 5, never a step failure. On the CLI-shim path, `--effort <tier>` carries the tier directly.
 - `description`: `Plan <short task name>`
 - `prompt`: everything the subagent needs to plan on its own: the full task, the issue title and body when fetched, the working directory, and the user's constraints. Instruct it to:
   - Produce a concrete, ordered plan: files to create or modify, the approach, build sequence, risks and edge cases, and verification.
@@ -74,7 +74,7 @@ Add `-R owner/repo` for another repository. Follow the repository's comment conv
 
 ### 5. Relay the plan to the user
 
-Present the checked plan. Say in one line if step 2 could not honor the requested tier, or if the issue's Plan effort stamp was `xhigh` and was clamped to `high`. Otherwise say nothing about tiers.
+Present the checked plan. Say in one line if step 2 could not honor the requested tier. Otherwise say nothing about tiers.
 
 ### 6. Ask whether to continue building (only if an issue was referenced)
 

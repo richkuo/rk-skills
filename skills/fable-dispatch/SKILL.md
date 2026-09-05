@@ -37,7 +37,7 @@ claude -p --model fable --effort <tier> \
 - **Never interpolate the prompt into the command line.** A prompt containing `"`, `` ` ``, or `$` breaks the quoting or executes (the class `tests/prompt-shell-safety.test.js` guards). Stdin from a file passes the prompt as data.
 - `--permission-mode plan` keeps the subagent read-only. `--dangerously-skip-permissions` must never appear in the shim.
 - **`--allowedTools` names every read-only command the calling skill's procedure runs.** Example: `fable-validate` runs `gh issue view --comments` and `gh pr list`, so its list is `"Bash(gh issue view *)" "Bash(gh pr list *)"`. Add `git log`/`git diff` forms when the procedure reads history, and `-R owner/repo` forms when it reads another repo. An empty list is valid for a subagent that only reads files. Plan mode auto-approves built-in reads. A headless run has no user to answer any other prompt, so a missing entry lands in `.permission_denials` and the result is incomplete. The list carries read-only commands only: never a bare `Bash`, never an edit, comment, or push command. Plan mode does not block an allow-listed Bash write (verified live), so the read-only list is the shim's only guard against writes.
-- `--effort` carries the tier directly. The Fable ceiling holds: any stamped tier above `high` becomes `high`, and the calling skill's report says so.
+- `--effort` carries the tier directly. Fable defaults to `high`; pass `xhigh` only when the user asked for it or stamped it.
 - **Timeout.** A Fable 5.1 run at `high` takes minutes and exceeds a host's default Bash timeout, which kills the call mid-run. Set the host's maximum timeout on the call, or start the CLI in the background with output redirected to a file and poll for exit.
 
 ## 4. Parse the result
