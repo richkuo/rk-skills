@@ -133,7 +133,7 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 therefore holds exactly Capabi
 
 ## Routing details
 
-- Fable 5.1 never runs at xhigh; high is its ceiling. Fable is never the default builder, and a Fable build requires explicit user direction.
+- Fable 5.1 defaults to high on every stage and runs at xhigh only when the user asks for it or stamps it. Fable is never the default builder, and a Fable build requires explicit user direction.
 - The main skill's band table owns the `fableplan` signal, planner, builder, and effort. Its first-review table owns every first-review boundary; each row starts on a band edge; a moved edge that a first-review row starts on moves that table, and any other edge change, a new edge or a moved edge inside a row, leaves it unchanged.
 - Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer (Opus 5 at 71–80, Fable 5.1 at 81–99).
 - Re-review step-down is owned by `skills/fix-pr-review/rereview-routing.md`. In subagent mode the standard-trigger rows inherit the session reviewer, and Sonnet serves the cheapest first-review row plus every non-blocking re-review; it takes no rung on the ladder.

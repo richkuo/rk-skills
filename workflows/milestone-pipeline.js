@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model derived from its [C..] score band, effort from a stamped Validate effort line when present, else the band default' },
-    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at the stamped Plan effort when present, else high (xhigh clamps to high); plans posted to the issues', model: 'fable' },
+    { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at the stamped Plan effort when present, else high; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
@@ -314,7 +314,6 @@ function validateRouteFor(ex, band) {
   const model = band.validate.model
   const stamped = ex.validate_effort
   if (!stamped) return { model, effort: band.validate.effort, note: '' }
-  if (model === 'fable' && stamped === 'xhigh') return { model, effort: 'high', note: ' (stamped Validate effort xhigh → high: Fable never runs at xhigh)' }
   if (model !== 'fable' && (stamped === 'low' || stamped === 'medium')) return { model, effort: 'high', note: ` (stamped Validate effort ${stamped} → high for ${MODEL_NAMES[model]}: low/medium are Fable-only)` }
   return { model, effort: stamped, note: ` (stamped Validate effort ${stamped} overrides the band default ${band.validate.effort})` }
 }
@@ -340,9 +339,9 @@ const PREP_SCHEMA = {
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor'], description: 'From "Build model:" — Fable 5.1→fable, Opus 5→opus, etc.; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor' },
           build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
           cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
-          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low and medium are Fable-only and max is Codex CLI-only — runtime normalizes non-Fable low/medium→high, max→xhigh on Opus/Sonnet, max→high on Fable, max→xhigh on Cursor' },
-          validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime clamps xhigh to high on a Fable validate and raises low/medium to high on a non-Fable validate' },
-          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim; the runtime clamps xhigh to high (Fable never runs at xhigh). Ignored when fableplan is false' },
+          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low and medium are Fable-only and max is Codex CLI-only — runtime normalizes non-Fable low/medium→high, max→xhigh on Claude models and Cursor' },
+          validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low/medium to high on a non-Fable validate' },
+          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; OMIT this field when the line is a standard `@claude` trigger or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
           first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; OMIT when unspecified — the runtime derives the default from the [C..] band' },
@@ -717,8 +716,8 @@ const prep = await agent(
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
 - effort: from "**Effort:**" — one of low/medium/high/xhigh/max; low and medium are Fable-only tiers and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
-- plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the fableplan stage runs at its high default. Preserve a stamped tier verbatim so the runtime can clamp xhigh to high and log it. Only the effort is stampable — never read a model from this line
-- validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can clamp or raise it and log the change
+- plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the fableplan stage runs at its high default. Preserve a stamped tier verbatim. Only the effort is stampable — never read a model from this line
+- validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
 - do NOT extract a "**Validate model:**" line — the validate model is derived from the [C..] score band by the runtime and a stamped model is never read
@@ -764,27 +763,14 @@ const normalizedIssues = prep.issues.map((issue) => {
       log(`#${normalized.number}: ${normalized.cli_error}`)
     }
   } else if (normalized.effort === 'max') {
-    const ceiling = normalized.model === 'fable' ? 'high' : 'xhigh'
-    log(`#${normalized.number}: normalized build effort max → ${ceiling} for ${MODEL_NAMES[normalized.model] || normalized.model} (max is a Codex CLI-only tier)`)
-    normalized.effort = ceiling
+    log(`#${normalized.number}: normalized build effort max → xhigh for ${MODEL_NAMES[normalized.model] || normalized.model} (max is a Codex CLI-only tier)`)
+    normalized.effort = 'xhigh'
   }
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable' && !isCliHarness(normalized.model)) {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
     normalized.effort = 'high'
   }
-  if (normalized.model === 'fable' && normalized.effort === 'xhigh') {
-    log(`#${normalized.number}: normalized build effort xhigh → high (Fable never runs at xhigh)`)
-    normalized.effort = 'high'
-  }
   const stampedPlanEffort = normalized.plan_effort
-  if (normalized.plan_effort === 'xhigh') {
-    log(`#${normalized.number}: normalized plan effort xhigh → high (Fable never runs at xhigh)`)
-    normalized.plan_effort = 'high'
-  }
-  if (normalized.first_review_model === 'fable' && normalized.first_review_effort === 'xhigh') {
-    log(`#${normalized.number}: normalized first-review effort xhigh → high (Fable never runs at xhigh)`)
-    normalized.first_review_effort = 'high'
-  }
   if (stampedPlanEffort && !normalized.fableplan && !normalized.missing_block) {
     log(`#${normalized.number}: ignoring Plan effort ${stampedPlanEffort} — fableplan is false, so no plan stage runs`)
   }

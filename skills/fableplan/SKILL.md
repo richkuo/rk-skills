@@ -27,7 +27,7 @@ gh issue view <N> --json number,title,body,url
 
 Add `-R owner/repo` for another repository. Stop and tell the user if the command fails. Never plan from a paraphrase of an issue you could not fetch.
 
-Record the number and URL for step 4. Read any **Plan effort** line in the body's `## Execution` block: planning runs at that tier when present and at `high` otherwise, and a stamped `xhigh` runs at `high` because Fable never runs at xhigh. Step 5 reports the clamp.
+Record the number and URL for step 4. Read any **Plan effort** line in the body's `## Execution` block: planning runs at that tier when present and at `high` otherwise; a stamped `xhigh` runs at `xhigh`, since the stamp is the user's explicit choice.
 
 ### 2. Dispatch the Fable 5.1 Plan subagent
 

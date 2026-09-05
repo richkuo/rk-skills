@@ -62,7 +62,7 @@
 
 - **Verb:** `Created` (new work), `Updated` (edits), `Validated` when a validation pass produced the edit (`validate-issue` and its wrappers), `Reviewed` on a pull request review comment (`pr-review` and every harness that posts one).
 - `<current model>`: the model actually in use (e.g. `Opus 5`).
-- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that tier; default `high`. Fable 5.1 never uses `xhigh`; `high` is its ceiling on every stage.
+- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that tier; default `high`. Fable 5.1 runs at `high` by default on every stage; it runs at `xhigh` only when I ask for it or stamp it.
 - `<harness>`: `Claude Code` for an interactive session, or the specific skill or agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). A hand-done commit, push, or PR in a session is `Claude Code`; never write `commit-push-pr` for it.
 - **Project precedence:** a repo CLAUDE.md footer format overrides this default.
 
