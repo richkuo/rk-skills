@@ -43,7 +43,7 @@ Give the user the comment URL.
 
 ### 4. Build and ship
 
-**Issue path.** Execute `work-on-issue` steps 1 to 6. Its step 0 ran in step 1 here; its step 7 report is replaced by steps 8 and 9 here. Three injections: before writing any code, mirror the plan's steps into the task tracker per `work-on-issue` step 2 and route deviations through step 5 (no re-planning on your own); step 5 consults apply throughout its step 3; the step 6 binding review runs between its steps 4 and 5. `baseRefs` is never an input here; a `targetBranch` the user names passes through unchanged.
+**Issue path.** Load `work-on-issue` and execute its steps 1 to 6. Its step 0 ran in step 1 here; its step 7 report is replaced by steps 8 and 9 here. Three injections: before writing any code, mirror the plan's steps into the task tracker per `work-on-issue` step 2 and route deviations through step 5 (no re-planning on your own); step 5 consults apply throughout its step 3; the step 6 binding review runs between its steps 4 and 5. `baseRefs` is never an input here; a `targetBranch` the user names passes through unchanged.
 
 **Prose path.**
 

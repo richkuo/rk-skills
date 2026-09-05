@@ -57,7 +57,7 @@ On failure, two corrective rounds per piece, each a different move:
 
 **Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, `run_in_background: false`) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the read-only rule. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
 
-The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer via SendMessage with the new diff and per-finding dispositions. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 7 and apply unchanged.
+The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer via SendMessage with the new diff and per-finding dispositions. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 6 and apply unchanged.
 
 ### 7. Commit, push, PR
 
