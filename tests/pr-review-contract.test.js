@@ -191,6 +191,12 @@ describe('PR review contract copies', () => {
 })
 
 describe('fixer and loop consumers', () => {
+  const FIX_PROMPT_MAX_BYTES = 10000
+
+  test.each(FIX_PROMPTS)('%s stays at or under the fix-pr prompt byte cap', (path) => {
+    expect(Buffer.byteLength(texts[path], 'utf8'), `${path}: bytes`).toBeLessThanOrEqual(FIX_PROMPT_MAX_BYTES)
+  })
+
   test.each([...FIXER_COPIES, ...LOOPS])('%s treats a Verification limitation as not a finding', (path) => {
     expect(flats[path]).toMatch(/Verification limitation[\s\S]{0,120}(?:not|never) a finding/i)
   })
