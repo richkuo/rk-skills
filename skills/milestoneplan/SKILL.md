@@ -5,11 +5,11 @@ description: Use when the user wants a milestone's execution plan shown as a tab
 
 # milestoneplan
 
-Show a milestone's execution plan as a single table. **This skill never writes.** It does not edit issue bodies, post comments, open PRs, or invoke the Workflow tool. Fixes belong to `execution-plan-review`; the run belongs to `milestone-workflow`.
+Show a milestone's execution plan as one table. **This skill never writes**: no issue edits, comments, PRs, or Workflow runs. Fixes belong to `execution-plan-review`; the run belongs to `milestone-workflow`.
 
 ## Input
 
-A milestone — by title (`v1`, `v1 — Desktop core call loop`), or nothing, in which case list the repo's open milestones and ask which one. Match loosely on title prefix; when two milestones match, show both and ask.
+A milestone title (`v1`, `v1 — Desktop core call loop`), matched loosely on prefix. With no input, or when two titles match, list the open milestones with open/closed counts and ask which.
 
 ## Steps
 
@@ -20,40 +20,35 @@ gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq 
 gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body
 ```
 
-Pass `state=all` on the milestones call (it defaults to open only) and `--paginate` with `per_page=100` (it returns 30 per page by default). If the issue fetch returns a count equal to `--limit`, re-fetch at a higher limit until a fetch returns strictly below its own limit — never render the table over a possibly-partial milestone.
-
-Strip `\r` from fetched bodies (the API returns CRLF) before parsing. Parse each issue's `[C<score>]` title prefix and `## Execution` block: `Depends on`, `Runs after`, build model, build effort, fableplan, PR review line, and the optional `Validate effort:` and `Plan effort:` lines.
+`state=all` and `--paginate` with `per_page=100` are required: the defaults are open-only and 30 per page, so a closed or late milestone reads as not found. If the issue count equals `--limit`, re-fetch at a higher limit until a fetch returns strictly below its own limit. Strip `\r` from bodies (the API returns CRLF), then parse the `[C<score>]` title prefix and the `## Execution` block: `Depends on`, `Runs after`, build model, effort, fableplan, `PR review:`, and the optional `Validate effort:` and `Plan effort:` lines.
 
 ### 2. Render the table
 
-Output is **exactly one markdown table** — one row per issue in the milestone, ordered by issue number. A real pipe-delimited markdown table, never prose, bullets, or a code block. Terminals wrap wide tables into unreadable pseudo-lists, so the table is capped at 8 columns (~100 characters) by merging related fields into compound cells:
+Output is **exactly one pipe-delimited markdown table**, one row per issue ordered by number, capped at these 8 columns so terminals do not wrap it:
 
 | # | Description | C | Deps/After | Validate | Build | Plan | Review |
 |---|---|---|---|---|---|---|---|
 
-- **#** — the issue number.
-- **Description** — the issue title with the `[C<score>]` prefix stripped, truncated to ~30 characters.
-- **C** — the score from the `[C<score>]` title prefix; *missing* when absent.
-- **Deps/After** — the stamped `Depends on` and `Runs after` edge lists as one cell, `<depends> / <after>`, issue numbers without the `#` prefix and `none` rendered as `—` (e.g. `12, 13 / —`); *missing* on either side when that field is absent — never infer edges from prose. When every row's `Runs after` is `none`, drop the ` / —` suffix from all cells and say so in the note line below the table.
-- **Validate** — the effective validation routing, `<model> · <effort>`. The model comes from the `[C<score>]` prefix, never from the Build model and never from a stamp; the effort is the band default unless a `Validate effort:` line stamps one. Band defaults: `Opus 5 · medium` at `[C0]`–`[C9]`, `Opus 5 · high` at `[C10]`–`[C49]`, `Opus 5 · xhigh` at `[C50]`–`[C70]`, `Fable 5.1 · medium` at `[C71]`–`[C80]`, `Fable 5.1 · high` at `[C81]` and above (this is the one inline copy in this file; the `validate-issue` step 6 band table is the authoritative source). A missing `[C..]` prefix keeps Fable at high. A stamped tier renders as the effective value with `(stamped)` appended, e.g. `Fable 5.1 · medium (stamped)`; a Fable row stamped `xhigh` renders `Fable 5.1 · xhigh (stamped)`, and an Opus row stamped `low` or `medium` renders `Opus 5 · high (stamped <tier> → high: Fable-only tier)` — the pipeline applies that same clamp, and it applies no clamp to a Fable row stamped `xhigh`.
-- **Build** — the stamped build model and effort as one cell, `<model> · <effort>` (e.g. `Opus 5 · xhigh`); *missing* on either half when absent. A stamp on an external harness renders as `<Name> · <effort> (<harness>)`, e.g. `Luna · max (Codex CLI)` or `Grok · high (Cursor CLI)`, with the explicit model id appended when the stamp carries one, e.g. `Grok · high (Cursor CLI, cursor-grok-4.6-high)`; a Cursor row stamped `max` renders `Grok · xhigh (Cursor CLI, stamped max → xhigh)`, and a Claude row stamped `max` renders the clamped tier the same way, because the pipeline applies those clamps.
-- **Plan** — when fableplan is stamped `Yes`, show `Yes · <effort>` where the effort is the stamped `Plan effort:` tier when present and `high` otherwise; append ` (stamped)` on a stamped tier, e.g. `Yes · medium (stamped)` or `Yes · xhigh (stamped)`. Plain `No` when stamped `No` and no `Plan effort:` line; *missing* when the fableplan stamp is absent. On `No` issues, any `Plan effort:` stamp — including `high` — renders in the Plan cell as `No · <tier> (inert — no plan stage runs)`.
-- **Review** — the effective first-review trigger, derived from the score on the first-review scale, which is coarser than the validate/build bands and is owned by the `validate-issue` step 6 first-review table (load that table for the rows and triggers; this file states no first-review boundary of its own, and a missing prefix takes its heaviest row), unless the `PR review:` line stamps an explicit `@claude <model> review effort:<tier>` trigger, which overrides it — render a stamped `haiku` as `@claude sonnet review`, the trigger the runtime actually posts, because `claude.yml` admits only `sonnet`/`opus`/`fable` and reads an unresolved shorthand as the route keyword; append a short parenthetical only when the line carries a real caveat (e.g. `may close with no PR`).
+- **Description** — the title with the `[C<score>]` prefix stripped, truncated to ~30 characters.
+- **C** — the score from the title prefix.
+- **Deps/After** — `<depends> / <after>`, issue numbers without `#`, `none` rendered as `—` (e.g. `12, 13 / —`); never infer edges from prose. When every `Runs after` is `none`, drop the ` / —` suffix and say so in the note.
+- **Validate** — `<model> · <effort>`. The model comes from the score band, never from a stamp; the effort is the band default unless a `Validate effort:` line stamps one. Band defaults: `Opus 5 · medium` at `[C0]`–`[C9]`, `Opus 5 · high` at `[C10]`–`[C49]`, `Opus 5 · xhigh` at `[C50]`–`[C70]`, `Fable 5.1 · medium` at `[C71]`–`[C80]`, `Fable 5.1 · high` at `[C81]` and above (`validate-issue` step 6 is the authority; a missing prefix routes as Fable high). A stamped tier renders as the effective value plus `(stamped)`, e.g. `Fable 5.1 · xhigh (stamped)`; the pipeline clamps an Opus row stamped `low` or `medium` to `Opus 5 · high (stamped <tier> → high: Fable-only tier)` and applies no clamp to a Fable row stamped `xhigh`.
+- **Build** — the stamped `<model> · <effort>`, e.g. `Opus 5 · xhigh`. An external harness renders as `<Name> · <effort> (<harness>)`, e.g. `Luna · max (Codex CLI)` or `Grok · high (Cursor CLI, cursor-grok-4.6-high)` when the stamp carries a model id. `max` is Codex CLI-only, so a Cursor or Claude row stamped `max` renders the clamp the pipeline applies, e.g. `Grok · xhigh (Cursor CLI, stamped max → xhigh)`.
+- **Plan** — `Yes · <effort>` when fableplan is `Yes`: the stamped `Plan effort:` tier with ` (stamped)`, else `high`. Plain `No` when stamped `No`; a `Plan effort:` line on a `No` issue renders `No · <tier> (inert — no plan stage runs)`.
+- **Review** — the first-review trigger from the `validate-issue` step 6 first-review table (this file states no boundary of its own; a missing prefix takes its heaviest row), unless `PR review:` stamps an explicit `@claude <model> review effort:<tier>` trigger. Render a stamped `haiku` as `@claude sonnet review`, the trigger the runtime posts, because `claude.yml` admits only `sonnet`/`opus`/`fable`. Append a parenthetical only for a real caveat (e.g. `may close with no PR`).
 
-After the table, print **one note line** stating what was factored out of the columns: that the validate model routes off the score band and the validate effort is the band default unless stamped (the step 2 Validate mapping; `validate-issue` step 6 is the authority), which rows carry a stamped `Validate effort` or `Plan effort` that was clamped, which rows build on an external CLI harness (the pipeline drives those through `cli-dispatch` under an Opus driver, and a rescore keeps the harness), which rows' stamped Build model or Effort diverges from their band default (name the band value — informational only: when validation confirms the higher score at run time, the pipeline re-routes the issue to the band defaults and the orchestrating session restamps it), plus anything uniform that was dropped (e.g. `Runs after` all `none`).
+Every absent field renders *missing*, never blank or a guessed default. An issue with no `## Execution` block is *missing* across the Execution-derived cells, with a note line that the pipeline builds it from the validated score band's defaults (no prefix routes as band 5).
 
-Mark any absent field as *missing* — never blank, never a guessed default. An issue with no `## Execution` block gets *missing* across the Execution-derived cells, with an extra line in the note that the pipeline derives its build from the validated score band's defaults (the Build, fableplan, and Effort routing in the `validate-issue` step 6 band table; no prefix routes as band 5).
+After the table, print **one note line** covering: the Validate factoring above (`validate-issue` step 6 is the authority); rows whose stamped `Validate effort` or `Plan effort` was clamped; rows built on an external CLI harness (the pipeline drives them through `cli-dispatch` under an Opus driver, and a rescore keeps the harness); rows whose stamped Build model or Effort diverges from the band default, naming the band value (informational: when validation confirms a higher score at run time, the pipeline re-routes to the band defaults and the orchestrating session restamps); and anything uniform that was dropped.
 
-Print nothing else besides the table and the note. No verdict, no findings list, no wave plan, no cost projection.
+Print nothing else: no verdict, findings, wave plan, or cost projection.
 
 ### 3. Hand off
 
-Offer, in one line each, only the actions that apply — and only after the table:
+After the table, offer in one line each only the actions that apply, and launch neither unprompted:
 
 - Stamps missing or wrong → `execution-plan-review` (it owns Execution-block edits).
 - Ready to run → `milestone-workflow` (it presents its own run plan before dispatching).
-
-Do not launch either one unprompted.
 
 ## Failure modes
 
@@ -61,6 +56,5 @@ Do not launch either one unprompted.
 |---|---|
 | No milestone named, several open | List them with open/closed counts and ask which |
 | Milestone has no issues | Say so; there is nothing to tabulate |
-| Milestone is closed | Still render — the milestones call needs `state=all` |
+| Milestone is closed | Still render; the milestones call needs `state=all` |
 | Fetched issue count equals `--limit` | Re-fetch at a higher limit until proven complete |
-| The repo has more than 30 milestones | Always `--paginate` with `per_page=100`, or a named milestone can read as not found |
