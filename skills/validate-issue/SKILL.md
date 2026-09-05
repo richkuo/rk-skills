@@ -13,7 +13,7 @@ No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --jso
 
 ### 1. Fetch the issue and linked PRs
 
-Run `gh issue view <N> --comments`, then list cross-referenced PRs that comments omit:
+Run `gh issue view <N> --comments`, then list the cross-referenced PRs that comments omit (`owner/repo#N` input names the repo):
 
 ```sh
 gh api --paginate repos/{owner}/{repo}/issues/<N>/timeline --jq '.[] | select(.event=="cross-referenced") | .source.issue | select(.pull_request) | "\(.number) \(.state)"'
@@ -36,7 +36,7 @@ Trace each scenario through its conditions and config. Code outranks prose. Veri
 5. Negative over a window: trace the event-to-boundary dispatch and every producer.
 6. Superlative, method-over-set, or cited baseline: establish population, tool coverage, source history.
 7. Aggregate, dedupe, prorate, or shared state: verify the partition boundary and key against the scope.
-8. Missing or unhandled surface: read surrounding content, find stale copy, diff deliverables.
+8. Missing, undocumented, or unhandled surface: read surrounding content, find stale copy, diff deliverables.
 
 Evidence outranks every verdict; reconcile it across bullets and paired findings.
 
