@@ -1,14 +1,14 @@
 # rk-skills
 
-Workflow skills for [Claude Code](https://claude.com/claude-code) — automate GitHub issues, PR review loops, docs syncing, and releases.
+Workflow skills for [Claude Code](https://claude.com/claude-code): GitHub issues, pull request (PR) review loops, docs syncing, and releases.
 
 [![npm](https://img.shields.io/badge/npm-rk--skills-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/rk-skills)
 
-A "skill" is a reusable instruction file that teaches Claude Code how to do one job well (like filing a GitHub issue or cutting a release). You trigger one by name, and Claude follows its steps.
+A skill is a reusable instruction file that teaches Claude Code one job (file an issue, cut a release). Trigger one by name and Claude follows its steps.
 
 ## Skills
 
-Most workflow skills come in two forms: a **base** skill that does one step and stops, and a **`-loop`** variant that keeps going on its own — through code review and re-review — until the pull request (PR) is approved.
+Most workflow skills come in two forms: a **base** skill that does one step and stops, and a **`-loop`** variant that continues through review and re-review until the PR is approved.
 
 ```mermaid
 flowchart LR
@@ -19,61 +19,59 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-Several skills mention a **complexity score** (`C0`–`C100`): a model + effort routing signal in the issue title. **Capability** (which LLM / whether a Fable plan runs first) lives in the score band; **Volume** (how hard to push) lives in the depth inside the band — see `validate-issue` step 6. "Fable" skills hand part of the work to a subagent running on the Fable 5.1 model — a second Claude instance that plans, validates, or drafts while your main session does the building.
-
-Every issue's first line also carries an explicit **`fableplan: yes|no`** signal, so later steps read the planning decision instead of re-deriving it from the score. It's `yes` at score ≥ 71 — a Fable 5.1 plan is posted before the build; the builder is Opus 5 at xhigh in both plan bands. Effort runs `high`/`xhigh` for Opus and Sonnet builds. A Fable build exists only when the user explicitly directs it — no band defaults to one; stamped, it may also run at `medium` or, at the planner's discretion, `low` for issues lighter than the formula's own floor. Fable 5.1 defaults to `high` on every stage (build, plan, validate, review, fix) and runs at `xhigh` only when the user asks for it or stamps it.
+Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fableplan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table. `fableplan` is `yes` at score 71 or higher, and a Fable 5.1 plan is then posted before the build. "Fable" skills hand part of the work to a subagent on the Fable 5.1 model; it runs at `high` by default and at `xhigh` only when you ask for it.
 
 ### Issue skills
 
 | Skill | What it does |
 |-------|--------------|
-| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks the claims against the actual code first, adds a complexity score, an explicit `fableplan` signal, and a short plain-language summary anyone can read, and never files a half-empty stub. |
-| `new-issue-loop` | Runs `new-issue`, then automatically validates the new issue, implements it, and drives the PR through review — one command from idea to reviewed PR. Stops early if it finds a duplicate issue. |
-| `validate-issue` | Fact-checks an existing issue: verifies every claim against the real code (with file and line references), and checks that the proposed approach is feasible and self-consistent. When the issue's `fableplan` signal is `yes`, it offers a Fable 5.1 plan as one of the reply options and leaves the call to you. |
-| `github-issue-format` | Reference skill: the required format for creating or editing any GitHub issue (`[C<score>]` title, complexity rationale line ending in an explicit `fableplan: yes\|no` signal, complete-body rule, and a mandatory plain-language summary section every reader can understand). Loaded automatically before an issue is filed or edited. |
-| `validate-issue-loop` | Runs `validate-issue`, applies any fixes the verdict calls for to the issue itself, then hands off to `work-on-issue-loop`. Stops instead if the issue is too large, infeasible, or already fixed elsewhere. |
-| `work-on-issue` | Implements an issue end-to-end: stops on a closed issue or an existing open PR for the same work, scans the issue thread for a posted implementation plan and builds to it (newest wins; deviations must be named in the PR), in an isolated git worktree (a separate working copy, so your main checkout stays untouched), verifies it, and opens a PR that closes the issue. An optional `targetBranch` makes that branch, instead of the repo default, both the worktree base and the PR base; the `-loop` and fableplan chains pass it through. |
-| `work-on-issue-loop` | Runs `work-on-issue` to implement and open the PR, triggers the first review, then delegates the review cycle to `fix-pr-review-loop` until the PR gets an approval ("LGTM" — looks good to me). |
-| `issueplan` | Uses the current session's LLM to plan and build a task without a subagent. For an issue, it posts the plan and asks whether to build. A prose task proceeds to implementation and a PR after the plan. |
+| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks claims against the code first, adds the score, the `fableplan` signal, and a plain-language summary. |
+| `new-issue-loop` | Runs `new-issue`, then validates, implements, and drives the PR through review. Stops on a duplicate. |
+| `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it. |
+| `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. |
+| `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
+| `work-on-issue` | Implements an issue in an isolated git worktree, builds to any posted plan (newest wins, deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
+| `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
+| `issueplan` | Plans and builds on the session's own model with no subagent. For an issue it posts the plan and asks whether to build. |
 
 ### PR review skills
 
 | Skill | What it does |
 |-------|--------------|
-| `fix-pr-review` | Reads all unaddressed feedback on a PR — review comments, inline threads, and any failing CI checks — re-checks each point against the actual code (never blindly applies a suggestion), fixes what holds up, resolves any merge conflicts with the base branch, pushes, replies point-by-point, and requests a fresh review from `@claude` by default or from `@codex` when you pass a `codex` argument (e.g. `/fix-pr-review 123 codex`). |
-| `fix-pr-review-loop` | Repeats `fix-pr-review` after every new review until the PR is approved, and won't stop on an approval while the PR is still unmergeable. After 5 review rounds it accepts the first approval even if minor, non-blocking notes remain. Escalates to the user instead of continuing when 4+ cycles keep raising blocking findings in code the loop itself added — evidence the PR is growing rather than converging. |
-| `pr-review` | Reference skill: the required format for any PR review comment (verdict line, section structure, materiality filter, safety carve-out, blocking test — reachability then consequence — before section placement, verification method, and completeness passes — dimension sweep, event-state matrix, bug-class expansion, counterfactual closure — that gate `LGTM`). A blocking finding the ordinary path does not reach states its trigger as **Reachability:** before **Invariant:**. Every finding must include an ASD-STE100 plain-simple-English summary under 55 words; `Requires Human Review` items must also include a recommended proposed solution under 55 words. Loaded automatically before a review is written. |
+| `fix-pr-review` | Reads every unaddressed review comment, inline thread, and failing check, re-checks each against the code, fixes what holds up, resolves merge conflicts, replies point by point, and requests a fresh review from `@claude` (or `@codex` with a `codex` argument). |
+| `fix-pr-review-loop` | Repeats `fix-pr-review` after every review until approval. After 5 rounds it accepts the first LGTM even with non-blocking notes. Escalates when 4 or more cycles keep raising blocking findings in code the loop itself added. |
+| `pr-review` | Reference skill: the required review comment format (verdict line, findings, materiality filter, completeness passes that gate `LGTM`). Loaded before a review is written. |
 
-### Docs & release skills
+### Docs and release skills
 
 | Skill | What it does |
 |-------|--------------|
-| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits actually changed — in your main session, so you see every edit. |
-| `create-release` | Cuts a version tag and publishes a GitHub release with generated notes in your main session, bumping the package version first so publish workflows fire correctly. |
-| `sync-docs-release` | Runs `sync-docs` and `create-release` in sequence in your main session: sync docs, land the doc changes, then cut the release. The doc changes go onto a branch and a PR by default — it never commits them to your default branch — and it asks whether to merge that PR before releasing. |
+| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits changed. |
+| `create-release` | Bumps the package version, tags it, and publishes a GitHub release with generated notes. |
+| `sync-docs-release` | Runs `sync-docs`, lands the doc changes on a PR, asks whether to merge, then runs `create-release`. |
 
 ### Fable-driven skills
 
 | Skill | What it does |
 |-------|--------------|
-| `fableplan` | Has a Fable 5.1 subagent write an implementation plan; posts the plan to the related issue if there is one, then asks whether to build now or stop there. |
-| `fable-new-issue` | Like `new-issue`, but a read-only Fable 5.1 subagent researches and drafts the issue; your main session spot-checks and files it. |
-| `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the new issue all the way to a reviewed PR automatically. |
-| `fable-validate` | Like `validate-issue`, but the fact-checking runs on a Fable 5.1 subagent; your main session presents the verdict and acts on it. |
-| `fable-validate-loop` | Runs `fable-validate`, applies issue fixes, gets a Fable plan (only when score ≥ 71, or touching safety-critical code), then drives to a reviewed PR. |
-| `fable-validate-fableplan-loop` | Same as above, but the Fable plan is unconditional — every issue gets a posted plan before implementation, no matter how simple. |
-| `fable-validate-fableplan` | The same chain without the build: Fable validates the issue, issue fixes are applied, and a Fable plan is always posted. It stops there — no worktree, no PR, no review loop. |
-| `validate-fableplan-loop` | The hybrid: validates on your session's own model, but still brings in Fable for planning when score ≥ 71 or safety-flagged, then drives to a reviewed PR. |
-| `fableplan-work-on-issue` | The trimmed chain: Fable 5.1 plans the issue and posts the plan, then `work-on-issue` builds it and opens a PR. No validation, no review loop — stops at the open PR. |
-| `fableplan-loop` | Same as above, plus the review loop: after the Fable plan is posted, `work-on-issue-loop` builds it, opens the PR, and keeps fixing review findings until approval. No validation. |
-| `fable-advisor` | Runs on your session's own model (Sonnet, typically). A persistent Fable 5.1 advisor writes the plan and stays available for mid-build consults (hard-to-reverse decisions, stuck signals, plan deviations); a separate fresh Fable 5.1 reviewer issues a binding pre-commit verdict. When a GitHub issue is referenced, it gates the issue and runs `work-on-issue`'s build-and-ship pipeline under the advisor instead of a duplicate flow. |
-| `fable-orchestrate` | Runs on Fable 5.1. Decomposes the task into self-contained worker specs, dispatches Sonnet 5 workers to implement them, reviews each result inline, integrates everything into one branch, and gets a binding verdict from a fresh Fable 5.1 reviewer before opening the PR. |
-| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or the Cursor CLI reaches that CLI — preflight, the two shims, the prompt-as-data rule, background-and-poll, result parsing, the substitution check, and attribution. Loaded by the Opus driver agent that `milestone-pipeline` dispatches for such an issue; it never falls back to a Claude build. |
-| `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.1 on the current harness — detects Claude Code positively, shells out to the Claude Code CLI on other harnesses (still Fable 5.1 at the intended effort, read-only), and only as a last resort falls back to another model with the downgrade reported. Loaded automatically before a Fable subagent is dispatched. |
+| `fableplan` | A Fable 5.1 subagent writes an implementation plan, posts it to the issue, and asks whether to build now. |
+| `fable-new-issue` | `new-issue` drafted by a read-only Fable 5.1 subagent; your session spot-checks and files it. |
+| `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the issue to a reviewed PR. |
+| `fable-validate` | `validate-issue` run on a Fable 5.1 subagent; your session presents the verdict and acts on it. |
+| `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 71 or higher or the code is safety-critical, then drives to a reviewed PR. |
+| `fable-validate-fableplan-loop` | Same, with an unconditional Fable plan. |
+| `fable-validate-fableplan` | Fable validates, fixes are applied, a Fable plan is posted, and it stops there. |
+| `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 71 or higher or when safety-flagged, then drives to a reviewed PR. |
+| `fableplan-work-on-issue` | Fable plans, `work-on-issue` builds and opens the PR. No validation, no review loop. |
+| `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
+| `fable-advisor` | Your session builds; a persistent Fable 5.1 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.1 reviewer issues a binding pre-commit verdict. |
+| `fable-orchestrate` | Runs on Fable 5.1: splits the task into worker specs, dispatches Sonnet 5 workers, reviews each result, integrates one branch, and gets a binding verdict from a fresh Fable 5.1 reviewer before opening the PR. |
+| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue. |
+| `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.1 on the current harness, with the fallback ladder and its reporting. Loaded before any Fable subagent is dispatched. |
 
 ### App pipeline skills
 
-The full path from a raw app idea to a running multi-agent build, with a user checkpoint between every stage:
+The path from a raw app idea to a running multi-agent build, with a user checkpoint between stages:
 
 ```mermaid
 flowchart LR
@@ -82,42 +80,40 @@ flowchart LR
 
 | Skill | What it does |
 |-------|--------------|
-| `new-app-pipeline` | The orchestrator: idea → PRD → resolved questions → issues → execution-plan review → milestone pre-flight → milestone workflow, stopping at every stage boundary for your review. Re-enterable mid-pipeline when artifacts already exist. |
-| `app-prd` | Turns an idea dump into a complete, section-numbered `PRD.md` landed via worktree + PR (bootstrapping an empty repo when needed), then iterates on the same PR as you refine. |
-| `prd-questions` | "Ask me all questions": sweeps the PRD for every open question and ambiguity, asks them in batched multiple-choice form with a recommended option, folds each answer into the owning spec section, and empties the Open Questions list. |
-| `prd-to-issues` | Breaks the refined PRD into dependency-ordered milestones and 15–25 complete, complexity-scored issues, each stamped with an `## Execution` block: hard `Depends on` prerequisites, ordering-only `Runs after` constraints, build model, effort, whether a Fable plan comes first, and the `@claude` review trigger; optional `Validate effort` and `Plan effort` lines override the band and high defaults per issue. |
-| `execution-plan-review` | Renders the ordering/model/effort/fableplan/plan-effort table from the issues themselves, takes revisions ("11 should be medium", "12 runs after 11", "plan 17 at medium", "validate 17 at medium", "build 275 with luna on codex at max"), rejects cycles across both edge kinds, pushes back when a revision leaves a non-Fable build at `low`/`medium` effort, and writes changes back to the issues. |
-| `milestoneplan` | Read-only: renders a milestone's execution plan as a single markdown table, one row per issue — number, description, complexity, dependencies, validate/build model and effort, fableplan, plan effort, and first-review trigger. Missing Execution-block fields show as *missing*, never guessed. Never edits an issue — hands fixes to `execution-plan-review` and the run to `milestone-workflow`. |
-| `milestone-workflow` | Reads typed ordering fields before legacy prose, labels inferred edges, builds dependency tracks for a milestone, presents the run plan for approval (mandatory), then runs `milestone-pipeline` — validate and plan at stamped effort when present, else band defaults; builds stamped on the Codex CLI or the Cursor CLI run through `cli-dispatch` under an Opus driver — and reports PRs, blocked descendants, review outcomes, merges, and the release. An optional `targetBranch` points every validation baseline, worktree, PR, and merge at that branch instead of the repo default; the release then stays off unless asked for, and is cut only when the target is the default branch. |
+| `new-app-pipeline` | The orchestrator: stops at every stage boundary for review and re-enters mid-pipeline when artifacts exist. |
+| `app-prd` | Turns an idea dump into a section-numbered `PRD.md` landed via worktree and PR. |
+| `prd-questions` | Sweeps the PRD for open questions, asks them in batched multiple-choice form, and folds each answer into the owning section. |
+| `prd-to-issues` | Breaks the PRD into dependency-ordered milestones and 15 to 25 scored issues, each with an `## Execution` block (`Depends on`, `Runs after`, build model, effort, fableplan, review trigger). |
+| `execution-plan-review` | Renders the execution table from the issues, takes revisions ("11 should be medium", "build 275 with luna on codex at max"), rejects cycles, and writes changes back. |
+| `milestoneplan` | Read-only: renders a milestone's plan as one table, one row per issue. Missing fields show as *missing*. |
+| `milestone-workflow` | Builds dependency tracks, presents the run plan for approval, then runs `milestone-pipeline`: validate, plan, build, review loops, in-session merges, and the release. An optional `targetBranch` points every stage at that branch. |
 
-Every new issue records direct predecessors as `**Depends on:** #<n>[, #<n>…] | none` for required code/product results and `**Runs after:** #<n>[, #<n>…] | none` for serialization without code inheritance. The `workflows/milestone-pipeline.js` dynamic workflow validates the full dependency graph before starting. Typed tracks use `after` for hard prerequisites and `runsAfter` for ordering-only predecessors. Unrelated tracks run concurrently; both successor types wait for stable predecessor review results. Hard successors build from verified predecessor heads, including a checked integration base for multiple heads, while ordering-only successors inherit no code. Legacy array tracks remain compatible and treat serial edges as hard dependencies. Re-running a partially completed milestone is safe: closed issues are skipped and issues that already have an open PR resume through `fix-pr-review-loop` instead of opening a duplicate; when a token target is set, a best-effort budget floor (`budgetFloor`, default 80k tokens) defers the remaining issues and returns partial results instead of dying at the hard ceiling, and each run posts its `runId` to the milestone's first issue so state survives losing the conversation. Reviews run through the repo's `@claude` Action by default (`reviewMode: 'github'`), or as in-session subagent reviewer/fixer cycles with `reviewMode: 'subagent'` (no GitHub Actions dependency); `reviewBot: 'codex'` routes github-mode reviews to the `@codex` Action instead, where the C21+ bands collapse onto Codex's single flagship and the cheap tier keeps a shorthand (`@codex luna review`) for both the C0–C20 first review and the non-blocking re-review. A `@claude fable review` or `@claude opus review effort:high` first review is first-review-only — the blocking re-reviews after it step down one rung each, fable through `@claude opus review effort:high` and then `@claude review`, and opus straight to `@claude review`. With merging on (`merge`, default `reviewLoop`), no subagent merges: the run pauses each LGTM PR as `awaiting_merge`, the orchestrating session squash-merges it in-session at green CI on the pinned reviewed head (branch deleted, issue closed), one PR at a time and only on a bare LGTM; a remaining PR that conflicts after a merge is resolved in-session, where the hand-resolved diff decides by behavior: a prose-only resolution keeps the standing LGTM, and a behavior change or any doubt, including agent-executed Markdown such as a `SKILL.md`, needs a `@claude sonnet review` before merging, then resumes with the merge recorded in `merged` as an `{issue, pr, merge_sha, issue_state}` record the run checks against the issue/PR pair it is gating — successors build from the updated base branch instead of stacking on unmerged heads; when every issue merges, the release stage (`release`, default `merge`) defers to the orchestrator, which runs `sync-docs-release` in-session to sync docs and publish a GitHub release. Bun regression tests execute the workflow through its async harness.
+The `workflows/milestone-pipeline.js` dynamic workflow validates the dependency graph, runs unrelated tracks concurrently, and builds hard successors from verified predecessor heads. Re-running a partial milestone skips closed issues and resumes open PRs through `fix-pr-review-loop`. Reviews run through the repo's `@claude` Action by default (`reviewMode: 'github'`), as in-session subagents with `reviewMode: 'subagent'`, or on the `@codex` Action with `reviewBot: 'codex'`. No subagent merges: each LGTM PR pauses as `awaiting_merge` and the orchestrating session squash-merges it at green CI on the reviewed head; a remaining PR that conflicts after a merge is resolved in-session, where the hand-resolved diff decides by behavior: a prose-only resolution keeps the standing LGTM, and a behavior change or any doubt, including agent-executed Markdown such as a `SKILL.md`, needs a `@claude sonnet review` before merging, then resumes; when every issue merges, the orchestrator runs `sync-docs-release`.
 
 ### Utility skills
 
 | Skill | What it does |
 |-------|--------------|
-| `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English) under 55 words, one sentence per line. |
-| `wans` | Answers "what are next steps?" for the current work in ASD-STE100 (Simplified Technical English) — a numbered list when there are several steps, ordered by sequence where one step must follow another and by importance where the order is free, each marked `You:` or `Me:`. |
+| `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English) under 55 words. |
+| `wans` | Answers "what are next steps?" in ASD-STE100 as a numbered list, each step marked `You:` or `Me:`. |
 
 ### Review bot prerequisite
 
-The PR-review skills (`fix-pr-review`, all `-loop` variants) depend on an automated reviewer that responds to `@claude review` comments and answers in a specific format (an `LGTM` / `Needs Updates` verdict plus structured findings). This repo ships one Claude install path plus a Codex twin of each:
+The PR-review skills (`fix-pr-review` and every `-loop` variant) need an automated reviewer that answers `@claude review` comments with an `LGTM` / `Needs Updates` verdict and structured findings. Without one, the loop skills detect its absence and stop. This repo ships:
 
-- **Claude bundle: [`templates/claude-workflow/`](./templates/claude-workflow/)** — the complete least-privilege setup: `@claude review` (read-only), any other `@claude ...` comment on a trusted-author PR (re-validate and fix all review feedback in place, folding in any extra text as additional scope), plain `@claude` asks on an issue (implement via the issue-workflow prompt), optional docs/release flows, prompt files, comment-patching scripts, and regression tests. The agent never executes the project's code in any mode (no test suites, builds, or scripts — CI owns checks). See its [README](./templates/claude-workflow/README.md) for install and triggers.
-- **Codex full bundle: [`templates/codex-workflow/`](./templates/codex-workflow/)** — the same three routes, router, review contract, and install shape driven by `openai/codex-action` instead. It needs an `OPENAI_API_KEY` secret, your own GitHub App for the write routes (`CODEX_APP_ID` / `CODEX_APP_PRIVATE_KEY`, because that action mints no App token), and the `CODEX_BOT_LOGIN` repository variable. Its review route holds no write credential at all and runs the read-only Codex sandbox, which denies the agent network too, so the run body stages the pull request on disk first and a trusted step posts the result. See its [README](./templates/codex-workflow/README.md).
-- **Codex minimal: [`templates/codex-review.yml`](./templates/codex-review.yml)** — the review-only Codex companion; copy it into `.github/workflows/` and add an `OPENAI_API_KEY` secret.
+- **Claude bundle: [`templates/claude-workflow/`](./templates/claude-workflow/)**: the least-privilege setup with `@claude review` (read-only), `@claude ...` fix routes on trusted-author PRs, `@claude` issue implementation, prompt files, and tests. See its [README](./templates/claude-workflow/README.md) for install and triggers.
+- **Codex full bundle: [`templates/codex-workflow/`](./templates/codex-workflow/)**: the same routes driven by `openai/codex-action`. Needs `OPENAI_API_KEY`, your own GitHub App for the write routes, and the `CODEX_BOT_LOGIN` variable. See its [README](./templates/codex-workflow/README.md).
+- **Codex minimal: [`templates/codex-review.yml`](./templates/codex-review.yml)**: review only; copy it into `.github/workflows/` and add `OPENAI_API_KEY`.
 
-Claude and Codex are independent: separate workflow files, separate concurrency groups, separate secrets, and installing one changes nothing about the other.
+Claude and Codex are independent: separate workflows, concurrency groups, and secrets.
 
-**External build harnesses.** Every band defaults to a Claude build. An issue's Execution block can stamp `Build model: <Name> (Codex CLI)` or `<Name> (Cursor CLI)`, with an optional model id after a comma, and `milestone-pipeline` then runs the build and every fix pass through the `cli-dispatch` shim under an Opus 5 driver agent: `codex exec` for Codex and `agent -p` for Cursor, prompt passed as data, run in the background and polled. Codex runs under its `workspace-write` sandbox. Cursor has no sandbox: `--force` runs any shell command, so a Cursor build holds the driver's full shell rights and the pre-run and post-run `git status` snapshot diff is its only guard. A model id from the issue body must match a strict character allowlist or the issue blocks. `Luna (Codex CLI)` resolves to `gpt-5.6-luna` and `Grok (Cursor CLI)` to `cursor-grok-4.6-<effort>`; any other name needs an explicit id or the issue blocks. `max` is a Codex-only effort tier. The driver never substitutes a Claude build. It reports the model the CLI says served the run only when the CLI names one, and neither codex-cli 0.152.1 nor cursor-agent 2026.09.02 does, so the usual record is `model unverified` beside the requested id. It attributes the work as `Harness: Codex` or `Harness: Cursor` on a `codex/` or `cursor/` branch.
+**The skills default to Claude.** They post `@codex` only when you select it: you say so, you pass `codex` to `/fix-pr-review`, a caller sets `reviewBot: 'codex'`, or the run started from an `@codex` comment. A cycle stays on the bot it picked.
 
-**The skills default to Claude.** `fix-pr-review`, the `-loop` skills, and `milestone-workflow`'s github review mode post `@claude` even when `codex.yml` is installed. They post `@codex` only when Codex is explicitly selected — you say so, you pass `codex` to `/fix-pr-review`, a caller argument names it (`reviewBot: 'codex'`), or the run itself was started by an `@codex` GitHub comment. Once a cycle picks a bot, every re-review in that cycle stays on it.
+**The reviewer follows the complexity band.** `@claude sonnet review` at C0 to C20, `@claude review` at C21 to C70, `@claude opus review effort:high` at C71 to C80, and `@claude fable review effort:high` at C81 or higher or with no score. A stamped `PR review:` trigger in an Execution block overrides the band. Every reviewer above `@claude review` reviews one blocking cycle only; each blocking re-review steps down one rung and stops at `@claude review`. A pass that addressed only non-blocking items re-triggers `@claude sonnet review`. With Codex, C21 and higher collapse onto `@codex review` and the cheap tier is `@codex luna review`. `skills/fix-pr-review/rereview-routing.md` owns the ladder.
 
-**The reviewer follows the complexity band.** `fix-pr-review`, the `-loop` skills, `milestone-workflow`, and the Action prompts all pick the reviewer from the issue's or PR's `[C<score>]`: `@claude sonnet review` at C0–C20, `@claude review` at C21–C70, `@claude opus review effort:high` at C71–C80, and `@claude fable review effort:high` at C81+ or when no score is available. The reviewer escalates on its own, coarser scale: those boundaries fall on the validate/build band edges in `validate-issue` step 6, so each first-review row groups whole bands rather than cutting across them, and it is still a separate table, but each row must start on a band edge above, so a band change that moves an edge this table uses moves this table with it, while a band split that only adds a new edge leaves it unchanged; that skill owns both. A stamped `PR review:` trigger in an issue's Execution block overrides the band. **Every reviewer above the standard trigger reviews one blocking cycle only**, and each blocking re-review steps down one rung: a Fable cycle 1 posts `@claude opus review effort:high` then `@claude review`, and an Opus cycle 1 posts `@claude review` for every blocking re-review. Both ladders stop at `@claude review` and never drop to sonnet, and neither heavy trigger is ever repeated. Sonnet sits below the floor and takes no rung, so a Sonnet cycle 1 repeats its own trigger. That step-down keys to the reviewer that actually ran cycle 1, and the score band does not decide it, so a stamped Fable or Opus first review steps down at any score, and a pass that addressed only non-blocking items always drops to `@claude sonnet review` without consuming a rung. With Codex selected, the C21+ bands collapse onto a bare `@codex review`, while the C0–C20 band and the non-blocking re-review keep `@codex luna review`.
+**External build harnesses.** An Execution block can stamp `Build model: <Name> (Codex CLI)` or `<Name> (Cursor CLI)`, with an optional model id, and `milestone-pipeline` then runs the build and every fix pass through the `cli-dispatch` shim under an Opus 5 driver. Codex runs in its `workspace-write` sandbox. Cursor has no sandbox, so a Cursor build holds the driver's full shell rights and a `git status` diff is its only guard. The driver never substitutes a Claude build and reports the serving model only when the CLI names one.
 
-Without a review bot, the loop skills detect its absence and stop instead of waiting for a review that never arrives.
-
-Grab the workflow directly into a repo:
+Grab the Claude workflow directly:
 
 ```sh
 mkdir -p .github/workflows && \
@@ -125,17 +121,17 @@ mkdir -p .github/workflows && \
   -o .github/workflows/claude.yml
 ```
 
-Before this copied workflow can run, add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App for write-capable routes. It uses `self-hosted` for `classify` and all route jobs; change `runs-on` and `runs_on` to `ubuntu-latest` or your own label when your repo has no self-hosted runner. See the bundle [Install](./templates/claude-workflow/README.md#install) and [Customization inputs](./templates/claude-workflow/README.md#customization-inputs) sections.
+Then add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App. The workflow uses `self-hosted` runners; change `runs-on` and `runs_on` when you have none. See the bundle [Install](./templates/claude-workflow/README.md#install) and [Customization inputs](./templates/claude-workflow/README.md#customization-inputs) sections.
 
 Also included:
 
-- `CLAUDE.md` — an example set of global instructions these skills are tuned for (attribution footers, complexity scores, the worktree+PR workflow). `AGENTS.md` is a symlink to it in this repo, so both files are one source of truth. Use it as a reference for your own `~/.claude/CLAUDE.md`.
-- `commands/commit.md` — a `/commit` slash command for creating well-formed git commits.
-- `docs/contract-inventory.md` — inventory of shared pipeline rules loop/validate skills must carry (review-cycle stop, score gate, duplicate/convergence and validation stops); Response Style limits point at `CLAUDE.md`/`AGENTS.md` instead of restating. `bun test` fails when a covered skill drops a required rule, so the family can't drift apart silently. The guards check the smallest marker that proves a rule is present (a threshold number, a stop keyword, a field name), and pin a sentence only where that sentence is itself the contract, so most wording edits do not break them.
+- `CLAUDE.md`: the global instructions these skills are tuned for. `AGENTS.md` is a symlink to it.
+- `commands/commit.md`: a `/commit` slash command.
+- `docs/contract-inventory.md`: the shared pipeline rules the loop and validate skills must carry; `bun test` fails when a covered skill drops one.
 
 ## Install (from a clone)
 
-If you work from a checkout of this repo, `install.sh` symlinks every skill into `~/.claude/skills` and, when `~/.codex` already exists on the machine, into `~/.codex/skills` as well. It also links `CLAUDE.md` into `~/.claude` and `AGENTS.md` into `~/.codex/AGENTS.md` (both point at the same file in this repo), plus workflows and the `/commit` command into `~/.claude` only. Re-run after pulling to pick up new or renamed skills.
+`install.sh` symlinks every skill into `~/.claude/skills` (and `~/.codex/skills` when `~/.codex` exists), plus `CLAUDE.md`, `AGENTS.md`, the workflows, and the `/commit` command. Re-run after pulling.
 
 ```sh
 ./install.sh
@@ -143,33 +139,21 @@ If you work from a checkout of this repo, `install.sh` symlinks every skill into
 
 ## Install (with npx)
 
-Copy every skill into your personal `~/.claude/skills/` with one command — no marketplace, no clone:
-
 ```sh
 npx rk-skills
 ```
 
-Add `--project` to install into the current repo's `.claude/skills/` instead. This path is copy-based — re-run it to update — whereas the plugin below auto-updates. It installs the **skills and any dynamic workflow scripts** (the `milestone-workflow` skill invokes a dynamic workflow script from `workflows/`, which lands in `~/.claude/workflows/`) into Claude destinations only; it does not link into `~/.codex`, install `CLAUDE.md` (the example global config), or the `/commit` command.
+Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
 
 ## Install (as a plugin)
-
-This repo is a Claude Code plugin marketplace. In any Claude Code session:
 
 ```
 /plugin marketplace add richkuo/rk-skills
 /plugin install rk-skills@rk-skills
 ```
 
-Claude Code auto-discovers everything under `skills/` (and the `/commit` command). `CLAUDE.md` is **not** installed by the plugin — treat it as a reference. Restart Claude Code (or start a new session), then trigger any skill by name, e.g. `/fableplan <task>`.
-
-Prefer to install a single skill? Each is just a directory with a `SKILL.md`, so you can copy one in directly:
-
-```sh
-mkdir -p ~/.claude/skills/work-on-issue && \
-  curl -fsSL https://raw.githubusercontent.com/richkuo/rk-skills/main/skills/work-on-issue/SKILL.md \
-  -o ~/.claude/skills/work-on-issue/SKILL.md
-```
+The plugin auto-discovers `skills/` and the `/commit` command and auto-updates; `CLAUDE.md` is a reference only. Restart Claude Code, then trigger any skill by name, e.g. `/fableplan <task>`. To install one skill, copy its directory's `SKILL.md` into `~/.claude/skills/<name>/`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT, see [LICENSE](./LICENSE).
