@@ -5,15 +5,15 @@ description: Use when the user asks to validate, review, or check a GitHub issue
 
 # validate-issue
 
-Validate every current-behavior claim against code. Input: a full issue URL, `#N`, `N`, or `owner/repo#N`; with none, take the newest open issue and state its number. The orchestration form `{ issue: <N>, targetBranch?: "<branch>" }` (or a prose "target branch <name>") names the branch the fix will merge into; it replaces the default branch as the baseline in step 0.
+Validate every current-behavior claim against code. Input: an issue URL, `#N`, `N`, or `owner/repo#N`; with none, take the newest open issue and state its number. `{ issue: <N>, targetBranch?: "<branch>" }` (or prose "target branch <name>") names the merge target, which replaces the default branch in step 0.
 
 ### 0. Baseline branch
 
-No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)`; with a `targetBranch`, validate it per `work-on-issue` step 1 ("Target") and set `DEFAULT` to it instead, naming it as the target in the verdict. Run `git fetch origin "$DEFAULT"`, and state `git rev-parse --short "origin/$DEFAULT"` as the baseline in the verdict. Read a working-tree path only when it is tracked and `git diff --quiet "origin/$DEFAULT" -- <path>` exits 0; otherwise read `git show "origin/$DEFAULT":<path>`.
+No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)`; with a `targetBranch`, validate it per `work-on-issue` step 1 ("Target"), set `DEFAULT` to it, and name it as the target in the verdict. Run `git fetch origin "$DEFAULT"`; the verdict states `git rev-parse --short "origin/$DEFAULT"` as the baseline. Read a working-tree path only when it is tracked and `git diff --quiet "origin/$DEFAULT" -- <path>` exits 0; otherwise read `git show "origin/$DEFAULT":<path>`.
 
 ### 1. Fetch the issue and linked PRs
 
-Run `gh issue view <N> --comments`, then list the cross-referenced PRs that comments omit (`owner/repo#N` input names the repo):
+Run `gh issue view <N> --comments`, then list cross-referenced PRs that comments omit:
 
 ```sh
 gh api --paginate repos/{owner}/{repo}/issues/<N>/timeline --jq '.[] | select(.event=="cross-referenced") | .source.issue | select(.pull_request) | "\(.number) \(.state)"'
@@ -23,26 +23,26 @@ Verify a merged fix against current code and recommend closure or reuse; list op
 
 ### 2. Extract claims and assertions
 
-List each current-behavior claim (causes, citations, sets, negatives, benefit premises) and proposal assertion (goals, lifetime, population timing, benefits, consumers, failure policy, deployment surface, touched sites). Steps 5a and 5b run for a new subsystem, shared state, cross-cutting refactor, deduplication, single source of truth, multi-consumer coordination, or infrastructure analogy.
+List each current-behavior claim (causes, citations, sets, negatives, benefit premises) and proposal assertion (goals, lifetime, population timing, benefits, consumers, failure policy, deployment surface, touched sites). Flag for 5a and 5b: a new subsystem, shared state, cross-cutting refactor, deduplication, single source of truth, multi-consumer coordination, or infrastructure analogy.
 
 ### 3. Verify claims
 
-Trace each scenario through its conditions and config. When code contradicts prose, trust the code. Verify independently even for the repo owner, recent code, or runtime state machines. Apply every triggered depth rule:
+Trace each scenario through its conditions and config. Code outranks prose. Verify independently even for the repo owner, recent code, or runtime state machines. Depth rules:
 
-1. Named wrapper or helper: read its body and delegated or short-circuit paths.
+1. Wrapper or helper: read its body and delegated or short-circuit paths.
 2. Set claim: find real call sites, establish membership, diff the claimed set.
 3. Benefit claim: prove the broken baseline exists in code, comments, or history.
 4. Conjunction or negative: split atomic assertions; prove absence on all paths.
 5. Negative over a window: trace the event-to-boundary dispatch and every producer.
 6. Superlative, method-over-set, or cited baseline: establish population, tool coverage, source history.
 7. Aggregate, dedupe, prorate, or shared state: verify the partition boundary and key against the scope.
-8. Missing, undocumented, or unhandled surface: read surrounding content, find stale copy, diff deliverables.
+8. Missing or unhandled surface: read surrounding content, find stale copy, diff deliverables.
 
 Evidence outranks every verdict; reconcile it across bullets and paired findings.
 
 ### 4. Mark claims
 
-Mark ✅ Verified, ❌ Refuted (name the real symbol), ⚠️ Conditional (name the config), or ❓ Unverified. Cite `file:line` and retain every unresolved claim.
+✅ Verified, ❌ Refuted (name the real symbol), ⚠️ Conditional (name the config), or ❓ Unverified. Cite `file:line`; keep every unresolved claim.
 
 ### 5. Assess the proposal
 
@@ -58,7 +58,7 @@ Whenever 5a runs, read [proposal-consistency.md](proposal-consistency.md) comple
 
 #### 5c. General checks
 
-Run `git log --since=7.days` on touched paths. Check locking, migrations, reloads, idempotency, failure blast radius, parallel live/offline/admin paths, dual implementations, and recent-work regression. Material findings go under Concerns with `file:line`; any safety, recent-work, or parity defect requires an update.
+Run `git log --since=7.days` on touched paths. Check locking, migrations, reloads, idempotency, failure blast radius, parallel live/offline/admin paths, dual implementations, and recent-work regression. Material findings go under Concerns with `file:line`; a safety, recent-work, or parity defect requires an update.
 
 ### 6. Score complexity
 
@@ -77,7 +77,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis
 | 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · xhigh |
 | 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5 · xhigh |
 
-fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block that stamps `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it, and the pipeline runs that build through the `cli-dispatch` shim. The Validate effort column is the band default; an issue's `## Execution` block can stamp a `Validate effort:` line that overrides it, and a `Plan effort:` line that overrides the fableplan stage's `high` default. The validate model is never stampable. An Opus validate stamped `low` or `medium` runs at `high`, because those tiers are Fable-only. The **first review** uses the coarser table below; each row starts on a band edge.
+fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. The Validate column is the band default; an `## Execution` block may stamp `Validate effort:` to override it and `Plan effort:` to override the fableplan stage's `high` default. The validate model is never stampable, and an Opus validate stamped `low` or `medium` runs at `high` (Fable-only tiers). The **first review** uses the coarser table below; each row starts on a band edge.
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
@@ -96,7 +96,7 @@ A high score alone is acceptable. Split and Umbrella need all three gates:
 2. Fold each part below C41 into the parent; at least two parts of C41 or higher remain. A folded part forces Umbrella. With fewer than two, keep one issue, emit `OK — restructure as in-body checklist`, and require an update when the body lacks that checklist.
 3. The combined diff is roughly above 500 changed lines, parts route to different bands, or a part carries money, data-integrity, or security risk.
 
-Keep one issue when a gate fails or one root cause needs one diff. **Split** = independent parts, none folded. **Umbrella** = coordinated or folded parts. **Narrow** is always available: keep the core, move extras to a Future note. Each child needs its own scored title, problem, and acceptance criteria. Scope and update decisions stay independent.
+Keep one issue when a gate fails or one root cause needs one diff. **Split** = independent parts, none folded. **Umbrella** = coordinated or folded parts. **Narrow** is always available: keep the core, move extras to a Future note. Each child needs its own scored title, problem, and acceptance criteria. Scope and update decisions are independent.
 
 ### 8. Output the verdict
 
@@ -127,7 +127,7 @@ Axes:
 <next-step line>
 ```
 
-Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, required restructure, or a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower. The rescore edits restamp the title prefix, the rationale line, and the fableplan signal to the recomputed values per [issue-editing.md](issue-editing.md), and when the body carries an `## Execution` block they also restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only: a stamp on Fable 5.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`. The pipeline routes the build on those stamps and re-routes only when the validator's score outranks the title, so a title restamped over a stale block would build on the stale stamp. A recomputed score below the title score restamps nothing, and the verdict carries the `Differs:` lines only; a title with no prefix gets none from a rescore. The verdict's `Complexity:` value is always the recomputed score, so the grades on the line produce it. The verdict's `fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher, so a recomputed score below the title never turns it to `no`. A rescore never lowers routing (complexity-scoring.md, Routing details). No only when accurate, feasible, consistent, and complete, with no rescore edit due.
+Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, required restructure, or a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower. The rescore edits restamp the title prefix, the rationale line, and the fableplan signal to the recomputed values per [issue-editing.md](issue-editing.md), and when the body carries an `## Execution` block they also restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only: a stamp on Fable 5.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`. A recomputed score below the title score restamps nothing, and the verdict carries the `Differs:` lines only; a title with no prefix gets none from a rescore. The verdict's `Complexity:` value is always the recomputed score. The verdict's `fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher; a rescore never lowers routing. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
 
 **Next-step line.** Post the first matching string verbatim. With fableplan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 
