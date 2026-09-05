@@ -27,7 +27,7 @@ List each current-behavior claim (causes, citations, sets, negatives, benefit pr
 
 ### 3. Verify claims
 
-Trace each scenario through its conditions and config. Code outranks prose. Verify independently even for the repo owner, recent code, or runtime state machines. Depth rules:
+Trace each scenario through its conditions and config. Code outranks prose. Verify independently even for the repo owner, recent code, or runtime state machines. Apply every triggered depth rule:
 
 1. Wrapper or helper: read its body and delegated or short-circuit paths.
 2. Set claim: find real call sites, establish membership, diff the claimed set.
