@@ -7,7 +7,7 @@ description: Use when the user says "new issue", "create an issue", "file an iss
 
 File a GitHub issue that a human or agent can pick up cold and implement correctly: grounded problem, goal, approach, acceptance criteria, complexity score, plain-language summary, attribution footer. Never file a placeholder, stub, or thin body; if it is not ready to spec, say so and track it in notes or a parent issue instead.
 
-Spec the best solution per the CLAUDE.md Engineering rules: cost, effort, and diff size never narrow the option space; only correctness and safety override "best". When the cheap design and the correct design diverge, spec the correct one and let the score say so.
+Spec the best solution per the CLAUDE.md Engineering rules: cost, compute, time, token spend, code volume, and convenience never narrow the option space; only correctness, safety, and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best". When the cheap design and the correct design diverge, spec the correct one and let the score say so.
 
 ## Input
 
