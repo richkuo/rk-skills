@@ -4,9 +4,10 @@ import { workflowConstant } from './helpers/workflow-constants.js'
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
 
-const [validateIssue, validateIssueScoring, prdToIssues, pipeline, milestoneplan] = await Promise.all([
+const [validateIssue, validateIssueScoring, validateIssueEditing, prdToIssues, pipeline, milestoneplan] = await Promise.all([
   read('skills/validate-issue/SKILL.md'),
   read('skills/validate-issue/complexity-scoring.md'),
+  read('skills/validate-issue/issue-editing.md'),
   read('skills/prd-to-issues/SKILL.md'),
   read('workflows/milestone-pipeline.js'),
   read('skills/milestoneplan/SKILL.md'),
@@ -258,20 +259,22 @@ describe('complexity grading procedure', () => {
   })
 
   test('a rescore that raises the score or changes a grade is an update, and a rescore never lowers routing', () => {
-    const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
+    const decision = validateIssue.slice(validateIssue.indexOf('### 8. Output the verdict'), validateIssue.indexOf('**Next-step line.**'))
     expect(decision).toMatch(/Yes for .*a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower/)
-    expect(decision).toMatch(/restamp the title prefix, the rationale line, and the fableplan signal/)
-    expect(decision).toMatch(/A recomputed score below the title score restamps nothing/)
-    expect(decision).toMatch(/a title with no prefix gets none from a rescore/)
+    expect(decision).toContain('[issue-editing.md](issue-editing.md) Routing corrections')
+    expect(validateIssueEditing).toMatch(/Restamp the title prefix, rationale grades and score, and score-based fableplan signal together/)
+    expect(validateIssueEditing).toMatch(/A recomputed score below the title score restamps nothing/)
+    expect(validateIssueEditing).toMatch(/a title with no prefix gets none from a rescore/i)
     expect(decision).toMatch(/No only when .*with no rescore edit due/)
     const rules = validateIssueScoring.slice(validateIssueScoring.indexOf('## Grading rules'), validateIssueScoring.indexOf('## Build the edit list first'))
     expect(rules).toMatch(/a prefix above the recomputed score keeps its value/)
   })
 
   test('a rescore restamps the Execution block upward only and never lowers the published fableplan signal', async () => {
-    const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
-    expect(decision).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only/)
-    expect(decision).toMatch(/Fable 5\.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`/)
+    const decision = validateIssue.slice(validateIssue.indexOf('### 8. Output the verdict'), validateIssue.indexOf('**Next-step line.**'))
+    expect(validateIssueEditing).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the new band's defaults, upward only/)
+    expect(validateIssueEditing).toMatch(/Keep an existing Fable 5\.1 build or Codex CLI or Cursor CLI harness model and effort/)
+    expect(validateIssueEditing).toMatch(/On those protected stamps, add `fableplan first: Yes` only when required; never turn an existing Yes into No/)
     expect(decision).toMatch(/`Complexity:` value is always the recomputed score/)
     expect(decision).toMatch(/`fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher/)
     const editing = await read('skills/validate-issue/issue-editing.md')

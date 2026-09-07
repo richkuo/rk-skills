@@ -33,9 +33,11 @@ const texts = Object.fromEntries(await Promise.all(ALL.map(async (path) => [path
 const normalized = Object.fromEntries(Object.entries(texts).map(([path, source]) => [path, source.replace(/\s+/g, ' ')]))
 
 describe('Issue-body Plain simple English contract', () => {
-  test('every issue-composing file requires the section with its 55-word cap', () => {
+  test('every issue-composing file requires the capped section directly or through its owner', () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
-      expect(normalized[path], path).toMatch(
+      const source = normalized[path]
+      const delegates = /maintain `## Plain simple English` per `github-issue-format`/.test(source)
+      expect(delegates ? normalized[OWNER] : source, path).toMatch(
         /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
     }

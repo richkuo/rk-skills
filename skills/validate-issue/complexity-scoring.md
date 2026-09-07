@@ -1,36 +1,20 @@
 # Complexity scoring procedure
 
-The canonical formula and both routing tables live only in the main skill (step 6). This file owns what the score is, the grading rules, the axis anchors, the reachable-score lattice, and the golden examples.
-
-## What the score is
-
-Five grades route the issue; each answers one question about the correct implementation:
-
-| Axis | Question | Feeds |
-|---|---|---|
-| Risk | What happens when the change is wrong, and can it be undone? | Capability |
-| Uncertainty | Is the design settled, and does the issue name every site? | Capability |
-| Coupling | How many other things must move together? | Capability floor and Volume |
-| Scope | How many files change? | Volume |
-| Verification | What proof does the builder need, and can it run locally? | Volume |
-
-Capability sets the band floor: the build model follows Capability alone. Volume is the size inside the band: it selects effort, and it can carry the score across the next band edge, which moves the validate model, the fableplan signal, and the first reviewer (see Reachable scores). The title score `25 × Capability + Volume` carries both in one number. The grades are the source of truth; a consumer that needs one grade reads it from the rationale line.
+The main skill's step 6 owns the formula and routing tables. This reference owns axis grading. Score the correct implementation, including required corrections to the proposal, rather than the issue's original file list.
 
 ## Grading rules
 
-1. Grade from the edit list that the correct implementation needs, after step 5, with the verdict's Optimal included.
-2. At validation, grade first and compare second: derive all five grades from the edit list and write each `Axes:` line with its evidence before you look up the grades the issue's rationale line states. Then compare grade by grade; each difference is a `Differs:` line, and the traced grade wins. A grade copied from the rationale line has no evidence of its own. An issue with no rationale line yet (`new-issue` step 4) has nothing to compare.
-3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind. A grade with no evidence is a guess.
-4. When two anchors fit, take the higher one.
-5. Grade 2 needs its anchor like every other grade; it is never a default.
-6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
-7. Recompute the score from the five grades before you post it; a score the grades do not produce is an arithmetic slip. A title prefix below the recomputed score, or a rationale line whose grades differ at a recomputed score that is not lower, is an update (step 8); a prefix above the recomputed score keeps its value, per Routing details.
+Build an evidence-backed edit list first: source, tests, contracts, migrations, configuration, parallel implementations, initialization, and documentation that must change. Include affected sites hidden from the issue's proposed diff.
+
+At validation, grade first and compare second: derive every grade from this list before you look up the grades the issue's rationale line states for comparison. Cite one piece of evidence per grade, such as a checked file count, shared contract, persisted effect, open design question, or required test kind. Take the higher anchor when two fit; grade 2 is never a default.
+
+Record one `Axes:` entry per grade and one `Differs:` entry per mismatch. Recompute the arithmetic from the five grades. Follow `issue-editing.md` Routing corrections for stored score changes; a prefix above the recomputed score keeps its value. Never lower routing from a validator rescore.
 
 ## Build the edit list first
 
-List the concrete files, functions, references, migrations, tests, and documentation that the correct implementation must change, including parallel live/offline paths, schema or config versions, initialization surfaces, startup probes, command-line contracts, and invalidated documentation. Scope and Verification are graded from this list.
+Scope counts every required file, including tests and documentation. Verification reflects the proof the correct implementation needs, even if the issue omits it. Avoid forcing tests into a documentation-only edit when static inspection is sufficient.
 
-If architecture or consistency remains Conditional or Refuted after step 5, grade Uncertainty from that gap, report a score-band range, and name the one unknown that drives it. A design defect cannot route through Capability 0 or 1.
+Grade Uncertainty from unresolved choices and omitted sites. A code-grounded direction that the issue has not adopted is still an issue correction. If architecture or consistency has an unresolved design defect, Capability cannot be 0 or 1. Identify the assumption and its effect on the score; use a provisional range when helpful. When the central behavior or implementation surface cannot be established, apply the main skill's readiness gate instead of emitting a precise completed verdict.
 
 ## Axis anchors
 
@@ -86,7 +70,7 @@ Grades 0 and 1 are checkable: compare the sites the issue names with the sites t
 
 | Grade | Anchor |
 |---|---|
-| 0 | A pure helper with a unit test and no fixture |
+| 0 | Static inspection or a focused local unit check with no fixture |
 | 1 | Unit tests with a small fixture or a golden file |
 | 2 | Several units and fixtures, or a contract test that reads several files |
 | 3 | An integration test with a subprocess, a network or service stub, or a database fixture, or a parity test across two implementations |
@@ -96,15 +80,11 @@ Grade the proof the correct implementation needs, including the tests the change
 
 ## Compute and report
 
-Apply the step-6 formula to the five grades. Write all five grades in the rationale line and in the verdict line, in this shape:
-
-`Capability 2 (Risk 3, Uncertainty 2 — <driver reason>); Volume 12 (Scope 2, Coupling 2, Verification 2)`
-
-The driver is the axis and grade that set Capability: the higher of Risk and Uncertainty, or the Coupling floor. The verdict also carries the step-8 `Axes:` block, one line per axis with its grade and evidence, and a `Differs:` line for each grade the issue states differently.
+Apply the step-6 formula and report all five grades with their evidence. The driver is the higher of Risk and Uncertainty, or the Coupling floor. The completed-verdict template in step 8 owns the output shape.
 
 ## Reachable scores
 
-Volume is always even. Capability 0 and 1 need Coupling 2 or lower, so their Volume is at most 20.
+Volume is even. Capability 0 and 1 require Coupling at most 2, which caps Volume at 20. These rows show minimum and maximum values; only even Volume increments are reachable.
 
 | Capability | Scores |
 |---|---|
@@ -113,14 +93,14 @@ Volume is always even. Capability 0 and 1 need Coupling 2 or lower, so their Vol
 | 2 | 50 to 74 |
 | 3 | 75 to 99 |
 
-Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Band 3 holds Capability 2 up to Volume 20. Band 4 holds Capability 2 at Volume 22 or 24 plus Capability 3 up to Volume 4. Band 5 holds Capability 3 from Volume 6.
+With the current tables, the build model follows Capability alone. Volume selects effort and can carry the score across the next band edge, changing validation, planning, or first review. Do not confuse a retained title routing floor with a new evidence-based score.
 
 ## Golden examples (consistency checklist)
 
 | Axes (S,C,R,U,V) | Capability | Volume | Score | Score rationale |
 |---|---|---|---|---|
 | (4,0,0,0,0) | 0 | 8 | **8** | Scope raises Volume without raising Capability |
-| (4,2,1,1,4) | 0 | 20 | **20** | The largest Capability 0 score: a mechanical grind stays on Sonnet at xhigh |
+| (4,2,1,1,4) | 0 | 20 | **20** | The largest Capability 0 score: a mechanical change stays on Sonnet at xhigh |
 | (0,0,2,0,0) | 1 | 0 | **25** | Risk 2 alone moves the build to Opus |
 | (0,0,0,4,0) | 3 | 0 | **75** | Uncertainty 4 maps to Capability 3 |
 | (0,4,1,1,0) | 2 | 8 | **58** | Coupling 4 forces Capability 2 |
@@ -133,7 +113,9 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Ba
 
 ## Routing details
 
-- The main skill's band table owns the `fableplan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
-- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer.
-- A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review, and keeps that band even after the validator returns a low score.
-- When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. Never lower routing from a validator rescore at any stage. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.
+The step-6 tables are the single source for routing boundaries. If boundaries change, a moved edge that a first-review row starts on moves that table; otherwise the review table stays unchanged. Currently bands 4 and 5 differ in validate effort and in first reviewer.
+
+A missing title score routes as the highest band; `[C0]` is a real score. The main skill's step 8 owns the effective fableplan signal, including title floors and safety findings. A calling workflow owns model dispatch and any revalidation on a higher route; plain validation does not silently switch models or launch another agent. Report unavailable required routing to the caller. The issue-editing reference owns upward-only stamp corrections and protected harness overrides.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex

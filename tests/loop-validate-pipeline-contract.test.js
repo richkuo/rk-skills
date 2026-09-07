@@ -61,7 +61,7 @@ const EDIT_VERB_WORKFLOW = 'workflows/milestone-pipeline.js'
 
 function procedureBody(markdown) {
   const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)
-  return match ? match[1] : markdown
+  return (match ? match[1] : markdown).replace(/\n---\n(?:Created|Updated|Validated|Reviewed) with LLM: [^<\n]+\n?$/, '')
 }
 
 function hasStopTableRow(body, ...termPatterns) {
@@ -215,6 +215,7 @@ describe('loop/validate pipeline contract', () => {
   })
 
   test('validation-driven issue edits stamp Validated, never Updated', () => {
+    expect(texts[EDIT_VERB_OWNER]).toMatch(/\n---\nUpdated with LLM: [^\n]+\n?$/)
     const owner = bodies[EDIT_VERB_OWNER]
     expect(owner, `${EDIT_VERB_OWNER}: appended Validated line`).toMatch(/^Validated with LLM: <current model> \| <effort> \| Harness: <harness>$/m)
     expect(owner, `${EDIT_VERB_OWNER}: Updated stamp`).not.toMatch(/^Updated with LLM:/m)
