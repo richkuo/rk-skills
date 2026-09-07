@@ -76,6 +76,3 @@ Read back the PR with `gh pr view <url> --json state,headRefName,headRefOid,base
 ### 7. Report to the user
 
 The skill ends here; the caller triggers any `@claude` review and waits on CI. Report the worktree/branch, the target branch when it differs from the default, what was implemented, the verification result, the commit SHA, and the PR URL. On a blocker, state the stage, the evidence, the preserved worktree, and which commit, push, or PR already exists; check the run record and branch before claiming no commit exists, since dependency integration or an earlier attempt may have committed. When step 3 stopped the run on an ungrounded failing test, name the test with its `file:line`, what it asserts, and the conflict, and state whether any commit or PR exists. Name follow-on work the deliverables mention as unfiled. Return caller-required structured fields from verified state. Cap the report at 55 words, plain simple English in ASD-STE100, per the Response Style rules.
-
----
-Updated with LLM: Fable 5.1 | high | Harness: Claude Code

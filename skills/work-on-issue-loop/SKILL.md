@@ -68,6 +68,3 @@ fix-pr-review-loop's Red Flags table applies while the loop runs. Additional row
 ## Common Mistakes
 
 fix-pr-review-loop's Common Mistakes list applies unchanged, including the cycle-cap rules its step 3 owns. One addition: skipping the step 3 follow-on sweep drops work named only in prose.
-
----
-Updated with LLM: Fable 5.1 | high | Harness: Claude Code
