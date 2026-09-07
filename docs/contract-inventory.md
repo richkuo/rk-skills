@@ -55,6 +55,3 @@ Abbreviations: **fix-pr prompts** = `templates/claude-workflow/prompts/fix-pr.md
 ## Related coverage
 
 `tests/complexity-score.test.js` mirrors the `validate-issue` step 6 band table against `BANDS` in `workflows/milestone-pipeline.js` and the `prd-to-issues` table. `tests/contract-inventory.test.js` checks that every path this file names exists and that the file stays under 16,000 bytes.
-
----
-Updated with LLM: Fable 5.1 | medium | Harness: work-on-issue
