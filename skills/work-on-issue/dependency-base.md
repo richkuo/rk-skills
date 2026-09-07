@@ -16,7 +16,7 @@ Use the first verified SHA as the initial base. In the clean new worktree, merge
 
 On a conflict, record the conflicting paths and pin, abort the active merge, and stop without resolving conflicts, implementing, or opening a PR. Preserve any earlier integration commits and report them. A failed abort is a blocker; never reset or clean the worktree to hide it.
 
-Verify `git merge-base --is-ancestor <sha> HEAD` for every pin, including the single-pin case. Record the resulting HEAD as the implementation base. On resume, require the same recorded pins and integration base, and verify their ancestry; do not repeat completed merges or reset implementation commits.
+Verify `git merge-base --is-ancestor <sha> HEAD` for every pin, including the single-pin case. Record the resulting HEAD as the implementation base. On resume, require the same recorded pins and integration base, and verify their ancestry; a pin or base that is not an ancestor of HEAD stops the run. Do not repeat completed merges or reset implementation commits.
 
 ## Publish the dependency relationship
 
