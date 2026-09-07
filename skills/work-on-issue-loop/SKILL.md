@@ -9,7 +9,7 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ## Input
 
-- Nothing — the issue validated this session, else `gh issue list --limit 1`.
+- Nothing — the issue validated or planned this session; with none, stop and ask which issue. Never select an issue from a list.
 - `#<N>` / `<N>` / URL / `owner/repo#N`.
 - Optional `targetBranch` (`{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to `work-on-issue`. The review loop follows the PR's own base branch.
 
@@ -17,7 +17,7 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ### 1. Implement, open the PR, and trigger the first review
 
-Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`). It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
+Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`), passing the resolved issue number through explicitly so it never re-resolves the issue itself. It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
 
 - **Stopped with no PR** (closed issue, existing PR, wrong repo, or any other stop `work-on-issue` defines; it owns the list) → nothing to drive; stop and relay its report with its stop reason.
 - **PR opened** → capture the PR number/URL and branch, then post the first trigger yourself as a separate one-line comment with no footer: `gh pr comment <PR-number> --body "<band-derived trigger>"`. Do not wait on CI; the reviewer surfaces check failures itself. Match the repo's trigger phrase if recent PR comments show it differs.
@@ -68,3 +68,6 @@ fix-pr-review-loop's Red Flags table applies while the loop runs. Additional row
 ## Common Mistakes
 
 fix-pr-review-loop's Common Mistakes list applies unchanged, including the cycle-cap rules its step 3 owns. One addition: skipping the step 3 follow-on sweep drops work named only in prose.
+
+---
+Updated with LLM: Fable 5.1 | high | Harness: Claude Code
