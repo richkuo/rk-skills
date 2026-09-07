@@ -1,61 +1,70 @@
-# Re-review routing (fix-pr-review step 10)
+# Re-review routing
 
-Read it whole before posting. A guessed phrase posts a trigger no Action answers.
+Read for step 10. This reference owns bot selection, blocking re-review routing, and growth measurement. `validate-issue` step 6 owns the first-review table and all score boundaries.
 
-## 1. Pick the bot
+## 1. Select and verify the bot
 
-The current cycle's bot, default `@claude`. Use `@codex` only when this cycle selected Codex: the user said so, a caller argument or the literal `codex` argument named it, or the run started from an `@codex` comment. An existing `codex.yml` selects nothing. Never switch bots mid-cycle.
+Default to `@claude`. Select `@codex` only through an explicit user instruction, caller argument, literal `codex` selector, or invocation from an `@codex` comment. The existence of `codex.yml` selects nothing. Keep the selected bot throughout the cycle.
 
-## 2. Route by blocking vs non-blocking
+Read the selected workflow's trigger parser or use verified integration evidence. Confirm that the exact phrase requests a review; an unsupported model shorthand can enter a write route. If the integration is absent or cannot be established, report re-review unavailable. Do not install workflows or switch bots as a side effect.
 
-Route by whether the addressed set contained **any blocking finding** (fix-pr-review step 1); the newest verdict alone never decides it. Blocking = a `Needs Fixing` or `Requires Human Review` item from any review, an inline thread validated as a real defect, or any CI Failure finding, counted whether fixed or refuted (a wrong refutation is what the heavier re-review catches).
+## 2. Classify the pass
 
-**Non-blocking only** (optional improvements or follow-ups): the cheap shorthand, `@claude sonnet review` or `@codex luna review`, in any band, consuming no rung.
+Use the entire original addressed set. Needs Fixing, Requires Human Review, inline defect claims, and CI failures are blocking for routing even when refuted. Optional improvements and follow-ups are non-blocking. A blocked or incompletely published pass posts no trigger.
 
-**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule): the same cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, consuming no rung; no trigger when it decided prose only. Step 7's behavior decision is the test and the file class is evidence only; `milestone-workflow` step 5 sub-step 3 makes the same decision before a merge.
+**Non-blocking only:** `@claude sonnet review` or `@codex luna review`, consuming no rung.
 
-**Blocking** → the step-down below, **keyed to the reviewer that actually ran cycle 1**; the score band never decides it.
+**Bare LGTM, merge only**: step 7 decides whether the hand-resolved diff changes behavior. A behavior change or doubt uses the same cheap shorthand; prose only posts none. File type alone never decides. This is also the decision used by `milestone-workflow` before merging.
 
-### Identify cycle 1
+**Blocking** → use the ladder below, keyed to the reviewer that actually ran cycle 1.
 
-The **EARLIEST** `@<bot> … review` trigger comment on the PR (a body that is only the trigger line), **skipping every cheap non-blocking re-trigger** (`@claude sonnet review`, `@codex luna review`), **unless that cheap phrase is what cycle 1 itself would have used**: the PR's band is the owner table's cheapest first-review row, or a stamped `PR review:` line in the linked issue names `sonnet`/`haiku` (either maps to `luna` on Codex). Read the stamp before applying the skip; a stamped cheap trigger is byte-identical to the non-blocking phrase. A step-down rung is itself a later trigger comment, so a later comment is never cycle 1.
+### Establish cycle 1
 
-### The step-down ladder (Claude cycles)
+Read the EARLIEST one-line review trigger comment for the selected bot, skipping every cheap non-blocking re-trigger unless that cheap phrase was the intended first-review route. Establish that from the linked issue's stamped `PR review:` line first, otherwise the owner's first-review table and PR/issue score. Do not treat a later step-down trigger as cycle 1. Where available, verify the trigger against the resulting review or workflow run; a known failed dispatch is not a completed reviewer cycle.
 
-**Every reviewer above the standard trigger runs one blocking cycle only.** Each blocking re-review steps down one rung; the floor `@claude review` repeats for every blocking cycle after it:
+Preserve an explicit effort suffix where the rules repeat a trigger. Do not infer a historical reviewer from a current score when a verified trigger or review record establishes it. If the history remains ambiguous, report the uncertainty and use the fallback rule without claiming an exact cycle count.
 
-| Cycle-1 reviewer | Blocking cycle 2 | Blocking cycle 3 and after |
+### Claude ladder
+
+Each reviewer above the standard trigger runs one blocking cycle only. Blocking re-reviews step down as follows:
+
+| Cycle-1 trigger | Next blocking review | Later blocking reviews |
 |---|---|---|
 | `@claude fable review effort:high` | `@claude opus review effort:high` | `@claude review` |
 | `@claude opus review effort:high` | `@claude review` | `@claude review` |
-| `@claude review` or `@claude sonnet review` | same trigger | same trigger |
+| `@claude review` or `@claude sonnet review` | Repeat cycle-1 trigger | Repeat cycle-1 trigger |
 
-Neither heavy trigger is ever repeated on a blocking re-review, whether the owner table or a stamped `PR review:` line selected it. The ladder **never steps down to sonnet**: Sonnet takes no rung, so a Sonnet cycle 1 repeats its own trigger. Decide the rung from the trigger comments after cycle 1, ignoring `@claude sonnet review` comments: a prior `@claude opus review` comment (any effort suffix) after a fable cycle 1 means the next rung is `@claude review`. A stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet`, and `fable`, and an unresolved shorthand becomes the route keyword.
+The ladder never steps down to sonnet. Ignore cheap non-blocking triggers when counting rungs. An Opus trigger with any effort after a Fable first cycle consumes the Opus rung once its review ran. Keep a still-pending request instead of posting a second one. A stamped `haiku` maps to `sonnet`; the Claude workflow admits `opus`, `sonnet`, and `fable` as review shorthands.
 
-### Codex cycles
+### Codex routing
 
-Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. Never post a `@claude` rung on a Codex cycle, and never discard a stamp back to the band: stamped `sonnet`/`haiku` becomes `@codex luna review`, stamped `opus`/`fable` the bare `@codex review`, each keeping a stamped `effort:<tier>`.
+Codex has no ladder. Repeat its cycle-1 trigger for each blocking re-review. Map stamped `sonnet`/`haiku` to `@codex luna review`, and `opus`/`fable` to `@codex review`, preserving stamped effort. Never post a Claude model shorthand on Codex.
 
 ### Fallback table
 
-**The fallback table applies ONLY when the PR carries no cycle-1 trigger comment**, none at all or none left after the skip. Its rows are the rows of the first-review table in `validate-issue` step 6, which owns every boundary; read the band there and take the matching row here. Read the score from the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the closed issue. A stamped `PR review:` line is no score source; it selects the reviewer directly.
+The fallback table applies ONLY when the PR carries no cycle-1 trigger comment that can be established after the skip. A verified first reviewer takes precedence. Read an available stamp before the score; map it as the corresponding first reviewer, then apply the re-review rule. Otherwise read the PR title score, then the closed issue's score, and use the row in the owner table.
 
-| Owner's first-review row | Claude fallback trigger | Codex fallback trigger |
+| Owner's first-review row | Claude fallback | Codex fallback |
 |---|---|---|
-| the sonnet row | `@claude sonnet review` | `@codex luna review` |
-| the standard-trigger row | `@claude review` | `@codex review` |
-| the opus row, the fable row, or no score | `@claude opus review effort:high` when no `@claude opus review` comment (any effort suffix) exists on the PR; `@claude review` otherwise | `@codex review` |
+| Sonnet | `@claude sonnet review` | `@codex luna review` |
+| Standard | `@claude review` | `@codex review` |
+| Opus, Fable, or unknown | `@claude opus review effort:high` if no prior Opus review is established; otherwise `@claude review` | `@codex review` |
 
-Fable and Opus each review one cycle only, and a first review already ran by some other route; never open a Fable cycle on a re-review.
+Never start a Fable review on a re-review pass. Report an inferred route as inferred.
 
-## 3. Post it as its own comment
+## 3. Publish once
 
-A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), no footer. A trigger inside a longer body does not fire. If the repo uses another trigger phrase, match its `.github/workflows/claude.yml` / `codex.yml`.
+Confirm the open PR still has the verified head and the disposition covers the collected sources. Check for a matching trigger already posted after that disposition, including on resumed runs. Post only when missing, as a separate comment whose entire body is the verified trigger line; the trigger has no footer because its parser requires that form.
+
+Record the returned URL, ID, and timestamp. If the write result is uncertain, read comments to establish whether it succeeded before retrying. Do not wait for the review here. Give the loop caller the confirmed trigger status so it counts only new requests.
 
 ## Growth check
 
-Inputs for fix-pr-review step 4, all read from the PR so a resumed loop sees the same values:
+Read persisted PR history so a resumed pass uses the same inputs:
 
-- **`<first-push-sha>`**: from `gh pr view <N> --json commits`, the newest commit whose `committedDate` is at or before the cycle-1 trigger comment's timestamp; with no trigger comment, the PR's `createdAt`. A first push of several commits resolves to the last.
-- **Measurement**: `git diff --stat $(git merge-base origin/<baseRefName> HEAD)..HEAD` against the same reading at `<first-push-sha>`. Never a plain `<first-push-sha>..HEAD` two-dot diff, which counts every base change since the branch point, including step 7 merges, as PR growth.
-- **`pr_cycle_count`**: the PR's trigger comments read chronologically per the cycle-1 rule, skipping the cheap non-blocking re-triggers, plus one when review feedback predates every trigger comment. Never the loop's in-memory `review_count`.
+- **`<first-push-sha>`:** prefer a recorded first-review head or a verified initial push event. Otherwise use the newest PR commit dated at or before the first trigger, or PR creation if there was no trigger, as an explicitly estimated baseline. Commit time is not push time. If that commit is absent or history was rewritten, report the missing baseline.
+- **Measurement:** for current HEAD and the baseline separately, find their merge base with the fetched base-branch tip and sum additions plus deletions with `git diff --numstat <merge-base> <head>`. Base merges must not count as PR growth. Binary changes have no line count; disclose them separately. A zero baseline has an undefined ratio. Never fabricate a denominator or use the direct baseline-to-HEAD diff as PR growth.
+- **`pr_cycle_count`:** count chronological review trigger comments under the cycle-1 rules, excluding cheap non-blocking re-triggers, plus one if feedback predates every trigger. A cheap first-review route still counts its blocking requests. Use linked dispositions to distinguish identical cheap phrases; report ambiguity when the evidence is missing. Never substitute the loop's in-memory `review_count`.
+
+---
+Updated with LLM: GPT-6 | high | Harness: skill-creator

@@ -1,56 +1,40 @@
 # Disposition comment
 
-Reference for SKILL.md step 9.
+Read for step 9. Follow the CLAUDE.md/AGENTS.md Response Style and attribution rules. This is a repair record; it does not issue a review verdict.
 
-## Template
+## Contents
 
-```
-Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
+Start with the PR head SHA, source review links or IDs, and whether the pass is complete or blocked. Say when no new commit was needed. For a blocked pass, distinguish local work from pushed work and identify unresolved findings explicitly.
 
-Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
+Copy each original finding title **verbatim from the review comment** so the next review can match by claim. For compound or duplicate feedback, retain the original titles and source links, then identify the subclaim being disposed. Each item carries current `file:line` evidence or a log/issue link when that is the evidence.
 
-### Fixed
-1. **<finding title>** — <what changed> (`file:line`). <Scope rule 1 note when required — see below.>
+Use only sections with content:
 
-### Corrected scope (partial)
-1. **<finding title>** — <what was real and fixed vs. what was not | blocking status refuted: the stated Reachability precondition <trigger>, refuted by <what the code does>; the defect <stands | does not stand>; re-routed to `### Recommended Optional`> (`file:line`).
+| Section | Required evidence |
+|---|---|
+| `### Fixed` | What changed and where. Name scope rule 1 when it overrode reviewer follow-up routing or rule 2; identify what this PR adds, changes, or endangers. |
+| `### Corrected scope (partial)` | What holds and what fails, with a code-grounded correction. |
+| `### Not changed (refuted)` | A self-contained code-grounded rebuttal, or evidence of a fix already present. A pre-existing CI failure uses base-run evidence. |
+| `### Resolved judgment calls` | Implemented decision, evidence, and material rejected alternatives. |
+| `### Resolved merge conflicts` | The hand-resolved set, how both intents survive, and the behavior decision that controls re-review. |
+| `### Deferred to follow-up` | Scope rule 2 and the missing mechanism outside the PR scope, or the reviewer's follow-up routing, plus the covering issue URL. |
+| `### Blocked` | Unresolved claim, confirmed evidence, work completed, and the missing fact, access, or decision. This section settles nothing. |
+| `### Verification` | Checks run and results, checks not run, and remaining limitations. |
+| `### Test edits` | Test and anchor; Outdated, Wrong, or Obsolete; independent checkable ground; replacement assertions or removal ground. Name the surviving test for a redundancy removal. |
 
-### Not changed (refuted)
-1. **<finding title>** — <code-grounded reason the suggestion does not apply> (`file:line`).
+A finding whose stated Reachability precondition is refuted records that routing change under **Corrected scope (partial), and nowhere else**. Name the trigger, the code that refutes it, whether the defect stands, and its new section. A remedy implemented in this push also gets a Fixed item; the partial item records the routing decision.
 
-### Resolved judgment calls (was Requires Human Review)
-1. **<finding title>** — implemented <the best solution and why, `file:line`>. Alternatives rejected: <one line each>.
+Every deferral **names both its basis and the issue number**; a deferral missing either half settles nothing. Rule 1 never permits deferral of a PR-caused defect. Preserve material deferred hazards in the explanation. If issue creation failed, use Blocked instead of claiming a deferral was filed.
 
-### Resolved merge conflicts
-1. `<file>` — <how the two sides were reconciled>.
+Include the `Growth check:` values when step 4's threshold fired, and label uncertain inputs. End the prose with `## Plain simple English` under the shared definition, then the required Created attribution footer with the actual model and applicable harness.
 
-### Deferred to follow-up
-1. **<finding title>** — out of scope, basis <scope rule 2: the mechanism the remedy needs and the yardstick that does not ask for it | reviewer-routed to `### Create Follow-up Issue`>; filed as #<issue>.
+## Publish and resume
 
-### Test edits
-1. **<test name>** (`file:line`) — <Outdated | Wrong | Obsolete>; ground: <the finding, issue, contract, or instruction that authorizes it>; now asserts <what the replacement asserts, or the ground alone for a removal, naming the surviving test for the redundancy case>.
-```
+Write the complete body to a file and use `gh pr comment <N> --repo <owner/repo> --body-file <file>`. Keep existing dispositions intact. If a write response is uncertain, fetch comments and match the head, sources, and body before retrying.
 
-## Slotting rules
+For each affected inline thread, reply to its root review comment with `gh api repos/{owner}/{repo}/pulls/<N>/comments/<root-comment-id>/replies -F body=@<reply-file>`. State the outcome and link the disposition, including the attribution footer. Cover all subclaims in that thread; leave thread resolution to the reviewer unless the user authorized it.
 
-- **Copy `<finding title>` verbatim from the review comment** — the reviewer's bold one-sentence title, word for word. The next reviewer matches findings to these dispositions by claim; a reworded title brings a settled finding back.
-- Every **Not changed (refuted)** and **Corrected scope (partial)** item carries a code-grounded rebuttal with its `file:line` that stands on its own — what a later reviewer must answer before re-raising.
-- **A blocking finding whose stated `**Reachability:**` precondition the code refutes goes under `### Corrected scope (partial)`, and nowhere else** — `pr-review`'s prior-cycle rule settles findings only on the dispositions it names. The item names the stated precondition, the `file:line` that refutes it, whether the defect still stands, and the section the finding moves to. A re-routed remedy fixed in this same push also gets its own **Fixed** item; this item records the routing change alone.
-- Omit any empty section. Keep each item one line with a `file:line` anchor. The `Growth check:` line appears only when step 4's growth check fired; it is the one place those numbers live.
-- **Every test edit appears under `### Test edits`** with its case, ground, and replacement assertion (a removal gives the ground instead); an edit missing from it reads as undisclosed.
-- **Every Deferred to follow-up item names both its basis and the issue number.** The basis has exactly two admissible values: scope rule 2 (with the mechanism the remedy needs and the yardstick that does not ask for it), or the reviewer's own `### Create Follow-up Issue` routing, filed without running a scope rule. Rule 1 never appears here — it keeps the finding in the PR, under **Fixed** with the rule-1 note. `pr-review` settles the finding on that pair as on a rebuttal; a deferral missing either half settles nothing, so the finding returns next cycle. An item matching an issue an earlier cycle filed cites that existing issue.
-- **A Fixed item that kept a finding in the PR against something that would have filed it carries a scope rule 1 note** — exactly when the reviewer routed it to `### Create Follow-up Issue` and the exclusion-exception pulled it back, or when rule 2 would have filed it and rule 1 matched first. The note names rule 1 and states, from code, what this PR adds or changes that causes the defect (or the hazard it creates). Other Fixed items carry no note.
-- CI Failure findings slot into the same sections — fixed under **Fixed**, pre-existing or flaky under **Not changed (refuted)** with the base-branch or flake evidence in place of a code citation.
+On resume, publish only missing replies or a missing trigger when the existing disposition still covers the current head and source set. A partially published pass never justifies duplicating every comment or advancing past unresolved work.
 
-## Inline-thread replies
-
-For findings from inline diff threads, also post a one-line reply in the thread — `gh api repos/{owner}/{repo}/pulls/<N>/comments/<databaseId>/replies -f body=...` using the root comment's `databaseId` from the thread query in [fetch-recipes.md](fetch-recipes.md).
-
-## Posting
-
-`gh pr comment <N> --body-file <file>`, ending with the **Created**-verb footer (it is a new comment):
-
-```
 ---
-Created with LLM: <current model> | <effort> | Harness: Claude Code
-```
+Updated with LLM: GPT-6 | high | Harness: skill-creator
