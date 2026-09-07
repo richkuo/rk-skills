@@ -1,62 +1,77 @@
 ---
 name: work-on-issue
-description: Use when the user says "work on issue", "implement issue", "/work-on-issue", or asks to implement a GitHub issue end-to-end (not merely validate it). Takes an issue URL or number (defaults to the just-validated issue). Implements the fix in an isolated worktree, verifies it, commits and pushes, and opens a PR that closes the issue. Default follow-on when validate-issue offers "work on issue".
+description: Implement a GitHub issue in an isolated worktree, verify the change, and open a pull request. Use for "work on issue", "implement issue", or /work-on-issue, including handoffs from validation or planning. Stops at the open pull request; use work-on-issue-loop for review convergence.
 ---
 
 # work-on-issue
 
-Take a GitHub issue to an open pull request that closes it: isolated worktree, implement, verify, commit and push, open the PR. Do not pause to ask the user; report at the end. Build the fix the traced code supports, even where the issue prose suggests another.
+Take the selected issue to a verified, open pull request (PR). Follow the repository's AGENTS.md/CLAUDE.md for engineering, test edits, attribution, and Response Style. Continue through authorized implementation and publication; ask only when an unresolved requirement or permission prevents safe progress. Review triggers, review cycles, merge, deployment, and follow-on issue creation belong to the caller.
 
 ## Input
 
-One of: nothing (the issue validated this session, else `gh issue list --limit 1`); `#<N>` / `<N>` / URL / `owner/repo#N`; or the orchestration form `{ issue: <N>, targetBranch?: "<branch>", baseRefs?: [{ pr, ref, sha }, ...] }`. `baseRefs` order is authoritative; each entry pins a predecessor PR's reviewed head. `targetBranch` (or a prose "target branch develop") names the branch the PR merges into and the worktree starts from; default is the repo default branch. If the issue lives in another repo, work in a local clone of it, or stop and say which repo is needed.
+Accept an issue number, URL, `owner/repo#N`, or `{ issue, targetBranch?, baseRefs?: [{ pr, ref, sha }, ...] }`. With no identifier, use the unambiguous issue from this session; otherwise ask which issue. Never select an unrelated issue from a list. `targetBranch` also accepts prose such as "target branch develop". `baseRefs` pins reviewed predecessor heads in caller order.
 
 ## Steps
 
 ### 0. Resolve the issue, gate-check it, and detect a plan
 
-Before any worktree exists, run `gh issue view <N> --comments` and `gh pr list --state open --search "#<N> in:title,body"`. Gates: the issue must be open, and no open PR may already fix it (a passing mention does not count; this session's own branch does not count). A failed gate: stop and report.
+Resolve the repository and issue together. Confirm the clone and fetch/push remotes match the intended repository; use a matching clone for another repository. Scope GitHub commands to that repository. Read the full issue, all comments including pagination, and applicable repository instructions before mutations.
 
-Scan the comments for a plan: a comment starting with `## Implementation plan` (any parenthetical model tag), or one a maintainer clearly frames as a plan. The newest wins, even over a caller-supplied plan; earlier plans are superseded, never merged. Record the adopted plan's author, URL, date, and whether a Fable model authored it (heading or footer); step 6's `, fableplan` marker keys on that flag. No plan is normal.
+The issue must be open. Check linked PRs and search open PR titles/bodies for the issue reference; inspect candidates for actual fixes. A failed lookup blocks. If another PR already fixes the issue, stop with its URL. This run's own PR is resumable after step 1 verifies its repository, head, base, and worktree.
+
+Detect a plan from a comment starting with `## Implementation plan` (optional model tag), or a plan identified by a maintainer or caller. Unless the user explicitly selects one, adopt the newest applicable posted plan; use a caller-supplied plan when none is posted. Earlier plans are superseded, never merged. Record author, URL or local source, date, and model evidence. The `fableplan` flag requires a Fable 5.1 plan that actually drove implementation. No plan is normal.
+
+Honor an explicit build model/harness assignment. A driver dispatching a stamped Codex or Cursor build must load `cli-dispatch`; an already-dispatched builder continues here without dispatching itself again. Report unavailable or substituted models through that contract.
 
 ### 1. Create the isolated worktree on a verified base
 
-Never implement on the target branch or a divergent checkout. First run `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` and `git fetch origin`.
+**Target.** Resolve `targetBranch`, else the repository default branch, once. Before shell use, require `^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`, no `..`, no `refs/` prefix, and `git check-ref-format --branch` success. `git ls-remote --heads origin "refs/heads/<target>"` must return exactly that ref. Fetch it into `origin/<target>` and record its commit. A missing or invalid target blocks; never substitute another branch. Keep this target through publication, even if the default later changes.
 
-**Target.** `targetBranch` when given, else the default branch. A given `targetBranch` must, before it reaches a shell, match `^[A-Za-z0-9][A-Za-z0-9._/@+-]*$`, contain no `..`, and pass `git check-ref-format --branch`; then `git ls-remote --heads origin "refs/heads/<target>"` must list exactly one line (the full ref is required because a bare name tail-matches `release/<target>`). A missing or invalid target stops the run with the reason; never substitute the default branch.
+**Base.** Without `baseRefs`, use the fetched target commit. With `baseRefs`, read [dependency-base.md](dependency-base.md) and validate the entire list before creating or changing a worktree.
 
-**Base.** Without `baseRefs`: `origin/<target>`. With `baseRefs`, validate the whole list before creating a worktree: reject an empty list, duplicates, non-positive PR numbers, SHAs outside 40 to 64 hex chars, and any ref failing `^[A-Za-z0-9][A-Za-z0-9._/@+-]*$` before it reaches a shell; then reject the target branch, the default branch, and `git check-ref-format --branch` failures. Verify each entry with `gh pr view <pr> --json headRefName,headRefOid,headRepository`: same repo, exact `ref` and `sha` match; fetch `pull/<pr>/head` into a namespaced local ref and confirm it resolves to `sha`. Any mismatch, missing, ambiguous, cross-repo, or changed head blocks the run; never fall back to the target or default branch. The first verified SHA is the initial base.
+**Create or resume.** Inspect `git worktree list --porcelain`, branch history, status, and any existing PR. Reuse only work attributable to this run with the same issue, target, and dependency pins. A matching name alone proves nothing. Preserve existing changes; ambiguous ownership, changed pins, unrelated work, or an unfinished Git operation blocks automatic reuse. On resume, verify the recorded base is an ancestor of HEAD; implementation commits need not equal the base.
 
-**Create and enter.** If `git worktree list` already shows a worktree for this issue, enter it; never create a duplicate. Claude Code: `EnterWorktree(name: "cc/issue-<N>-<slug>")`, `<slug>` = issue title kebab-cased to 5 words or fewer; if the tool altered the branch name, `git branch -m cc/issue-<N>-<slug>`. Cursor/Codex: `git worktree add .claude/worktrees/<prefix>/issue-<N>-<slug> -b <prefix>/issue-<N>-<slug> <resolved-base>` with `cursor/` or `codex/`, then `cd` in. Confirm `HEAD` equals the resolved base SHA; if a brand-new, commit-free worktree differs (`EnterWorktree` always branches from the default branch), `git -C <worktree-path> reset --hard <resolved-base>`. Never reset a re-entered worktree or one carrying work. Anchor every later command with `-C <worktree-path>`; shell state does not persist between calls.
+For a fresh run, use `git worktree add <path> -b <prefix>/issue-<N>-<slug> <resolved-base>` with `cc/`, `cursor/`, or `codex/` for the active harness. Derive a short alphanumeric/hyphen slug; pass paths and refs as quoted data. Use the repository's worktree location, else `.claude/worktrees/`. Confirm the new HEAD equals the resolved base. Do not reset an existing checkout or implement on the target branch or in the main checkout. Use an explicit working directory for every tool call, and `git -C <path>` for Git commands.
 
-**Multiple prerequisites.** Merge the remaining recorded SHAs in caller order with one `git merge --no-commit --no-ff` before touching product files. On any conflict, abort the merge and return blocked with the conflicting refs: no resolution, no implementation, no PR. Commit the merge with a dependency-integration message plus the attribution footer. Then verify `git merge-base --is-ancestor <sha> HEAD` for every recorded SHA (a single entry needs only this check); any failure blocks. The resulting `HEAD` is the only authorized base.
+Keep a run record outside tracked files: repository, issue, target, base commit, ordered dependency pins, plan source, worktree, branch, verification, and published commit/PR. Update it after durable steps so retries can inspect completed work before repeating mutations.
 
 ### 2. Understand the issue and the code
 
-Read the issue body and comments, validation findings, and the repo's `CLAUDE.md`/docs for the touched subsystem. If validation marked the issue's sketch as doubtful or wrong, or it conflicts with the code, implement the optimal direction for this repo and note the discrepancy in the PR body.
+Trace affected paths and map all acceptance criteria, including negative requirements, to observable checks. Resolve implementation details from code and validation evidence while preserving the requested outcome. If the issue is already satisfied, report evidence without an empty PR; if its goal is ambiguous or infeasible, report the blocking decision.
 
-**An adopted plan is the blueprint**: implement to it instead of re-deriving. Three overrides, in order: (1) **the traced code**: where the plan contradicts what the code does, follow the code; (2) **anything newer on the issue**: a later maintainer comment or edit supersedes the part it touches; (3) **correctness and safety**: a plan step that breaks an invariant is wrong. Name every deviation in the PR body with its reason. This is the single plan-deviation policy; a caller restatement never narrows it, and a caller sentence permitting one override does not remove the other two.
+**An adopted plan is the blueprint.** Deviations can follow **the traced code**, **anything newer on the issue** from a maintainer, or **correctness and safety**. Existing behavior informs implementation; it does not cancel a requested behavior change. Record each deviation and its reason in the PR body. This shared plan-deviation policy applies to every caller; a restatement never narrows it. Explicit user requirements remain authoritative.
 
-**Mirror the plan's steps into the task tracker** (`TodoWrite` or equivalent) before writing code, one item per step; mark an item complete only when its verify point passes. Derive missing numbering or per-step observable checks yourself. Without a tracker, keep the checklist in a scratchpad file outside the working tree. An overridden step closes as a recorded deviation carrying its own verify point (or the superseding comment) and a matching PR-body entry; it is never marked done and never left open. A borrowed verify point re-homes when its source step is overridden: to the replacement's verify point, else the item's own observable check, else the item closes as its own recorded deviation; re-homing cascades through borrowers of that item's check. No open item may wait on a check that can never run.
+**Mirror the plan's steps into the task tracker** before writing code; mark an item complete only when its verify point passes. Derive missing numbering or checks. Without a tracker, use the run record. An overridden step closes as a recorded deviation with a replacement check or superseding requirement and a matching PR-body entry. A borrowed verify point re-homes to a runnable replacement or the item's own check; apply this through dependent items, or close them as deviations too. Leave no item waiting on a canceled check. Without a plan, track acceptance checks directly.
 
 ### 3. Implement the fix
 
-Build the best solution per CLAUDE.md's engineering rules: follow existing conventions, respect invariants, keep the diff scoped to the issue. Write tests for the change; for a bug fix, prove the regression test is real (red then green) by running it against the unfixed code first.
+Implement the scoped change and necessary documentation. Add meaningful tests for behavior that can regress. For bug fixes, run the regression check against the unchanged base and the fix; isolate the base check to preserve current work. If reproduction is unavailable, state the limitation. Documentation-only changes need relevant validation rather than artificial runtime tests.
 
-CLAUDE.md's test-edit rules own stale-test edits: the cases Outdated, Wrong, and Obsolete, each with a named checkable ground, disclosed in the commit and PR body. A test with no ground stays as it is and the code gets the fix. A test that breaks in another location is checked before it is edited: classify it as Outdated, Wrong, or Obsolete and edit under that case with its ground; a test that is none of the three means the change broke real behavior, so fix the code. If the correct change still cannot pass an ungrounded test, stop before step 5, keep the worktree, and report it (step 7).
+Apply repository test-edit rules. When a test breaks in another location, classify it as Outdated, Wrong, or Obsolete with the required independent ground before editing; none of the three means the change broke real behavior, so fix the code. Disclose every test edit and its ground in the commit and PR. An unresolved correct expectation blocks completion.
 
 ### 4. Verify before claiming anything
 
-Run the project's build, tests, and linters (per its `CLAUDE.md`, `package.json`, or Makefile) and confirm they pass before committing. Report real results; never paper over a failure.
+Run required tests, build, and linters plus relevant acceptance checks. Review the complete diff against the recorded base for omissions, unrelated changes, and unintended generated files. Close every plan item with evidence or a recorded deviation.
+
+Fix failures caused by this change. Check an alleged pre-existing failure against the unchanged base before labeling it. Required checks that fail or cannot run block the normal commit/PR path unless the user or caller explicitly authorizes publication with that limitation. Record commands, results, and tested state; rerun affected checks after subsequent edits. Local success does not establish continuous integration (CI) success.
 
 ### 5. Commit and push
 
-Review `git status` before staging; `git add -A` only when nothing unrelated appears, otherwise stage intended files by name. Commit with the repo's title convention referencing the issue, ending with the LLM Attribution Footer per CLAUDE.md (`Created`; `<harness>` is `Claude Code` interactively, or the GitHub Action identifier in CI). Push with `-u` and confirm the remote head equals the local `HEAD`.
+Inspect status and the staged diff; stage only intended files. Follow repository commit and attribution conventions using the actual builder and applicable caller attribution. Confirm the final commit contains the verified changes. Push the issue branch with an explicit remote and upstream, then confirm its remote head equals local HEAD. Never force-push to repair a mismatch. After an uncertain push, inspect remote state before retrying.
 
 ### 6. Open the PR
 
-Re-run the step 0 duplicate-PR search, then set `--base` to the step 1 target: re-detect the default branch when no `targetBranch` was given, else re-check that `origin/<targetBranch>` still exists. Title: the repo's PR-title convention (CLAUDE.md default); append `, fableplan` only when a Fable-authored plan (the step 0 flag, or one produced this session) drove the build; a maintainer's plan earns no marker. Body: `Closes #<N>`; `## Summary` and verification first; every test edit disclosed per CLAUDE.md; the adopted plan linked with every deviation and its reason (or "none"); with `baseRefs`, the predecessor PRs and verified heads in order, stating they must merge first (the PR base stays the target branch); with a non-default target, a `Target branch:` line; `## Plain simple English` last, per CLAUDE.md Response Style. Capture the PR URL.
+Recheck issue state, duplicate PRs, the exact target's existence, and dependency pins. If a gate changed, preserve the branch and report it. Use the recorded target with `--base`. Verify and update this run's existing PR; after an uncertain create response, find the exact head/base PR before retrying.
+
+Follow repository title/body conventions: `Closes #<N>`, `## Summary` and verification first, test-edit disclosures, adopted plan source and deviations (or "none"), then `## Plain simple English` before attribution. Include `Target branch:` for a non-default target and ordered predecessor PRs/pins when present. Append `, fableplan` only for the step-0 flag. Send multiline text through a structured tool argument or `--body-file`. Leave issue closure to the merge workflow.
+
+Read back the PR and verify its repository, open state, head branch/commit, base, and body. Return success only when the remote head matches the verified local commit and the requested change is present in the PR diff.
 
 ### 7. Report to the user
 
-The skill ends here; the caller triggers any `@claude` review and waits on CI. Report the worktree/branch, the target branch when it differs from the default, what was implemented, the verification result, the commit SHA, and the PR URL. When step 3 stopped the run on an ungrounded failing test, report instead that no commit or PR exists, name the test with its `file:line`, what it asserts, and the conflict, and keep the worktree. Name follow-on work the deliverables mention as unfiled. Cap the report at 55 words, plain simple English in ASD-STE100, per the Response Style rules.
+Report the outcome, verification, commit, PR URL, and worktree/branch; include a non-default target. On a blocker, state the stage, evidence, preserved work, and which commit, push, or PR already exists. Check before claiming no commit exists: dependency integration or an earlier attempt may have committed. Name follow-on work as unfiled. Preserve the worktree for review or recovery. Return caller-required structured fields from verified state.
+
+Cap the report at 55 words in ASD-STE100, per the Response Style rules.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Claude Code
