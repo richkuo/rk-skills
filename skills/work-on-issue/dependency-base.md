@@ -21,6 +21,3 @@ Verify `git merge-base --is-ancestor <sha> HEAD` for every pin, including the si
 ## Publish the dependency relationship
 
 Recheck each PR's state, repository, target, ref, and head against the pins before opening or updating the dependent PR. A changed pin requires refreshed caller input and renewed integration/verification; do not silently adopt it. Keep the dependent PR base as the recorded target and list predecessor PRs and verified heads in caller order. State which predecessors must merge first. Check the PR diff against its target as well as the implementation diff against the recorded integration base, so prerequisite changes cannot hide unrelated work.
-
----
-Created with LLM: GPT-6 | high | Harness: Claude Code
