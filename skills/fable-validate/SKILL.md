@@ -1,6 +1,6 @@
 ---
 name: fable-validate
-description: Use when the user wants a GitHub issue validated by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
+description: Use when the user wants a GitHub issue validated by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate an issue", or "validate this with fable".
 ---
 
 # fable-validate
@@ -49,7 +49,7 @@ When the result arrives, save the verdict verbatim to a scratchpad file immediat
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any ❌/⚠️ claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
 
 ### 4. Relay the verdict to the user
 
@@ -68,3 +68,6 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 - The validation subagent runs on Fable 5.1 regardless of the main agent's model — `model: fable` on the Agent call forces it.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex

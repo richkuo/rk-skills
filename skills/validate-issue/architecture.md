@@ -1,51 +1,36 @@
 # Architecture procedure
 
-## Runtime topology
+Use the traced runtime and repository invariants to assess placement and ownership. Inspect the actual entrypoint, dispatch or spawn site, process boundaries, and relevant lifetimes. A name such as "global", "cache", or "shared" does not establish visibility or authority.
 
-Trace the hot path from its entrypoint. Identify processes, threads, containers, or requests; who spawns or dispatches them; and each lifetime. Cite the spawn or dispatch site.
+## State and consumer contracts
 
-## Concern decomposition
+Separate input retrieval, derived computation, authoritative storage, and consumption. An existing input cache may remove repeated reads while leaving repeated computation intact.
 
-Separate fetch/cache, compute/derive, authoritative storage, and consume/route concerns. An existing cache can deduplicate input/output without owning derived business results.
+For each changed state item, establish the contract needed by the goal:
 
-## Ownership checklist
-
-For each shared or authoritative state item, require or derive:
-
-| Question | Required answer |
+| Dimension | Evidence to establish |
 |---|---|
-| Owner | Component that sees all consumers or writes the record |
-| Lifetime | Request, cycle, process, or persisted restart lifetime |
-| Medium | Heap, database, file, queue, or remote procedure call |
-| Population | Writer, timing, invalidation, and reload behavior |
-| Consumer contract | Inject, pull, subscribe, or explicit recompute fallback |
-| Failure policy | Miss, stale value, timeout, and error behavior |
+| Owner and readers | Who can write, which consumers need it, and how they reach it |
+| Lifetime and medium | Request, cycle, process, or restart lifetime; memory, storage, or service |
+| Population | Writer, creation point, initialization order, invalidation, and reload |
+| Consistency | Partition and key, concurrent access, ordering, and synchronization |
+| Failure | Miss, stale value, timeout, startup, partial write, and recovery where applicable |
 
-Mark the design ⚠️ when a required answer is absent, and supply the code-grounded answer when possible.
+A worker's heap is local to that worker. Cross-process coordination needs an explicit communication or storage contract. Local recomputation on a miss must agree with the stated authority and deduplication goal. Require durability only when restart behavior requires it.
 
-## Isolation boundaries
+## Placement and affected sites
 
-- Worker heap state is invisible to peer workers without an inter-process contract.
-- Disk, database, or shared services can coordinate across workers; heap-only state cannot.
-- A leaf-worker global has only that worker's scope.
-- Local recomputation on a miss can defeat deduplication or authoritative-store goals; require it to be explicit.
+Compare the proposed owner with the component that can enforce the required visibility, lifetime, and consistency. Prefer an existing mechanism when it meets those requirements. Derive placement from the repository; an orchestrator is not automatically the owner of all shared state. Distinguish an architectural impossibility from a feasible change to an existing convention.
 
-## Layer placement
-
-Place fan-in, deduplication, cycle state, and routing in the orchestrator. Place per-job handling in workers, pure shared logic in one library, and restart-safe authority in persistence. Prefer existing inject or precompute paths over new infrastructure. When the proposed owner cannot see all consumers, cite the parent or service that can.
-
-## Touch-set completeness
-
-Treat every proposed site list as a set claim. Search each affected field or symbol across its package. Enumerate all readers, writers, defaults, validators, serializers, reload copies, and tests. Diff that set against the issue.
-
-Read the complete load/apply sequence around each proposed edit. Check for an earlier normalization that pre-empts an unset guard and for a later copy/apply site that the issue omitted. An unnamed required site makes architecture ⚠️ or ❌.
-
-For aggregates or shared state, also confirm that the enclosing partition boundary and key match the scope that feeds the facility.
+For each changed field or contract, find affected readers, writers, defaults, validators, serialization, reload copies, and tests at the baseline. Compare this set with the proposed edits and stated phase boundary. Read the complete load/apply sequence: early normalization can make a later unset guard ineffective, and later copies can discard a value. Cross-check this set with the claim evidence from step 3 rather than repeating the search.
 
 ## Verdict
 
-- ✅ **Viable:** topology, owner, medium, timing, consumer contract, and failure policy match the repo.
-- ⚠️ **Underspecified:** the problem is valid, but placement or an ownership contract is missing.
-- ❌ **Infeasible:** the proposal violates isolation, duplicates authority without synchronization, or conflicts with established architecture.
+- **Viable:** the relevant ownership, isolation, lifetime, consistency, and consumer contracts support the goal.
+- **Underspecified:** a necessary contract or affected site is missing; supply a code-grounded correction where possible.
+- **Infeasible:** the proposed mechanism cannot meet a required invariant, such as cross-process visibility or a single synchronized authority.
 
-For ⚠️ or ❌, add `Optimal direction (this repo):` with the concrete placement and contract supported by cited code.
+For a material defect, cite the baseline evidence and add `Optimal direction (this repo):` with the required placement and contract. Use Unverified when evidence is insufficient to decide viability. A finding must explain the consequence for the stated goal; optional design preferences do not require an issue update.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex

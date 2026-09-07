@@ -1,36 +1,26 @@
 # Proposal self-consistency procedure
 
-Apply this after claim tracing and alongside Architecture.
+Check the issue's own promises against each other. Reuse the code evidence and consumer contracts already traced; this pass does not repeat the architecture assessment.
 
-## Lifetime and population
+## Follow the proposed behavior
 
-List every issue statement that says when proposed state is created, populated, read, cleared, or persisted:
+Trace one complete scenario from input or trigger to the acceptance result. For each state item or phase, compare where it is created, populated, read, invalidated, and persisted across all sections. Record conflicting statements with their section or comment source. If two lifetimes are intentional, require distinct layers and their connection to be explicit.
 
-| Source section | When | Medium | Survives restart |
-|---|---|---|---|
+Check the following where applicable:
 
-Decide whether one store can satisfy every row. Mark ❌ when statements require incompatible lifetimes, such as load-time registration and cycle-only memory. Cite the existing load, validation, or cycle hook that supports the correction.
-
-## Verb audit
-
-Search the issue for `on add`, `on load`, `register`, `first access`, `each cycle`, `ephemeral`, `persist`, `cache`, `global`, and `shared`. Mark ❌ when one proposed noun uses incompatible timing verbs and the issue does not define separate layers.
-
-## Benefits and existing facilities
-
-Verify each deduplication, latency, or single-source benefit against the current baseline. Name existing facilities at their actual layer. Mark ⚠️ when a cache already deduplicates input/output but the issue claims all work is duplicated.
-
-## Consumer completeness
-
-Find all orchestrator, worker, subprocess, offline, and administrative consumers. Mark ⚠️ when the proposal migrates only part of the set and does not define a phase boundary.
-
-## Failure policy
-
-For each new fetch, process, or shared read, require miss, timeout, stale-value, startup, and error behavior. Compare it with the current inline path. A missing policy is ⚠️.
+- The approach achieves the stated goal and each acceptance criterion tests an observable result. A solution-shaped criterion alone does not prove that the reported problem is fixed.
+- Repeated names, defaults, timing, ownership, and scope agree. A correction in Approach must also reach conflicting Goal or acceptance text.
+- Claimed benefits still follow from the corrected baseline and the chosen mechanism. Preserve real differences between retrieval and computation, or between consumers.
+- Partial migration names its phase boundary, coexistence behavior, and compatibility requirements. A consumer excluded from this phase must still work.
+- Failure and recovery promises agree with the architecture contract. Mandatory safety behavior cannot become an unspecified fallback in another section.
 
 ## Verdict
 
-- ✅ **Consistent:** lifetime, population, benefits, consumer scope, and failure behavior agree.
-- ⚠️ **Gaps:** statements do not conflict, but a required policy or deploy/consumer surface is missing.
-- ❌ **Contradicts:** two sections require incompatible ownership, timing, or scope; state the required rewrite.
+- **Consistent:** the relevant goals, mechanism, criteria, and phase contracts agree.
+- **Gaps:** a necessary result, policy, or affected consumer is missing.
+- **Contradicts:** sections require incompatible behavior; name both statements and the required correction.
 
-Any material ⚠️ or ❌ requires an issue-description update.
+A material Gaps or Contradicts verdict requires an issue update. If choosing the correction requires unknown product intent or unavailable evidence, keep that uncertainty explicit and apply the main skill's readiness gate.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex
