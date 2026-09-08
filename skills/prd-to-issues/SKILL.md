@@ -1,88 +1,78 @@
 ---
 name: prd-to-issues
-description: Use when the user wants a finished PRD broken into GitHub milestones and issues — "file the issues from the PRD", "/prd-to-issues", "break this into GitHub issues". Derives dependency-ordered milestones, files complete complexity-scored issues (github-issue-format), and stamps each with an Execution block (typed predecessors, build model, effort, fableplan, review trigger). Stage 4 of the new-app-pipeline.
+description: Turn a finished Product Requirements Document (PRD) into GitHub milestones and complete, scored issues with typed dependencies and Execution blocks. Use for "file the issues from the PRD", "/prd-to-issues", or "break this into GitHub issues". Stage 4 of the new-app-pipeline.
 ---
 
 # prd-to-issues
 
-Break a refined PRD into milestones and fully specified GitHub issues that cold agents implement one at a time. An agent holding only the issue body and the PRD must be able to build it correctly.
+Produce a complete, dependency-ordered backlog that an agent can implement from each issue and its cited PRD. The deliverable ends at verified GitHub issues; implementation and workflow dispatch require their own instruction.
 
-**Load the `github-issue-format` skill before filing anything (mandatory).**
+Follow the target repository's CLAUDE.md/AGENTS.md Response Style and attribution rules. Read [github-issue-format](../github-issue-format/SKILL.md) before composing issue bodies. Read [validate-issue step 6](../validate-issue/SKILL.md#6-score-complexity) and its [complexity-scoring reference](../validate-issue/complexity-scoring.md) for scoring and routing; those sources own the formula, grades, and band tables. Use those sections without starting the validation workflow.
 
-## Steps
+## 1. Establish the source and existing work
 
-### 1. Plan the breakdown (present before filing)
+Identify the target repository, PRD revision, and requested release scope from the request and repository state. Read the full PRD, relevant repository instructions, implementation, and tests. Distinguish implemented behavior from planned work; an empty repository needs proposed implementation boundaries, clearly marked as proposed.
 
-- Derive **milestones** from dependency structure, never from feature themes. Typical shape: `v0` foundation and core surface (scaffold, schema, auth, core flows, payments happy path), `v1` lifecycle and delivery (jobs, schedulers, notifications), `v2` second-surface parity, `v3` post-MVP.
-- Aim for **15–25 issues**, each independently implementable and PR-sized.
-- Separate the **dependency spine** (built serially) from **parallel waves**. For each issue record its direct hard prerequisites apart from ordering-only predecessors. Name the risk concentrators, usually the schema and the money module.
-- Show the plan (titles, milestones, order) in chat before filing and adjust on feedback.
+Fetch all relevant open and closed issues and milestones, with pagination. Compare bodies, acceptance criteria, and implementation evidence before reusing an issue; a matching title or closed state alone does not prove coverage. Preserve existing work and deliberate execution overrides. Resolve an ambiguous repository or conflicting source revision before any write.
 
-### 2. Create milestones
+Use a stable PRD link and its verified section heading or identifier in each issue. Prefer a commit-pinned source when available. If the source is local or uncommitted, identify its revision in the drafts and establish a durable source accessible to future agents before filing. Do not invent section numbers or publish source material outside the user's authorized destination.
 
-`gh api repos/<owner>/<repo>/milestones -f title='...' -f description='...'`, one per phase, the description listing the member issues' themes.
+## 2. Map requirements and dependencies
 
-### 3. Write the issues
+Keep a local filing record with the source revision, release scope, requirement-to-issue map, complete draft bodies, graph, intended create/reuse/update actions, and returned GitHub identifiers. Save it outside the tracked source unless the user requests a committed plan; make its location available for resumption.
 
-Per `github-issue-format`: `[C<score>]` plain-language title, complexity rationale first line, then **Problem** (with PRD § references), **Goal**, **Approach**, **Acceptance criteria**, **`## Plain simple English`** (mandatory, under 55 words, ASD-STE100), the step 4 Execution block, then the attribution footer.
+- Map every in-scope requirement to a draft key, an existing issue, or verified implementation. Record exclusions and deferred requirements with their reason. Give shared invariants an owning issue and identify the consumers that must enforce them.
+- Size issues around a coherent result that can be implemented and verified in one pull request (PR) after its prerequisites. Set no fixed issue count or milestone size. Keep inseparable changes together; use the scope-disposition criteria in `validate-issue` step 7 when splitting a large candidate.
+- Derive milestones from prerequisite order and a verifiable completion outcome. Reuse suitable milestones and keep the user's release names and boundaries unless a conflict requires a decision. Do not move deferred roadmap features into the requested release.
+- Assign stable local keys while drafting. **Depends on** records direct prerequisites whose code or product result the successor requires. **Runs after** records a direct ordering constraint when no result is required, such as independent changes to the same package that must not overlap. Shared location alone is insufficient; identify the actual conflict. When the successor needs the result, use Depends on.
+- Preserve edge types and their reasons. Reject missing references, self-references, duplicate edges, a predecessor in both fields, and cycles across the combined graph. Recursively inspect referenced existing issues, including those outside the milestone. Milestone order must permit every prerequisite to finish before its successor; milestone membership alone supplies no edge. Identify serial prerequisites, concurrent work, and safety-critical issues.
 
-- Cite PRD section numbers everywhere; they are the cold agent's index.
-- Acceptance criteria are testable behaviors, including negative ones ("no endpoint can return a signed URL for sealed media, for any role").
-- Money, privacy, and irreversible-deletion invariants go in the acceptance criteria.
-- Pure logic (pricing engines) embeds the PRD's worked examples as required test cases.
-- File via one batch script (heredoc bodies, `gh issue create --milestone`), sequentially so numbering is stable.
+If a missing product decision prevents a complete specification, hold that issue and its affected successors. Use [prd-questions](../prd-questions/SKILL.md) only for the blocking decision and the affected source sections; do not start a whole-roadmap sweep. Continue independent drafts and file complete independent issues within existing scope authorization, unless the user required the whole backlog to be settled first. Record the held requirements and report partial completion; never file a stub or treat the subset as full coverage.
 
-### 4. Stamp Execution blocks
+## 3. Draft complete issues and execution metadata
 
-Append to every issue body, before the footer:
+Use `github-issue-format` for the title, rationale, body order, mandatory `## Plain simple English` section, and footer. Embed the issue's relevant requirements and acceptance criteria so that the PRD supplies context without becoming a substitute for the specification.
 
-```
-## Execution
-- **Depends on:** #<n>[, #<n>…] | none
-- **Runs after:** #<n>[, #<n>…] | none
-- **Build model:** <Fable 5.1 | Opus 5 | ... | <Name> (Codex CLI[, <model-id>]) | <Name> (Cursor CLI[, <model-id>])>
-- **Effort:** <low (Fable-only, discretionary, below the formula floor) | medium (Fable-only) | high | xhigh | max (Codex CLI-only)>
-- **fableplan first:** <Yes (Fable 5.1 plans, plan posted to this issue, builder implements against it) | No>
+State the result, scope boundaries, implementation contracts, prerequisite outputs, and verification method. Include applicable failure paths and money, privacy, authorization, data-integrity, and irreversible-deletion invariants. Carry the PRD's worked examples into acceptance tests, checking their inputs and expected results against the stated rules. Resolve contradictions before filing; do not silently choose a rule.
+
+Grade all five complexity axes from the proposed edit list and the proof required. Distinguish proposed sites from inspected sites, and record the evidence for each grade. Recompute the title score, rationale, and execution defaults together after scope changes.
+
+Append exactly one Execution block before the footer. Use these field names with concrete values; local keys are permitted only in unpublished drafts:
+
+- **Depends on:** comma-separated actual issue references, or `none`
+- **Runs after:** comma-separated actual issue references, or `none`
+- **Build model:** the score band's Build model
+- **Effort:** the score band's Build effort
+- **fableplan first:** the score band's `Yes` or `No`
 - **PR review:** standard `@claude` review trigger
-- **Validate effort:** <low | medium | high | xhigh>   (optional; omit for the band default)
-- **Plan effort:** <low | medium | high>   (optional; omit to plan at high; read only when fableplan first is Yes)
-```
 
-Ordering fields, stamped from the approved spine/wave graph once final numbers are known:
+The standard PR review line leaves first-review routing to the pipeline and the `validate-issue` step 6 first-review table. Do not copy review boundaries or re-review rules here.
 
-- Record direct predecessor edges only, comma-separated; write `none` when there is no edge of that kind.
-- **Depends on**: the issue needs the predecessor's code or product result (an API issue that needs another issue's schema).
-- **Runs after**: the issues must not overlap but the later one needs none of the earlier one's code (two independent issues editing the same package). A same-package exclusion is always `Runs after`. Never list one predecessor in both fields.
+Omit **Validate effort:** and **Plan effort:** at initial filing unless explicitly requested; the owners supply the defaults. Never stamp a validate model. Never stamp Fable 5.1 as the Build model without a specific user instruction. Never stamp an external CLI harness as the Build model without a specific user instruction. Command-line interface (CLI) overrides use `<Name> (Codex CLI[, <model-id>])` or `<Name> (Cursor CLI[, <model-id>])`.
 
-Routing fields derive from the complexity score band. Score each issue with the `validate-issue` step 6 formula and stamp from that band:
+For user-directed model, effort, planner, or review overrides, read [execution-plan-review](../execution-plan-review/SKILL.md) and apply its validation and clamp rules to the draft. Preserve valid overrides when resuming. Do not execute the referenced build or review workflow.
 
-| Band | Score band | Build model | fableplan first | Effort |
-|---|---|---|---|---|
-| 0 | 0–9 | Sonnet 5 (or the repo's cheap/fast builder) | No | high |
-| 1 | 10–20 | Sonnet 5 (or the repo's cheap/fast builder) | No | xhigh |
-| 2 | 21–49 | Opus 5 | No | high |
-| 3 | 50–70 | Opus 5 | No | xhigh |
-| 4 | 71–80 | Opus 5 | **Yes** | xhigh |
-| 5 | 81–99 | Opus 5 | **Yes** | xhigh |
+## 4. Review the complete filing plan
 
-- **Never stamp Fable 5.1 as the Build model.** No band defaults to a Fable build; one exists only when the user directs it on a specific issue.
-- **Never stamp an external CLI harness as the Build model.** `execution-plan-review` writes `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` (optional model id after a comma) on the user's instruction, and `cli-dispatch` owns how the pipeline reaches that CLI.
-- The axes already encode the old heuristics (money/security raises Risk; design-heavy raises Uncertainty; mechanical grind raises Scope/Volume at Capability 0). Never override the band with a separate signal table; if the PRD states a safety carve-out and Risk was under-scored, raise Risk and re-score.
-- **fableplan first: Yes** means score 71 or higher (bands 4–5). Never below 71.
-- **Validate model** is derived from the score by the `validate-issue` step 6 band table and is never stamped; a missing `[C..]` prefix routes as band 5. **Validate effort** and **Plan effort** default to the band value and `high`; this skill omits both lines at filing time, and `execution-plan-review` adds them and owns the clamp rules (an Opus validate stamped `low` or `medium` runs at `high`).
-- Effort floor is **medium** and medium is Fable-only: Opus and Sonnet builds run at high or xhigh. A Fable build may drop to **low** only on a band-5 issue judged lighter than its Volume warrants. Fable 5.1 defaults to high on every stage and runs at xhigh only when the user asks for it or stamps it (the LLM Attribution Footer section of CLAUDE.md owns this rule). When unsure between two tiers, take the higher.
-- **PR review**: the pipeline derives the first-review trigger from the `validate-issue` step 6 first-review table; this file states no boundary of its own. `skills/fix-pr-review/rereview-routing.md` owns the blocking re-review step-down ladder and the shorthand `claude.yml` resolves (`sonnet`, `opus`, `fable`; never stamp `haiku`). Stamp an explicit `@claude <model> review effort:<tier>` line only to override the default.
-- Scores filed before the band-encoding change are not comparable; re-score if routing matters.
+Before writing to GitHub, make the complete drafts and coverage map available with a compact table of draft key, title, milestone, score, typed predecessors, and create/reuse/update action. Check that each in-scope requirement is covered, every criterion is verifiable, the combined graph is acyclic, routing matches scores or explicit overrides, and each milestone has a completion outcome.
 
-### 5. Report
+Honor existing authorization to file. If the user requested review first or has not authorized filing, stop at this concrete plan and ask for the required approval. Do not ask again when the session already authorizes the proposed scope. When invoked through `new-app-pipeline`, preserve its stage checkpoints. A material scope or dependency change after approval needs reconciliation before filing.
 
-A compact table: issue number, `C`, title. Note the spine/wave ordering and which issues concentrate risk.
+## 5. File in dependency order and verify
 
-## Failure modes
+Recheck GitHub for concurrent changes before writes. Reuse matching milestones; create only missing ones with their completion outcome in the description. Use an explicit target repository on every GitHub operation. Pass issue bodies as data through `gh issue create --body-file` or a structured tool argument; never interpolate PRD text into executable shell code.
 
-| Situation | Do this |
-|---|---|
-| An issue cannot be specced without a decision the PRD does not make | Stop; run `prd-questions` for it first. Never file a stub |
-| Two issues touch the same module in the same wave | List the earlier issue in the later issue's `Runs after`, or merge them if they are not independently implementable |
-| A milestone exceeds about 12 issues | Split it; workflow waves get unwieldy past that |
-| Tempted to skip Execution blocks "for now" | Never; cold agents need them |
+Create issues sequentially in topological order across both edge types. Resolve each predecessor key to its verified GitHub number before creating the successor, so every new issue has its complete body and final Execution block at creation. Use the identifiers returned by GitHub; never predict numbering. Read back each created issue and persist its identity in the filing record before proceeding.
+
+For approved updates to existing issues, re-fetch the body and apply only the intended changes, preserving unrelated content and valid overrides. Revalidate the combined graph after any concurrent change. Do not close, reopen, delete, or move existing work merely to make the backlog fit.
+
+If a create or update fails or returns an uncertain result, stop dependent writes and reconcile remote state before retrying. After an uncertain create, match the source reference, title, body, and milestone against GitHub and the filing record. Resume from verified results; never rerun the whole batch blindly or delete successful work as rollback. If the result remains ambiguous, report the blocker and request resolution.
+
+Read back the full filed set, including reused issues and milestones. Check saved titles, bodies, source references, milestone assignments, scores, routing fields, and actual dependency targets against the plan; rerun the combined graph and coverage checks. Resolve mismatches before reporting completion. Cross-milestone prerequisites remain explicit; [milestone-workflow run planning](../milestone-workflow/run-plan.md) owns their execution treatment.
+
+## 6. Report the result
+
+Return links to the milestones and created or updated issues, a compact score/title table or linked filing record, and any unresolved or deferred scope. Distinguish reused and already implemented work from new filings. Report partial completion and the next required decision when blocked. Do not claim the backlog is ready until the saved bodies and graph pass verification.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex

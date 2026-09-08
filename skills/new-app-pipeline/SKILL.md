@@ -14,7 +14,7 @@ The end-to-end process for starting a new app: capture the idea as a PRD, refine
 | 1 | Idea → PRD | `app-prd` | `PRD.md` on a PR | User iterates on the draft, in bursts |
 | 2 | Resolve questions | `prd-questions` | Updated PRD, empty Open Questions | User answered every batch |
 | 3 | Merge the PRD PR | — | PRD on main | Explicit user go |
-| 4 | Issues + milestones | `prd-to-issues` | Milestones, 15–25 issues with Execution blocks | User reviews the breakdown table |
+| 4 | Issues + milestones | `prd-to-issues` | Milestones, complete scoped issues with Execution blocks | User reviews the breakdown table |
 | 5 | Execution plan | `execution-plan-review` | Revised Execution blocks | User settles the final table |
 | 6 | Show the plan | `milestoneplan` | Single per-issue plan table (complexity, dependencies, models, efforts, fableplan, first review) | User reviews the table (recommended, not required) |
 | 7 | Run a milestone | `milestone-workflow` | Workflow run → PRs → LGTMs | User approves the run plan (mandatory) |
@@ -33,3 +33,6 @@ The end-to-end process for starting a new app: capture the idea as a PRD, refine
 If the artifacts already exist (a PRD in the repo, issues filed), enter at the first stage whose artifact is missing or stale — never redo a finished stage. Verify by looking at the repo and issues, not by asking.
 
 Entering at a milestone that already has Execution blocks is the common case; run `milestoneplan` first to see what state those blocks are actually in before assuming stage 5 is finished.
+
+---
+Updated with LLM: GPT-6 | high | Harness: Codex
