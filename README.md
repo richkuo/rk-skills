@@ -83,7 +83,7 @@ flowchart LR
 | `new-app-pipeline` | The orchestrator: stops at every stage boundary for review and re-enters mid-pipeline when artifacts exist. |
 | `app-prd` | Turns an idea dump into a section-numbered `PRD.md` landed via worktree and PR. |
 | `prd-questions` | Sweeps the PRD for open questions, asks them in batched multiple-choice form, and folds each answer into the owning section. |
-| `prd-to-issues` | Maps PRD requirements to dependency-ordered milestones and complete scored issues, with resumable filing and an `## Execution` block (`Depends on`, `Runs after`, build model, effort, fableplan, review trigger). |
+| `prd-to-issues` | Maps PRD requirements to dependency-ordered milestones and complete scored issues, with verified dependencies and an `## Execution` block (`Depends on`, `Runs after`, build model, effort, fableplan, review trigger). |
 | `execution-plan-review` | Renders the execution table from the issues, takes revisions ("11 should be medium", "build 275 with luna on codex at max"), rejects cycles, and writes changes back. |
 | `milestoneplan` | Read-only: renders a milestone's plan as one table, one row per issue. Missing fields show as *missing*. |
 | `milestone-workflow` | Builds dependency tracks, presents the run plan for approval, then runs `milestone-pipeline`: validate, plan, build, review loops, in-session merges, and the release. An optional `targetBranch` points every stage at that branch. |

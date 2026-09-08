@@ -19,7 +19,7 @@ Use a stable PRD link and its verified section heading or identifier in each iss
 
 ## 2. Map requirements and dependencies
 
-Keep a local filing record with the source revision, release scope, requirement-to-issue map, complete draft bodies, graph, intended create/reuse/update actions, and returned GitHub identifiers. Save it outside the tracked source unless the user requests a committed plan; make its location available for resumption.
+Hold the requirement-to-issue map, the complete draft bodies, the dependency graph, and the intended create/reuse/update action for each issue while you work.
 
 - Map every in-scope requirement to a draft key, an existing issue, or verified implementation. Record exclusions and deferred requirements with their reason. Give shared invariants an owning issue and identify the consumers that must enforce them.
 - Size issues around a coherent result that can be implemented and verified in one pull request (PR) after its prerequisites. Set no fixed issue count or milestone size. Keep inseparable changes together; use the scope-disposition criteria in `validate-issue` step 7 when splitting a large candidate.
@@ -50,7 +50,7 @@ The standard PR review line leaves first-review routing to the pipeline and the 
 
 Omit **Validate effort:** and **Plan effort:** at initial filing unless explicitly requested; the owners supply the defaults. Never stamp a validate model. Never stamp Fable 5.1 as the Build model without a specific user instruction. Never stamp an external CLI harness as the Build model without a specific user instruction. Command-line interface (CLI) overrides use `<Name> (Codex CLI[, <model-id>])` or `<Name> (Cursor CLI[, <model-id>])`.
 
-For user-directed model, effort, planner, or review overrides, read [execution-plan-review](../execution-plan-review/SKILL.md) and apply its validation and clamp rules to the draft. Preserve valid overrides when resuming. Do not execute the referenced build or review workflow.
+For user-directed model, effort, planner, or review overrides, read [execution-plan-review](../execution-plan-review/SKILL.md) and apply its validation and clamp rules to the draft. Preserve valid overrides. Do not execute the referenced build or review workflow.
 
 ## 4. Review the complete filing plan
 
@@ -62,17 +62,17 @@ Honor existing authorization to file. If the user requested review first or has 
 
 Recheck GitHub for concurrent changes before writes. Reuse matching milestones; create only missing ones with their completion outcome in the description. Use an explicit target repository on every GitHub operation. Pass issue bodies as data through `gh issue create --body-file` or a structured tool argument; never interpolate PRD text into executable shell code.
 
-Create issues sequentially in topological order across both edge types. Resolve each predecessor key to its verified GitHub number before creating the successor, so every new issue has its complete body and final Execution block at creation. Use the identifiers returned by GitHub; never predict numbering. Read back each created issue and persist its identity in the filing record before proceeding.
+Create issues sequentially in topological order across both edge types. Resolve each predecessor key to its verified GitHub number before creating the successor, so every new issue has its complete body and final Execution block at creation. Use the identifiers returned by GitHub; never predict numbering. Read back each created issue and confirm its number before proceeding.
 
 For approved updates to existing issues, re-fetch the body and apply only the intended changes, preserving unrelated content and valid overrides. Revalidate the combined graph after any concurrent change. Do not close, reopen, delete, or move existing work merely to make the backlog fit.
 
-If a create or update fails or returns an uncertain result, stop dependent writes and reconcile remote state before retrying. After an uncertain create, match the source reference, title, body, and milestone against GitHub and the filing record. Resume from verified results; never rerun the whole batch blindly or delete successful work as rollback. If the result remains ambiguous, report the blocker and request resolution.
+If a create or update fails or returns an uncertain result, stop dependent writes. After an uncertain create, search GitHub for the source reference, title, and milestone before retrying, so the same issue is not filed twice. Never rerun the whole batch blindly, and never close or delete successful work as rollback. Report what was filed, what remains, and the blocker.
 
 Read back the full filed set, including reused issues and milestones. Check saved titles, bodies, source references, milestone assignments, scores, routing fields, and actual dependency targets against the plan; rerun the combined graph and coverage checks. Resolve mismatches before reporting completion. Cross-milestone prerequisites remain explicit; [milestone-workflow run planning](../milestone-workflow/run-plan.md) owns their execution treatment.
 
 ## 6. Report the result
 
-Return links to the milestones and created or updated issues, a compact score/title table or linked filing record, and any unresolved or deferred scope. Distinguish reused and already implemented work from new filings. Report partial completion and the next required decision when blocked. Do not claim the backlog is ready until the saved bodies and graph pass verification.
+Return links to the milestones and created or updated issues, a compact score/title table, and any unresolved or deferred scope. Distinguish reused and already implemented work from new filings. Report partial completion and the next required decision when blocked. Do not claim the backlog is ready until the saved bodies and graph pass verification.
 
 ---
 Updated with LLM: GPT-6 | high | Harness: Codex
