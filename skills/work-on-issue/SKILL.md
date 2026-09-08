@@ -1,6 +1,6 @@
 ---
 name: work-on-issue
-description: Use when the user says "work on issue", "implement issue", "/work-on-issue", or asks to implement a GitHub issue end-to-end (not merely validate it). Takes an issue URL or number (defaults to the just-validated issue). Implements in an isolated worktree, verifies, commits, pushes, and opens a PR that closes the issue. Stops at the open PR; work-on-issue-loop owns review.
+description: Use when the user says "work on issue", "implement issue", "/work-on-issue", or asks to implement a GitHub issue end-to-end (not merely validate it). Takes an issue URL or number (defaults to the just-validated issue). Implements in an isolated worktree, verifies, commits, pushes, and opens a PR that closes the issue.
 ---
 
 # work-on-issue
