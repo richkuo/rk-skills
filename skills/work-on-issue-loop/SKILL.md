@@ -17,7 +17,7 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ### 1. Implement, open the PR, and trigger the first review
 
-Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`), passing the resolved issue number through explicitly so it never re-resolves the issue itself. It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
+Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`), passing the resolved issue number explicitly. It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
 
 - **Stopped with no PR** (closed issue, existing PR, wrong repo, or any other stop `work-on-issue` defines; it owns the list) → nothing to drive; stop and relay its report with its stop reason.
 - **PR opened** → capture the PR number/URL and branch, then post the first trigger yourself as a separate one-line comment with no footer: `gh pr comment <PR-number> --body "<band-derived trigger>"`. Do not wait on CI; the reviewer surfaces check failures itself. Match the repo's trigger phrase if recent PR comments show it differs.
