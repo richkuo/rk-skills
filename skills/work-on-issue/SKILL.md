@@ -5,7 +5,7 @@ description: Use when the user says "work on issue", "implement issue", "/work-o
 
 # work-on-issue
 
-Take the issue to a verified, open pull request (PR). The repository's CLAUDE.md/AGENTS.md owns engineering, test-edit, attribution, and Response Style rules. Never pause to ask; report at the end, or stop and report when a gate fails. Review triggers, merge, and follow-on issues belong to the caller.
+Take the issue to a verified, open pull request (PR). The repository's CLAUDE.md/AGENTS.md owns engineering, test-edit, attribution, and Response Style rules. Never pause to ask; report at the end, or stop and report when a gate fails.
 
 ## Input
 
@@ -20,8 +20,6 @@ Work in a clone whose remotes match the issue's repository; pass `-R <owner>/<re
 Gates: the issue is open and no open PR already fixes it. Check `gh pr list --state open --search "#<N> in:title,body"` and `gh issue view <N> --json closedByPullRequestsReferences`, then open each candidate; a passing mention does not count, and a PR whose head is this issue's own branch (step 1) routes to step 6. A failed lookup blocks; an existing fix stops the run with its URL.
 
 A plan is a comment starting with `## Implementation plan` (any parenthetical model tag), or one a maintainer or caller clearly frames as a plan. Adopt the newest posted plan, even over a caller-supplied one, unless the user selects one; a caller's plan applies only when none is posted. Earlier plans are superseded, never merged. Record its author, source, date, and whether a Fable 5.1 model authored it (heading or footer) for step 6's `, fableplan` marker. No plan is normal.
-
-Honor an explicit build model/harness assignment; a driver dispatching a stamped Codex or Cursor build loads `cli-dispatch`.
 
 ### 1. Create the isolated worktree on a verified base
 
@@ -51,7 +49,7 @@ The repository's test-edit rules own stale-test edits: the cases Outdated, Wrong
 
 Run the project's build, tests, and linters plus the step 2 acceptance checks. Review the full diff against the base for omissions, unrelated changes, and generated files. Close every plan item with evidence or a deviation.
 
-Fix failures this change caused; check an alleged pre-existing failure against the unchanged base first. Failing or unrunnable required checks block the PR, except under a caller instruction that forbids running the project's code and defers to continuous integration (CI), such as the issue-workflow prompts' "do NOT run test suites" line; then the PR body names the checks left to CI. Rerun affected checks after later edits. Local success is not CI success.
+Fix failures this change caused; check an alleged pre-existing failure against the unchanged base first. Failing or unrunnable required checks block the PR, except under a caller instruction that forbids running the project's code and defers to continuous integration (CI); then the PR body names the checks left to CI. Rerun affected checks after later edits. Local success is not CI success.
 
 ### 5. Commit and push
 
@@ -67,4 +65,4 @@ Read back `gh pr view <url> --json state,headRefName,headRefOid,baseRefName,body
 
 ### 7. Report to the user
 
-The skill ends here; the caller triggers review and waits on CI. Report the worktree/branch, a non-default target, what was implemented, the verification result, the commit SHA, and the PR URL. On a blocker, state the stage, the evidence, the preserved worktree, and which commit, push, or PR already exists per branch history and GitHub. When step 3 stopped on an ungrounded failing test, name its `file:line`, assertion, and conflict. Name unfiled follow-on work and return caller-required fields from verified state. Cap the report at 55 words, plain simple English in ASD-STE100, per the Response Style rules.
+The skill ends here; the caller triggers review and waits on CI. Report the worktree/branch, a non-default target, what was implemented, the verification result, the commit SHA, and the PR URL. On a blocker, state the stage, the evidence, the preserved worktree, and which commit, push, or PR already exists per branch history and GitHub. When step 3 stopped on an ungrounded failing test, name its `file:line`, assertion, and conflict. Name unfiled follow-on work. Cap the report at 55 words, plain simple English in ASD-STE100, per the Response Style rules.
