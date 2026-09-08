@@ -73,6 +73,3 @@ Read back the full filed set, including reused issues and milestones. Check save
 ## 6. Report the result
 
 Return links to the milestones and created or updated issues, a compact score/title table, and any unresolved or deferred scope. Distinguish reused and already implemented work from new filings. Report partial completion and the next required decision when blocked. Do not claim the backlog is ready until the saved bodies and graph pass verification.
-
----
-Updated with LLM: GPT-6 | high | Harness: Codex

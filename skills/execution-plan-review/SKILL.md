@@ -62,6 +62,3 @@ Re-render the final table once after all revisions land, and say it is what the 
 | Revision names a plan model | Only the effort is stampable; the fableplan stage is Fable 5.1 by definition. Drop the model part, keep the effort part, say so |
 | Revision names a plan effort | Write the `Plan effort:` line with `low`, `medium`, `high`, or `xhigh`. A revision to `high` removes the line, since high is the default |
 | Edits collide with concurrent issue edits | Re-fetch, re-apply only your delta |
-
----
-Updated with LLM: GPT-6 | high | Harness: Codex

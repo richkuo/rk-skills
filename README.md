@@ -157,6 +157,3 @@ The plugin auto-discovers `skills/` and the `/commit` command and auto-updates; 
 ## License
 
 MIT, see [LICENSE](./LICENSE).
-
----
-Updated with LLM: GPT-6 | high | Harness: Codex
