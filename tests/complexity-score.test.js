@@ -94,16 +94,18 @@ describe('complexity score band encoding', () => {
     })
   })
 
-  test('the prd-to-issues band table states the same build routing as the owner', () => {
-    const owner = ownerBands()
-    const rows = [...prdToIssues.matchAll(/^\| (\d) \| (\d+)–(\d+) \| (Sonnet 5|Opus 5|Fable 5.1)[^|]*\| (\*\*Yes\*\*|No) \| (\w+) ?\|/gm)]
-    expect(rows.length, 'prd-to-issues states six bands').toBe(owner.length)
-    rows.forEach(([, band, min, max, model, fableplan, effort], index) => {
-      const row = owner[index]
-      expect({ band: Number(band), min: Number(min), max: Number(max) }, `row ${band} bounds`).toEqual({ band: row.band, min: row.min, max: row.max })
-      expect(fableplan === '**Yes**', `row ${band} fableplan`).toBe(row.fableplan)
-      expect({ model: MODEL_KEY[model], effort }, `row ${band} build`).toEqual(row.build)
-    })
+  test('prd-to-issues resolves scoring and routing to the canonical sources', async () => {
+    for (const target of ['../validate-issue/SKILL.md#6-score-complexity', '../validate-issue/complexity-scoring.md']) {
+      const links = [...prdToIssues.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map(([, href]) => href)
+      expect(links).toContain(target)
+      const resolved = new URL(target, new URL('skills/prd-to-issues/SKILL.md', root))
+      const anchor = resolved.hash
+      resolved.hash = ''
+      const content = await Bun.file(resolved).text()
+      if (anchor) expect(content).toContain('### 6. Score complexity')
+      else expect(content).toContain('## Axis anchors')
+    }
+    expect(prdToIssues).not.toMatch(/^\| \d \| \d+–\d+ \|/m)
   })
 
   test('the milestoneplan validate copy covers every owner band with the owner routing', () => {

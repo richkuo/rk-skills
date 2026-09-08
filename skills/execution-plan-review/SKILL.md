@@ -21,7 +21,7 @@ Cell rules:
 - **Plan effort** defaults to `high` on `fableplan first: Yes` issues; a stamped line shows as `<tier> (stamped)`. On a `No` issue show `—` only when no line is stamped; any stamped line, `high` included, shows as `<tier> (inert — no plan stage runs)`, because the milestone pipeline logs it on every run and the source-of-truth table must not mask it.
 - An absent ordering field shows as `missing`, never `none`, so legacy prose inference is not silently discarded.
 
-Follow with 2–3 sentences on the pattern (dominant bands, which issues plan first at score ≥ 71, the review trigger) for a sanity check against the `prd-to-issues` / `validate-issue` band table.
+Follow with 2–3 sentences on the pattern (dominant bands, which issues plan first at score ≥ 71, the review trigger) for a sanity check against the `validate-issue` step 6 band table.
 
 ### 2. Take revisions
 

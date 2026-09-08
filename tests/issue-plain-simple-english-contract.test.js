@@ -33,8 +33,17 @@ const texts = Object.fromEntries(await Promise.all(ALL.map(async (path) => [path
 const normalized = Object.fromEntries(Object.entries(texts).map(([path, source]) => [path, source.replace(/\s+/g, ' ')]))
 
 describe('Issue-body Plain simple English contract', () => {
-  test('every issue-composing file requires the section with its 55-word cap', () => {
+  test('every issue-composing file requires the section and its shared definition', async () => {
     for (const path of ISSUE_BODY_CONSUMERS) {
+      if (path === 'skills/prd-to-issues/SKILL.md') {
+        const reference = texts[path].match(/\[github-issue-format\]\(([^)]+)\)/)
+        expect(reference).not.toBeNull()
+        const resolved = new URL(reference[1], new URL(path, root))
+        expect(resolved.href).toBe(new URL(OWNER, root).href)
+        expect(await Bun.file(resolved).text()).toBe(texts[OWNER])
+        expect(normalized[path]).toContain('mandatory `## Plain simple English` section')
+        continue
+      }
       expect(normalized[path], path).toMatch(
         /## Plain simple English[\s\S]{0,320}55 words|55 words[\s\S]{0,320}## Plain simple English/,
       )
