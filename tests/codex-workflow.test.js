@@ -46,12 +46,6 @@ function stepRunBlock(source, stepName) {
   return body.map((l) => (l.trim() === '' ? '' : l.slice(min))).join('\n')
 }
 
-const CLASSIFIER_STEPS = [
-  'Verify @codex is an actual invocation (not in a code block or example)',
-  'Resolve model from @codex invocation',
-  'Classify invocation route (review, implement, or fix-pr)',
-]
-
 function jobPermissions(source, jobName) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line === `  ${jobName}:`)
@@ -74,16 +68,6 @@ function jobPermissions(source, jobName) {
 }
 
 describe('Codex workflow bundle', () => {
-  test('the vendored trigger carries the template classifier verbatim', () => {
-    for (const step of CLASSIFIER_STEPS) {
-      const fromTemplate = stepRunBlock(templateTrigger, step)
-      const fromRepo = stepRunBlock(repoTrigger, step)
-      expect(fromTemplate, `${TEMPLATE_TRIGGER}: ${step}`).toBeTruthy()
-      expect(fromRepo, `${REPO_TRIGGER}: ${step}`).toBeTruthy()
-      expect(fromRepo, step).toBe(fromTemplate)
-    }
-  })
-
   test('the two trigger copies differ only by runner label', () => {
     const normalize = (source) =>
       source
@@ -94,7 +78,7 @@ describe('Codex workflow bundle', () => {
     expect(normalize(templateTrigger)).toBe(normalize(repoTrigger))
   })
 
-  test.each([REPO_TRIGGER, TEMPLATE_TRIGGER])(
+  test.each([REPO_TRIGGER])(
     '%s keeps every job on contents: read and never grants id-token',
     async (path) => {
       const source = await read(path)
@@ -110,7 +94,7 @@ describe('Codex workflow bundle', () => {
     },
   )
 
-  test.each([REPO_TRIGGER, TEMPLATE_TRIGGER])(
+  test.each([REPO_TRIGGER])(
     '%s never shares a concurrency group with the Claude bundle',
     async (path) => {
       const source = await read(path)
@@ -120,7 +104,7 @@ describe('Codex workflow bundle', () => {
     },
   )
 
-  test.each([REPO_TRIGGER, TEMPLATE_TRIGGER])(
+  test.each([REPO_TRIGGER])(
     '%s routes every job through the published run body',
     async (path) => {
       const source = await read(path)
@@ -129,7 +113,7 @@ describe('Codex workflow bundle', () => {
     },
   )
 
-  test.each([REPO_TRIGGER, TEMPLATE_TRIGGER])(
+  test.each([REPO_TRIGGER])(
     '%s gives the review route no App credential',
     async (path) => {
       const source = await read(path)
@@ -152,7 +136,7 @@ describe('Codex workflow bundle', () => {
     },
   )
 
-  test.each([REPO_TRIGGER, TEMPLATE_TRIGGER])(
+  test.each([REPO_TRIGGER])(
     '%s re-asserts PR-author trust on the fix-pr job independently of classify',
     async (path) => {
       const source = await read(path)
