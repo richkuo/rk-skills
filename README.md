@@ -32,7 +32,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
 | `work-on-issue` | Implements an issue in an isolated git worktree, builds to any posted plan (newest wins, deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
 | `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
-| `issueplan` | Plans and builds on the session's own model with no subagent. For an issue it posts the plan and asks whether to build. |
+| `issueplan` | Plans on the session's model without subagents. Supports planning only; explicit build authorization continues to a PR. A bare issue invocation asks after posting the plan. |
 
 ### PR review skills
 
@@ -157,3 +157,6 @@ The plugin auto-discovers `skills/` and the `/commit` command and auto-updates; 
 ## License
 
 MIT, see [LICENSE](./LICENSE).
+
+---
+Updated with LLM: GPT-6 | high | Harness: skill-creator
