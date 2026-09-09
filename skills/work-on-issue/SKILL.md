@@ -51,7 +51,7 @@ The repository's test-edit rules own stale-test edits: the cases Outdated, Wrong
 
 Run the project's build, tests, and linters plus the step 2 acceptance checks. Review the full diff against the base for omissions, unrelated changes, and generated files. Close every plan item with evidence or a deviation.
 
-Fix failures this change caused; check an alleged pre-existing failure against the unchanged base first. Failing or unrunnable required checks block the PR, except under a caller instruction that forbids running the project's code and defers to continuous integration (CI); then the PR body names the checks left to CI. Rerun affected checks after later edits. Local success is not CI success.
+Fix failures this change caused; check an alleged pre-existing failure against the unchanged base first. Failures caused by this change block the PR until fixed. Unavailable checks and verified pre-existing failures do not block opening the PR. Name each outstanding check, why it did not pass or run, and any checks deferred to continuous integration (CI) in the PR body; keep required release checks outstanding until verified. Rerun affected checks after later edits. Local success is not CI success.
 
 ### 5. Commit and push
 
