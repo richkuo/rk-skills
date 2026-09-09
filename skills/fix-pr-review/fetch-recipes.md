@@ -1,45 +1,34 @@
-# Fetch recipes
+# Fetch and reconcile feedback
 
-Reference for SKILL.md steps 1–2: channel queries, collection rules, CI-check procedures.
+Read for steps 1 and 2. Use the PR's resolved base repository and GitHub host for all review and check queries, including fork PRs. Record the inspected head SHA. A failed or truncated fetch is incomplete input; retry recoverable reads. Remaining collection gaps block completion and re-review.
 
-## Review-feedback channels (step 1)
+## Three channels
 
-```bash
-# Formal review events — state included so DISMISSED reviews can be skipped
-gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '.[] | {id, user: .user.login, state, submitted_at, body}'
-# Issue comments on the PR — where @claude review output usually lands
-gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, body}'
-# Inline diff threads with resolution state — REST cannot report isResolved, so use GraphQL
-gh api graphql -F owner='{owner}' -F repo='{repo}' -F pr=<N> -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-    reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
-      comments(first:50){ nodes{ databaseId author{login} createdAt body } } } } } } }'
-```
+- Formal reviews: `gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate`. Retain ID, author, state, submitted time, commit ID, body, and URL. Skip dismissed review bodies; their unresolved inline claims are still considered separately.
+- Issue comments: `gh api repos/{owner}/{repo}/issues/<N>/comments --paginate`. Retain ID, author, created and updated times, body, and URL. Include ordinary prose that asks for a change, even without review headings.
+- Inline threads: query GraphQL `repository.pullRequest.reviewThreads` with `first:100`, an `after` cursor, and `pageInfo { hasNextPage endCursor }`. Retain thread ID, `isResolved`, `isOutdated`, path, line, and comment IDs. For each thread, separately paginate its `comments` connection through `node(id: <thread ID>)` as a `PullRequestReviewThread`, retaining `fullDatabaseId`, author, timestamps, body, URL, and review commit where available. Each connection has its own cursor; paginating threads alone does not fetch all replies. Use the root comment's `fullDatabaseId` as the REST reply target; preserve its exact integer text. If it is null, obtain the matching REST comment ID before replying.
 
-When `hasNextPage` is true, paginate with `endCursor` — never drop threads past 100.
+Use `gh api graphql` with variables supplied as structured fields or from a request file. Check GraphQL errors as well as command exit status. Never put fetched bodies or branch names into executable shell text.
 
-### Collection rules
+## Reconciliation across runs
 
-**Cutoff** = the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review); no cutoff → everything since the PR opened. Collect:
+Read prior dispositions and match findings by source identity and claim. A last-disposition timestamp or last pushed commit is only a search aid; neither proves an older finding was addressed. Edited comments need comparison by current body and `updated_at`/`updatedAt` as available.
 
-- Every formal review or review-formatted comment **newer than the cutoff** — one opening with an `LGTM` / `Needs Updates` verdict, carrying sections like `### Needs Fixing`, or otherwise clearly review feedback. **When several landed, address all of them.** The latest alone is incomplete. Skip `DISMISSED` reviews.
-- Every **unresolved** inline thread (`isResolved: false`) **regardless of age** — resolution state decides and the timestamp does not; `isOutdated` alone does not mean resolved. Exception: a thread whose last comment is your own disposition reply with no response since is awaiting the reviewer — skip it. Each thread is one finding.
-- Skip your own prior disposition comments and `@<bot> … review` trigger comments.
+Collect every unaddressed claim from all reviews and comments, plus unresolved inline threads of any age. Split compound threads in step 3. `isOutdated` alone does not settle a thread. Ignore trigger comments and disposition prose as new findings, but retain reviewer replies that contest a disposition or add evidence.
 
-## CI check snapshot (step 2)
+A prior disposition covers only the claims it explicitly accounts for. Verify its fixed claim at the current head or retain its code-grounded rebuttal or valid deferral. A final fixer reply with no newer response is awaiting review only when it accounts for every claim in that thread and its evidence still holds. A generic acknowledgment, partial reply, or Blocked item remains actionable. Do not resolve threads merely because a reply was posted.
 
-```bash
-gh pr checks <N> --json name,state,bucket,link,startedAt,completedAt
-```
+Read again before publishing to detect new or edited feedback. Reconcile additions and refresh validation if the head changed. If feedback keeps changing and a complete pass cannot be established, preserve work and report the incomplete set. Never move a global cutoff past findings absent from the disposition.
 
-`bucket` normalizes `state` into `pass`/`fail`/`pending`/`skipping`/`cancel`:
+## CI snapshot
 
-- `pending` / `skipping` — **skip entirely.** A running check is the next pass's problem; never retry, wait, or treat "not done yet" as a finding.
-- `cancel` — see the attribution procedure below.
-- `fail` — pull only the failing detail:
-  - GitHub Actions: resolve the run ID from the check's `link`, then `gh run view <run-id> --log-failed`.
-  - External CI: `gh api` does not fill `{sha}`, so read it first (`gh pr view <N> --json headRefOid --jq .headRefOid`), then `gh api repos/{owner}/{repo}/commits/<sha>/check-runs --jq '.check_runs[] | select(.conclusion=="failure") | {name, output}'`.
+Use `gh pr checks <N> --repo <owner/repo> --json name,state,bucket,link,startedAt,completedAt`. Nonzero status can mean failing or pending checks; distinguish returned check data from an API failure.
 
-### Attributing a `bucket: cancel` check
+- `fail`: collect failing details. For GitHub Actions, obtain the run ID from the check link and use `gh run view <run-id> --repo <owner/repo> --log-failed`. For external checks, read the check output or linked provider evidence at the recorded head. Paginate check-run results and select the check by identity, not name alone.
+- `pending` or `skipping`: record status, with no finding, waiting, or retry.
+- `cancel`: investigate only available evidence. A concrete upstream failure becomes a finding unless its failed job is already represented. A manual cancel creates no finding. An unknown cause is a verification gap; never invent an upstream defect.
 
-Skip a cancelled check unless its run log shows a real upstream failure caused the cancel; a manual cancel is skipped. When it did and this snapshot already has a `fail`-bucket entry for that upstream job, skip it — the `fail` path covers it. Otherwise resolve the run ID from its `link`, find the failed job with `gh run view <run-id>`, pull its detail via the `fail` procedure, and cite that job's name. When no concrete failed job surfaces, never invent an upstream cause — record the finding against the cancelled check's own name with its run link and flag it for human review.
+Unavailable logs leave attribution unresolved. Record the access limitation separately from the failed check; do not call it pre-existing or fixed without evidence.
+
+---
+Updated with LLM: GPT-6 | high | Harness: skill-creator
