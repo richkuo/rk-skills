@@ -68,6 +68,3 @@ Read back `gh pr view <url> --json state,headRefName,headRefOid,baseRefName,body
 ### 7. Report to the user
 
 The skill ends here; the caller triggers review and waits on CI. Report the worktree/branch, a non-default target, what was implemented, the verification result, the commit SHA, and the PR URL. On a blocker, state the stage, the evidence, the preserved worktree, and which commit, push, or PR already exists per branch history and GitHub. When step 3 stopped on an ungrounded failing test, name its `file:line`, assertion, and conflict. Name unfiled follow-on work. Cap the report at 55 words, plain simple English in ASD-STE100, per the Response Style rules.
-
----
-Updated with LLM: GPT-6 | high | Harness: Codex
