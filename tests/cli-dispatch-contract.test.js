@@ -26,6 +26,12 @@ describe('cli dispatch contract', () => {
     for (const flag of ['-C "$REPO"', "-m '<model-id>'", '-c model_reasoning_effort=<tier>', '-s workspace-write', '--json', '-o "$RESULT"', '< "$PROMPT"']) {
       expect(codexShim, flag).toContain(flag)
     }
+    const validateShim = codeBlocks.find((block) => block.includes('-s read-only'))
+    expect(validateShim, 'a fenced read-only codex exec validate shim exists').toBeDefined()
+    for (const flag of ['-C "$REPO"', "-m '<model-id>'", '-c model_reasoning_effort=<tier>', '-s read-only', '--json', '-o "$RESULT"', '< "$PROMPT"']) {
+      expect(validateShim, flag).toContain(flag)
+    }
+    expect(validateShim, 'the validate shim grants no network').not.toContain('network_access')
     for (const flag of ['--output-format json', "--model '<model-id>'", '--force', '--trust', '--workspace "$REPO"', '"$(cat "$PROMPT")"']) {
       expect(cursorShim, flag).toContain(flag)
     }
@@ -58,13 +64,19 @@ describe('cli dispatch contract', () => {
     expect(pipeline).toMatch(/Never add \\`--dangerously-bypass-approvals-and-sandbox\\`, \\`--yolo\\`/)
     expect(pipeline).toContain("enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor']")
     expect(pipeline).toContain("enum: ['low', 'medium', 'high', 'xhigh', 'max']")
-    expect(pipeline).toContain("validate_model: { type: 'string', enum: ['fable', 'opus']")
+    expect(pipeline).toContain("validate_model: { type: 'string', enum: ['fable', 'opus', 'codex', 'cursor']")
+    expect(pipeline).toContain(`codex exec -C "$REPO" -m '\${cliModel}' -c model_reasoning_effort=\${effort} -s read-only --json`)
+    expect(pipeline).toContain("const CLI_VALIDATE_HARNESSES = new Set(['codex'])")
+    expect(pipeline).toMatch(/never widen the sandbox past \\`read-only\\`/)
   })
 
   test('every skill that stamps, renders, or runs a Build model documents the CLI harness form', () => {
     expect(prdToIssues).toContain('<Name> (Codex CLI[, <model-id>])')
     expect(prdToIssues).toContain('Never stamp an external CLI harness as the Build model')
     expect(planReview).toContain('build 275 with luna on codex at max')
+    expect(planReview).toContain('validate 20 with astra on codex at low')
+    expect(skill).toContain('## 9. Validate pass')
+    expect(milestoneplan).toContain('Astra · low (Codex CLI, gpt-6)')
     expect(planReview).toContain('`max` is a Codex CLI-only tier')
     expect(milestoneplan).toContain('Luna · max (Codex CLI)')
     expect(milestoneWorkflow).toContain('`codex login status`')

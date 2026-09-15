@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', reviewBot?: \'claude\' | \'codex\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, targetBranch?: \'develop\', merged?: [{issue, pr, merge_sha, issue_state}] }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
-    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model from a stamped Validate model line when present, else derived from its [C..] score band; effort from a stamped Validate effort line when present, else the band default' },
+    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model from a stamped Validate model line when present (a Codex CLI stamp runs the validate-issue pass through the read-only cli-dispatch shim under an Opus 5 driver), else derived from its [C..] score band; effort from a stamped Validate effort line when present, else the band default' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at the stamped Plan effort when present, else high; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
@@ -181,6 +181,41 @@ function cliShimCommand(harness, cliModel, effort) {
   return `agent -p --output-format json --model '${cliModel}' --force --trust --workspace "$REPO" "$(cat "$PROMPT")" > "$RESULT" 2> "$STDERR"`
 }
 
+function cliValidateShimCommand(cliModel, effort) {
+  return `codex exec -C "$REPO" -m '${cliModel}' -c model_reasoning_effort=${effort} -s read-only --json -o "$RESULT" < "$PROMPT" > "$EVENTS" 2> "$STDERR"`
+}
+
+const CLI_VALIDATE_HARNESSES = new Set(['codex'])
+
+function validateModelName(ex) {
+  if (isCliHarness(ex.validate_model)) return `${ex.validate_model_name || ex.validate_cli_model || ex.validate_model} (${CLI_HARNESSES[ex.validate_model].label})`
+  return MODEL_NAMES[ex.validate_model]
+}
+
+function cliValidateDriverPrompt(taskPrompt, ex, issue) {
+  const modelName = ex.validate_model_name || ex.validate_cli_model
+  return `You are a validation DRIVER agent in this repo. The validation itself runs on ${modelName} through the Codex CLI (model id \`${ex.validate_cli_model}\`, effort \`${ex.validate_effort}\`) in its read-only sandbox. You never validate the issue yourself and you never substitute a Claude model for that pass: the issue's Execution block stamps this external harness, and silently validating on another model is the defect this driver exists to close. If the CLI cannot run, return the blocker.
+
+Load the \`cli-dispatch\` skill BEFORE doing anything else (mandatory) and follow its validate-pass section exactly. Then:
+1. Preflight: \`command -v codex\` must succeed and \`codex login status\` must report a signed-in account. Either failure is a blocker — return verdict INVALID with rescored_complexity 0, empty corrections and constraints, and blocker naming the missing piece.
+2. Run \`git fetch origin\` so the CLI agent traces against a current \`origin/<default branch>\`, then snapshot \`git status --porcelain --untracked-files=all\` in the main checkout.
+3. Fetch the issue yourself: \`gh issue view ${issue} --json title,body,milestone,state\` and \`gh pr list --search "#${issue} in:title,body" --state all --json number,title,state,headRefName\`. Write a prompt file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory) that carries, in this order: the task prompt below verbatim; the fetched issue title, body, and PR list as data under a heading that says they were fetched by the driver; one line stating that the sandbox is read-only with no network, so every \`gh\` or network call fails and the agent works from the embedded issue data, the local checkout, and \`origin/<default branch>\`, and records anything it could not check as a Verification limitation in the summary; one line telling the CLI agent to read the \`validate-issue\` skill file directly at the first path that exists among \`~/.codex/skills/validate-issue/SKILL.md\`, \`~/.cursor/skills/validate-issue/SKILL.md\`, and \`~/.claude/skills/validate-issue/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file); and one line telling it to write no file, post no comment, and end its final message with one JSON object carrying exactly the keys verdict, summary, corrections, implementation_constraints, rescored_complexity, and invalid_reason.
+4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit:
+   \`${cliValidateShimCommand(ex.validate_cli_model, ex.validate_effort)}\`
+   Never add \`--dangerously-bypass-approvals-and-sandbox\`, \`--yolo\`, or any flag the cli-dispatch skill does not name; never widen the sandbox past \`read-only\`.
+5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker that quotes the last lines of the stderr file.
+6. After every run, pass or fail, read the CLI's final message and the event log. When the output names the model that served the run, compare it with \`${ex.validate_cli_model}\` — a different model is a substitution: report it in flags and in the summary, never as a ${modelName} validation. An output that names no model is recorded as model unverified beside the requested id. This step is never skipped on a zero exit.
+7. Diff \`git status --porcelain --untracked-files=all\` in the main checkout against the snapshot, ignoring every path under \`.claude/worktrees/\`; report any change in flags.
+8. Parse the JSON object from the final message and return it via StructuredOutput unchanged, with flags added. A final message with no parseable JSON object, or one missing verdict or rescored_complexity, is a blocker: return verdict INVALID with rescored_complexity 0 and blocker naming the parse failure; never fill the verdict in yourself.
+
+Task prompt for the Codex CLI agent (write it to the prompt file verbatim):
+----- BEGIN TASK PROMPT -----
+${taskPrompt}
+----- END TASK PROMPT -----
+
+Return via StructuredOutput: verdict, summary, corrections, implementation_constraints, rescored_complexity, invalid_reason when INVALID, flags naming any substitution, stray write, or retry, and blocker only when the pass could not run or could not be parsed.`
+}
+
 function cliDriverPrompt(taskPrompt, ex, kind = 'implement', planned = false) {
   const harness = CLI_HARNESSES[ex.model]
   const modelName = footerModelName(ex)
@@ -312,6 +347,9 @@ function blockingRetrigger(ex) {
 
 function validateRouteFor(ex, band) {
   const stampedModel = ex.validate_model
+  if (isCliHarness(stampedModel)) {
+    return { model: CLI_DRIVER.model, effort: CLI_DRIVER.effort, cli: true, note: ` (stamped Validate model ${validateModelName(ex)} overrides the band default ${MODEL_NAMES[band.validate.model]} @ ${band.validate.effort}; model id ${ex.validate_cli_model}, effort ${ex.validate_effort}, driven by a ${MODEL_NAMES[CLI_DRIVER.model]} @ ${CLI_DRIVER.effort} driver agent)` }
+  }
   const model = stampedModel || band.validate.model
   const modelNote = stampedModel ? ` (stamped Validate model ${MODEL_NAMES[stampedModel]}${stampedModel === band.validate.model ? ' matches' : ' overrides'} the band default ${MODEL_NAMES[band.validate.model]})` : ''
   const stamped = ex.validate_effort
@@ -346,8 +384,10 @@ const PREP_SCHEMA = {
           build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
           cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low and medium are Fable-only and max is Codex CLI-only — runtime normalizes non-Fable low/medium→high, max→xhigh on Claude models and Cursor' },
-          validate_model: { type: 'string', enum: ['fable', 'opus'], description: 'From an optional "Validate model:" line — Fable 5.1→fable, Opus 5→opus. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
-          validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low/medium to high on a non-Fable validate' },
+          validate_model: { type: 'string', enum: ['fable', 'opus', 'codex', 'cursor'], description: 'From an optional "Validate model:" line — Fable 5.1→fable, Opus 5→opus; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
+          validate_model_name: { type: 'string', description: 'For a codex/cursor validate only: the display name before the parenthetical, e.g. "Astra" from "Astra (Codex CLI, gpt-6)"; OMIT for Claude models' },
+          validate_cli_model: { type: 'string', description: 'For a codex/cursor validate only: the explicit CLI model id after the comma inside the parenthetical; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
+          validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low/medium to high on a non-Fable Claude validate, and max is a Codex CLI-only tier' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; OMIT this field when the line is a standard `@claude` trigger or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
@@ -369,6 +409,8 @@ const VALIDATION_SCHEMA = {
     corrections: { type: 'array', items: { type: 'string' }, description: 'Concrete edits the issue body needs (empty if none)' },
     implementation_constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the implementer must honor (invariants, refuted approaches, preferred option, merge-order notes)' },
     invalid_reason: { type: 'string', description: 'Only when verdict is INVALID: why' },
+    flags: { type: 'array', items: { type: 'string' }, description: 'Only from a CLI validate driver: substitution, stray write, retry, or model-unverified notes' },
+    blocker: { type: 'string', description: 'Only from a CLI validate driver: why the pass could not run or be parsed; the runtime treats the result as a failed attempt' },
   },
 }
 
@@ -473,9 +515,9 @@ async function validateWithRetry(issue, prompt, options) {
     const disposition = attempt === 1 ? 'retrying once' : 'retries exhausted'
     try {
       const validation = await agent(prompt, options)
-      if (validation) return { validation, blocker: null }
-      blocker = 'validation agent failed'
-      log(`#${issue}: validation attempt ${attempt}/2 returned no result; ${disposition}`)
+      if (validation && !validation.blocker) return { validation, blocker: null }
+      blocker = validation?.blocker ? `validation driver blocked: ${validation.blocker}` : 'validation agent failed'
+      log(`#${issue}: validation attempt ${attempt}/2 ${validation?.blocker ? `blocked — ${validation.blocker}` : 'returned no result'}; ${disposition}`)
     } catch (error) {
       const detail = error?.message || error
       blocker = `validation threw: ${detail}`
@@ -724,8 +766,8 @@ const prep = await agent(
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
 - effort: from "**Effort:**" — one of low/medium/high/xhigh/max; low and medium are Fable-only tiers and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
 - plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the fableplan stage runs at its high default. Preserve a stamped tier verbatim. Only the effort is stampable — never read a model from this line
-- validate_model: from an optional "**Validate model:**" line — map "Fable 5.1"→fable and "Opus 5" (any Opus)→opus. When the line is absent, OMIT the field — absence means the runtime derives the validate model from the [C..] band. Never read a model from the "Validate effort:" line
-- validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
+- validate_model: from an optional "**Validate model:**" line — map "Fable 5.1"→fable and "Opus 5" (any Opus)→opus. When the line carries a parenthetical naming an external harness — "Astra (Codex CLI, gpt-6)", "Luna (Codex CLI)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set validate_model_name to the name before the parenthetical, and set validate_cli_model to the id after the comma inside the parenthetical when one is present; OMIT validate_cli_model when the parenthetical carries no id, and OMIT both fields for Claude models. When the line is absent, OMIT validate_model — absence means the runtime derives the validate model from the [C..] band. Never read a model from the "Validate effort:" line
+- validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh/max. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model opus, effort high, fableplan false — never fable: Fable builds only on an explicit stamp, and the runtime re-derives these from the validated score anyway). Do not modify anything anywhere.
@@ -772,6 +814,34 @@ const normalizedIssues = prep.issues.map((issue) => {
   } else if (normalized.effort === 'max') {
     log(`#${normalized.number}: normalized build effort max → xhigh for ${MODEL_NAMES[normalized.model] || normalized.model} (max is a Codex CLI-only tier)`)
     normalized.effort = 'xhigh'
+  }
+  if (isCliHarness(normalized.validate_model)) {
+    const harness = CLI_HARNESSES[normalized.validate_model]
+    if (!CLI_VALIDATE_HARNESSES.has(normalized.validate_model)) {
+      normalized.validate_cli_error = `Validate model "${normalized.validate_model_name || normalized.validate_model}" on the ${harness.label} is not supported — a validate pass runs only on the Codex CLI, whose read-only sandbox enforces that validation writes nothing; stamp "Validate model:" as Fable 5.1, Opus 5, or "<Name> (Codex CLI, <model-id>)"`
+      log(`#${normalized.number}: ${normalized.validate_cli_error}`)
+    }
+    if (!normalized.validate_effort) normalized.validate_effort = 'high'
+    if (!harness.efforts.includes(normalized.validate_effort)) {
+      log(`#${normalized.number}: normalized validate effort ${normalized.validate_effort} → high for ${harness.label}`)
+      normalized.validate_effort = 'high'
+    }
+    if (!normalized.validate_cli_model) {
+      const resolveDefault = harness.defaultModels[String(normalized.validate_model_name || '').trim().toLowerCase()]
+      if (resolveDefault) {
+        normalized.validate_cli_model = resolveDefault(normalized.validate_effort)
+      } else if (!normalized.validate_cli_error) {
+        normalized.validate_cli_error = `Validate model "${normalized.validate_model_name || normalized.validate_model}" on the ${harness.label} carries no CLI model id and has no known default — stamp it as "<Name> (${harness.label}, <model-id>)"`
+        log(`#${normalized.number}: ${normalized.validate_cli_error}`)
+      }
+    }
+    if (normalized.validate_cli_model && !CLI_MODEL_ID.test(String(normalized.validate_cli_model))) {
+      normalized.validate_cli_error = `Validate model id ${JSON.stringify(String(normalized.validate_cli_model))} on the ${harness.label} carries a character outside the allowed set (letters, digits, ".", "_", ":", "-"; it must start with a letter or digit) — that id would reach a shell command, so the issue is blocked; stamp it as "<Name> (${harness.label}, <model-id>)" with a plain id`
+      log(`#${normalized.number}: ${normalized.validate_cli_error}`)
+    }
+  } else if (normalized.validate_effort === 'max') {
+    log(`#${normalized.number}: normalized validate effort max → xhigh for ${MODEL_NAMES[normalized.validate_model || bandFor(normalized.complexity).validate.model]} (max is a Codex CLI-only tier)`)
+    normalized.validate_effort = 'xhigh'
   }
   if ((normalized.effort === 'medium' || normalized.effort === 'low') && normalized.model !== 'fable' && !isCliHarness(normalized.model)) {
     log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (low/medium are Fable-only)`)
@@ -887,8 +957,8 @@ async function executeTrack(trackIndex) {
     const ex = EX.get(issue) || { number: issue, title: `#${issue}`, model: 'opus', effort: 'high', fableplan: false, missing_block: true }
     const completed = dedupeRecords([...inheritedCompleted, ...localCompleted])
     const skipped = dedupeRecords([...inheritedSkipped, ...localSkipped])
-    if (ex.cli_error) {
-      blocker = ex.cli_error
+    if (ex.cli_error || ex.validate_cli_error) {
+      blocker = ex.cli_error || ex.validate_cli_error
       log(`#${issue}: blocked before validation — ${blocker}; blocking later issues in track ${trackIndex + 1}`)
       addResult({ issue, status: 'blocked', blocker })
       localSkipped.push({ issue, reason: `${blocker} — issue never started` })
@@ -900,7 +970,8 @@ async function executeTrack(trackIndex) {
     const validationPrompt = validatePrompt(issue, completed, skipped, baseRefs)
     const validateBand = bandFor(ex.complexity)
     const validateRoute = validateRouteFor(ex, validateBand)
-    log(`#${issue}: ${hasScore(ex.complexity) ? `C${ex.complexity} (band ${validateBand.name})` : 'no [C..] prefix — unknown routes as the top band'} — validating on ${MODEL_NAMES[validateRoute.model]} @ ${validateRoute.effort}${validateRoute.note}`)
+    log(`#${issue}: ${hasScore(ex.complexity) ? `C${ex.complexity} (band ${validateBand.name})` : 'no [C..] prefix — unknown routes as the top band'} — validating on ${validateRoute.cli ? `${validateModelName(ex)} @ ${ex.validate_effort}` : `${MODEL_NAMES[validateRoute.model]} @ ${validateRoute.effort}`}${validateRoute.note}`)
+    const dispatchPrompt = validateRoute.cli ? cliValidateDriverPrompt(validationPrompt, ex, issue) : validationPrompt
     const validationOptions = {
       model: validateRoute.model,
       effort: validateRoute.effort,
@@ -908,9 +979,12 @@ async function executeTrack(trackIndex) {
       phase: 'Validate',
       label: `validate:#${issue}`,
     }
-    const validationDispatch = await validateWithRetry(issue, validationPrompt, validationOptions)
+    const validationDispatch = await validateWithRetry(issue, dispatchPrompt, validationOptions)
     let validation = validationDispatch.validation
     blocker = validationDispatch.blocker
+    if (validation && Array.isArray(validation.flags) && validation.flags.length) {
+      for (const flag of validation.flags) log(`#${issue}: validate driver flag — ${flag}`)
+    }
     if (!validation) {
       log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
       addResult({ issue, status: 'validation_failed', blocker })
@@ -925,12 +999,12 @@ async function executeTrack(trackIndex) {
       effectiveComplexity = rescored
       const escalatedBand = bandFor(rescored)
       const escalatedRoute = validateRouteFor(ex, escalatedBand)
-      log(`#${issue}: validator re-scored ${hasScore(ex.complexity) ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${MODEL_NAMES[escalatedRoute.model]} @ ${escalatedRoute.effort}${escalatedRoute.note}`)
-      const escalatedDispatch = await validateWithRetry(issue, validationPrompt, { ...validationOptions, model: escalatedRoute.model, effort: escalatedRoute.effort })
+      log(`#${issue}: validator re-scored ${hasScore(ex.complexity) ? `C${ex.complexity}` : 'the unprefixed issue'} → C${rescored} (band ${escalatedBand.name}) — re-validating on ${escalatedRoute.cli ? `${validateModelName(ex)} @ ${ex.validate_effort}` : `${MODEL_NAMES[escalatedRoute.model]} @ ${escalatedRoute.effort}`}${escalatedRoute.note}`)
+      const escalatedDispatch = await validateWithRetry(issue, dispatchPrompt, { ...validationOptions, model: escalatedRoute.model, effort: escalatedRoute.effort })
       if (escalatedDispatch.validation) {
         validation = escalatedDispatch.validation
       } else {
-        log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${MODEL_NAMES[validateRoute.model]} verdict stands`)
+        log(`#${issue}: escalated validation failed (${escalatedDispatch.blocker}) — the original ${validateRoute.cli ? validateModelName(ex) : MODEL_NAMES[validateRoute.model]} verdict stands`)
       }
     }
     let reviewComplexity = effectiveComplexity

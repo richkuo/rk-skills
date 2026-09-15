@@ -1,6 +1,6 @@
 ---
 name: cli-dispatch
-description: Required dispatch procedure for running a build or fix pass on an external coding CLI — the Codex CLI (`codex exec`) or the Cursor CLI (`agent -p`) — when an issue's Execution block stamps that harness as the Build model. Preflight, the two shims, the prompt-as-data rule, the background-and-poll rule, result parsing, the substitution check, attribution, and the failure table. Load BEFORE dispatching any Codex CLI or Cursor CLI build.
+description: Required dispatch procedure for running a build, fix pass, or validate pass on an external coding CLI — the Codex CLI (`codex exec`) or the Cursor CLI (`agent -p`) — when an issue's Execution block stamps that harness as the Build model or the Validate model. Preflight, the shims, the prompt-as-data rule, the background-and-poll rule, result parsing, the substitution check, attribution, and the failure table. Load BEFORE dispatching any Codex CLI or Cursor CLI build or validate pass.
 ---
 
 # CLI dispatch
@@ -80,3 +80,22 @@ Compare the model the output names with the requested id. A different model is a
 | Output names another model | Report the substitution in summary, flags, footer; never present as the stamped build |
 | Zero exit, no PR | Block; never open a PR for the CLI agent |
 | Writes outside the issue's worktree | Report in flags; leave for the user |
+| `Validate model` stamps the Cursor CLI | Block the issue: a validate pass runs only on the Codex CLI, whose `read-only` sandbox enforces that validation writes nothing |
+| Validate final message has no JSON verdict | Block; never fill the verdict in for the CLI agent |
+
+## 9. Validate pass
+
+An issue can stamp `Validate model: <Name> (Codex CLI[, <model-id>])`, and `milestone-pipeline` then runs the `validate-issue` pass through the Codex CLI under the same Opus 5 driver. Sections 1, 2, 5, 6, and 8 apply unchanged; the differences:
+
+- **Codex only.** A validate pass never writes, so it runs in the `read-only` sandbox, which Codex enforces. The Cursor CLI has no write boundary (section 4), so a Cursor validate stamp blocks the issue.
+- **No network.** The `read-only` sandbox grants none, so every `gh` call inside the pass fails. The driver runs `git fetch origin` first, fetches the issue (`gh issue view <n> --json title,body,milestone,state`) and the PR list for it itself, and embeds them in the prompt file as data under a heading that says the driver fetched them. The prompt file also tells the CLI agent that the sandbox has no network, so it works from the embedded data, the local checkout, and `origin/<default branch>`, and records anything it could not check as a Verification limitation in the summary.
+- **The shim:**
+
+```sh
+codex exec -C "$REPO" -m '<model-id>' -c model_reasoning_effort=<tier> \
+  -s read-only --json -o "$RESULT" < "$PROMPT" > "$EVENTS" 2> "$STDERR"
+```
+
+- **The prompt file** carries the caller's validate prompt verbatim, the embedded issue data, the skill-path line for `validate-issue`, and one line telling the agent to write no file, post no comment, and end its final message with one JSON object carrying exactly `verdict`, `summary`, `corrections`, `implementation_constraints`, `rescored_complexity`, and `invalid_reason`.
+- **The result** is that JSON object, returned unchanged plus `flags`. A final message with no parseable object, or one missing `verdict` or `rescored_complexity`, is a blocker; the driver never fills in a verdict. A non-zero exit retries once with the same inputs (nothing lands from a read-only pass), then blocks with the last stderr lines.
+- **Attribution.** A validate pass posts nothing, so no footer is written; the driver's flags and summary carry the substitution or `model unverified` record.
