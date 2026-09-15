@@ -332,10 +332,9 @@ describe('milestone-pipeline dependency scheduling', () => {
 
   test('the prep schema tells the agent to omit every field the runtime derives when absent', () => {
     const schema = workflowSource.slice(workflowSource.indexOf('const PREP_SCHEMA'), workflowSource.indexOf('\n}\n', workflowSource.indexOf('const PREP_SCHEMA')))
-    for (const field of ['complexity', 'validate_effort', 'plan_effort', 'first_review_model', 'first_review_effort']) {
+    for (const field of ['complexity', 'validate_model', 'validate_effort', 'plan_effort', 'first_review_model', 'first_review_effort']) {
       expect(schema.match(new RegExp(`^ +${field}: \\{.*$`, 'm'))?.[0], `${field} description`).toMatch(/\bOMIT\b/)
     }
-    expect(schema).not.toMatch(/validate_model/)
   })
 
   test('a stamped Validate effort overrides the band default, clamped to each model\'s allowed tiers', async () => {
@@ -371,6 +370,55 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#7: C60 (band 50–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
       '#8: C75 (band 71–80) — validating on Fable 5.1 @ medium',
     ])
+  })
+
+  test('a stamped Validate model overrides the band default, and the effort clamp follows the stamped model', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C41] Opus band stamped Fable low', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'fable', validate_effort: 'low', missing_block: false },
+          { number: 3, title: '[C68] Opus band stamped Fable, no effort', complexity: 68, model: 'opus', effort: 'xhigh', fableplan: false, validate_model: 'fable', missing_block: false },
+          { number: 4, title: '[C85] Fable band stamped Opus medium', complexity: 85, model: 'opus', effort: 'xhigh', fableplan: true, validate_model: 'opus', validate_effort: 'medium', missing_block: false },
+          { number: 5, title: '[C75] Fable band stamped Opus, no effort', complexity: 75, model: 'opus', effort: 'high', fableplan: true, validate_model: 'opus', missing_block: false },
+          { number: 6, title: '[C85] Fable band stamped Fable xhigh', complexity: 85, model: 'opus', effort: 'xhigh', fableplan: true, validate_model: 'fable', validate_effort: 'xhigh', missing_block: false },
+          { number: 7, title: '[C5] Opus band stamped Opus, no effort', complexity: 5, model: 'sonnet', effort: 'high', fableplan: false, validate_model: 'opus', missing_block: false },
+        ],
+      }),
+    })
+
+    const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
+    expect(dispatch('validate:#2')).toMatchObject({ model: 'fable', effort: 'low' })
+    expect(dispatch('validate:#3')).toMatchObject({ model: 'fable', effort: 'xhigh' })
+    expect(dispatch('validate:#4')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#5')).toMatchObject({ model: 'opus', effort: 'high' })
+    expect(dispatch('validate:#6')).toMatchObject({ model: 'fable', effort: 'xhigh' })
+    expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
+
+    expect(logs.filter((message) => message.includes('validating on'))).toEqual([
+      '#2: C41 (band 21–49) — validating on Fable 5.1 @ low (stamped Validate model Fable 5.1 overrides the band default Opus 5) (stamped Validate effort low overrides the band default high)',
+      '#3: C68 (band 50–70) — validating on Fable 5.1 @ xhigh (stamped Validate model Fable 5.1 overrides the band default Opus 5)',
+      '#4: C85 (band 81+) — validating on Opus 5 @ high (stamped Validate model Opus 5 overrides the band default Fable 5.1) (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#5: C75 (band 71–80) — validating on Opus 5 @ high (stamped Validate model Opus 5 overrides the band default Fable 5.1) (band default effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#6: C85 (band 81+) — validating on Fable 5.1 @ xhigh (stamped Validate model Fable 5.1 matches the band default Fable 5.1) (stamped Validate effort xhigh overrides the band default high)',
+      '#7: C5 (band 0–9) — validating on Opus 5 @ high (stamped Validate model Opus 5 matches the band default Opus 5) (band default effort medium → high for Opus 5: low/medium are Fable-only)',
+    ])
+  })
+
+  test('a stamped Validate model carries into the escalated re-validation unchanged', async () => {
+    const { events, logs } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
+      Prep: () => ({
+        issues: [
+          { number: 2, title: '[C30] Opus band stamped Fable low, rescored into Fable', complexity: 30, model: 'opus', effort: 'high', fableplan: false, validate_model: 'fable', validate_effort: 'low', missing_block: false },
+        ],
+      }),
+      Validate: () => ({ verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 85 }),
+    })
+
+    const attempts = events.filter((event) => event.state === 'started' && event.label === 'validate:#2')
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]).toMatchObject({ model: 'fable', effort: 'low' })
+    expect(attempts[1]).toMatchObject({ model: 'fable', effort: 'low' })
+    expect(logs).toContain('#2: validator re-scored C30 → C85 (band 81+) — re-validating on Fable 5.1 @ low (stamped Validate model Fable 5.1 matches the band default Fable 5.1) (stamped Validate effort low overrides the band default high)')
   })
 
   test('a stamped Validate effort carries into the escalated re-validation unchanged', async () => {

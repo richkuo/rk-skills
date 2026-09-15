@@ -4,7 +4,7 @@ export const meta = {
   whenToUse: 'When the user has approved a milestone-workflow run plan. args: { tracks: [[2,3]] } or { tracks: [{issues:[2,3]}, {issues:[9], after:[0]}, {issues:[12], runsAfter:[0]}], reviewLoop?: true, reviewMode?: \'github\' | \'subagent\', reviewBot?: \'claude\' | \'codex\', maxReviewCycles?: 5, budgetFloor?: 80000, merge?: true, release?: true, targetBranch?: \'develop\', merged?: [{issue, pr, merge_sha, issue_state}] }',
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
-    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model derived from its [C..] score band, effort from a stamped Validate effort line when present, else the band default' },
+    { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts — model from a stamped Validate model line when present, else derived from its [C..] score band; effort from a stamped Validate effort line when present, else the band default' },
     { title: 'Plan', detail: 'Fable plans the issues flagged fableplan: Yes at the stamped Plan effort when present, else high; plans posted to the issues', model: 'fable' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
@@ -311,11 +311,17 @@ function blockingRetrigger(ex) {
 }
 
 function validateRouteFor(ex, band) {
-  const model = band.validate.model
+  const stampedModel = ex.validate_model
+  const model = stampedModel || band.validate.model
+  const modelNote = stampedModel ? ` (stamped Validate model ${MODEL_NAMES[stampedModel]}${stampedModel === band.validate.model ? ' matches' : ' overrides'} the band default ${MODEL_NAMES[band.validate.model]})` : ''
   const stamped = ex.validate_effort
-  if (!stamped) return { model, effort: band.validate.effort, note: '' }
-  if (model !== 'fable' && (stamped === 'low' || stamped === 'medium')) return { model, effort: 'high', note: ` (stamped Validate effort ${stamped} → high for ${MODEL_NAMES[model]}: low/medium are Fable-only)` }
-  return { model, effort: stamped, note: ` (stamped Validate effort ${stamped} overrides the band default ${band.validate.effort})` }
+  const effort = stamped || band.validate.effort
+  if (model !== 'fable' && (effort === 'low' || effort === 'medium') && (stamped || stampedModel)) {
+    const source = stamped ? `stamped Validate effort ${stamped}` : `band default effort ${effort}`
+    return { model, effort: 'high', note: `${modelNote} (${source} → high for ${MODEL_NAMES[model]}: low/medium are Fable-only)` }
+  }
+  if (!stamped) return { model, effort, note: modelNote }
+  return { model, effort: stamped, note: `${modelNote} (stamped Validate effort ${stamped} overrides the band default ${band.validate.effort})` }
 }
 
 function derivedBuild(complexity) {
@@ -340,6 +346,7 @@ const PREP_SCHEMA = {
           build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
           cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low and medium are Fable-only and max is Codex CLI-only — runtime normalizes non-Fable low/medium→high, max→xhigh on Claude models and Cursor' },
+          validate_model: { type: 'string', enum: ['fable', 'opus'], description: 'From an optional "Validate model:" line — Fable 5.1→fable, Opus 5→opus. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
           validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low/medium to high on a non-Fable validate' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
@@ -717,10 +724,10 @@ const prep = await agent(
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
 - effort: from "**Effort:**" — one of low/medium/high/xhigh/max; low and medium are Fable-only tiers and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
 - plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the fableplan stage runs at its high default. Preserve a stamped tier verbatim. Only the effort is stampable — never read a model from this line
+- validate_model: from an optional "**Validate model:**" line — map "Fable 5.1"→fable and "Opus 5" (any Opus)→opus. When the line is absent, OMIT the field — absence means the runtime derives the validate model from the [C..] band. Never read a model from the "Validate effort:" line
 - validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
 - fableplan: true when "**fableplan first:**" starts with "Yes"
 - first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
-- do NOT extract a "**Validate model:**" line — the validate model is derived from the [C..] score band by the runtime and a stamped model is never read
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model opus, effort high, fableplan false — never fable: Fable builds only on an explicit stamp, and the runtime re-derives these from the validated score anyway). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }
