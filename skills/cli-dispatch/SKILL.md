@@ -13,7 +13,7 @@ Check only the CLI the stamp names, before writing any file: `command -v codex &
 
 ## 2. Model id and effort
 
-- `Luna (Codex CLI)` resolves to `gpt-5.6-luna`; `Grok (Cursor CLI)` resolves to `cursor-grok-4.6-<effort>`. An explicit id in the parenthetical (`Luna (Codex CLI, gpt-5.6-luna)`) is used verbatim. Any other name with no explicit id is a blocker; never guess an id.
+- `Luna (Codex CLI)` resolves to `gpt-5.6-luna`, `Astra (Codex CLI)` to `gpt-6-astra`; `Grok (Cursor CLI)` resolves to `cursor-grok-4.6-<effort>`. An explicit id in the parenthetical (`Luna (Codex CLI, gpt-5.6-luna)`) is used verbatim. Any other name with no explicit id is a blocker; never guess an id.
 - Codex tiers `low`, `medium`, `high`, `xhigh`, `max` pass as `-c model_reasoning_effort=<tier>`. Cursor encodes the tier in the id suffix; the caller normalizes `max` to `xhigh` with a log line.
 - `agent --list-models` prints the ids Cursor accepts (`agent` and `cursor-agent` are one binary); run it when an explicit id looks unfamiliar. On 2026-09-02 (cursor-agent 2026.09.02) it listed `cursor-grok-4.6-{low,medium,high,xhigh}`, so the `Grok` default resolves at every tier; a `-fast` variant is an explicit id.
 - **A model id is shell data.** Accept only ids matching `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, block the issue otherwise, and single-quote the id in the shim.
