@@ -72,14 +72,13 @@ function readOnlyViolations(text) {
 
 describe('Execution block fields', () => {
   test('prd-to-issues documents every routing field the pipeline prep reads, including the optional effort stamps', () => {
-    for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review', 'Validate effort', 'Plan effort']) {
+    for (const field of ['Depends on', 'Runs after', 'Build model', 'Effort', 'fableplan first', 'PR review', 'Validate model', 'Validate effort', 'Plan effort']) {
       expect(prdToIssues, `prd-to-issues documents ${field}`).toContain(`**${field}:**`)
     }
-    expect(prdToIssues, 'prd-to-issues never stamps a validate model').not.toContain('**Validate model:**')
-    for (const field of ['Build model', 'Effort', 'fableplan first', 'PR review', 'Validate effort', 'Plan effort']) {
+    for (const field of ['Build model', 'Effort', 'fableplan first', 'PR review', 'Validate model', 'Validate effort', 'Plan effort']) {
       expect(pipeline, `pipeline prep reads ${field}`).toMatch(new RegExp(`"\\*{0,2}${field}:`))
     }
-    expect(pipeline, 'pipeline prep never reads a validate model').toMatch(/do NOT extract a "\*\*Validate model:\*\*" line/)
+    expect(pipeline, 'pipeline prep reads a stamped validate model as an override').toContain('- validate_model: from an optional "**Validate model:**" line')
     expect(prdToIssues, 'prd-to-issues documents the external CLI Build model form').toContain('(Codex CLI[, <model-id>])')
     expect(pipeline, 'pipeline prep maps the external CLI Build model form').toContain('map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor')
   })

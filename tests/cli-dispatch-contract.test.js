@@ -58,7 +58,7 @@ describe('cli dispatch contract', () => {
     expect(pipeline).toMatch(/Never add \\`--dangerously-bypass-approvals-and-sandbox\\`, \\`--yolo\\`/)
     expect(pipeline).toContain("enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor']")
     expect(pipeline).toContain("enum: ['low', 'medium', 'high', 'xhigh', 'max']")
-    expect(pipeline).toMatch(/do NOT extract a "\*\*Validate model:\*\*" line/)
+    expect(pipeline).toContain("validate_model: { type: 'string', enum: ['fable', 'opus']")
   })
 
   test('every skill that stamps, renders, or runs a Build model documents the CLI harness form', () => {

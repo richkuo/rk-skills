@@ -77,7 +77,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis
 | 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · xhigh |
 | 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5 · xhigh |
 
-fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. The Validate column is the band default; an `## Execution` block may stamp `Validate effort:` to override it and `Plan effort:` to override the fableplan stage's `high` default. The validate model is never stampable, and an Opus validate stamped `low` or `medium` runs at `high` (Fable-only tiers). The **first review** uses the coarser table below; each row starts on a band edge.
+fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. The Validate column is the band default; an `## Execution` block may stamp `Validate model:` (`Fable 5.1` or `Opus 5`) and `Validate effort:` to override it, and `Plan effort:` to override the fableplan stage's `high` default. A stamped model wins over the band; the effort clamp follows the effective model, so an Opus validate at `low` or `medium` runs at `high` (Fable-only tiers) and a Fable validate runs every tier as stamped. The **first review** uses the coarser table below; each row starts on a band edge.
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
