@@ -405,21 +405,22 @@ describe('milestone-pipeline dependency scheduling', () => {
   })
 
   test('a Codex CLI Validate model runs the validate pass through a read-only driver, and Cursor or an unknown id blocks the issue', async () => {
-    const { events, logs, output } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6]], reviewLoop: false }, {
+    const { events, logs, output } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: '[C93] Astra on Codex at low', complexity: 93, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6', validate_effort: 'low', missing_block: false },
+          { number: 2, title: '[C93] Astra on Codex at low', complexity: 93, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6-astra', validate_effort: 'low', missing_block: false },
           { number: 3, title: '[C41] Luna on Codex at max, default id', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Luna', validate_effort: 'max', missing_block: false },
           { number: 4, title: '[C41] Grok on Cursor', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'cursor', validate_model_name: 'Grok', validate_effort: 'high', missing_block: false },
           { number: 5, title: '[C41] unknown Codex name, no id', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Nova', missing_block: false },
-          { number: 6, title: '[C41] Codex id with a shell character', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6; rm -rf', validate_effort: 'low', missing_block: false },
+          { number: 6, title: '[C41] Codex id with a shell character', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6-astra; rm -rf', validate_effort: 'low', missing_block: false },
+          { number: 7, title: '[C41] Astra on Codex at low, default id', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_effort: 'low', missing_block: false },
         ],
       }),
     })
 
     const dispatch = (label) => events.find((event) => event.state === 'started' && event.label === label)
     expect(dispatch('validate:#2')).toMatchObject({ model: 'opus', effort: 'high' })
-    expect(dispatch('validate:#2').prompt).toContain("codex exec -C \"$REPO\" -m 'gpt-6' -c model_reasoning_effort=low -s read-only --json")
+    expect(dispatch('validate:#2').prompt).toContain("codex exec -C \"$REPO\" -m 'gpt-6-astra' -c model_reasoning_effort=low -s read-only --json")
     expect(dispatch('validate:#2').prompt).toContain('You are a validation DRIVER agent')
     expect(dispatch('validate:#2').prompt).toContain('gh issue view 2 --json title,body,milestone,state')
     expect(dispatch('validate:#2').prompt).toContain('Invoke the `validate-issue` skill with args `2`')
@@ -429,8 +430,9 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#4')).toBeUndefined()
     expect(dispatch('validate:#5')).toBeUndefined()
     expect(dispatch('validate:#6')).toBeUndefined()
+    expect(dispatch('validate:#7').prompt).toContain("-m 'gpt-6-astra' -c model_reasoning_effort=low -s read-only")
 
-    expect(logs).toContain('#2: C93 (band 81+) — validating on Astra (Codex CLI) @ low (stamped Validate model Astra (Codex CLI) overrides the band default Fable 5.1 @ high; model id gpt-6, effort low, driven by a Opus 5 @ high driver agent)')
+    expect(logs).toContain('#2: C93 (band 81+) — validating on Astra (Codex CLI) @ low (stamped Validate model Astra (Codex CLI) overrides the band default Fable 5.1 @ high; model id gpt-6-astra, effort low, driven by a Opus 5 @ high driver agent)')
     expect(logs).toContain('#3: C41 (band 21–49) — validating on Luna (Codex CLI) @ max (stamped Validate model Luna (Codex CLI) overrides the band default Opus 5 @ high; model id gpt-5.6-luna, effort max, driven by a Opus 5 @ high driver agent)')
     const outcome = (issue) => output.results.find((result) => result.issue === issue)
     expect(outcome(4).status).toBe('blocked')
@@ -447,18 +449,18 @@ describe('milestone-pipeline dependency scheduling', () => {
     const { events, logs, output } = await executeWorkflow({ tracks: [[2]], reviewLoop: false }, {
       Prep: () => ({
         issues: [
-          { number: 2, title: '[C41] Astra on Codex at low', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6', validate_effort: 'low', missing_block: false },
+          { number: 2, title: '[C41] Astra on Codex at low', complexity: 41, model: 'opus', effort: 'high', fableplan: false, validate_model: 'codex', validate_model_name: 'Astra', validate_cli_model: 'gpt-6-astra', validate_effort: 'low', missing_block: false },
         ],
       }),
       Validate: () => {
         attempts += 1
         if (attempts === 1) return { verdict: 'INVALID', summary: '', corrections: [], implementation_constraints: [], rescored_complexity: 0, blocker: 'codex login status reports signed out' }
-        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 41, flags: ['model unverified: the output names no model; requested id gpt-6'] }
+        return { verdict: 'VALID', summary: 'valid', corrections: [], implementation_constraints: [], rescored_complexity: 41, flags: ['model unverified: the output names no model; requested id gpt-6-astra'] }
       },
     })
     expect(events.filter((event) => event.state === 'started' && event.label === 'validate:#2')).toHaveLength(2)
     expect(logs).toContain('#2: validation attempt 1/2 blocked — codex login status reports signed out; retrying once')
-    expect(logs).toContain('#2: validate driver flag — model unverified: the output names no model; requested id gpt-6')
+    expect(logs).toContain('#2: validate driver flag — model unverified: the output names no model; requested id gpt-6-astra')
     expect(output.results.find((result) => result.issue === 2).status).not.toBe('blocked')
   })
 
