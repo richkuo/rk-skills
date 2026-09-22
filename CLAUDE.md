@@ -17,6 +17,7 @@
 - No stylistic tics: em-dashes for emphasis, payoff lines, metaphor labels ("knob", "lever"), reveal phrasing ("the real problem is"), or the word "quietly". State the point plainly.
 - **Banned rhetoric**, in chat and every written artifact:
   - **No stacked contrast inside one phrase or sentence.** Never write "X, not Y", "not X, but Y", "it's not X; it's Y", or "less X, more Y". Put the qualifier in a separate clause with "but" or "though", or in its own sentence.
+  - **No antithesis.** Never set two opposed ideas against each other in parallel structure for effect ("easy to start, hard to finish", "small change, large impact", "speed over safety"). This applies with or without a negation. State each idea in its own sentence, and state the tradeoff plainly if one exists.
   - **No litotes or litotes-adjacent hedging** ("not unlikely", "not without risk", "no small task"). State the claim directly, and state your confidence beside it in its own clause. If confidence is low, say so plainly.
   - **No verbal irony:** never say the opposite of what you mean for sarcasm, mock praise, or dry inversion.
   - **No metacommentary:** never narrate your own response or process ("Good question", "In short", "As mentioned above", "It's worth noting").
