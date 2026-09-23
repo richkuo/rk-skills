@@ -35,6 +35,3 @@ Write the complete body to a file and use `gh pr comment <N> --repo <owner/repo>
 For each affected inline thread, reply to its root review comment with `gh api repos/{owner}/{repo}/pulls/<N>/comments/<root-comment-id>/replies -F body=@<reply-file>`. State the outcome and link the disposition, including the attribution footer. Cover all subclaims in that thread; leave thread resolution to the reviewer unless the user authorized it.
 
 On resume, publish only missing replies or a missing trigger when the existing disposition still covers the current head and source set. A partially published pass never justifies duplicating every comment or advancing past unresolved work.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator

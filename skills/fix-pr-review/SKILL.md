@@ -92,17 +92,14 @@ Before pushing, re-fetch the head and confirm it still equals the starting head.
 
 ### 9. Post the disposition comment
 
-Read [disposition-comment.md](disposition-comment.md). Publish one source-linked disposition, including all-refuted passes, and replies to affected inline threads. A blocked pass uses an explicit incomplete disposition; it does not settle unfinished findings. Check for a successful prior post before retrying any uncertain write.
+Read [disposition-comment.md](disposition-comment.md). Publish one source-linked disposition, including all-refuted passes, and replies to affected inline threads. A pass is **blocked** when any finding ends Blocked, a stop before step 8 leaves no commit, or the step 8 push or this step's publication did not complete. A blocked pass still pushes and publishes the work it completed, with an explicit incomplete disposition; it does not settle unfinished findings. Check for a successful prior post before retrying any uncertain write.
 
 ### 10. Trigger the re-review
 
 Read [rereview-routing.md](rereview-routing.md). The blocking ladder is keyed to the reviewer that actually ran cycle 1. For bare-LGTM conflict repairs, step 7 decides: a behavior change or doubt uses the cheap shorthand; prose only posts none.
 
-Post the trigger separately only after the fixes, disposition, and required replies are confirmed. A blocked pass posts none. Report the actual trigger URL and timestamp to a loop caller; never count an attempted or duplicate trigger as a new cycle.
+Post the trigger separately only after the fixes, disposition, and required replies are confirmed. A complete pass routes by the original classification from step 1. A blocked pass posts none: a re-review would raise the Blocked finding again with nothing new to decide, so the missing fact, access, or decision comes first. When an earlier trigger is still pending, post none and report that trigger. Report the outcome to a loop caller as complete with the new trigger's URL and timestamp, pending with the earlier trigger's URL and timestamp, or blocked; never count an attempted or duplicate trigger as a new cycle.
 
 ### 11. Report to the user
 
 State complete, no actionable feedback, or blocked; link the disposition and give the verified head, verification result, and trigger status. Name unresolved findings, access gaps, pre-existing failures, pending checks, growth alerts, and test edits when present. Keep detailed evidence in the disposition under the shared Response Style rules. Do not claim that requesting re-review is approval.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator

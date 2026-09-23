@@ -36,7 +36,7 @@ Run fix-pr-review-loop steps 2 through 4 against the PR, carrying `review_count`
 
 - **fix-pr-review-loop step 2** — wait for the review to land (both jq gotchas, background until-loop, ~30-minute cap).
 - **fix-pr-review-loop step 3** — the merge-conflict check and the stop conditions: a bare LGTM with nothing left to fix stops the loop; when `review_count > 5`, stop at the first LGTM even with non-blocking findings; a `Needs Updates` verdict never stops the loop by cycle count alone. The one exception is the divergence brake: `pr_cycle_count >= 4` **and** `Needs Updates` **and** every blocking finding sits in code an earlier cycle added. `pr_cycle_count` is fix-pr-review step 4's growth-check count read from the PR's trigger comments, never the in-memory `review_count`. A blocking finding that cannot be attributed to a cycle (no `file:line`, or a path the head no longer has) defeats the brake, and a line a base merge brought in is base-branch work. When the brake fires, stop and report per step 5's **Diverging** row.
-- **fix-pr-review-loop step 4** — resolve with fix-pr-review, increment `review_count`, loop to its step 2.
+- **fix-pr-review-loop step 4** — resolve with fix-pr-review and act on the outcome it reports: a new trigger increments `review_count` and loops to its step 2, a pending trigger loops without incrementing, and a blocked pass stops at its step 5 **Blocked** row.
 
 On a "Done" terminal state continue with step 3; on any other terminal state go to step 4.
 

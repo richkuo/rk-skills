@@ -10,6 +10,3 @@ Read for step 4. The main skill owns scope and completion; this reference owns e
 - **CI failures:** inspect the actual failing step. Attribute to the PR only when the diff causes it. Evidence of a pre-existing failure requires a matching base run or reproduction on the relevant base. A passing retry alone does not prove an infrastructure failure; intermittent product defects remain possible. Use a separate clean worktree for a base reproduction when execution is permitted.
 
 Keep claim validity and work status separate. A confirmed issue can be Blocked or Deferred; access failure, test failure, or inability to implement never makes it Refuted. Check every original source against the final dispositions before publication so deduplication cannot drop part of a claim.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator

@@ -197,6 +197,36 @@ describe('fixer and loop consumers', () => {
     expect(Buffer.byteLength(texts[path], 'utf8'), `${path}: bytes`).toBeLessThanOrEqual(FIX_PROMPT_MAX_BYTES)
   })
 
+  test('the Claude fix-pr route admits every command its prompt and staged skill files require', () => {
+    const engine = texts[CLAUDE_ENGINE]
+    const fixAllowed = engine.match(/PROMPT_FILE=\$PROMPTS_DIR\/fix-pr\.md\s+ALLOWED='([^']+)'/)
+    expect(fixAllowed, 'fix-pr route ALLOWED').not.toBeNull()
+    const names = fixAllowed[1].split(',')
+    for (const tool of ['Bash(gh issue list*)', 'Bash(gh issue create*)', 'Bash(gh api graphql*)', 'Bash(gh pr view*)', 'Bash(gh pr comment*)']) {
+      expect(names, tool).toContain(tool)
+    }
+    expect(engine, 'skills are staged for the fix-pr route').toContain('cp -R .rk-skills-shared/skills "$RUNNER_TEMP/rk-shared/skills"')
+    expect(engine, 'fix-pr route can read the staged skills').toMatch(/--add-dir \\"\$\{SKILLS_DIR\}\\"/)
+    expect(engine, 'fix-pr route names the staged path').toMatch(/skill files for this run are staged at \$\{SKILLS_DIR\}/)
+
+    const prompt = flats['templates/claude-workflow/prompts/fix-pr.md']
+    expect(prompt, 'no REST gh api call on this route').not.toMatch(/gh api repos/)
+    expect(prompt, 'feedback fetched with admitted commands').toMatch(/gh pr view --json reviews,comments/)
+    expect(prompt, 'inline replies through GraphQL').toMatch(/addPullRequestReviewThreadReply/)
+  })
+
+  test('a blocked fix pass is defined, posts no trigger, and stops the loop at a Blocked row', () => {
+    expect(flats[FIXER]).toMatch(/A pass is blocked when any finding ends Blocked/)
+    expect(flats[FIXER]).toMatch(/A blocked pass posts none/)
+    for (const path of FIX_PROMPTS) {
+      expect(flats[path], path).toMatch(/A blocked pass \(any finding Blocked[^)]*\) posts no trigger/)
+    }
+    const loop = flats['skills/fix-pr-review-loop/SKILL.md']
+    expect(loop).toMatch(/Blocked: go to step 5, Blocked row; start no further cycle/)
+    expect(loop).toMatch(/\| fix-pr-review reported a blocked pass[^|]*\| Blocked\./)
+    expect(flats['skills/work-on-issue-loop/SKILL.md']).toMatch(/a blocked pass stops at its step 5 Blocked row/)
+  })
+
   test.each([...FIXER_COPIES, ...LOOPS])('%s treats a Verification limitation as not a finding', (path) => {
     expect(flats[path]).toMatch(/Verification limitation[\s\S]{0,120}(?:not|never) a finding/i)
   })

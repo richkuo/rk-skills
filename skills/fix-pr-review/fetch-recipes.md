@@ -29,6 +29,3 @@ Use `gh pr checks <N> --repo <owner/repo> --json name,state,bucket,link,startedA
 - `cancel`: investigate only available evidence. A concrete upstream failure becomes a finding unless its failed job is already represented. A manual cancel creates no finding. An unknown cause is a verification gap; never invent an upstream defect.
 
 Unavailable logs leave attribution unresolved. Record the access limitation separately from the failed check; do not call it pre-existing or fixed without evidence.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator

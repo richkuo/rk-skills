@@ -10,7 +10,7 @@ Read the selected workflow's trigger parser or use verified integration evidence
 
 ## 2. Classify the pass
 
-Use the entire original addressed set. Needs Fixing, Requires Human Review, inline defect claims, and CI failures are blocking for routing even when refuted. Optional improvements and follow-ups are non-blocking. A blocked or incompletely published pass posts no trigger.
+Use the entire original addressed set. Needs Fixing, Requires Human Review, inline defect claims, and CI failures are blocking for routing even when refuted. Optional improvements and follow-ups are non-blocking. A blocked pass, as fix-pr-review step 9 defines it, posts no trigger.
 
 **Non-blocking only:** `@claude sonnet review` or `@codex luna review`, consuming no rung.
 
@@ -34,7 +34,7 @@ Each reviewer above the standard trigger runs one blocking cycle only. Blocking 
 | `@claude opus review effort:high` | `@claude review` | `@claude review` |
 | `@claude review` or `@claude sonnet review` | Repeat cycle-1 trigger | Repeat cycle-1 trigger |
 
-The ladder never steps down to sonnet. Ignore cheap non-blocking triggers when counting rungs. An Opus trigger with any effort after a Fable first cycle consumes the Opus rung once its review ran. Keep a still-pending request instead of posting a second one. A stamped `haiku` maps to `sonnet`; the Claude workflow admits `opus`, `sonnet`, and `fable` as review shorthands.
+The ladder never steps down to sonnet. Ignore cheap non-blocking triggers when counting rungs. An Opus trigger with any effort after a Fable first cycle consumes the Opus rung once its review ran. Keep a still-pending request instead of posting a second one, and report it to the loop caller as the pending trigger. A stamped `haiku` maps to `sonnet`; the Claude workflow admits `opus`, `sonnet`, and `fable` as review shorthands.
 
 ### Codex routing
 
@@ -65,6 +65,3 @@ Read persisted PR history so a resumed pass uses the same inputs:
 - **`<first-push-sha>`:** prefer a recorded first-review head or a verified initial push event. Otherwise use the newest PR commit dated at or before the first trigger, or PR creation if there was no trigger, as an explicitly estimated baseline. Commit time is not push time. If that commit is absent or history was rewritten, report the missing baseline.
 - **Measurement:** for current HEAD and the baseline separately, find their merge base with the fetched base-branch tip and sum additions plus deletions with `git diff --numstat <merge-base> <head>`. Base merges must not count as PR growth. Binary changes have no line count; disclose them separately. A zero baseline has an undefined ratio. Never fabricate a denominator or use the direct baseline-to-HEAD diff as PR growth.
 - **`pr_cycle_count`:** count chronological review trigger comments under the cycle-1 rules, excluding cheap non-blocking re-triggers, plus one if feedback predates every trigger. A cheap first-review route still counts its blocking requests. Use linked dispositions to distinguish identical cheap phrases; report ambiguity when the evidence is missing. Never substitute the loop's in-memory `review_count`.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator

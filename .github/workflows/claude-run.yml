@@ -72,6 +72,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rk-shared"
           cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
           cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
+          cp -R .rk-skills-shared/skills "$RUNNER_TEMP/rk-shared/skills"
           rm -rf .rk-skills-shared
 
       - name: Prune stale worktrees before Claude runs
@@ -173,7 +174,7 @@ jobs:
             ALLOWED='Bash(git *),Bash(gh *),Read,Edit,Write,Glob,Grep,Skill,EnterWorktree'
           elif [ "$MODE" = "fix-pr" ] || [ "$MODE" = "fix-pr-review" ]; then
             PROMPT_FILE=$PROMPTS_DIR/fix-pr.md
-            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,Glob,Grep'
+            ALLOWED='Bash(wc *),Bash(ls *),Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(git checkout*),Bash(git switch*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Bash(gh pr checkout*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*),Bash(gh issue list*),Bash(gh issue create*),Bash(gh api graphql*),Read,Edit,Write,Glob,Grep'
           else
             PROMPT_FILE=$PROMPTS_DIR/pr-review-format.md
             ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch*),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
@@ -227,10 +228,17 @@ jobs:
           if [ -n "$FLOW" ]; then
             PROMPT="$PROMPT The requested operation mode for this run is ${FLOW}."
           fi
+          SKILLS_DIR="$RUNNER_TEMP/rk-shared/skills"
+          if [ "$MODE" = "fix-pr" ] || [ "$MODE" = "fix-pr-review" ]; then
+            PROMPT="$PROMPT The rk-skills skill files for this run are staged at ${SKILLS_DIR}. When a phase names a skill file such as fix-pr-review/fetch-recipes.md, read it there with your file tools."
+          fi
           if [ "$MODE" = "review" ]; then
             PROMPT="$PROMPT The pull request head is checked out in this workspace already, as a detached HEAD at commit ${HEAD_SHA}. Its merge base with the target branch is ${BASE_SHA}."
           fi
           ARGS="--model ${MODEL_ID} --effort ${EFFORT} --append-system-prompt \"${PROMPT}\" --allowedTools \"${ALLOWED}\""
+          if [ "$MODE" = "fix-pr" ] || [ "$MODE" = "fix-pr-review" ]; then
+            ARGS="$ARGS --add-dir \"${SKILLS_DIR}\""
+          fi
           if [ "$MODE" = "review" ]; then
             ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task\" --setting-sources user --settings ${SETTINGS_FILE}"
           fi
