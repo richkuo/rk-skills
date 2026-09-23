@@ -62,7 +62,7 @@
 ```
 
 - **Verb:** `Created` (new work), `Updated` (edits), `Validated` when a validation pass produced the edit (`validate-issue` and its wrappers), `Reviewed` on a pull request review comment (`pr-review` and every harness that posts one).
-- `<current model>`: the model actually in use (e.g. `Opus 5`).
+- `<current model>`: the model actually in use (e.g. `Opus 5.5`).
 - `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that tier; default `high`. Fable 5.1 runs at `high` by default on every stage; it runs at `xhigh` only when I ask for it or stamp it.
 - `<harness>`: `Claude Code` for an interactive session, or the specific skill or agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). A hand-done commit, push, or PR in a session is `Claude Code`; never write `commit-push-pr` for it.
 - **Project precedence:** a repo CLAUDE.md footer format overrides this default.
@@ -71,7 +71,7 @@
 
 - **PR body order:** `## Summary` and verification first, scannable without restating the whole issue. End with `## Plain simple English`. `work-on-issue` enforces this. The PR body and every commit message carry the LLM Attribution Footer.
 - **Never use bare `#<number>` to number a list item or step** in a PR or issue body or comment: GitHub auto-links it to that issue. Use `1.`, `(1)`, or "Item 1"; reserve bare `#<number>` for a genuine issue or PR reference.
-- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]`. `type` is a Conventional Commits type (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`). `scope` is `#<issue>` when the PR closes one, else a short component name or none. The bracket reuses the issue's `[C<score>]` score with the model and effort actually used to build; derive a standalone score via the `validate-issue` step 6 formula. Append `, fableplan` only when a **Fable 5.1** plan drove the build (`work-on-issue` step 0 owns the adoption rules). E.g. `fix(#95): resolve double-fill race on order matching [C95, Opus 5, xhigh, fableplan]`.
+- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]`. `type` is a Conventional Commits type (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`). `scope` is `#<issue>` when the PR closes one, else a short component name or none. The bracket reuses the issue's `[C<score>]` score with the model and effort actually used to build; derive a standalone score via the `validate-issue` step 6 formula. Append `, fableplan` only when a **Fable 5.1** plan drove the build (`work-on-issue` step 0 owns the adoption rules). E.g. `fix(#95): resolve double-fill race on order matching [C95, Opus 5.5, xhigh, fableplan]`.
 - The `pr-review` skill owns the full review-comment format and the completeness passes that gate `LGTM`. Load it before writing any review comment.
 
 ## GitHub Issues

@@ -54,7 +54,7 @@ Line 10 reads `tagName` and line 22 passes it back unchanged, which is self-cons
 **Verification limitation:** GitHub release-notes body size limit (docs.github.com) unavailable — this route has no network or fetch tool.
 
 ---
-Reviewed with LLM: Opus 5 | high | Harness: Claude Code
+Reviewed with LLM: Opus 5.5 | high | Harness: Claude Code
 ```
 
 ## Example 2: a bare `LGTM` review
@@ -63,7 +63,7 @@ Reviewed with LLM: Opus 5 | high | Harness: Claude Code
 LGTM
 
 ---
-Reviewed with LLM: Opus 5 | high | Harness: Claude Code
+Reviewed with LLM: Opus 5.5 | high | Harness: Claude Code
 ```
 
 Fill in the model, effort, and harness that actually ran.

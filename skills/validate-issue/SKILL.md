@@ -70,20 +70,20 @@ Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis
 
 | Band | Score | Validate | fableplan | Build |
 |---|---|---|---|---|
-| 0 | 0–9 | Opus 5 · medium | No | Sonnet 5 · high |
-| 1 | 10–20 | Opus 5 · high | No | Sonnet 5 · xhigh |
-| 2 | 21–49 | Opus 5 · high | No | Opus 5 · high |
-| 3 | 50–70 | Opus 5 · xhigh | No | Opus 5 · xhigh |
-| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5 · xhigh |
-| 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5 · xhigh |
+| 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5 · high |
+| 1 | 10–20 | Opus 5.5 · high | No | Sonnet 5 · xhigh |
+| 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
+| 3 | 50–70 | Opus 5.5 · xhigh | No | Opus 5.5 · xhigh |
+| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5.5 · xhigh |
+| 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5.5 · xhigh |
 
-fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. The Validate column is the band default; an `## Execution` block may stamp `Validate model:` (`Fable 5.1`, `Opus 5`, or `<Name> (Codex CLI[, <model-id>])`, which runs this skill through the `cli-dispatch` read-only validate shim) and `Validate effort:` to override it, and `Plan effort:` to override the fableplan stage's `high` default. A stamped model wins over the band; the effort clamp follows the effective model, so an Opus validate at `low` or `medium` runs at `high` (Fable-only tiers), a Fable validate runs every tier as stamped, and a Codex CLI validate runs `low` to `max` as stamped. The **first review** uses the coarser table below; each row starts on a band edge.
+fableplan is yes when the score is 71 or higher. The Build column is the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. The Validate column is the band default; an `## Execution` block may stamp `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, which runs this skill through the `cli-dispatch` read-only validate shim) and `Validate effort:` to override it, and `Plan effort:` to override the fableplan stage's `high` default. A stamped model wins over the band; the effort clamp follows the effective model, so an Opus validate at `low` or `medium` runs at `high` (Fable-only tiers), a Fable validate runs every tier as stamped, and a Codex CLI validate runs `low` to `max` as stamped. The **first review** uses the coarser table below; each row starts on a band edge.
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
 | 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |
 | 21–70 | reviewer default | `@claude review` | `@codex review` |
-| 71–80 | Opus 5 · high | `@claude opus review effort:high` | `@codex review` |
+| 71–80 | Opus 5.5 · high | `@claude opus review effort:high` | `@codex review` |
 | 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
 
 Blocking re-reviews step down one rung per cycle, keyed to the reviewer that actually ran cycle 1 (`skills/fix-pr-review/rereview-routing.md`).

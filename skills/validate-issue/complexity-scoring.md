@@ -134,6 +134,6 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Ba
 ## Routing details
 
 - The main skill's band table owns the `fableplan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
-- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer.
+- Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5.5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer.
 - A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review, and keeps that band even after the validator returns a low score.
 - When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. Never lower routing from a validator rescore at any stage. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.

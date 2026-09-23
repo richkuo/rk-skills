@@ -365,9 +365,9 @@ describe('milestone-pipeline dependency scheduling', () => {
       '#2: C85 (band 81+) — validating on Fable 5.1 @ medium (stamped Validate effort medium overrides the band default high)',
       '#3: C75 (band 71–80) — validating on Fable 5.1 @ low (stamped Validate effort low overrides the band default medium)',
       '#4: C75 (band 71–80) — validating on Fable 5.1 @ xhigh (stamped Validate effort xhigh overrides the band default medium)',
-      '#5: C30 (band 21–49) — validating on Opus 5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
-      '#6: C30 (band 21–49) — validating on Opus 5 @ high (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
-      '#7: C60 (band 50–70) — validating on Opus 5 @ high (stamped Validate effort low → high for Opus 5: low/medium are Fable-only)',
+      '#5: C30 (band 21–49) — validating on Opus 5.5 @ xhigh (stamped Validate effort xhigh overrides the band default high)',
+      '#6: C30 (band 21–49) — validating on Opus 5.5 @ high (stamped Validate effort medium → high for Opus 5.5: low/medium are Fable-only)',
+      '#7: C60 (band 50–70) — validating on Opus 5.5 @ high (stamped Validate effort low → high for Opus 5.5: low/medium are Fable-only)',
       '#8: C75 (band 71–80) — validating on Fable 5.1 @ medium',
     ])
   })
@@ -395,12 +395,12 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#7')).toMatchObject({ model: 'opus', effort: 'high' })
 
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
-      '#2: C41 (band 21–49) — validating on Fable 5.1 @ low (stamped Validate model Fable 5.1 overrides the band default Opus 5) (stamped Validate effort low overrides the band default high)',
-      '#3: C68 (band 50–70) — validating on Fable 5.1 @ xhigh (stamped Validate model Fable 5.1 overrides the band default Opus 5)',
-      '#4: C85 (band 81+) — validating on Opus 5 @ high (stamped Validate model Opus 5 overrides the band default Fable 5.1) (stamped Validate effort medium → high for Opus 5: low/medium are Fable-only)',
-      '#5: C75 (band 71–80) — validating on Opus 5 @ high (stamped Validate model Opus 5 overrides the band default Fable 5.1) (band default effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#2: C41 (band 21–49) — validating on Fable 5.1 @ low (stamped Validate model Fable 5.1 overrides the band default Opus 5.5) (stamped Validate effort low overrides the band default high)',
+      '#3: C68 (band 50–70) — validating on Fable 5.1 @ xhigh (stamped Validate model Fable 5.1 overrides the band default Opus 5.5)',
+      '#4: C85 (band 81+) — validating on Opus 5.5 @ high (stamped Validate model Opus 5.5 overrides the band default Fable 5.1) (stamped Validate effort medium → high for Opus 5.5: low/medium are Fable-only)',
+      '#5: C75 (band 71–80) — validating on Opus 5.5 @ high (stamped Validate model Opus 5.5 overrides the band default Fable 5.1) (band default effort medium → high for Opus 5.5: low/medium are Fable-only)',
       '#6: C85 (band 81+) — validating on Fable 5.1 @ xhigh (stamped Validate model Fable 5.1 matches the band default Fable 5.1) (stamped Validate effort xhigh overrides the band default high)',
-      '#7: C5 (band 0–9) — validating on Opus 5 @ high (stamped Validate model Opus 5 matches the band default Opus 5) (band default effort medium → high for Opus 5: low/medium are Fable-only)',
+      '#7: C5 (band 0–9) — validating on Opus 5.5 @ high (stamped Validate model Opus 5.5 matches the band default Opus 5.5) (band default effort medium → high for Opus 5.5: low/medium are Fable-only)',
     ])
   })
 
@@ -432,8 +432,8 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#6')).toBeUndefined()
     expect(dispatch('validate:#7').prompt).toContain("-m 'gpt-6-astra' -c model_reasoning_effort=low -s read-only")
 
-    expect(logs).toContain('#2: C93 (band 81+) — validating on Astra (Codex CLI) @ low (stamped Validate model Astra (Codex CLI) overrides the band default Fable 5.1 @ high; model id gpt-6-astra, effort low, driven by a Opus 5 @ high driver agent)')
-    expect(logs).toContain('#3: C41 (band 21–49) — validating on Luna (Codex CLI) @ max (stamped Validate model Luna (Codex CLI) overrides the band default Opus 5 @ high; model id gpt-5.6-luna, effort max, driven by a Opus 5 @ high driver agent)')
+    expect(logs).toContain('#2: C93 (band 81+) — validating on Astra (Codex CLI) @ low (stamped Validate model Astra (Codex CLI) overrides the band default Fable 5.1 @ high; model id gpt-6-astra, effort low, driven by a Opus 5.5 @ high driver agent)')
+    expect(logs).toContain('#3: C41 (band 21–49) — validating on Luna (Codex CLI) @ max (stamped Validate model Luna (Codex CLI) overrides the band default Opus 5.5 @ high; model id gpt-5.6-luna, effort max, driven by a Opus 5.5 @ high driver agent)')
     const outcome = (issue) => output.results.find((result) => result.issue === issue)
     expect(outcome(4).status).toBe('blocked')
     expect(outcome(4).blocker).toContain('a validate pass runs only on the Codex CLI')
@@ -528,7 +528,7 @@ describe('milestone-pipeline dependency scheduling', () => {
       expect(promptFor(events, `implement:#${issue} (sonnet/high)`), `#${issue}`)
         .toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     }
-    expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5 @ medium')
+    expect(logs).toContain('#2: C0 (band 0–9) — validating on Opus 5.5 @ medium')
     expect(logs).toContain('#3: no [C..] prefix — unknown routes as the top band — validating on Fable 5.1 @ high')
     expect(logs).toContain('#5: prep reported C0 but the title carries no [C<score>] prefix — routing as unscored (unknown), which takes the top band')
     expect(logs).toContain('#6: prep reported C0 but the title reads [C50] — routing as unscored (unknown), which takes the top band')
@@ -577,14 +577,14 @@ describe('milestone-pipeline dependency scheduling', () => {
     expect(dispatch('validate:#13')).toMatchObject({ model: 'fable', effort: 'high' })
 
     expect(logs.filter((message) => message.includes('validating on'))).toEqual([
-      '#2: C2 (band 0–9) — validating on Opus 5 @ medium',
-      '#3: C9 (band 0–9) — validating on Opus 5 @ medium',
-      '#4: C10 (band 10–20) — validating on Opus 5 @ high',
-      '#5: C20 (band 10–20) — validating on Opus 5 @ high',
-      '#6: C21 (band 21–49) — validating on Opus 5 @ high',
-      '#7: C49 (band 21–49) — validating on Opus 5 @ high',
-      '#8: C50 (band 50–70) — validating on Opus 5 @ xhigh',
-      '#9: C70 (band 50–70) — validating on Opus 5 @ xhigh',
+      '#2: C2 (band 0–9) — validating on Opus 5.5 @ medium',
+      '#3: C9 (band 0–9) — validating on Opus 5.5 @ medium',
+      '#4: C10 (band 10–20) — validating on Opus 5.5 @ high',
+      '#5: C20 (band 10–20) — validating on Opus 5.5 @ high',
+      '#6: C21 (band 21–49) — validating on Opus 5.5 @ high',
+      '#7: C49 (band 21–49) — validating on Opus 5.5 @ high',
+      '#8: C50 (band 50–70) — validating on Opus 5.5 @ xhigh',
+      '#9: C70 (band 50–70) — validating on Opus 5.5 @ xhigh',
       '#10: C71 (band 71–80) — validating on Fable 5.1 @ medium',
       '#11: C80 (band 71–80) — validating on Fable 5.1 @ medium',
       '#12: C81 (band 81+) — validating on Fable 5.1 @ high',
@@ -645,10 +645,10 @@ describe('milestone-pipeline dependency scheduling', () => {
 
     const normalizations = logs.filter((message) => message.includes('normalized'))
     expect(normalizations).toEqual([
-      '#3: normalized build effort medium → high for Opus 5 (low/medium are Fable-only)',
+      '#3: normalized build effort medium → high for Opus 5.5 (low/medium are Fable-only)',
       '#4: normalized build effort medium → high for Sonnet 5 (low/medium are Fable-only)',
       '#5: normalized build effort medium → high for Haiku 4.5 (low/medium are Fable-only)',
-      '#10: normalized build effort low → high for Opus 5 (low/medium are Fable-only)',
+      '#10: normalized build effort low → high for Opus 5.5 (low/medium are Fable-only)',
     ])
   })
 
@@ -1464,7 +1464,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 keeps the stronger stamp')
       .toContain('gh pr comment <num> --body "@claude opus review effort:high"')
-    expect(logs.some((m) => m.includes('#3: keeping the stamped first review Opus 5'))).toBeTrue()
+    expect(logs.some((m) => m.includes('#3: keeping the stamped first review Opus 5.5'))).toBeTrue()
 
     expect(promptFor(events, 'implement:#4 (sonnet/xhigh)'), '#4 keeps sonnet on a downward rescore')
       .toContain('gh pr comment <num> --body "@claude sonnet review effort:high"')
@@ -1499,8 +1499,8 @@ describe('milestone-pipeline subagent review mode', () => {
       { model: 'opus', effort: 'high' },
       { model: 'opus', effort: 'xhigh' },
     ])
-    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 50–70) — re-validating on Opus 5 @ xhigh'))).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5 @ xhigh (band 50–70); the issue needs a [C70] restamp'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: validator re-scored C10 → C70 (band 50–70) — re-validating on Opus 5.5 @ xhigh'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5.5 @ xhigh (band 50–70); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
@@ -1560,7 +1560,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#2')).toBeTrue()
-    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+ (complexity unknown'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2: no Execution block — deriving build Opus 5.5 @ xhigh with fableplan from band 81+ (complexity unknown'))).toBeTrue()
     expect(started(events, 'implement:#3 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#3')).toBeTrue()
 
@@ -1572,7 +1572,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'implement:#6 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'plan:#6')).toBeTrue()
-    expect(logs.some((message) => message.includes('#6: no Execution block — deriving build Opus 5 @ xhigh with fableplan from band 81+'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#6: no Execution block — deriving build Opus 5.5 @ xhigh with fableplan from band 81+'))).toBeTrue()
   })
 
   test('needs_updates dispatches a fixer on the build model and re-reviews on the first-review spec', async () => {
@@ -2064,7 +2064,7 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(implement.prompt).not.toMatch(/codex exec[^\n]*(--dangerously-bypass-approvals-and-sandbox|--yolo|danger-full-access)/)
     expect(implement.prompt).toMatch(/Never add `--dangerously-bypass-approvals-and-sandbox`, `--yolo`/)
     expect(implement.prompt).toContain('Created with LLM: Luna | max | Harness: Codex')
-    expect(logs.some((message) => message.includes('#2') && message.includes('implementing on Luna (Codex CLI) @ max') && message.includes('driven by a Opus 5 @ high driver'))).toBeTrue()
+    expect(logs.some((message) => message.includes('#2') && message.includes('implementing on Luna (Codex CLI) @ max') && message.includes('driven by a Opus 5.5 @ high driver'))).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.status).toBe('pr_open')
   })
 
@@ -2108,7 +2108,7 @@ describe('milestone-pipeline external CLI build harnesses', () => {
     expect(batch.prompt).not.toContain('return pr_number 0')
     expect(batch.prompt).toContain('The CLI agent never posts a review trigger')
     expect(batch.prompt).toContain('Updated with LLM: Luna | max | Harness: Codex')
-    expect(logs.some((message) => message.includes('PR #1002: cycles 2-3 fix pass forwards to Luna (Codex CLI) @ max through a Opus 5 driver'))).toBeTrue()
+    expect(logs.some((message) => message.includes('PR #1002: cycles 2-3 fix pass forwards to Luna (Codex CLI) @ max through a Opus 5.5 driver'))).toBeTrue()
   })
 
   test('subagent-mode reviewers stay on Claude while the fix pass forwards to the CLI', async () => {
@@ -2135,7 +2135,7 @@ describe('milestone-pipeline external CLI build harnesses', () => {
 
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
     expect(started(events, 'implement:#3 (fable/xhigh)')).toBeTrue()
-    expect(logs).toContain('#2: normalized build effort max → xhigh for Opus 5 (max is a Codex CLI-only tier)')
+    expect(logs).toContain('#2: normalized build effort max → xhigh for Opus 5.5 (max is a Codex CLI-only tier)')
     expect(logs).toContain('#3: normalized build effort max → xhigh for Fable 5.1 (max is a Codex CLI-only tier)')
   })
 

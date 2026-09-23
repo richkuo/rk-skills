@@ -85,7 +85,7 @@ Compare the model the output names with the requested id. A different model is a
 
 ## 9. Validate pass
 
-An issue can stamp `Validate model: <Name> (Codex CLI[, <model-id>])`, and `milestone-pipeline` then runs the `validate-issue` pass through the Codex CLI under the same Opus 5 driver. Sections 1, 2, 5, 6, and 8 apply unchanged; the differences:
+An issue can stamp `Validate model: <Name> (Codex CLI[, <model-id>])`, and `milestone-pipeline` then runs the `validate-issue` pass through the Codex CLI under the same Opus 5.5 driver. Sections 1, 2, 5, 6, and 8 apply unchanged; the differences:
 
 - **Codex only.** A validate pass never writes, so it runs in the `read-only` sandbox, which Codex enforces. The Cursor CLI has no write boundary (section 4), so a Cursor validate stamp blocks the issue.
 - **No network.** The `read-only` sandbox grants none, so every `gh` call inside the pass fails. The driver runs `git fetch origin` first, fetches the issue (`gh issue view <n> --json title,body,milestone,state`) and the PR list for it itself, and embeds them in the prompt file as data under a heading that says the driver fetched them. The prompt file also tells the CLI agent that the sandbox has no network, so it works from the embedded data, the local checkout, and `origin/<default branch>`, and records anything it could not check as a Verification limitation in the summary.
