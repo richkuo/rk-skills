@@ -34,7 +34,7 @@ The appended verb is always `Validated`, because this edit is the output of a va
 
 ## Check for newer edits
 
-Immediately before `gh issue edit`, run `gh issue view <N> --repo "$REPO" --json title,body,updatedAt` and compare `updatedAt` with the value step 1 recorded; a relayed verdict that carries none records it at the start of this procedure, before the correction is assembled. When it changed, merge the newer text into the correction, retrace every claim it touches, and check again; never overwrite another author's edit with the older body. When edits keep arriving, stop and report the prepared correction. This check narrows the race but is not atomic.
+Immediately before `gh issue edit`, run `gh issue view <N> --repo "$REPO" --json title,body,updatedAt` and compare `updatedAt` with the recorded value; step 1 records the first one, and a relayed verdict that carries none records it at the start of this procedure, before the correction is assembled. When `updatedAt` changed, compare the title and body with the recorded snapshot. A comment, label, or assignee change leaves them equal and needs no merge. When they differ, merge the newer text into the correction and retrace every claim it touches. In both cases, record the title, body, and `updatedAt` just read as the new snapshot, then check again; never overwrite another author's edit with the older body. When edits keep arriving, stop and report the prepared correction. This check narrows the race but is not atomic.
 
 ## Verify the saved issue
 
