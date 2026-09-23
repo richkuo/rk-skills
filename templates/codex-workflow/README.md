@@ -93,7 +93,7 @@ release workflow that parses the `docs-release/*` branch name.
 | `@codex sync-release` | docs/release flow, only after the candidate-list edit above | Scoped |
 
 `effort:low|medium|high|xhigh` is parsed from the comment; the default is
-`xhigh`. Review events (formal reviews, inline comments) always stay read-only.
+`high`. Review events (formal reviews, inline comments) always stay read-only.
 
 | Shorthand | Model | Notes |
 |-----------|-------|-------|

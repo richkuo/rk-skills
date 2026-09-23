@@ -520,10 +520,10 @@ class ResolveModelTest(unittest.TestCase):
             "gpt-5.3-codex-spark",
         )
 
-    def test_default_effort_is_xhigh(self):
+    def test_default_effort_is_high(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@codex review")["effort"],
-            "xhigh",
+            "high",
         )
 
     def test_effort_token_overrides_the_default(self):
