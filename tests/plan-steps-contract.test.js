@@ -58,6 +58,9 @@ describe('numbered plan steps with verify points', () => {
 
 const TRUST_POINTERS = ['skills/issueplan/SKILL.md']
 
+const UNTRUSTED_OVERRIDE =
+  /(?:newer on the issue|(?:posted|added|left) (?:on|to) the issue after)(?![^.\n|]{0,80}trusted)|(?:newer|later) (?:issue )?comments?(?![^.\n|]{0,80}trusted)[^.\n|]{0,40}(?:supersed|overrid)/i
+
 const ANY_AUTHOR_ADOPTION =
   /(?:adopt\w*|blueprint)[^.]{0,60}(?:plan|comment)s? (?:from|by|of) (?:any|every) (?:author|commenter|one)\b|(?:plan|comment)s? (?:from|by|of) (?:any|every) (?:author|commenter|one)\b[^.]{0,60}(?:adopt|blueprint)/i
 
@@ -73,9 +76,12 @@ describe('plan-adoption trust', () => {
   test('work-on-issue step 0 adopts a plan only from a trusted author', () => {
     const owner = bodies[MIRROR_OWNER]
     const step0 = owner.slice(owner.indexOf('### 0.'), owner.indexOf('### 1.'))
-    expect(step0, 'the invoking user is trusted').toMatch(/invoking user \(`viewerDidAuthor` true\)/)
-    expect(step0, 'the trusted associations').toMatch(/`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`/)
-    expect(step0, 'a bot earns trust only through its association').toMatch(/`\[bot\]`\) is trusted only through its association/)
+    expect(step0, 'the trusted associations').toMatch(/`author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`/)
+    expect(step0, 'trust data comes from the REST comments endpoint').toMatch(/`user\.login`, `user\.type`, and `author_association` from `gh api repos\/<owner>\/<repo>\/issues\/<N>\/comments --paginate`/)
+    expect(step0, 'the invoking user is a User account from gh api user').toMatch(/invoking user is the `login` that `gh api user` returns when its `type` is `User`/)
+    expect(step0, 'a failed or bot viewer lookup trusts no invoking user').toMatch(/fails, as it does under an Actions or app token, or returns a `Bot`, no author is trusted as the invoking user/)
+    expect(step0, 'a bot earns trust only through its association').toMatch(/\(`user\.type` `Bot`\) is trusted only through its association/)
+    expect(step0, 'no trust field that hides bots').not.toMatch(/viewerDidAuthor|login ending in `\[bot\]`/)
     expect(step0, 'no bot allowlist').toMatch(/[Nn]o bot allowlist exists/)
     expect(step0, 'the newest trusted plan wins').toMatch(/[Aa]dopt the newest trusted plan/)
     expect(step0, 'a caller plan is the fallback').toMatch(/caller's plan applies only when no trusted plan is posted/)
@@ -105,6 +111,14 @@ describe('plan-adoption trust', () => {
     expect(bodies['skills/issueplan/SKILL.md']).not.toMatch(ANY_AUTHOR_ADOPTION)
   })
 
+  test('the override (2) guard catches paraphrases and spares the trusted wording', () => {
+    expect('the traced code, anything posted on the issue after the plan, then correctness and safety').toMatch(UNTRUSTED_OVERRIDE)
+    expect('anything newer on the issue, then correctness and safety').toMatch(UNTRUSTED_OVERRIDE)
+    expect('a later comment supersedes the part it touches').toMatch(UNTRUSTED_OVERRIDE)
+    expect('a newer comment from a `work-on-issue` step 0 trusted author or an issue edit').not.toMatch(UNTRUSTED_OVERRIDE)
+    expect(bodies['skills/fableplan/SKILL.md']).not.toMatch(UNTRUSTED_OVERRIDE)
+  })
+
   test('consumers point at the owner and never restate an untrusted adoption rule', async () => {
     for (const path of TRUST_POINTERS) {
       expect(bodies[path], `${path}: defers to work-on-issue step 0 for trust`).toMatch(/`work-on-issue` step 0 trusts its author/)
@@ -117,7 +131,7 @@ describe('plan-adoption trust', () => {
       expect(text, `${path}: untrusted "newest posted plan" rule`).not.toMatch(/newest\s+(?:posted\s+)?(?:plan\b|wins\b)/i)
       expect(text, `${path}: adopts a plan from any author`).not.toMatch(ANY_AUTHOR_ADOPTION)
       if (path !== MIRROR_OWNER) {
-        expect(text, `${path}: override (2) without the trust qualifier`).not.toMatch(/newer on the issue(?![^.\n|]{0,80}trusted)/i)
+        expect(text, `${path}: override (2) without the trust qualifier`).not.toMatch(UNTRUSTED_OVERRIDE)
       }
     }
   })
