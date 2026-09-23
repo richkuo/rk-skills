@@ -45,6 +45,7 @@ const PLAN_DEVIATION_CALLERS = [
   'skills/fable-validate-loop/SKILL.md',
   'skills/fable-validate-fableplan-loop/SKILL.md',
   'skills/validate-fableplan-loop/SKILL.md',
+  'skills/issueplan/SKILL.md',
 ]
 
 const EDIT_VERB_OWNER = 'skills/validate-issue/issue-editing.md'
