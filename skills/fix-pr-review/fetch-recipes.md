@@ -10,13 +10,18 @@ gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '.[] | {id, user: 
 # Issue comments on the PR — where @claude review output usually lands
 gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, body}'
 # Inline diff threads with resolution state — REST cannot report isResolved, so use GraphQL
+# Omit -F after on the first call; pass -F after='<endCursor>' for each later page
 gh api graphql -F owner='{owner}' -F repo='{repo}' -F pr=<N> -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-    reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
-      comments(first:50){ nodes{ databaseId author{login} createdAt body } } } } } } }'
+  query($owner:String!,$repo:String!,$pr:Int!,$after:String){ repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+    reviewThreads(first:100, after:$after){ pageInfo{hasNextPage endCursor} nodes{ id isResolved isOutdated path line
+      comments(first:50){ pageInfo{hasNextPage endCursor} nodes{ databaseId author{login} createdAt body } } } } } } }'
+# Remaining replies of one thread, when its comments.pageInfo.hasNextPage is true
+gh api graphql -F id='<thread id>' -F after='<endCursor>' -f query='
+  query($id:ID!,$after:String){ node(id:$id){ ... on PullRequestReviewThread {
+    comments(first:100, after:$after){ pageInfo{hasNextPage endCursor} nodes{ databaseId author{login} createdAt body } } } } }'
 ```
 
-When `hasNextPage` is true, paginate with `endCursor` — never drop threads past 100.
+When `hasNextPage` is true, paginate with `endCursor` — never drop threads past 100. Each thread's `comments` connection has its own cursor: paginating the threads does not fetch a long thread's later replies, and the last reply decides whether the thread awaits the reviewer.
 
 ### Collection rules
 
