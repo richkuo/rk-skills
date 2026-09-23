@@ -158,6 +158,7 @@ describe('loop/validate pipeline contract', () => {
       const body = bodies[path]
       expect(body, path).toMatch(/fable-validate-loop step 4's score gate, safety carve-out, and top-band note apply unchanged/)
       expect(body, `${path}: restated score gate`).not.toMatch(/\*\*Score gate:\*\*/)
+      expect(body, `${path}: restated score threshold`).not.toMatch(/\b71\b/)
     }
   })
 
@@ -195,6 +196,7 @@ describe('loop/validate pipeline contract', () => {
       expect(body, path).toMatch(/fable-validate-loop step 2's STOP table/)
       expect(body.split('\n').some((line) => line.startsWith('|') && /\*\*STOP\.?\*\*/.test(line)), `${path}: restated STOP row`).toBe(false)
       expect(body, `${path}: restated verdict template`).not.toMatch(/Update issue description\? <Yes ?\| ?No>/)
+      expect(body, `${path}: targetBranch pass-through`).toMatch(/Same as fable-validate-loop, including the optional `targetBranch`/)
     }
     expect(VALIDATION_STOP, 'the delegates point at an owner that keeps the full table').toContain(VALIDATION_STOP_OWNER)
   })

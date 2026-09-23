@@ -13,7 +13,7 @@ This is **fable-validate-fableplan-loop with the implementation stage removed** 
 
 ## Input
 
-Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (defaults to the latest open issue in the current repo).
+Same as fable-validate-loop, including the optional `targetBranch`.
 
 ## Steps
 
