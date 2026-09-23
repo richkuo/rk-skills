@@ -78,7 +78,7 @@ Only after step 6's verification: `git status`; stage **each fix file by name** 
 
 ### 9. Post the disposition comment
 
-One comment stating what happened to each finding, per [disposition-comment.md](disposition-comment.md), read completely; posted even when every finding was refuted. When this is a retry after a failed or uncertain post, first check the PR for a disposition that already covers this head commit, and post only what is missing.
+One comment stating what happened to each finding, per [disposition-comment.md](disposition-comment.md), read completely; posted even when every finding was refuted. When this is a retry after a failed or uncertain post, first check the PR for a disposition posted after this pass's step 1 fetch, and post only what is missing.
 
 ### 10. Trigger the re-review
 
