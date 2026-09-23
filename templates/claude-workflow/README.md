@@ -10,9 +10,9 @@ the Codex twin and documents only what differs from this file.
 | Path | Purpose |
 |------|---------|
 | `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`. |
-| `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Fetches the prompts and scripts below from rk-skills at run time, so an rk-skills update reaches every consumer on its next run. |
+| `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Resolves the model id and effort, and fetches the prompts and scripts below from rk-skills at run time, so an rk-skills update reaches every consumer on its next run. |
 | `prompts/*.md` | One prompt per route, fetched at run time. Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
-| `scripts/` | Comment patch/compose helpers plus unit tests. `test_workflow_logic.py` executes the real classifier shell out of `claude.yml`. |
+| `scripts/` | Comment patch/compose helpers plus unit tests. `test_workflow_logic.py` executes the real classifier shell out of `claude.yml` and the model resolve step out of `claude-run.yml`. |
 
 ## Install
 
