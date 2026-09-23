@@ -165,9 +165,10 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
-  test('validate→plan/implement chains stop on too-large, infeasible, or existing PR', () => {
+  test('validate→plan/implement chains stop on blocked, too-large, infeasible, or existing PR', () => {
     for (const path of VALIDATION_STOP) {
       const body = bodies[path]
+      expect(hasStopTableRow(body, /Validation blocked/), `${path}: STOP+blocked row`).toBe(true)
       expect(hasStopTableRow(body, /too large/i), `${path}: STOP+too large row`).toBe(true)
       expect(hasStopTableRow(body, /infeasible/i), `${path}: STOP+infeasible row`).toBe(true)
       expect(hasStopTableRow(body, /existing PR|already addressing|already implements/i), `${path}: STOP+existing-PR row`).toBe(true)
@@ -240,5 +241,31 @@ describe('loop/validate pipeline contract', () => {
       workflowLines.some((line) => line.includes('fix-pr-review') && line.includes('Updated with LLM')),
       `${EDIT_VERB_WORKFLOW}: PR-fix commits keep Updated`,
     ).toBe(true)
+  })
+
+  test('validation pins evidence to one commit and a blocked result never reaches a caller as a pass', async () => {
+    const owner = await read(VERDICT_TEMPLATE_OWNER)
+    const baseline = owner.slice(owner.indexOf('### 0. Baseline branch'), owner.indexOf('### 1. Fetch the issue'))
+    expect(baseline).toMatch(/Pass `--repo "\$REPO"` to every `gh` call/)
+    expect(baseline).toMatch(/pin `BASE=\$\(git rev-parse "origin\/\$DEFAULT"\)` once/)
+    expect(baseline).toMatch(/Every read, search, and history check uses `BASE`/)
+    expect(baseline).not.toMatch(/Read a working-tree path/)
+    const fetch = owner.slice(owner.indexOf('### 1. Fetch the issue'), owner.indexOf('### 2. Extract claims'))
+    expect(fetch).toMatch(/merged=/)
+    expect(fetch).toMatch(/When the timeline lookup fails, say so under Concerns; never report that no overlapping PR exists/)
+    const blocked = owner.slice(owner.indexOf('**Validation blocked.**'), owner.indexOf('**Next-step line.**'))
+    expect(blocked).toMatch(/no completed-verdict line, score, or next-step line/)
+    expect(blocked).toMatch(/maps it to its failing value \(INVALID[^)]*\), never to a passing value/)
+    const workflow = await read(EDIT_VERB_WORKFLOW)
+    expect(workflow).toMatch(/If validate-issue ends in Validation blocked, return verdict INVALID/)
+  })
+
+  test('a validation edit checks for newer issue text before it saves', async () => {
+    const editing = texts[EDIT_VERB_OWNER]
+    const check = editing.slice(editing.indexOf('## Check for newer edits'), editing.indexOf('## Verify the saved issue'))
+    expect(check).toMatch(/Immediately before `gh issue edit`/)
+    expect(check).toMatch(/compare `updatedAt` with the value step 1 recorded/)
+    expect(check).toMatch(/never overwrite another author's edit with the older body/)
+    expect(editing).toMatch(/`gh issue edit <N> --repo "\$REPO" --title <title> --body-file <file>`/)
   })
 })

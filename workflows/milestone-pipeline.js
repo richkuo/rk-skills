@@ -506,6 +506,7 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
     `the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes),`,
     `and rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it.`,
+    `If validate-issue ends in Validation blocked, return verdict INVALID with the missing input as invalid_reason and rescored_complexity 0.`,
   ].join(' ')
 }
 

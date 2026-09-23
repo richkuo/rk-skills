@@ -259,25 +259,30 @@ describe('complexity grading procedure', () => {
     }
   })
 
-  test('a rescore that raises the score or changes a grade is an update, and a rescore never lowers routing', () => {
+  test('a missing prefix, a differing prefix in either direction, or differing grades is an update, and a lower score lands only on evidence', () => {
     const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
-    expect(decision).toMatch(/Yes for .*a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower/)
-    expect(decision).toMatch(/restamp the title prefix, the rationale line, and the fableplan signal/)
-    expect(decision).toMatch(/A recomputed score below the title score restamps nothing/)
-    expect(decision).toMatch(/a title with no prefix gets none from a rescore/)
+    expect(decision).toMatch(/Yes for .*a rescore: a title with no `\[C<score>\]` prefix, a title prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ from the traced ones/)
+    expect(decision).toMatch(/restamp the title prefix and the rationale line \(grades, score, model and effort, fableplan signal\) to the recomputed values/)
+    expect(decision).toMatch(/and add both when the issue has none/)
+    expect(decision).toMatch(/A lower recomputed score restamps down only on evidence: every lowered grade the rationale line states has its `Differs:` line/)
+    expect(decision).not.toMatch(/restamps nothing|gets none from a rescore|a rescore never lowers routing/)
     expect(decision).toMatch(/No only when .*with no rescore edit due/)
     const rules = validateIssueScoring.slice(validateIssueScoring.indexOf('## Grading rules'), validateIssueScoring.indexOf('## Build the edit list first'))
-    expect(rules).toMatch(/a prefix above the recomputed score keeps its value/)
+    expect(rules).toMatch(/A missing title prefix, a prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ is an update/)
+    expect(rules).not.toMatch(/keeps its value/)
+    const routing = validateIssueScoring.slice(validateIssueScoring.indexOf('## Routing details'))
+    expect(routing).toMatch(/routes as the highest band at validate, build, and review until a validation stamps the traced score on the issue/)
+    expect(routing).toMatch(/Within one run, never lower routing from a validator rescore/)
   })
 
-  test('a rescore restamps the Execution block upward only and never lowers the published fableplan signal', async () => {
+  test('the Execution block restamps upward on a higher score and lowers only unchanged band defaults on a lower score', async () => {
     const decision = validateIssue.slice(validateIssue.indexOf('<next-step line>'), validateIssue.indexOf('**Next-step line.**'))
-    expect(decision).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only/)
-    expect(decision).toMatch(/Fable 5\.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`/)
+    expect(decision).toMatch(/its Edit the title section owns the `## Execution` block restamp/)
     expect(decision).toMatch(/`Complexity:` value is always the recomputed score/)
-    expect(decision).toMatch(/`fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher/)
+    expect(decision).toMatch(/`fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher\. It routes this run only/)
     const editing = await read('skills/validate-issue/issue-editing.md')
-    expect(editing).toMatch(/restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the new band's defaults[^\n]*upward only: never lower a model or an effort/)
+    expect(editing).toMatch(/\*\*Higher score, or no prior prefix:\*\* restamp each line to the new band's defaults, upward only: never lower a model or an effort, keep a Fable 5\.1 build and a Codex CLI or Cursor CLI harness stamp as written, and on those add only `fableplan first: Yes` when the new score is 71 or higher/)
+    expect(editing).toMatch(/\*\*Lower score:\*\* restamp a line down to the new band's default only when it still equals the old band's default\. A line that differs from the old default is a deliberate stamp and stays, and a Fable 5\.1 build or a Codex CLI or Cursor CLI harness stamp keeps its model and effort/)
     for (const path of ['skills/fable-validate-loop/SKILL.md', 'skills/validate-fableplan-loop/SKILL.md']) {
       const gate = (await read(path)).match(/\*\*Score gate:\*\*[^\n]*/)[0]
       expect(gate, path).toMatch(/`fableplan: no`[^\n]*both \*\*below 71\*\*/)

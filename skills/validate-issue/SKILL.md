@@ -9,17 +9,17 @@ Validate every current-behavior claim against code. Input: an issue URL, `#N`, `
 
 ### 0. Baseline branch
 
-No worktree for validation or issue edits. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)`; with a `targetBranch`, validate it per `work-on-issue` step 1 ("Target"), set `DEFAULT` to it, and name it as the target in the verdict. Run `git fetch origin "$DEFAULT"`; the verdict states `git rev-parse --short "origin/$DEFAULT"` as the baseline. Read a working-tree path only when it is tracked and `git diff --quiet "origin/$DEFAULT" -- <path>` exits 0; otherwise read `git show "origin/$DEFAULT":<path>`.
+No worktree for validation or issue edits. The issue's repository `REPO` is the one a URL or `owner/repo#N` names, else the checkout's `origin`. Pass `--repo "$REPO"` to every `gh` call, linked PRs included. When `origin` is a different repository, trace `REPO` from a temporary clone outside this checkout; never cite another repository's code. Resolve `DEFAULT=$(gh repo view "$REPO" --json defaultBranchRef --jq .defaultBranchRef.name)`; with a `targetBranch`, validate it per `work-on-issue` step 1 ("Target"), set `DEFAULT` to it, and name it as the target in the verdict. Run `git fetch origin "$DEFAULT"`, then pin `BASE=$(git rev-parse "origin/$DEFAULT")` once; a failed fetch keeps the last fetched ref and names that as a verification limitation. Every read, search, and history check uses `BASE` (`git show "$BASE":<path>`, `git grep -n <pattern> "$BASE" -- <paths>`, `git log "$BASE" -- <paths>`), so local edits, untracked files, and a moving branch cannot change the evidence. The verdict states `git rev-parse --short "$BASE"` as the baseline. When the issue cannot be read or no `BASE` resolves, stop with `Validation blocked` (step 8).
 
 ### 1. Fetch the issue and linked PRs
 
-Run `gh issue view <N> --comments`, then list the cross-referenced PRs that comments omit (`owner/repo#N` input names the repo):
+Run `gh issue view <N> --repo "$REPO" --comments` and record its `updatedAt` (`--json updatedAt`) for the step-11 freshness check. Then list the cross-referenced PRs that comments omit:
 
 ```sh
-gh api --paginate repos/{owner}/{repo}/issues/<N>/timeline --jq '.[] | select(.event=="cross-referenced") | .source.issue | select(.pull_request) | "\(.number) \(.state)"'
+gh api --paginate "repos/$REPO/issues/<N>/timeline" --jq '.[] | select(.event=="cross-referenced") | .source.issue | select(.pull_request) | "\(.repository_url) \(.number) \(.state) merged=\(.pull_request.merged_at // "no")"'
 ```
 
-Verify a merged fix against current code and recommend closure or reuse; list open overlapping PRs under Concerns.
+A closed PR is a fix only when `merged` is set and its change is present at `BASE`; verify it against that code and recommend closure or reuse. List open overlapping PRs under Concerns. When the timeline lookup fails, say so under Concerns; never report that no overlapping PR exists.
 
 ### 2. Extract claims and assertions
 
@@ -58,7 +58,7 @@ Whenever 5a runs, read [proposal-consistency.md](proposal-consistency.md) comple
 
 #### 5c. General checks
 
-Run `git log --since=7.days` on touched paths. Check locking, migrations, reloads, idempotency, failure blast radius, parallel live/offline/admin paths, dual implementations, and recent-work regression. Material findings go under Concerns with `file:line`; a safety, recent-work, or parity defect requires an update.
+Run `git log --since=7.days "$BASE" -- <touched paths>`. Check locking, migrations, reloads, idempotency, failure blast radius, parallel live/offline/admin paths, dual implementations, and recent-work regression. Material findings go under Concerns with `file:line`; a safety, recent-work, or parity defect requires an update.
 
 ### 6. Score complexity
 
@@ -127,7 +127,9 @@ Axes:
 <next-step line>
 ```
 
-Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, required restructure, or a rescore: a title prefix below the recomputed score, or a rationale line whose grades differ from the traced ones at a recomputed score that is not lower. The rescore edits restamp the title prefix, the rationale line, and the fableplan signal to the recomputed values per [issue-editing.md](issue-editing.md), and when the body carries an `## Execution` block they also restamp its `Build model:`, `Effort:`, and `fableplan first:` lines to the recomputed band's defaults, upward only: a stamp on Fable 5.1 or on a Codex CLI or Cursor CLI harness keeps its model and effort and gains only `fableplan first: Yes`. A recomputed score below the title score restamps nothing, and the verdict carries the `Differs:` lines only; a title with no prefix gets none from a rescore. The verdict's `Complexity:` value is always the recomputed score. The verdict's `fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher; a rescore never lowers routing. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
+Yes for a material ❌/⚠️ claim, architecture or consistency gap, material concern, missing scope, required restructure, or a rescore: a title with no `[C<score>]` prefix, a title prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ from the traced ones. The rescore edits restamp the title prefix and the rationale line (grades, score, model and effort, fableplan signal) to the recomputed values per [issue-editing.md](issue-editing.md), and add both when the issue has none; its Edit the title section owns the `## Execution` block restamp. A lower recomputed score restamps down only on evidence: every lowered grade the rationale line states has its `Differs:` line, and the `Axes:` evidence names what the issue over-scored. The verdict's `Complexity:` value is always the recomputed score. The verdict's `fableplan:` field is a routing signal: `yes` when the title score or the recomputed score is 71 or higher. It routes this run only; a downward restamp takes effect from the next run. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
+
+**Validation blocked.** When the issue cannot be read, no `BASE` resolves, or the central claim (the behavior the issue exists to change) stays ❓ after step 3, output `**#<N>: Validation blocked** — <missing input>` with the evidence gathered so far, and no completed-verdict line, score, or next-step line. A loop treats it as STOP. A caller with a fixed verdict vocabulary maps it to its failing value (INVALID, with the missing input as the reason and complexity 0), never to a passing value.
 
 **Next-step line.** Post the first matching string verbatim. With fableplan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 
@@ -145,4 +147,4 @@ Invoke `fableplan` with the issue number; honor an explicit request even at sign
 
 ### 11. Handle "update issue"
 
-Read [issue-editing.md](issue-editing.md) completely and apply it from the checkout, with no worktree.
+Read [issue-editing.md](issue-editing.md) completely and apply it from the checkout, with no worktree. Pass the `REPO` and `updatedAt` from steps 0 and 1.

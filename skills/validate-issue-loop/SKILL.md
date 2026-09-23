@@ -34,6 +34,7 @@ Check the verdict's **Scope** field, **Architecture** section, and **Concerns** 
 | Condition | Action |
 |---|---|
 | `Scope: too large` (validate-issue step 7 flagged split / umbrella / narrow) | **STOP.** Report the disposition and proposed parts; do not proceed to work-on-issue-loop. Implementing a multi-part issue as one PR reproduces the scope problem in the diff — that needs a human call on how to split it. |
+| `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to build. |
 | Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; auto-implementing a design the validation itself rejected would ship the wrong fix. |
 | A **merged** PR already implements the fix (verdict recommends closing/repurposing the issue) | **STOP.** Report the PR and the close/repurpose recommendation — there's nothing left to implement. |
 | An **open** PR is already addressing the issue (named under Concerns) | **STOP.** Report the overlapping PR; whether to supersede, join, or wait on in-flight work is a human call — auto-implementing duplicates it. |
