@@ -99,14 +99,14 @@ jobs:
             opus|opus5)     MODEL_ID="claude-opus-5-5" ;;
             sonnet|sonnet5) MODEL_ID="claude-sonnet-5" ;;
             fable|fable5)   MODEL_ID="claude-fable-5-1" ;;
-            *)              MODEL_ID="claude-opus-4-8[1m]" ;;
+            *)              MODEL_ID="claude-opus-5-5" ;;
           esac
 
           echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
           echo "::notice::Using model: $MODEL_ID"
 
           EFFORT_RAW=$(printf '%s' "$STRIPPED" | grep -oiE 'effort:(low|medium|xhigh|high)' | head -1 | tr '[:upper:]' '[:lower:]' | cut -d: -f2 || true)
-          EFFORT="${EFFORT_RAW:-xhigh}"
+          EFFORT="${EFFORT_RAW:-high}"
           echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
           echo "::notice::Using effort: $EFFORT"
 

@@ -48,7 +48,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: ${{ contains(github.event.comment.body, 'luna') && 'gpt-5.6-luna' || 'gpt-5.6-sol' }}
-          effort: xhigh
+          effort: high
           sandbox: read-only
           safety-strategy: drop-sudo
           output-file: ${{ runner.temp }}/codex-review.md
