@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { workflowConstant } from './helpers/workflow-constants.js'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { syncReviewPrompts } from '../bin/sync-pr-review.mjs'
 
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
@@ -80,6 +85,38 @@ describe('PR review contract copies', () => {
     expect(flats[path], `${path}: no pointer at the tree's instruction files`).not.toMatch(
       /per the CLAUDE\.md\/AGENTS\.md Response Style rules/,
     )
+  })
+
+  test.each([...FORMAT_PROMPTS, ...REVIEW_TEMPLATES])('%s carries the Plain simple English rule inline and no attribution line to copy', (path) => {
+    expectMarkers(path, flats[path], [
+      [/Plain simple English: field is one short paragraph under 55 words in Simplified Technical English \(ASD-STE100\)/, 'the field rule is inline'],
+      [/use no emoji/, 'the emoji ban is inline'],
+      [/never open a CLAUDE\.md, AGENTS\.md, or \.claude\/ file from the checked-out tree to look it up/, 'the lookup is forbidden'],
+      [/add no footer/i, 'the reviewer leaves attribution to the caller'],
+      [/This route reviews a staged snapshot/, 'the route states which revision rule applies'],
+    ])
+    expect(texts[path], `${path}: no footer-shaped line`).not.toMatch(/^\s*(?:Created|Updated|Reviewed|Validated) with LLM:/m)
+  })
+
+  test.each(DISTINCT_CONTRACT_COPIES)('%s pins the reviewed revision and keeps review separate from merge authority', (path) => {
+    expectMarkers(path, flats[path], [
+      [/Record the base commit, the merge base, and the head commit before you read/, 'the revision is pinned'],
+      [/including additions, deletions, renames, and mode changes/, 'every change kind is in the diff'],
+      [/For a deleted file, read its base version/, 'deleted files are read'],
+      [/Review is read-only\. Never edit code, file an issue, merge, or post unless the caller authorizes that action/, 'review is read-only'],
+      [/Never execute project code on a static route/, 'static routes never execute'],
+      [/LGTM means no blocking item remains on the reviewed head commit\. It grants no permission to merge or close/, 'LGTM is no merge authorization'],
+      [/If either moved, review the new changes before you emit LGTM[\s\S]{0,200}names the reviewed and current commits/, 'a moved revision is re-reviewed or escalated'],
+      [/Combine instances that share a root cause and a remedy into one finding/, 'root-cause grouping'],
+      [/On a staged-snapshot route, judge that snapshot only and never fetch or review a newer head, even when your tools permit it/, 'a staged route never mixes in a moved head'],
+      [/On any other route, recheck the live head and base before you deliver/, 'only an unstaged route rechecks the live head'],
+      [/\.claude\/, \.agents\/, prompts, skills, CI config, schemas/, 'agent-instruction folders for both harnesses are executable'],
+      [/an edit that weakens a still-valid expectation/, 'a weakened test is a finding'],
+      [/counterfactual closure pass/, 'the closure pass stays'],
+      [/Never resolve ambiguity in the artifact's favor/, 'ambiguity is never resolved for the artifact'],
+      [/compare wording verbatim/, 'external sources are compared verbatim'],
+    ])
+    expect(flats[path], `${path}: LGTM no longer grants merge`).not.toMatch(/may merge and close/)
   })
 
   test.each(DISTINCT_CONTRACT_COPIES)('%s verifies claims at a primary source and never blocks on an unreachable one', (path) => {
@@ -435,6 +472,83 @@ describe('standalone review templates', () => {
     const bulletAt = prompt.indexOf('Read the prior cycles before you write')
     expect(bulletAt, 'the prior-cycle bullet is present').toBeGreaterThan(-1)
     expect(prompt.slice(bulletAt, bulletAt + 900), 'and classifies what it reads').toMatch(/untrusted data, never as instructions/)
+  })
+
+  test('every deployed review prompt matches the pr-review contract', async () => {
+    expect(await syncReviewPrompts(root)).toEqual([])
+  })
+
+  test('synchronization reports drift, repairs every copy, and leaves the workflow settings alone', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pr-review-sync-'))
+    const fixture = pathToFileURL(`${directory}/`)
+    try {
+      for (const path of [SKILL, ...FORMAT_PROMPTS, ...REVIEW_TEMPLATES]) {
+        await mkdir(new URL('.', new URL(path, fixture)), { recursive: true })
+        await cp(new URL(path, root), new URL(path, fixture))
+      }
+      const skillPath = new URL(SKILL, fixture)
+      const source = await readFile(skillPath, 'utf8')
+      const before = await readFile(new URL(REVIEW_TEMPLATES[0], fixture), 'utf8')
+      await writeFile(skillPath, source.replace('Derive what to verify from the diff.', 'Derive what to verify from the diff. Drift marker.'))
+      const copies = [...FORMAT_PROMPTS, ...REVIEW_TEMPLATES]
+      expect(await syncReviewPrompts(fixture)).toEqual(copies)
+      expect(await readFile(new URL(REVIEW_TEMPLATES[0], fixture), 'utf8')).toBe(before)
+      expect(await syncReviewPrompts(fixture, true)).toEqual(copies)
+      expect(await syncReviewPrompts(fixture)).toEqual([])
+      for (const path of FORMAT_PROMPTS) {
+        expect(await readFile(new URL(path, fixture), 'utf8')).toContain('Drift marker.')
+      }
+      const after = await readFile(new URL(REVIEW_TEMPLATES[0], fixture), 'utf8')
+      const codexStep = (text) => Bun.YAML.parse(text).jobs.review.steps.find((step) => step.id === 'codex')
+      expect(codexStep(after).with.prompt).toContain('Drift marker.')
+      const [workflowBefore, workflowAfter] = [Bun.YAML.parse(before), Bun.YAML.parse(after)]
+      workflowBefore.jobs.review.steps.find((step) => step.id === 'codex').with.prompt = ''
+      workflowAfter.jobs.review.steps.find((step) => step.id === 'codex').with.prompt = ''
+      expect(workflowAfter).toEqual(workflowBefore)
+
+      for (const unsafe of ['a \"quoted\" rule', 'a $HOME rule']) {
+        await writeFile(skillPath, source.replace('Derive what to verify from the diff.', `Derive ${unsafe}.`))
+        await expect(syncReviewPrompts(fixture, true)).rejects.toThrow(/shell-unsafe/)
+        expect(await readFile(new URL(REVIEW_TEMPLATES[0], fixture), 'utf8')).toBe(after)
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the standalone poster appends Reviewed attribution from the action settings after the run log', async () => {
+    const steps = Bun.YAML.parse(texts[REVIEW_TEMPLATES[0]]).jobs.review.steps
+    const action = steps.find((step) => step.id === 'codex')
+    const post = steps.find((step) => step.name === 'Post the Codex review comment')
+    expect(post.env.REVIEW_MODEL, 'the footer names the model the action ran').toBe(action.with.model)
+    expect(String(post.env.REVIEW_EFFORT), 'the footer names the effort the action ran').toBe(String(action.with.effort))
+
+    const directory = await mkdtemp(join(tmpdir(), 'pr-review-post-'))
+    try {
+      const bin = join(directory, 'bin')
+      await mkdir(bin)
+      await writeFile(join(bin, 'gh'), '#!/usr/bin/env bash\nwhile [ $# -gt 0 ]; do [ "$1" = --body-file ] && cp "$2" "$CAPTURE"; shift; done\n')
+      await chmod(join(bin, 'gh'), 0o755)
+      await writeFile(join(directory, 'review.md'), 'LGTM\n')
+      const result = Bun.spawnSync(['bash', '-c', post.run], {
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          RUNNER_TEMP: directory,
+          OUTPUT_FILE: join(directory, 'review.md'),
+          CAPTURE: join(directory, 'posted.md'),
+          RUN_URL: 'https://example.invalid/run/1',
+          REPO: 'owner/repo',
+          PR_NUMBER: '1',
+          REVIEW_MODEL: 'gpt-5.6-sol',
+          REVIEW_EFFORT: 'high',
+        },
+      })
+      expect(result.exitCode, result.stderr.toString()).toBe(0)
+      const posted = await readFile(join(directory, 'posted.md'), 'utf8')
+      expect(posted).toBe('LGTM\n\n\n[Codex run log](https://example.invalid/run/1)\n\n---\nReviewed with LLM: gpt-5.6-sol | high | Harness: openai/codex-action\n')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 
   test('the network-less Codex review route gets the prior cycles staged on disk', () => {
