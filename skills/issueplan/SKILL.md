@@ -30,6 +30,8 @@ Read acceptance criteria, maintainer corrections, prior plans, and any Execution
 
 Trace the requested behavior through the relevant code, callers, and tests with read-only inspection. Distinguish existing mechanisms from proposed additions. Correct false assumptions yourself when the intended outcome remains clear; ask only for a missing product decision or a scope change that requires the user.
 
+Plan the absolute-best solution. Cost, time, token use, and code volume never narrow the option space. Only correctness and safety override "best".
+
 Write a plan sized to the task:
 
 - State the intended behavior and scope, tied to the acceptance criteria.
