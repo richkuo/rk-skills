@@ -93,6 +93,7 @@ describe('PR review contract copies', () => {
       [/use no emoji/, 'the emoji ban is inline'],
       [/never open a CLAUDE\.md, AGENTS\.md, or \.claude\/ file from the checked-out tree to look it up/, 'the lookup is forbidden'],
       [/add no footer/i, 'the reviewer leaves attribution to the caller'],
+      [/This route reviews a staged snapshot/, 'the route states which revision rule applies'],
     ])
     expect(texts[path], `${path}: no footer-shaped line`).not.toMatch(/^\s*(?:Created|Updated|Reviewed|Validated) with LLM:/m)
   })
@@ -107,6 +108,9 @@ describe('PR review contract copies', () => {
       [/LGTM means no blocking item remains on the reviewed head commit\. It grants no permission to merge or close/, 'LGTM is no merge authorization'],
       [/If either moved, review the new changes before you emit LGTM[\s\S]{0,200}names the reviewed and current commits/, 'a moved revision is re-reviewed or escalated'],
       [/Combine instances that share a root cause and a remedy into one finding/, 'root-cause grouping'],
+      [/On a staged-snapshot route, judge that snapshot only and never fetch or review a newer head, even when your tools permit it/, 'a staged route never mixes in a moved head'],
+      [/On any other route, recheck the live head and base before you deliver/, 'only an unstaged route rechecks the live head'],
+      [/\.claude\/, \.agents\/, prompts, skills, CI config, schemas/, 'agent-instruction folders for both harnesses are executable'],
       [/an edit that weakens a still-valid expectation/, 'a weakened test is a finding'],
       [/counterfactual closure pass/, 'the closure pass stays'],
       [/Never resolve ambiguity in the artifact's favor/, 'ambiguity is never resolved for the artifact'],
