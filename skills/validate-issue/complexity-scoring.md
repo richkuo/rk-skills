@@ -24,7 +24,7 @@ Capability sets the band floor: the build model follows Capability alone. Volume
 4. When two anchors fit, take the higher one.
 5. Grade 2 needs its anchor like every other grade; it is never a default.
 6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
-7. Recompute the score from the five grades before you post it; a score the grades do not produce is an arithmetic slip. A title prefix below the recomputed score, or a rationale line whose grades differ at a recomputed score that is not lower, is an update (step 8); a prefix above the recomputed score keeps its value, per Routing details.
+7. Recompute the score from the five grades before you post it; a score the grades do not produce is an arithmetic slip. A missing title prefix in a repository that follows the `[C<score>]` convention, a prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ is an update (step 8). A lower score lands only with the `Differs:` and `Axes:` evidence step 8 requires.
 
 ## Build the edit list first
 
@@ -135,5 +135,5 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Ba
 
 - The main skill's band table owns the `fableplan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
 - Build effort never decreases as the band rises. Bands 3, 4, and 5 all build on Opus 5.5 at xhigh; bands 4 and 5 differ in validate effort and in first reviewer.
-- A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review, and keeps that band even after the validator returns a low score.
-- When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. Never lower routing from a validator rescore at any stage. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.
+- A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review until a validation stamps the traced score on the issue (step 8).
+- When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. A lower traced score restamps the title and rationale line down per step 8, and every stage that reads the issue after the edit lands routes on it. A read-only validator rescore that writes no issue edit never lowers routing: the milestone pipeline keeps the band it already chose from the title for that run. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.

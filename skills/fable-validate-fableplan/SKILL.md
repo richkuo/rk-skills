@@ -30,6 +30,7 @@ Follow **fable-validate-loop steps 1 through 4** with the changes below, then ru
 | Condition | Action |
 |---|---|
 | `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
+| `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to plan or build. |
 | Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
 | A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
 | An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
