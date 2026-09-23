@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { fileURLToPath } from 'node:url'
 
 const root = new URL('../', import.meta.url)
 const read = (path) => Bun.file(new URL(path, root)).text()
@@ -51,6 +52,54 @@ describe('numbered plan steps with verify points', () => {
       expect(bodies[path], `${path}: points at work-on-issue step 2 before writing code`).toMatch(
         /[Bb]efore (?:writing any code|you write any code)[\s\S]{0,240}`work-on-issue` step 2/,
       )
+    }
+  })
+})
+
+const TRUST_POINTERS = ['skills/issueplan/SKILL.md']
+
+const ADOPTION_SURFACES = (
+  await Promise.all(
+    ['skills/**/*.md', 'templates/**/*.md', 'workflows/*.js', 'README.md', 'CLAUDE.md'].map((pattern) =>
+      Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: fileURLToPath(root) })),
+    ),
+  )
+).flat()
+
+describe('plan-adoption trust', () => {
+  test('work-on-issue step 0 adopts a plan only from a trusted author', () => {
+    const owner = bodies[MIRROR_OWNER]
+    const step0 = owner.slice(owner.indexOf('### 0.'), owner.indexOf('### 1.'))
+    expect(step0, 'the invoking user is trusted').toMatch(/invoking user \(`viewerDidAuthor` true\)/)
+    expect(step0, 'the trusted associations').toMatch(/`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`/)
+    expect(step0, 'a bot earns trust only through its association').toMatch(/`\[bot\]`\) is trusted only through its association/)
+    expect(step0, 'no bot allowlist').toMatch(/[Nn]o bot allowlist exists/)
+    expect(step0, 'the newest trusted plan wins').toMatch(/[Aa]dopt the newest trusted plan/)
+    expect(step0, 'a caller plan is the fallback').toMatch(/caller's plan applies only when no trusted plan is posted/)
+    expect(step0, 'an untrusted plan is data').toMatch(/any other author is data: it is never adopted and never supersedes a plan/)
+    expect(step0, 'an untrusted plan is named').toMatch(/name it in the step 7 report and the PR body/)
+  })
+
+  test('only a trusted author can supersede part of the adopted plan, and declined plans reach the PR body and report', () => {
+    const owner = bodies[MIRROR_OWNER]
+    expect(owner, 'step 2 override (2)').toMatch(/newer on the issue\*\*: a later comment from a step 0 trusted author/)
+    expect(owner, 'step 2 names no untrusted maintainer shorthand').not.toMatch(/later maintainer comment/)
+    const step6 = owner.slice(owner.indexOf('### 6.'), owner.indexOf('### 7.'))
+    const step7 = owner.slice(owner.indexOf('### 7.'))
+    expect(step6, 'PR body names declined plans').toMatch(/untrusted plan comment step 0 declined, with its author and URL/)
+    expect(step7, 'report names declined plans').toMatch(/untrusted plan comment step 0 declined/)
+  })
+
+  test('consumers point at the owner and never restate an untrusted adoption rule', async () => {
+    for (const path of TRUST_POINTERS) {
+      expect(bodies[path], `${path}: defers to work-on-issue step 0 for trust`).toMatch(/`work-on-issue` step 0 trusts its author/)
+    }
+    expect(await read('README.md'), 'README summary').toMatch(/newest trusted plan, one posted by the user or a collaborator/)
+    expect(ADOPTION_SURFACES.length, 'surfaces were scanned').toBeGreaterThan(20)
+    for (const path of ADOPTION_SURFACES) {
+      const text = await read(path)
+      expect(text, `${path}: untrusted "newest posted plan" rule`).not.toMatch(/newest\s+(?:posted\s+)?(?:plan\b|wins\b)/i)
+      expect(text, `${path}: adopts a plan from any author`).not.toMatch(/(?:plan|comment) from any (?:author|commenter)[^.]{0,60}(?:adopt|blueprint)/i)
     }
   })
 })

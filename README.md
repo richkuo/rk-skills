@@ -30,7 +30,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it. |
 | `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. |
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
-| `work-on-issue` | Implements an issue in an isolated git worktree, builds to any posted plan (newest wins, deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
+| `work-on-issue` | Implements an issue in an isolated git worktree, builds to the newest trusted plan, one posted by the user or a collaborator (plans from other authors are named and skipped; deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
 | `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
 | `issueplan` | Plans on the session's model without subagents. A bare issue invocation posts the plan and asks whether to build; a task description with no issue builds and opens a PR by default. A planning-only request stops after the plan, and explicit build authorization continues to a PR. |
 
