@@ -484,6 +484,18 @@ class ResolveModelTest(unittest.TestCase):
             "claude-fable-5-1",
         )
 
+    def test_default_effort_is_high(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude review")["effort"],
+            "high",
+        )
+
+    def test_effort_token_overrides_the_default(self):
+        self.assertEqual(
+            run_resolve_model("issue_comment", "@claude review effort:xhigh")["effort"],
+            "xhigh",
+        )
+
     def test_flow_matches_create_release_with_model_shorthand(self):
         self.assertEqual(
             run_resolve_model(

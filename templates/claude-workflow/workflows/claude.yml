@@ -106,7 +106,7 @@ jobs:
           echo "::notice::Using model: $MODEL_ID"
 
           EFFORT_RAW=$(printf '%s' "$STRIPPED" | grep -oiE 'effort:(low|medium|xhigh|high)' | head -1 | tr '[:upper:]' '[:lower:]' | cut -d: -f2 || true)
-          EFFORT="${EFFORT_RAW:-xhigh}"
+          EFFORT="${EFFORT_RAW:-high}"
           echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
           echo "::notice::Using effort: $EFFORT"
 

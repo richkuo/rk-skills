@@ -84,7 +84,7 @@ branch name.
 Model shorthand (`opus`, `sonnet`, `fable`, each also with a `5` suffix, e.g.
 `@claude opus5 review`) and `effort:low|medium|high|xhigh` are parsed from the
 comment. `opus`/`opus5` and no shorthand both select Opus 5.5; no effort keeps
-`xhigh`. Review events (formal reviews, inline comments) always stay read-only.
+`high`. Review events (formal reviews, inline comments) always stay read-only.
 
 ## Security model
 
