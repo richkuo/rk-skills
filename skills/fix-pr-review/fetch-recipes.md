@@ -8,7 +8,7 @@ Reference for SKILL.md steps 1–2: channel queries, collection rules, CI-check 
 # Formal review events — state included so DISMISSED reviews can be skipped
 gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '.[] | {id, user: .user.login, state, submitted_at, body}'
 # Issue comments on the PR — where @claude review output usually lands
-gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, updated_at, body}'
+gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, body}'
 # Inline diff threads with resolution state — REST cannot report isResolved, so use GraphQL
 # Omit -F after on the first call; pass -F after='<endCursor>' for each later page
 gh api graphql -F owner='{owner}' -F repo='{repo}' -F pr=<N> -f query='
@@ -25,12 +25,10 @@ When `hasNextPage` is true, paginate with `endCursor` — never drop threads pas
 
 ### Collection rules
 
-**Cutoff** = the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review); no cutoff → everything since the PR opened. The cutoff narrows the search; it does not prove an older review was addressed. Collect:
+**Cutoff** = the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review); no cutoff → everything since the PR opened. Collect:
 
 - Every formal review or review-formatted comment **newer than the cutoff** — one opening with an `LGTM` / `Needs Updates` verdict, carrying sections like `### Needs Fixing`, or otherwise clearly review feedback. **When several landed, address all of them.** The latest alone is incomplete. Skip `DISMISSED` reviews.
 - Every **unresolved** inline thread (`isResolved: false`) **regardless of age** — resolution state decides and the timestamp does not; `isOutdated` alone does not mean resolved. Exception: a thread whose last comment is your own disposition reply with no response since is awaiting the reviewer — skip it. Each thread is one finding.
-- Every older formal review or review-formatted comment that no prior disposition header lists as a source, such as one that landed while the previous pass was running. Collect it whole. Findings an earlier pass already settled are disposed again from current code, and the new header then lists the source. Match by source: finding titles cannot settle feedback, because free-form feedback has no title and a merged duplicate keeps only one.
-- Every formal review or review-formatted comment edited after the cutoff, collected whole even when a disposition header already lists it. An edit alone never brings in a comment that is not review feedback, such as a bot status comment. Issue comments carry `updated_at`. REST reviews carry no edit time, so read `lastEditedAt` from GraphQL `pullRequest.reviews`.
 - Skip your own prior disposition comments and `@<bot> … review` trigger comments.
 
 ## CI check snapshot (step 2)

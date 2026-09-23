@@ -5,7 +5,7 @@ Reference for SKILL.md step 9.
 ## Template
 
 ```
-Addressed review feedback (<author login> · <created_at>; <author login> · <created_at>; ...) in <commit-sha>.
+Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
 
 Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
 
@@ -33,7 +33,6 @@ Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
 
 ## Slotting rules
 
-- **The header lists every source this pass addressed**, one `<author login> · <created_at>` pair per review or comment, separated by `;`. Use the creation time (`submitted_at` for a formal review), because a bot review is created early and edited when it finishes. [fetch-recipes.md](fetch-recipes.md) matches older feedback against these lists, so a source missing from every header is collected again.
 - **Copy `<finding title>` verbatim from the review comment** — the reviewer's bold one-sentence title, word for word. The next reviewer matches findings to these dispositions by claim; a reworded title brings a settled finding back.
 - Every **Not changed (refuted)** and **Corrected scope (partial)** item carries a code-grounded rebuttal with its `file:line` that stands on its own — what a later reviewer must answer before re-raising.
 - **A blocking finding whose stated `**Reachability:**` precondition the code refutes goes under `### Corrected scope (partial)`, and nowhere else** — `pr-review`'s prior-cycle rule settles findings only on the dispositions it names. The item names the stated precondition, the `file:line` that refutes it, whether the defect still stands, and the section the finding moves to. A re-routed remedy fixed in this same push also gets its own **Fixed** item; this item records the routing change alone.
