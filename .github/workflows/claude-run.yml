@@ -60,44 +60,6 @@ jobs:
       CLAUDE_HARNESS: anthropics/claude-code-action@v1
       BOT_LOGIN: ${{ inputs.mode == 'review' && 'github-actions[bot]' || 'claude[bot]' }}
     steps:
-      - name: Resolve model and effort
-        id: resolve
-        env:
-          MODEL_SHORT: ${{ inputs.model }}
-          MODEL_ID_IN: ${{ inputs.model_id }}
-          EFFORT_IN: ${{ inputs.effort }}
-        run: |
-          if [ -n "$MODEL_ID_IN" ]; then
-            MODEL_ID="$MODEL_ID_IN"
-          else
-            case "$(printf '%s' "$MODEL_SHORT" | tr '[:upper:]' '[:lower:]')" in
-              opus|opus5)     MODEL_ID="claude-opus-5-5" ;;
-              sonnet|sonnet5) MODEL_ID="claude-sonnet-5" ;;
-              fable|fable5)   MODEL_ID="claude-fable-5-1" ;;
-              *)              MODEL_ID="claude-opus-5-5" ;;
-            esac
-          fi
-          ID_RE='^[A-Za-z0-9][A-Za-z0-9._:-]*(\[[A-Za-z0-9]+\])?$'
-          if ! [[ "$MODEL_ID" =~ $ID_RE ]]; then
-            echo "::error::The model id is not a valid model id."
-            exit 1
-          fi
-
-          EFFORT=$(printf '%s' "$EFFORT_IN" | tr '[:upper:]' '[:lower:]')
-          case "$EFFORT" in
-            '') EFFORT=high ;;
-            low|medium|high|xhigh) ;;
-            *)
-              echo "::error::The effort must be low, medium, high, or xhigh."
-              exit 1
-              ;;
-          esac
-
-          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
-          echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
-          echo "::notice::Using model: $MODEL_ID"
-          echo "::notice::Using effort: $EFFORT"
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,6 +80,44 @@ jobs:
           cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
           cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
           rm -rf .rk-skills-shared
+
+      - name: Resolve model and effort
+        id: resolve
+        env:
+          MODEL_SHORT: ${{ inputs.model }}
+          MODEL_ID_IN: ${{ inputs.model_id }}
+          EFFORT_IN: ${{ inputs.effort }}
+        run: |
+          if [ -n "$MODEL_ID_IN" ]; then
+            MODEL_ID="$MODEL_ID_IN"
+          else
+            case "$(printf '%s' "$MODEL_SHORT" | tr '[:upper:]' '[:lower:]')" in
+              opus|opus5)     MODEL_ID="claude-opus-5-5" ;;
+              sonnet|sonnet5) MODEL_ID="claude-sonnet-5" ;;
+              fable|fable5)   MODEL_ID="claude-fable-5-1" ;;
+              *)              MODEL_ID="claude-opus-5-5" ;;
+            esac
+          fi
+          ID_RE='^[A-Za-z0-9][A-Za-z0-9._:@/-]*(\[[A-Za-z0-9]+\])?$'
+          if ! [[ "$MODEL_ID" =~ $ID_RE ]]; then
+            echo "::error::The model id is not a valid model id."
+            exit 1
+          fi
+
+          EFFORT=$(printf '%s' "$EFFORT_IN" | tr '[:upper:]' '[:lower:]')
+          case "$EFFORT" in
+            '') EFFORT=high ;;
+            low|medium|high|xhigh) ;;
+            *)
+              echo "::error::The effort must be low, medium, high, or xhigh."
+              exit 1
+              ;;
+          esac
+
+          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
+          echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
+          echo "::notice::Using model: $MODEL_ID"
+          echo "::notice::Using effort: $EFFORT"
 
       - name: Prune stale worktrees before Claude runs
         run: |

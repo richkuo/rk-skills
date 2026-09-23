@@ -601,6 +601,19 @@ class EngineResolveTest(unittest.TestCase):
         self.assertEqual(out["model_id"], "gpt-5.6-terra")
         self.assertEqual(out["effort"], "xhigh")
 
+    def test_legacy_model_id_with_at_or_slash_is_accepted(self):
+        for model_id in ("claude-opus-4@20250514", "arn:aws:bedrock:us-east-1:1:inference-profile/us.anthropic.claude-opus-4"):
+            code, out = run_engine_resolve(model_id=model_id)
+            self.assertEqual(code, 0, model_id)
+            self.assertEqual(out["model_id"], model_id)
+
+    def test_resolve_runs_after_the_shared_scripts_are_staged(self):
+        yml = _read(RUN_YML)
+        staged = yml.index("- name: Stage shared assets outside the workspace\n")
+        resolve = yml.index("- name: " + ENGINE_RESOLVE_STEP + "\n")
+        self.assertLess(staged, resolve)
+        self.assertNotIn("steps.resolve.", yml[:resolve])
+
     def test_empty_effort_defaults_to_high(self):
         self.assertEqual(run_engine_resolve()[1]["effort"], "high")
 

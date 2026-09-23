@@ -71,45 +71,6 @@ jobs:
       CLAUDE_HARNESS: openai/codex-action@v1
       BOT_LOGIN: ${{ inputs.mode == 'review' && 'github-actions[bot]' || inputs.bot_login }}
     steps:
-      - name: Resolve model and effort
-        id: resolve
-        env:
-          MODEL_SHORT: ${{ inputs.model }}
-          MODEL_ID_IN: ${{ inputs.model_id }}
-          EFFORT_IN: ${{ inputs.effort }}
-        run: |
-          if [ -n "$MODEL_ID_IN" ]; then
-            MODEL_ID="$MODEL_ID_IN"
-          else
-            case "$(printf '%s' "$MODEL_SHORT" | tr '[:upper:]' '[:lower:]')" in
-              sol)         MODEL_ID="gpt-5.6-sol" ;;
-              terra)       MODEL_ID="gpt-5.6-terra" ;;
-              luna|mini)   MODEL_ID="gpt-5.6-luna" ;;
-              codex|spark) MODEL_ID="gpt-5.3-codex-spark" ;;
-              *)           MODEL_ID="gpt-5.6-sol" ;;
-            esac
-          fi
-          ID_RE='^[A-Za-z0-9][A-Za-z0-9._:-]*(\[[A-Za-z0-9]+\])?$'
-          if ! [[ "$MODEL_ID" =~ $ID_RE ]]; then
-            echo "::error::The model id is not a valid model id."
-            exit 1
-          fi
-
-          EFFORT=$(printf '%s' "$EFFORT_IN" | tr '[:upper:]' '[:lower:]')
-          case "$EFFORT" in
-            '') EFFORT=high ;;
-            low|medium|high|xhigh) ;;
-            *)
-              echo "::error::The effort must be low, medium, high, or xhigh."
-              exit 1
-              ;;
-          esac
-
-          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
-          echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
-          echo "::notice::Using model: $MODEL_ID"
-          echo "::notice::Using effort: $EFFORT"
-
       - name: Require GitHub App credentials on write routes
         if: inputs.mode != 'review'
         env:
@@ -163,6 +124,45 @@ jobs:
           cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
           cp -R .rk-skills-shared/skills "$RUNNER_TEMP/rk-shared/skills"
           rm -rf .rk-skills-shared
+
+      - name: Resolve model and effort
+        id: resolve
+        env:
+          MODEL_SHORT: ${{ inputs.model }}
+          MODEL_ID_IN: ${{ inputs.model_id }}
+          EFFORT_IN: ${{ inputs.effort }}
+        run: |
+          if [ -n "$MODEL_ID_IN" ]; then
+            MODEL_ID="$MODEL_ID_IN"
+          else
+            case "$(printf '%s' "$MODEL_SHORT" | tr '[:upper:]' '[:lower:]')" in
+              sol)         MODEL_ID="gpt-5.6-sol" ;;
+              terra)       MODEL_ID="gpt-5.6-terra" ;;
+              luna|mini)   MODEL_ID="gpt-5.6-luna" ;;
+              codex|spark) MODEL_ID="gpt-5.3-codex-spark" ;;
+              *)           MODEL_ID="gpt-5.6-sol" ;;
+            esac
+          fi
+          ID_RE='^[A-Za-z0-9][A-Za-z0-9._:@/-]*(\[[A-Za-z0-9]+\])?$'
+          if ! [[ "$MODEL_ID" =~ $ID_RE ]]; then
+            echo "::error::The model id is not a valid model id."
+            exit 1
+          fi
+
+          EFFORT=$(printf '%s' "$EFFORT_IN" | tr '[:upper:]' '[:lower:]')
+          case "$EFFORT" in
+            '') EFFORT=high ;;
+            low|medium|high|xhigh) ;;
+            *)
+              echo "::error::The effort must be low, medium, high, or xhigh."
+              exit 1
+              ;;
+          esac
+
+          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
+          echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
+          echo "::notice::Using model: $MODEL_ID"
+          echo "::notice::Using effort: $EFFORT"
 
       - name: Prune stale Codex worktrees before Codex runs
         run: |
