@@ -11,7 +11,8 @@ const STOP_CONDITION_REGION = {
   'skills/work-on-issue-loop/SKILL.md': ['**fix-pr-review-loop step 3**', '**fix-pr-review-loop step 4**'],
 }
 
-const CAPABILITY_GATE = ['skills/fable-validate-loop/SKILL.md', 'skills/validate-fableplan-loop/SKILL.md']
+const CAPABILITY_GATE = ['skills/fable-validate-loop/SKILL.md']
+const CAPABILITY_GATE_DELEGATES = ['skills/validate-fableplan-loop/SKILL.md']
 const ALWAYS_PLAN = [
   'skills/fable-validate-fableplan-loop/SKILL.md',
   'skills/fable-validate-fableplan/SKILL.md',
@@ -20,9 +21,9 @@ const ALWAYS_PLAN = [
 
 const DUPLICATE_CONVERGENCE = ['skills/new-issue-loop/SKILL.md', 'skills/fable-new-issue-loop/SKILL.md']
 
-const VALIDATION_STOP = [
-  'skills/validate-issue-loop/SKILL.md',
-  'skills/fable-validate-loop/SKILL.md',
+const VALIDATION_STOP = ['skills/validate-issue-loop/SKILL.md', 'skills/fable-validate-loop/SKILL.md']
+const VALIDATION_STOP_OWNER = 'skills/fable-validate-loop/SKILL.md'
+const VALIDATION_STOP_DELEGATES = [
   'skills/validate-fableplan-loop/SKILL.md',
   'skills/fable-validate-fableplan-loop/SKILL.md',
   'skills/fable-validate-fableplan/SKILL.md',
@@ -33,6 +34,7 @@ const VERDICT_TEMPLATE_CONSUMERS = VALIDATION_STOP
 
 const REPORT_CAP = [
   ...VALIDATION_STOP,
+  ...VALIDATION_STOP_DELEGATES,
   'skills/fableplan-loop/SKILL.md',
   'skills/fableplan-work-on-issue/SKILL.md',
   ...DUPLICATE_CONVERGENCE,
@@ -80,9 +82,11 @@ const texts = Object.fromEntries(
         ...REVIEW_CYCLE_FULL,
         ...REVIEW_CYCLE_PARAPHRASE,
         ...CAPABILITY_GATE,
+        ...CAPABILITY_GATE_DELEGATES,
         ...ALWAYS_PLAN,
         ...DUPLICATE_CONVERGENCE,
         ...VALIDATION_STOP,
+        ...VALIDATION_STOP_DELEGATES,
         VERDICT_TEMPLATE_OWNER,
         ...REPORT_CAP,
         PLAN_DEVIATION_OWNER,
@@ -149,6 +153,14 @@ describe('loop/validate pipeline contract', () => {
     }
   })
 
+  test('delegate loops take the score gate from fable-validate-loop and keep no copy of it', () => {
+    for (const path of CAPABILITY_GATE_DELEGATES) {
+      const body = bodies[path]
+      expect(body, path).toMatch(/fable-validate-loop step 4's score gate, safety carve-out, and top-band note apply unchanged/)
+      expect(body, `${path}: restated score gate`).not.toMatch(/\*\*Score gate:\*\*/)
+    }
+  })
+
   test('always-plan skills document the missing score gate as intentional', () => {
     for (const path of ALWAYS_PLAN) {
       const body = bodies[path]
@@ -174,6 +186,17 @@ describe('loop/validate pipeline contract', () => {
       expect(hasStopTableRow(body, /infeasible/i), `${path}: STOP+infeasible row`).toBe(true)
       expect(hasStopTableRow(body, /existing PR|already addressing|already implements/i), `${path}: STOP+existing-PR row`).toBe(true)
     }
+  })
+
+  test('delegate validate chains take the STOP table and verdict template from fable-validate-loop and keep no copy', () => {
+    for (const path of VALIDATION_STOP_DELEGATES) {
+      const body = bodies[path]
+      expect(body, path).toMatch(/Follow \*\*fable-validate-loop steps 1 through [46]\*\*/)
+      expect(body, path).toMatch(/fable-validate-loop step 2's STOP table/)
+      expect(body.split('\n').some((line) => line.startsWith('|') && /\*\*STOP\.?\*\*/.test(line)), `${path}: restated STOP row`).toBe(false)
+      expect(body, `${path}: restated verdict template`).not.toMatch(/Update issue description\? <Yes ?\| ?No>/)
+    }
+    expect(VALIDATION_STOP, 'the delegates point at an owner that keeps the full table').toContain(VALIDATION_STOP_OWNER)
   })
 
   test('verdict-block template stays parseable in every loop that quotes it', () => {

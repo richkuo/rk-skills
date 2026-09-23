@@ -11,9 +11,7 @@ This is **fableplan-loop with the review loop removed** — the handoff is to `w
 
 ## Input
 
-Same as fableplan-loop: a GitHub issue is **required**; with nothing supplied, default to the latest open issue in the current repo. If no issue can be resolved, stop and ask — do not plan or implement against a paraphrase.
-
-Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to every validate, plan, and build step in the chain, so the baseline and the PR base are that branch instead of the repo default. `work-on-issue` step 1 ("Target") owns its validation.
+Same as fableplan-loop, including the optional `targetBranch`: a GitHub issue is **required**; with nothing supplied, default to the latest open issue in the current repo. If no issue can be resolved, stop and ask — do not plan or implement against a paraphrase.
 
 ## Steps
 

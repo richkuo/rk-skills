@@ -13,29 +13,15 @@ This is **fable-validate-loop with the score gate removed** — the only differe
 
 ## Input
 
-Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (defaults to the latest open issue in the current repo).
-
-Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to every validate, plan, and build step in the chain, so the baseline and the PR base are that branch instead of the repo default. `work-on-issue` step 1 ("Target") owns its validation.
+Same as fable-validate-loop, including the optional `targetBranch`.
 
 ## Steps
 
 Follow **fable-validate-loop steps 1 through 6** with these changes:
 
-**Step 1 (fable-validate)** applies unchanged; it produces the standard verdict block:
+**Step 1 (fable-validate)** applies unchanged.
 
-```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
-```
-
-**Step 2 (scope gate)** applies unchanged — the same four STOP conditions:
-
-| Condition | Action |
-|---|---|
-| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
-| `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to build. |
-| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
-| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
-| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
+**Step 2 (scope gate)** applies unchanged, with fable-validate-loop step 2's STOP table.
 
 **Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan-loop`.
 
