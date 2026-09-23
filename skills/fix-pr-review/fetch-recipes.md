@@ -29,8 +29,8 @@ When `hasNextPage` is true, paginate with `endCursor` — never drop threads pas
 
 - Every formal review or review-formatted comment **newer than the cutoff** — one opening with an `LGTM` / `Needs Updates` verdict, carrying sections like `### Needs Fixing`, or otherwise clearly review feedback. **When several landed, address all of them.** The latest alone is incomplete. Skip `DISMISSED` reviews.
 - Every **unresolved** inline thread (`isResolved: false`) **regardless of age** — resolution state decides and the timestamp does not; `isOutdated` alone does not mean resolved. Exception: a thread whose last comment is your own disposition reply with no response since is awaiting the reviewer — skip it. Each thread is one finding.
-- Every **finding** in an older formal review or review-formatted comment that no prior disposition names by verbatim title, such as a new finding in a review that landed while the previous pass was running. Match each finding on its own. A review with some named findings still contributes its unnamed ones. A review with every finding named adds nothing.
-- Every comment whose `updated_at` is newer than the cutoff, read again and filtered by the same title check.
+- Every older formal review or review-formatted comment that no prior disposition header lists as a source, such as one that landed while the previous pass was running. Collect it whole. Findings an earlier pass already settled are disposed again from current code, and the new header then lists the source. Match by source: finding titles cannot settle feedback, because free-form feedback has no title and a merged duplicate keeps only one.
+- Every review or comment edited after the cutoff, collected whole by the same rule. Issue comments carry `updated_at`. REST reviews carry no edit time, so read `lastEditedAt` from GraphQL `pullRequest.reviews`.
 - Skip your own prior disposition comments and `@<bot> … review` trigger comments.
 
 ## CI check snapshot (step 2)
