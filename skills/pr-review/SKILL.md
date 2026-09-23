@@ -79,7 +79,7 @@ With no findings, emit only LGTM, any limitation lines, and the footer. Otherwis
 
 ## Maintaining this skill
 
-[example-review.md](example-review.md) contains complete invented fixtures and sample output; read it only when layout needs clarification. The contract above is the source for the workflow prompt copies. After editing it, run `bun bin/sync-pr-review.mjs --write` from the rk-skills checkout, then `bun test`. The synchronizer preserves each route's tool and posting boundary. Shared writing rules belong to the trusted CLAUDE.md/AGENTS.md Response Style section.
+[example-review.md](example-review.md) contains complete invented fixtures and sample output; read it only when layout needs clarification. The contract above is the source for the workflow prompt copies. After editing it, run `bun bin/sync-pr-review.mjs --write` from the rk-skills checkout, then `bun test`. The synchronizer preserves each route's tool and posting boundary. Shared writing rules belong to the trusted CLAUDE.md/AGENTS.md Response Style section. The Actions routes cannot read that section, so the synchronizer inlines its Plain simple English definition into each workflow copy; update both together.
 
 ---
 Updated with LLM: GPT-6 | high | Harness: Claude Code

@@ -108,6 +108,20 @@ describe('PR review contract copies', () => {
     ])
   })
 
+  test.each([...FORMAT_PROMPTS, ...REVIEW_TEMPLATES])('%s carries the Plain simple English rule and never sends the reviewer to the staged tree for it', (path) => {
+    expectMarkers(path, flats[path], [
+      [/Plain simple English: field as one short paragraph under 55 words in Simplified Technical English \(ASD-STE100\)/, 'the field rule is inlined'],
+      [/use no emoji/, 'the emoji ban is inlined'],
+      [/never open a CLAUDE\.md, AGENTS\.md, or \.claude\/ file from the checked-out tree to look it up/, 'the lookup is forbidden'],
+    ])
+    expect(flats[path], `${path}: no pointer at the tree's instruction files`).not.toMatch(
+      /per the CLAUDE\.md\/AGENTS\.md Response Style rules/,
+    )
+    expect(flats[path], `${path}: no dependency on rules the route cannot obtain`).not.toMatch(
+      /Apply the Response Style rules supplied by the trusted caller/,
+    )
+  })
+
   test('all deployed prompts contain the current canonical contract', async () => {
     expect(await syncReviewPrompts(root)).toEqual([])
   })
