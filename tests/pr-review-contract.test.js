@@ -404,6 +404,31 @@ describe('review routing', () => {
     }
   })
 
+  test('both loops carry one stamped-model mapping, and it names the shorthands claude.yml admits', async () => {
+    const CODEX_END = 'to the bare `@codex review`'
+    const mappingOf = (path) => {
+      const line = texts[path].split('\n').find((candidate) => candidate.startsWith('**Map a stamped model before posting it.**'))
+      expect(line, `${path}: stamped-model mapping paragraph`).toBeDefined()
+      const end = line.indexOf(CODEX_END)
+      expect(end, `${path}: Codex mapping`).toBeGreaterThan(-1)
+      return line.slice(0, end + CODEX_END.length)
+    }
+    const [owner, copy] = LOOPS.map(mappingOf)
+    expect(copy, `${LOOPS[1]}: mapping matches ${LOOPS[0]} step 1`).toBe(owner)
+    expect(owner).toContain('a stamped `sonnet` or `haiku` posts `@claude sonnet review`')
+    expect(owner).toContain("An unadmitted shorthand becomes the Action's route keyword and can select the write-capable fix-pr job, which pushes commits.")
+    expect(owner).toContain('On Codex, `sonnet`/`haiku` map to `@codex luna review` and `opus`/`fable` to the bare `@codex review`')
+    const stated = owner.match(/resolves only ((?:`[a-z]+`(?:, | and )?)+):/)
+    expect(stated, 'the mapping names the resolved shorthands').toBeTruthy()
+    const statedNames = [...stated[1].matchAll(/`([a-z]+)`/g)].map((match) => match[1]).sort()
+    for (const caller of [CLAUDE_CALLER, '.github/workflows/claude.yml']) {
+      const admitted = (await read(caller)).match(/tolower\(\$1\) ~ \/\^\(([a-z0-9|]+)\)\$\//)
+      expect(admitted, `${caller}: admitted model shorthands`).toBeTruthy()
+      const admittedNames = [...new Set(admitted[1].split('|').map((name) => name.replace(/\d+$/, '')))].sort()
+      expect(statedNames, `${caller}: resolved set`).toEqual(admittedNames)
+    }
+  })
+
   test('the pipeline review prompt reports a failed check as code evidence, never as the verdict', () => {
     expect(texts[PIPELINE]).toMatch(/failed check that traces to this PR's diff is evidence of a code defect/i)
     expect(texts[PIPELINE]).toMatch(/(?:not|never) the check status (?:itself|on its own|alone)/i)
