@@ -22,15 +22,15 @@ The **EARLIEST** `@<bot> … review` trigger comment on the PR (a body that is o
 
 ### The step-down ladder (Claude cycles)
 
-**Every reviewer above the standard trigger runs one blocking cycle only.** Each blocking re-review steps down one rung; the floor `@claude review` repeats for every blocking cycle after it:
+**Every reviewer above the standard trigger runs one blocking cycle only.** The standard trigger `@claude review` runs Opus 5.5 at high (`validate-issue` step 6). A heavier cycle 1 steps down to it on the first blocking re-review, and it repeats for every blocking cycle after that:
 
-| Cycle-1 reviewer | Blocking cycle 2 | Blocking cycle 3 and after |
-|---|---|---|
-| `@claude fable review effort:high` | `@claude opus review effort:high` | `@claude review` |
-| `@claude opus review effort:high` | `@claude review` | `@claude review` |
-| `@claude review` or `@claude sonnet review` | same trigger | same trigger |
+| Cycle-1 reviewer | Every blocking re-review |
+|---|---|
+| `@claude fable review effort:high` | `@claude review` |
+| `@claude opus review effort:high` | `@claude review` |
+| `@claude review` or `@claude sonnet review` | same trigger |
 
-Neither heavy trigger is ever repeated on a blocking re-review, whether the owner table or a stamped `PR review:` line selected it. The ladder **never steps down to sonnet**: Sonnet takes no rung, so a Sonnet cycle 1 repeats its own trigger. Decide the rung from the trigger comments after cycle 1, ignoring `@claude sonnet review` comments: a prior `@claude opus review` comment (any effort suffix) after a fable cycle 1 means the next rung is `@claude review`. A stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet`, and `fable`, and an unresolved shorthand becomes the route keyword.
+A heavy trigger with another effort suffix takes the same row. Neither heavy trigger is ever repeated on a blocking re-review, whether the owner table or a stamped `PR review:` line selected it. The ladder **never steps down to sonnet**: Sonnet takes no rung, so a Sonnet cycle 1 repeats its own trigger. A stamped `haiku` posts `@claude sonnet review`: `claude.yml` resolves only `opus`, `sonnet`, and `fable`, and an unresolved shorthand becomes the route keyword.
 
 ### Codex cycles
 
@@ -43,10 +43,9 @@ Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. N
 | Owner's first-review row | Claude fallback trigger | Codex fallback trigger |
 |---|---|---|
 | the sonnet row | `@claude sonnet review` | `@codex luna review` |
-| the standard-trigger row | `@claude review` | `@codex review` |
-| the opus row, the fable row, or no score | `@claude opus review effort:high` when no `@claude opus review` comment (any effort suffix) exists on the PR; `@claude review` otherwise | `@codex review` |
+| any other row, or no score | `@claude review` | `@codex review` |
 
-Fable and Opus each review one cycle only, and a first review already ran by some other route; never open a Fable cycle on a re-review.
+Fable reviews one cycle only, and a first review already ran by some other route; never open a Fable cycle on a re-review.
 
 ## 3. Post it as its own comment
 
