@@ -102,7 +102,8 @@ release workflow that parses the `docs-release/*` branch name.
 | `luna` / `mini` | `gpt-5.6-luna` | Fast and affordable; the counterpart to `@claude sonnet review` for the C0–C20 band and the cheap non-blocking re-review. |
 | `codex` / `spark` | `gpt-5.3-codex-spark` | Text-only fast coding preview. |
 
-An unrecognized shorthand falls through to the default.
+An unrecognized shorthand falls through to the default. `codex-run.yml` owns
+this table, as `claude-run.yml` does for Claude.
 
 ## Security model
 

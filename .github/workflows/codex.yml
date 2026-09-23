@@ -33,7 +33,7 @@ jobs:
       invoked: ${{ steps.verify_invocation.outputs.invoked }}
       mode: ${{ steps.classify_mode.outputs.mode }}
       flow: ${{ steps.resolve_model.outputs.flow }}
-      model_id: ${{ steps.resolve_model.outputs.model_id }}
+      model: ${{ steps.resolve_model.outputs.model }}
       effort: ${{ steps.resolve_model.outputs.effort }}
     steps:
       - name: Verify @codex is an actual invocation (not in a code block or example)
@@ -86,7 +86,7 @@ jobs:
             echo "::notice::@codex found but only inside code blocks or examples — skipping."
           fi
 
-      - name: Resolve model from @codex invocation
+      - name: Read model shorthand and effort from @codex invocation
         if: steps.verify_invocation.outputs.invoked == 'true'
         id: resolve_model
         env:
@@ -96,21 +96,10 @@ jobs:
         run: |
           MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -ioE '(^|(\r?\n))[[:space:]]*@codex[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' || true)
 
-          case "$MODEL_SHORT" in
-            sol)         MODEL_ID="gpt-5.6-sol" ;;
-            terra)       MODEL_ID="gpt-5.6-terra" ;;
-            luna|mini)   MODEL_ID="gpt-5.6-luna" ;;
-            codex|spark) MODEL_ID="gpt-5.3-codex-spark" ;;
-            *)           MODEL_ID="gpt-5.6-sol" ;;
-          esac
-
-          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
-          echo "::notice::Using model: $MODEL_ID"
+          echo "model=$MODEL_SHORT" >> "$GITHUB_OUTPUT"
 
           EFFORT_RAW=$(printf '%s' "$STRIPPED" | grep -oiE 'effort:(low|medium|xhigh|high)' | head -1 | tr '[:upper:]' '[:lower:]' | cut -d: -f2 || true)
-          EFFORT="${EFFORT_RAW:-high}"
-          echo "effort=$EFFORT" >> "$GITHUB_OUTPUT"
-          echo "::notice::Using effort: $EFFORT"
+          echo "effort=$EFFORT_RAW" >> "$GITHUB_OUTPUT"
 
           FLOW=""
           if [ "$EVENT_NAME" = "issue_comment" ] && [ "$DOCS_RELEASE_ENABLED" = "true" ]; then
@@ -189,7 +178,7 @@ jobs:
     with:
       mode: review
       flow: ''
-      model_id: ${{ needs.classify.outputs.model_id }}
+      model: ${{ needs.classify.outputs.model }}
       effort: ${{ needs.classify.outputs.effort }}
       bot_login: ${{ vars.CODEX_BOT_LOGIN }}
     secrets:
@@ -206,7 +195,7 @@ jobs:
     with:
       mode: implement
       flow: ${{ needs.classify.outputs.flow }}
-      model_id: ${{ needs.classify.outputs.model_id }}
+      model: ${{ needs.classify.outputs.model }}
       effort: ${{ needs.classify.outputs.effort }}
       bot_login: ${{ vars.CODEX_BOT_LOGIN }}
     secrets:
@@ -231,7 +220,7 @@ jobs:
     with:
       mode: fix-pr
       flow: ''
-      model_id: ${{ needs.classify.outputs.model_id }}
+      model: ${{ needs.classify.outputs.model }}
       effort: ${{ needs.classify.outputs.effort }}
       bot_login: ${{ vars.CODEX_BOT_LOGIN }}
     secrets:

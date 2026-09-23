@@ -34,7 +34,9 @@ CODEX_YML = os.path.abspath(os.path.join(HERE, "..", "workflows", "codex.yml"))
 
 VERIFY_STEP = "Verify @codex is an actual invocation (not in a code block or example)"
 CLASSIFY_MODE_STEP = "Classify invocation route (review, implement, or fix-pr)"
-RESOLVE_MODEL_STEP = "Resolve model from @codex invocation"
+RESOLVE_MODEL_STEP = "Read model shorthand and effort from @codex invocation"
+RUN_YML = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".github", "workflows", "codex-run.yml"))
+ENGINE_RESOLVE_STEP = "Resolve model and effort"
 VERIFY_STRIP_ENV_KEYS = ("PERL_STRIP_FENCED", "SED_STRIP_INLINE")
 
 BOT_LOGIN = "acme-codex[bot]"
@@ -246,7 +248,26 @@ def _run_block_all_outputs(script, env_overrides):
         return values
 
 
-def run_resolve_model(event_name, stripped, docs_release_enabled=""):
+def run_engine_resolve(model="", model_id="", effort=""):
+    """Run the run workflow's resolve step; return (exit code, GITHUB_OUTPUT dict)."""
+    script = extract_step_run_block(_read(RUN_YML), ENGINE_RESOLVE_STEP)
+    with tempfile.TemporaryDirectory() as d:
+        out_path = os.path.join(d, "github_output")
+        open(out_path, "w").close()
+        env = dict(os.environ)
+        env.update({"MODEL_SHORT": model, "MODEL_ID_IN": model_id, "EFFORT_IN": effort})
+        env["GITHUB_OUTPUT"] = out_path
+        r = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+        values = {}
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                key, sep, val = line.rstrip("\n").partition("=")
+                if sep:
+                    values[key] = val
+        return r.returncode, values
+
+
+def run_caller_resolve(event_name, stripped, docs_release_enabled=""):
     script = extract_step_run_block(_read(CODEX_YML), RESOLVE_MODEL_STEP)
     return _run_block_all_outputs(
         script,
@@ -256,6 +277,15 @@ def run_resolve_model(event_name, stripped, docs_release_enabled=""):
             "DOCS_RELEASE_ENABLED": docs_release_enabled,
         },
     )
+
+
+def run_resolve_model(event_name, stripped, docs_release_enabled=""):
+    """Caller parse, then the run workflow's lookup, as one run executes them."""
+    caller = run_caller_resolve(event_name, stripped, docs_release_enabled)
+    code, engine = run_engine_resolve(model=caller["model"], effort=caller["effort"])
+    if code != 0:
+        raise AssertionError(f"run workflow resolve step failed for caller outputs {caller}")
+    return {**caller, **engine}
 
 
 def run_verify_invocation(event_name, body, trigger_actor="someuser", codex_bot_login=""):
@@ -468,7 +498,8 @@ class ClassifyModeRoutingTest(unittest.TestCase):
 
 
 class ResolveModelTest(unittest.TestCase):
-    """Pin the model-shorthand → MODEL_ID resolution and the docs/release FLOW
+    """Pin the model-shorthand → MODEL_ID resolution (caller parse, then the run
+    workflow lookup) and the docs/release FLOW
     matcher, extracted straight from the live YAML so a change to the shorthand
     regex or the model-id case statement is what the test runs against."""
 
@@ -553,6 +584,43 @@ class ResolveModelTest(unittest.TestCase):
             run_resolve_model("issue_comment", "@codex create-release")["flow"],
             "",
         )
+
+
+class EngineResolveTest(unittest.TestCase):
+    """Pin the run workflow's resolve step: the lookup every caller shares, the
+    legacy model_id pass-through, and the checks that stop a bad value."""
+
+    def test_caller_passes_the_shorthand_and_the_raw_effort(self):
+        caller = run_caller_resolve("issue_comment", "@codex LUNA review")
+        self.assertEqual(caller["model"], "luna")
+        self.assertEqual(caller["effort"], "")
+
+    def test_legacy_model_id_is_used_verbatim(self):
+        code, out = run_engine_resolve(model="luna", model_id="gpt-5.6-terra", effort="xhigh")
+        self.assertEqual(code, 0)
+        self.assertEqual(out["model_id"], "gpt-5.6-terra")
+        self.assertEqual(out["effort"], "xhigh")
+
+    def test_empty_effort_defaults_to_high(self):
+        self.assertEqual(run_engine_resolve()[1]["effort"], "high")
+
+    def test_uppercase_effort_is_accepted(self):
+        self.assertEqual(run_engine_resolve(effort="XHIGH")[1]["effort"], "xhigh")
+
+    def test_unknown_effort_fails(self):
+        code, out = run_engine_resolve(effort="max")
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("model_id", out)
+
+    def test_model_id_with_a_space_fails(self):
+        code, out = run_engine_resolve(model_id="bad id")
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("model_id", out)
+
+    def test_model_id_with_a_newline_fails(self):
+        code, out = run_engine_resolve(model_id="gpt-5.6-terra\neffort=low")
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("model_id", out)
 
 
 class VerifyInvocationSelfTriggerTest(unittest.TestCase):

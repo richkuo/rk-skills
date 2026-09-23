@@ -85,6 +85,10 @@ Model shorthand (`opus`, `sonnet`, `fable`, each also with a `5` suffix, e.g.
 `@claude opus5 review`) and `effort:low|medium|high|xhigh` are parsed from the
 comment. `opus`/`opus5` and no shorthand both select Opus 5.5; no effort keeps
 `high`. Review events (formal reviews, inline comments) always stay read-only.
+`claude.yml` passes the shorthand and effort on as written, and `claude-run.yml`
+maps them to a model id, so a model change in rk-skills reaches every consumer
+on its next run. An older `claude.yml` that still passes `model_id` keeps its
+own model until you copy the template again.
 
 ## Security model
 

@@ -325,14 +325,15 @@ describe('review routing', () => {
     }
   })
 
-  test('the Claude review caller resolves every band shorthand it is sent', () => {
-    const workflow = texts[CLAUDE_CALLER]
+  test('the Claude run workflow resolves every band shorthand the caller sends', () => {
+    const engine = texts[CLAUDE_ENGINE]
     for (const [shorthand, modelId] of [['sonnet', 'claude-sonnet-5'], ['opus', 'claude-opus-5-5'], ['fable', 'claude-fable-5-1']]) {
-      expect(workflow, `${shorthand} shorthand`).toMatch(
+      expect(engine, `${shorthand} shorthand`).toMatch(
         new RegExp(`${shorthand}\\|${shorthand}5\\)\\s+MODEL_ID="${modelId}"`),
       )
     }
-    expect(workflow, 'effort suffix').toMatch(/effort:\(low\|medium\|xhigh\|high\)/)
+    expect(texts[CLAUDE_CALLER], 'caller passes the shorthand').toMatch(/model: \$\{\{ needs\.classify\.outputs\.model \}\}/)
+    expect(texts[CLAUDE_CALLER], 'effort suffix').toMatch(/effort:\(low\|medium\|xhigh\|high\)/)
   })
 
   test('every review-trigger site routes by complexity band, skills defer to the owner table, and re-review sites step the heavy reviewers down', () => {
