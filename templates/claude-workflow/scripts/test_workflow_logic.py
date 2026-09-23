@@ -442,10 +442,10 @@ class ResolveModelTest(unittest.TestCase):
     shorthand regex or the model-id case statement is what the test runs
     against."""
 
-    def test_no_shorthand_defaults_to_opus_4_8(self):
+    def test_no_shorthand_defaults_to_opus_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude fix this")["model_id"],
-            "claude-opus-4-8[1m]",
+            "claude-opus-5-5",
         )
 
     def test_opus_shorthand_selects_opus_5(self):
