@@ -33,7 +33,7 @@ async function ownerRows() {
     const [model, effort] = review.split('·').map((part) => part.trim())
     return { min: Number(min), max: Number(max), review: { model: MODEL_KEY[model] ?? null, effort: MODEL_KEY[model] ? effort : 'high' } }
   })
-  expect(rows.length, 'the owner table must state four rows').toBe(4)
+  expect(rows.length, 'the owner table must state three rows').toBe(3)
   return rows
 }
 
@@ -54,12 +54,11 @@ describe('first-review boundary drift', () => {
 
   test('every Action prompt spells out the owner table boundaries and no others', async () => {
     const rows = await ownerRows()
-    const [cheap, standard, opus, fable] = rows
+    const [cheap, standard, fable] = rows
     for (const path of CLAUDE_PROMPTS) {
       const body = (await read(path)).replace(/\s+/g, ' ')
       expect(body, `${path}: cheap row`).toMatch(RANGE(cheap.min, cheap.max))
       expect(body, `${path}: standard row`).toMatch(RANGE(standard.min, standard.max))
-      expect(body, `${path}: opus row`).toMatch(RANGE(opus.min, opus.max))
       expect(body, `${path}: fable row`).toContain(`C${fable.min} and above`)
     }
     for (const path of CODEX_PROMPTS) {

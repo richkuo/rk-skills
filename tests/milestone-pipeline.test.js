@@ -337,6 +337,33 @@ describe('milestone-pipeline dependency scheduling', () => {
     }
   })
 
+  test('a stamped bare @claude review with an effort tier keeps the tier as an opus stamp', async () => {
+    const schema = workflowSource.slice(workflowSource.indexOf('const PREP_SCHEMA'), workflowSource.indexOf('\n}\n', workflowSource.indexOf('const PREP_SCHEMA')))
+    expect(schema.match(/^ +first_review_model: \{.*$/m)?.[0]).toContain('a bare `@claude review effort:<tier>` names opus')
+    expect(workflowSource).toContain('when it is the bare \\`@claude review\\` with an \\`effort:<tier>\\`, set first_review_model to opus and keep that tier')
+
+    const { events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'github', merge: false }, {
+      Prep: () => ({ issues: [{ number: 2, title: '[C85] Stamped bare trigger at xhigh', complexity: 85, model: 'opus', effort: 'xhigh', fableplan: false, missing_block: false, first_review_model: 'opus', first_review_effort: 'xhigh' }] }),
+      Implement: () => ({
+        pr_number: 1002, pr_url: 'https://example.test/pr/1002', head_ref: 'cc/issue-2', head_sha: headSha(2),
+        summary: 'implemented', tests_passed: true, github_review_status: 'lgtm', github_review_nonblocking_remaining: 0, github_review_summary: 'clean', flags: [],
+      }),
+    })
+    const prompt = promptFor(events, 'implement:#2 (opus/xhigh)')
+    expect(prompt).toContain('gh pr comment <num> --body "@claude opus review effort:xhigh"')
+    expect(prompt).toContain('the blocking re-trigger exactly `@claude review`')
+
+    for (const path of ['skills/work-on-issue-loop/SKILL.md', 'skills/fix-pr-review-loop/SKILL.md']) {
+      const body = await Bun.file(new URL(`../${path}`, import.meta.url)).text()
+      expect(body, path).toContain('A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5 and posts `@claude opus review effort:<tier>`')
+    }
+    const routing = await Bun.file(new URL('../skills/fix-pr-review/rereview-routing.md', import.meta.url)).text()
+    expect(routing).toContain('A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5, so it becomes `@codex review effort:<tier>`; with no tier it takes the band.')
+    const codexFix = await Bun.file(new URL('../templates/codex-workflow/prompts/fix-pr.md', import.meta.url)).text()
+    expect(codexFix).toContain('does a stamped PR review: line decide, else the band')
+    expect(codexFix).toContain('a bare @claude review stamp counts as opus only with a tier, else the band')
+  })
+
   test('a stamped Validate effort overrides the band default, clamped to each model\'s allowed tiers', async () => {
     const { events, logs } = await executeWorkflow({ tracks: [[2], [3], [4], [5], [6], [7], [8]], reviewLoop: false }, {
       Prep: () => ({
@@ -1460,7 +1487,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#2 (opus/high)'), '#2 takes the rescored band default')
       .toContain('gh pr comment <num> --body "@claude review"')
-    expect(logs.some((m) => m.includes('#2: rescored review band 21–70 outranks the stamped first review Sonnet 5'))).toBeTrue()
+    expect(logs.some((m) => m.includes('#2: rescored review band 21–80 outranks the stamped first review Sonnet 5'))).toBeTrue()
 
     expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 keeps the stronger stamp')
       .toContain('gh pr comment <num> --body "@claude opus review effort:high"')

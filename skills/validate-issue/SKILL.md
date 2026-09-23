@@ -82,8 +82,7 @@ fableplan is yes when the score is 71 or higher. The Build column is the Claude 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
 | 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |
-| 21–70 | Opus 5.5 · high | `@claude review` | `@codex review` |
-| 71–80 | Opus 5.5 · high | `@claude review` | `@codex review` |
+| 21–80 | Opus 5.5 · high | `@claude review` | `@codex review` |
 | 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
 
 The bare `@claude review` is the standard review: it runs Opus 5.5 at high, the same reviewer as `@claude opus review effort:high`. Blocking re-reviews are keyed to the reviewer that actually ran cycle 1: a heavier cycle-1 reviewer steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).

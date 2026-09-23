@@ -275,8 +275,7 @@ const BANDS = [
 
 const REVIEW_BANDS = [
   { name: '0–20', min: 0, max: 20, review: { model: 'sonnet', effort: 'high' } },
-  { name: '21–70', min: 21, max: 70, review: { model: 'opus', effort: 'high' } },
-  { name: '71–80', min: 71, max: 80, review: { model: 'opus', effort: 'high' } },
+  { name: '21–80', min: 21, max: 80, review: { model: 'opus', effort: 'high' } },
   { name: '81+', min: 81, max: Infinity, review: { model: 'fable', effort: 'high' } },
 ]
 
@@ -388,7 +387,7 @@ const PREP_SCHEMA = {
           validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low/medium to high on a non-Fable Claude validate, and max is a Codex CLI-only tier' },
           plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "fableplan first:" starts with Yes' },
-          first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; OMIT this field when the line is a standard `@claude` trigger or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
+          first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; a bare `@claude review effort:<tier>` names opus, because the bare trigger runs Opus 5.5; OMIT this field when the line is a standard `@claude` trigger with no effort tier, or absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
           first_review_effort: { type: 'string', enum: ['medium', 'high', 'xhigh'], description: 'From "effort:<tier>" in that first-review trigger; OMIT when unspecified — the runtime derives the default from the [C..] band' },
           missing_block: { type: 'boolean', description: 'True when the issue has no ## Execution block (fields above are then your best-heuristic defaults)' },
         },
@@ -768,7 +767,7 @@ const prep = await agent(
 - validate_model: from an optional "**Validate model:**" line — map "Fable 5.1"→fable and "Opus 5.5" (any Opus)→opus. When the line carries a parenthetical naming an external harness — "Astra (Codex CLI, gpt-6-astra)", "Luna (Codex CLI)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set validate_model_name to the name before the parenthetical, and set validate_cli_model to the id after the comma inside the parenthetical when one is present; OMIT validate_cli_model when the parenthetical carries no id, and OMIT both fields for Claude models. When the line is absent, OMIT validate_model — absence means the runtime derives the validate model from the [C..] band. Never read a model from the "Validate effort:" line
 - validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh/max. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
 - fableplan: true when "**fableplan first:**" starts with "Yes"
-- first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when the line is a standard \`@claude\` trigger or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
+- first_review_model / first_review_effort: from the optional "**PR review:**" line — when it names a first-review trigger like \`@claude fable review effort:high\`, extract that model and effort; when it is the bare \`@claude review\` with an \`effort:<tier>\`, set first_review_model to opus and keep that tier, because the bare trigger runs Opus 5.5; when the line is a standard \`@claude\` trigger with no effort tier, or absent, OMIT both fields — the runtime derives the default from the [C..] band, and it treats presence as "an operator stamped a trigger"
 If an issue has NO Execution block, set missing_block: true and fill the fields with conservative defaults (model opus, effort high, fableplan false — never fable: Fable builds only on an explicit stamp, and the runtime re-derives these from the validated score anyway). Do not modify anything anywhere.
 Return via StructuredOutput.`,
   { schema: PREP_SCHEMA, phase: 'Prep', label: 'prep:execution-blocks', effort: 'low' }

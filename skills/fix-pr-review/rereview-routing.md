@@ -34,7 +34,7 @@ A heavy trigger with another effort suffix takes the same row. Neither heavy tri
 
 ### Codex cycles
 
-Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. Never post a `@claude` rung on a Codex cycle, and never discard a stamp back to the band: stamped `sonnet`/`haiku` becomes `@codex luna review`, stamped `opus`/`fable` the bare `@codex review`, each keeping a stamped `effort:<tier>`.
+Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. Never post a `@claude` rung on a Codex cycle, and never discard a stamp back to the band: stamped `sonnet`/`haiku` becomes `@codex luna review`, stamped `opus`/`fable` the bare `@codex review`, each keeping a stamped `effort:<tier>`. A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5, so it becomes `@codex review effort:<tier>`; with no tier it takes the band.
 
 ### Fallback table
 
