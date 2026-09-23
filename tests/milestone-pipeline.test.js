@@ -1183,12 +1183,12 @@ describe('milestone-pipeline subagent review mode', () => {
     })
 
     expect(started(events, 'review:PR#1002 c1 (sonnet/high)')).toBeTrue()
-    const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1003 c1 (claude/high)')
+    const bandZeroReview = events.find((event) => event.state === 'started' && event.label === 'review:PR#1003 c1 (opus/high)')
     expect(bandZeroReview).toBeTruthy()
-    expect(bandZeroReview.model).toBeUndefined()
-    const bandZeroTop = events.find((event) => event.state === 'started' && event.label === 'review:PR#1004 c1 (claude/high)')
+    expect(bandZeroReview.model).toBe('opus')
+    const bandZeroTop = events.find((event) => event.state === 'started' && event.label === 'review:PR#1004 c1 (opus/high)')
     expect(bandZeroTop).toBeTruthy()
-    expect(bandZeroTop.model).toBeUndefined()
+    expect(bandZeroTop.model).toBe('opus')
     expect(started(events, 'review:PR#1005 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1006 c1 (opus/high)')).toBeTrue()
     expect(started(events, 'review:PR#1007 c1 (fable/high)')).toBeTrue()
@@ -1217,8 +1217,8 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(promptFor(events, 'implement:#2 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude sonnet review"')
     expect(promptFor(events, 'implement:#6 (sonnet/high)')).toContain('gh pr comment <num> --body "@claude review"')
-    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude opus review effort:high"')
-    expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 opus cycle 1 steps down to the standard trigger')
+    expect(promptFor(events, 'implement:#3 (opus/high)')).toContain('gh pr comment <num> --body "@claude review"')
+    expect(promptFor(events, 'implement:#3 (opus/high)'), '#3 the opus row posts the standard trigger and repeats it')
       .toContain('the blocking re-trigger exactly `@claude review`')
     expect(promptFor(events, 'implement:#4 (fable/high)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
     expect(promptFor(events, 'implement:#5 (sonnet/xhigh)')).toContain('gh pr comment <num> --body "@claude fable review effort:high"')
@@ -1301,7 +1301,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const expected = {
       'implement:#2 (sonnet/xhigh)': ['@claude sonnet review', '@claude sonnet review'],
-      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude opus review effort:high'],
+      'implement:#4 (fable/high)': ['@claude fable review effort:high', '@claude review'],
       'implement:#5 (sonnet/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#6 (opus/high)': ['@claude opus review effort:high', '@claude review'],
       'implement:#7 (sonnet/high)': ['@claude sonnet review effort:high', '@claude sonnet review effort:high'],
@@ -1407,7 +1407,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     const two = promptFor(events, 'implement:#2 (opus/high)')
     expect(two, '#2 cycle-1 keeps the stamp').toContain('gh pr comment <num> --body "@claude fable review effort:high"')
-    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude opus review effort:high`')
+    expect(two, '#2 blocking re-trigger steps down').toContain('the blocking re-trigger exactly `@claude review`')
     expect(logs.some((m) => m.includes('#2: keeping the stamped first review Fable 5.1'))).toBeTrue()
 
     const three = promptFor(events, 'implement:#3 (opus/xhigh)')
@@ -1503,7 +1503,7 @@ describe('milestone-pipeline subagent review mode', () => {
     expect(logs.some((message) => message.includes('#2: RESCORED C10 → C70 — re-routing build Sonnet 5 @ xhigh → Opus 5.5 @ xhigh (band 50–70); the issue needs a [C70] restamp'))).toBeTrue()
     expect(started(events, 'plan:#2')).toBeFalse()
     expect(started(events, 'implement:#2 (opus/xhigh)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c1 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c1 (opus/high)')).toBeTrue()
     expect(output.results.find((result) => result.issue === 2)?.rescore).toEqual({
       from: 10,
       to: 70,
@@ -1593,13 +1593,13 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'review:PR#1002 c1 (opus/xhigh)')).toBeTrue()
     expect(events.find((event) => event.state === 'started' && event.label === 'fix:PR#1002 c1 (sonnet/high)')).toMatchObject({ model: 'sonnet', effort: 'high' })
-    expect(started(events, 'review:PR#1002 c2 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c2 (opus/high)')).toBeTrue()
     expect(record?.status).toBe('merged')
     expect(record?.review.cycles_run).toBe(2)
     expect(record?.head_sha).toBe(headSha(2, 'c'))
   })
 
-  test('a fable first review never repeats: blocking re-reviews step down to opus, then to the standard reviewer', async () => {
+  test('a fable first review never repeats: blocking re-reviews step down to the standard Opus reviewer', async () => {
     let reviewCycle = 0
     const { output, events } = await executeWorkflow({ tracks: [[2]], reviewMode: 'subagent', merged: [mergedRecord(2)] }, {
       Prep: () => ({ issues: [prepIssue({ first_review_model: 'fable', first_review_effort: 'high' })] }),
@@ -1617,7 +1617,7 @@ describe('milestone-pipeline subagent review mode', () => {
 
     expect(started(events, 'review:PR#1002 c1 (fable/high)')).toBeTrue()
     expect(started(events, 'review:PR#1002 c2 (opus/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c3 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c3 (opus/high)')).toBeTrue()
     expect(record?.status).toBe('merged')
     expect(record?.review.final_status).toBe('lgtm')
   })
@@ -1639,8 +1639,8 @@ describe('milestone-pipeline subagent review mode', () => {
     const record = output.results.find((result) => result.issue === 2)
 
     expect(started(events, 'review:PR#1002 c2 (opus/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c3 (claude/high)')).toBeTrue()
-    expect(started(events, 'review:PR#1002 c4 (claude/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c3 (opus/high)')).toBeTrue()
+    expect(started(events, 'review:PR#1002 c4 (opus/high)')).toBeTrue()
     expect(record?.review.final_status).toBe('lgtm')
   })
 
@@ -2114,11 +2114,11 @@ describe('milestone-pipeline external CLI build harnesses', () => {
   test('subagent-mode reviewers stay on Claude while the fix pass forwards to the CLI', async () => {
     const { events } = await executeWorkflow({ tracks: [[2]], reviewLoop: true, reviewMode: 'subagent' }, {
       Prep: () => ({ issues: [prepRecord(2, { model: 'cursor', build_model_name: 'Grok', effort: 'high' })] }),
-      'review:PR#1002 c1 (claude/high)': () => ({
+      'review:PR#1002 c1 (opus/high)': () => ({
         verdict: 'needs_updates', blocking_count: 1, nonblocking_count: 0, head_ref: 'cursor/issue-2', head_sha: headSha(2), comment_url: 'https://example.test/pr/1002#review', summary: 'one blocker',
       }),
     })
-    const review = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (claude/high)')
+    const review = events.find((event) => event.state === 'started' && event.label === 'review:PR#1002 c1 (opus/high)')
     const fix = events.find((event) => event.state === 'started' && event.label === 'fix:PR#1002 c1 (cursor/high)')
 
     expect(review.prompt).not.toContain('agent -p')
