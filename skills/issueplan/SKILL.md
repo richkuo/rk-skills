@@ -62,6 +62,3 @@ Recheck affected code against the saved plan after entering the worktree, especi
 Apply its implementation, verification, commit, push, and PR procedures in steps 3 through 6, within user limits. For tasks without an issue, omit issue references and closing keywords. Preserve the plan and deviations in the PR body; include locally saved plan text only when publishing it is permitted.
 
 Report the PR URL, verification result, and any remaining blocker. If stopped, include the saved plan and worktree paths needed to resume. Retain worktrees with unfinished or unpushed work; clean up completed work only when repository rules permit. This skill ends at delivery; merging or an automated review loop needs separate authorization.
-
----
-Updated with LLM: GPT-6 | high | Harness: skill-creator
