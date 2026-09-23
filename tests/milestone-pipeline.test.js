@@ -357,6 +357,11 @@ describe('milestone-pipeline dependency scheduling', () => {
       const body = await Bun.file(new URL(`../${path}`, import.meta.url)).text()
       expect(body, path).toContain('A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5 and posts `@claude opus review effort:<tier>`')
     }
+    const routing = await Bun.file(new URL('../skills/fix-pr-review/rereview-routing.md', import.meta.url)).text()
+    expect(routing).toContain('A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5, so it becomes `@codex review effort:<tier>`; with no tier it takes the band.')
+    const codexFix = await Bun.file(new URL('../templates/codex-workflow/prompts/fix-pr.md', import.meta.url)).text()
+    expect(codexFix).toContain('does a stamped PR review: line decide, else the band')
+    expect(codexFix).toContain('a bare @claude review stamp counts as opus only with a tier, else the band')
   })
 
   test('a stamped Validate effort overrides the band default, clamped to each model\'s allowed tiers', async () => {
