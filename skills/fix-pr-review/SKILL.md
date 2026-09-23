@@ -74,15 +74,15 @@ If the PR is `CONFLICTING`: `git fetch origin <baseRefName> && git merge origin/
 
 ### 8. Commit and push
 
-Only after step 6's verification: `git status`; stage **each fix file by name** (never `git add -A`; a step 7 merge commit stays as git created it); `git commit -F <msg-file>`; `git push` to the tracked upstream. Message: "Address review on #<N>: <summary>", every test edit disclosed, plus the **Updated**-verb LLM Attribution Footer per CLAUDE.md/AGENTS.md, `Harness: Claude Code`. Confirm `gh pr view <N> --json headRefOid` equals `git rev-parse HEAD`; on a mismatch stop, post nothing, and report it.
+Only after step 6's verification: `git status`; stage **each fix file by name** (never `git add -A`; a step 7 merge commit stays as git created it); `git commit -F <msg-file>`; `git push` to the tracked upstream; a rejected push means the head moved since step 0, so stop, post nothing, and report it, and never force-push. Message: "Address review on #<N>: <summary>", every test edit disclosed, plus the **Updated**-verb LLM Attribution Footer per CLAUDE.md/AGENTS.md, `Harness: Claude Code`. Confirm `gh pr view <N> --json headRefOid` equals `git rev-parse HEAD`; on a mismatch stop, post nothing, and report it.
 
 ### 9. Post the disposition comment
 
-One comment stating what happened to each finding, per [disposition-comment.md](disposition-comment.md), read completely; posted even when every finding was refuted.
+One comment stating what happened to each finding, per [disposition-comment.md](disposition-comment.md), read completely; posted even when every finding was refuted. When this is a retry after a failed or uncertain post, first check the PR for a disposition that already covers this head commit, and post only what is missing.
 
 ### 10. Trigger the re-review
 
-One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. A bare-LGTM run that only merged the base routes by step 7's merge re-review rule: the cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, no trigger when it decided prose only. The trigger is its **own** comment; a trigger bundled into the disposition does not fire.
+One trigger comment per [rereview-routing.md](rereview-routing.md), read completely. The step-down is keyed to the reviewer that actually ran cycle 1; the band does not decide it. Route by whether the addressed set contained **any blocking finding** (step 1); the newest verdict alone does not decide it either. A bare-LGTM run that only merged the base routes by step 7's merge re-review rule: the cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, no trigger when it decided prose only. The trigger is its **own** comment; a trigger bundled into the disposition does not fire. Post none when the same trigger already follows this pass's disposition.
 
 ### 11. Report to the user
 

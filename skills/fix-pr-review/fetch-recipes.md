@@ -8,22 +8,27 @@ Reference for SKILL.md steps 1–2: channel queries, collection rules, CI-check 
 # Formal review events — state included so DISMISSED reviews can be skipped
 gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '.[] | {id, user: .user.login, state, submitted_at, body}'
 # Issue comments on the PR — where @claude review output usually lands
-gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, body}'
+gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '.[] | {author: .user.login, created_at, updated_at, body}'
 # Inline diff threads with resolution state — REST cannot report isResolved, so use GraphQL
 gh api graphql -F owner='{owner}' -F repo='{repo}' -F pr=<N> -f query='
   query($owner:String!,$repo:String!,$pr:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-    reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
-      comments(first:50){ nodes{ databaseId author{login} createdAt body } } } } } } }'
+    reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ id isResolved isOutdated path line
+      comments(first:50){ pageInfo{hasNextPage endCursor} nodes{ databaseId author{login} createdAt body } } } } } } }'
+# Remaining replies of one thread, when its comments.pageInfo.hasNextPage is true
+gh api graphql -F id='<thread id>' -F after='<endCursor>' -f query='
+  query($id:ID!,$after:String){ node(id:$id){ ... on PullRequestReviewThread {
+    comments(first:100, after:$after){ pageInfo{hasNextPage endCursor} nodes{ databaseId author{login} createdAt body } } } } }'
 ```
 
-When `hasNextPage` is true, paginate with `endCursor` — never drop threads past 100.
+When `hasNextPage` is true, paginate with `endCursor` — never drop threads past 100. Each thread's `comments` connection has its own cursor: paginating the threads does not fetch a long thread's later replies, and the last reply decides whether the thread awaits the reviewer.
 
 ### Collection rules
 
-**Cutoff** = the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review); no cutoff → everything since the PR opened. Collect:
+**Cutoff** = the timestamp of your most recent disposition comment on the PR (or the last commit you pushed addressing a review); no cutoff → everything since the PR opened. The cutoff narrows the search; it does not prove an older review was addressed. Collect:
 
 - Every formal review or review-formatted comment **newer than the cutoff** — one opening with an `LGTM` / `Needs Updates` verdict, carrying sections like `### Needs Fixing`, or otherwise clearly review feedback. **When several landed, address all of them.** The latest alone is incomplete. Skip `DISMISSED` reviews.
 - Every **unresolved** inline thread (`isResolved: false`) **regardless of age** — resolution state decides and the timestamp does not; `isOutdated` alone does not mean resolved. Exception: a thread whose last comment is your own disposition reply with no response since is awaiting the reviewer — skip it. Each thread is one finding.
+- Every older review or review-formatted comment whose findings no prior disposition names by verbatim title, such as a review that landed while the previous pass was running, and every comment whose `updated_at` is newer than the cutoff.
 - Skip your own prior disposition comments and `@<bot> … review` trigger comments.
 
 ## CI check snapshot (step 2)
