@@ -1,6 +1,6 @@
 # Worked example
 
-Read after the `## Format` section of [SKILL.md](SKILL.md), which owns every rule; where this file and the rules disagree, the rules win. Text outside the two fenced blocks is commentary and never part of a posted review.
+Read after the `### Format` section of [SKILL.md](SKILL.md), which owns every rule; where this file and the rules disagree, the rules win. Text outside the two fenced blocks is commentary and never part of a posted review.
 
 ## The diff under review (invented)
 
