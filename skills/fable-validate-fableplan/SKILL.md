@@ -13,27 +13,15 @@ This is **fable-validate-fableplan-loop with the implementation stage removed** 
 
 ## Input
 
-Same defaults as fable-validate: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (defaults to the latest open issue in the current repo).
+Same as fable-validate-loop, including the optional `targetBranch`.
 
 ## Steps
 
 Follow **fable-validate-loop steps 1 through 4** with the changes below, then run this skill's step 5 in place of fable-validate-loop's steps 5 and 6:
 
-**Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner. It produces the standard verdict block:
+**Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner.
 
-```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
-```
-
-**Step 2 (scope gate):** the same four STOP conditions apply; the cost here is a wasted or wrong plan rather than a wrong PR:
-
-| Condition | Action |
-|---|---|
-| `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts — splitting is a human call. |
-| `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to plan or build. |
-| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
-| A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
-| An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
+**Step 2 (scope gate):** fable-validate-loop step 2's STOP table applies unchanged. Here a missed stop costs a wasted or wrong plan, and an incomplete validation is never approval to plan.
 
 **Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan`.
 

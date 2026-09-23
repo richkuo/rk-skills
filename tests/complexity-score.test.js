@@ -224,9 +224,6 @@ describe('complexity axis anchors and reported grades', () => {
       'skills/validate-issue/SKILL.md',
       'skills/validate-issue-loop/SKILL.md',
       'skills/fable-validate-loop/SKILL.md',
-      'skills/validate-fableplan-loop/SKILL.md',
-      'skills/fable-validate-fableplan/SKILL.md',
-      'skills/fable-validate-fableplan-loop/SKILL.md',
       'skills/new-issue/SKILL.md',
     ]
     for (const path of templates) {
@@ -285,7 +282,7 @@ describe('complexity grading procedure', () => {
     const editing = await read('skills/validate-issue/issue-editing.md')
     expect(editing).toMatch(/\*\*Higher score, or no prior prefix:\*\* restamp each line to the new band's defaults, upward only: never lower a model or an effort, keep a Fable 5\.1 build and a Codex CLI or Cursor CLI harness stamp as written, and on those add only `fableplan first: Yes` when the new score is 71 or higher/)
     expect(editing).toMatch(/\*\*Lower score:\*\* restamp a line down to the new band's default only when it still equals the old band's default\. A line that differs from the old default is a deliberate stamp and stays, and a Fable 5\.1 build or a Codex CLI or Cursor CLI harness stamp keeps its model and effort/)
-    for (const path of ['skills/fable-validate-loop/SKILL.md', 'skills/validate-fableplan-loop/SKILL.md']) {
+    for (const path of ['skills/fable-validate-loop/SKILL.md']) {
       const gate = (await read(path)).match(/\*\*Score gate:\*\*[^\n]*/)[0]
       expect(gate, path).toMatch(/`fableplan: no`[^\n]*both \*\*below 71\*\*/)
       expect(gate, path).toMatch(/Never read the raw `Complexity:` value/)
