@@ -45,13 +45,15 @@ Save the checked plan in a scratchpad file outside the working tree. Include the
 
 ## 3. Preserve and present the plan
 
-For an issue, unless the user limits posting, post the checked plan before implementation. Use `## Implementation plan (current session)` as the heading so `work-on-issue` can find it. Apply the repository's attribution footer; absent a repository format, use a final `---` line followed by `Created with LLM: <current session model> | <current session effort> | Harness: issueplan`. Use observed model and effort values or the repository's explicit fallback; report unknown values instead of inventing them.
+A plan is blocked when any acceptance criterion rests on an unresolved dependency, or when it depends on a missing mechanism or a false assumption the plan cannot correct. Classify the plan before posting it.
 
-Post from the saved body with `gh issue comment <issue> --body-file <plan-file>`, using the resolved repository. Record the returned comment URL in the saved plan file. After an uncertain posting result, inspect the issue comments before retrying to avoid duplicate plans. If required posting fails, preserve the local plan and report the blocker before building.
+For an issue, unless the user limits posting, post the checked plan before implementation. A ready plan uses `## Implementation plan (current session)` as the heading so `work-on-issue` can find it. A blocked plan never uses that heading: post it under `## Blocked plan (current session)`, name the blocker first, and state that it is not ready to build and no builder may adopt it. Apply the repository's attribution footer; absent a repository format, use a final `---` line followed by `Created with LLM: <current session model> | <current session effort> | Harness: issueplan`. Use observed model and effort values or the repository's explicit fallback; report unknown values instead of inventing them.
+
+Post from the saved body with `gh issue comment <issue> --body-file <plan-file>`, using the resolved repository. Record the returned comment URL in the saved plan file. After an uncertain posting result, inspect the issue comments before retrying to avoid duplicate plans: when this skill's comment exists, record its URL in the saved plan file and do not retry; otherwise retry and record the returned URL. If required posting fails, preserve the local plan and report the blocker before building.
 
 Give the user the plan's main decisions and a link to its full text, using the comment URL or local scratchpad path. Follow the requested outcome above: stop for planning only, continue when authorized, or ask the one remaining build question. Keep the saved plan for a later continuation.
 
-A blocked plan never enters step 4 without a user decision, whatever authorization was given. A plan is blocked when any acceptance criterion rests on an unresolved dependency, or when it depends on a missing mechanism or a false assumption the plan cannot correct. Stop, name the blocker, and ask whether to revise the task or the plan; the question offers no plain build.
+A blocked plan never enters step 4 without a user decision, whatever authorization was given. Stop, name the blocker, and ask whether to revise the task or the plan; the question offers no plain build. A revised plan that clears the blocker is checked again, posted under the ready heading, and its comment URL replaces the recorded one.
 
 ## 4. Build and deliver
 
