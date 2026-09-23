@@ -1,7 +1,7 @@
 ---
 name: issueplan
 description: >-
-  Plan a task or GitHub issue with the current session model, then build when authorized. Use for "/issueplan", "issueplan this", "issue-plan", or requests to plan an issue in this session. Supports planning only; uses no subagents.
+  Plan a task or GitHub issue with the current session model, then build. With an issue, it posts the plan and asks before building; with a task description and no issue, it builds and opens a pull request by default. A planning-only request stops after the plan, and explicit build authorization skips the question. Use for "/issueplan", "issueplan this", "issue-plan", or requests to plan an issue in this session. Uses no subagents.
 ---
 
 # issueplan
@@ -41,7 +41,7 @@ Write a plan sized to the task:
 
 Check the plan against the code before delivery: existing paths and symbols must be real, proposed additions must be labeled, and verification commands must match the project's tools. Every acceptance criterion needs an implementation step and a check, or an explicit unresolved dependency. Do not present a blocked plan as ready to build.
 
-Save the checked plan in a scratchpad file outside the working tree. Include the task or issue URL, inspected commit, target branch, unresolved decisions, and implementation authorization so the work can resume after context summarization.
+Save the checked plan in a scratchpad file outside the working tree. Include the task or issue URL, inspected commit, target branch, the time the plan was checked and saved, unresolved decisions, and implementation authorization so the work can resume after context summarization.
 
 ## 3. Preserve and present the plan
 
@@ -51,15 +51,17 @@ Post from the saved body with `gh issue comment <issue> --body-file <plan-file>`
 
 Give the user the plan's main decisions and a link to its full text, using the comment URL or local scratchpad path. Follow the requested outcome above: stop for planning only, continue when authorized, or ask the one remaining build question. Keep the saved plan for a later continuation.
 
+A blocked plan never enters step 4 without a user decision, whatever authorization was given. A plan is blocked when any acceptance criterion rests on an unresolved dependency, or when it depends on a missing mechanism or a false assumption the plan cannot correct. Stop, name the blocker, and ask whether to revise the task or the plan; the question offers no plain build.
+
 ## 4. Build and deliver
 
 Load [work-on-issue](../work-on-issue/SKILL.md) for the shared build procedures below. Apply those procedures in this session; do not invoke its issue-selection fallback or a delegated workflow.
 
-On a resumed run, identify the task's existing worktree and PR first so the duplicate check can recognize its own branch. Before building, refresh issue state and comments and apply `work-on-issue` step 0 for issue-state, duplicate-PR, and plan-selection rules. Use the saved plan when no posted plan exists. For tasks without an issue, skip issue-specific commands and gates.
+On a resumed run, identify the task's existing worktree and PR first so the duplicate check can recognize its own branch. Before building, refresh issue state and comments and apply `work-on-issue` step 0 for its issue-state and duplicate-PR gates. For plan selection, the saved plan is a candidate with its saved time: build the newest candidate. The comment this skill posted in step 3 is the saved plan and counts as no separate candidate. Any other plan comment posted after that time supersedes the saved plan; an older posted plan never replaces it, including when posting was limited or failed. Record the adopted plan's author for the `work-on-issue` step 6 `, fableplan` marker. For tasks without an issue, skip issue-specific commands and gates.
 
 If no Git repository is available, preserve the plan and report that implementation needs one. Otherwise, create or reuse the isolated worktree per `work-on-issue` step 1. Resolve the target from user and repository instructions, otherwise the repository default branch. Use `<agent-prefix>/issueplan/<short-task-name>` for a new branch. This skill supplies no `baseRefs`; new work starts from the fetched target branch. The PR uses that same target. Confirm a reused worktree belongs to this task and target; preserve its existing work.
 
-Recheck affected code against the saved plan after entering the worktree, especially when the base or issue changed. Before writing any code, apply `work-on-issue` step 2 for plan deviations and mirroring numbered steps into the task tracker, including its scratchpad fallback and overridden-step rules. Update the saved plan and record material changes; ask again only when a change exceeds existing authorization.
+Recheck affected code against the saved plan after entering the worktree, especially when the base or issue changed. Before writing any code, apply `work-on-issue` step 2 for plan deviations and mirroring numbered steps into the task tracker, including its scratchpad fallback and overridden-step rules. Update the saved plan and record material changes; ask again only when a change exceeds existing authorization. The recheck may find a recorded dependency resolved, and the build then continues under the existing authorization. A dependency the recheck finds still unresolved, or a new one, stops the build under the blocked-plan rule in step 3.
 
 Apply its implementation, verification, commit, push, and PR procedures in steps 3 through 6, within user limits. For tasks without an issue, omit issue references and closing keywords. Preserve the plan and deviations in the PR body; include locally saved plan text only when publishing it is permitted.
 
