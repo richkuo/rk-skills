@@ -6,7 +6,7 @@ description: >-
 
 # issueplan
 
-The current session's large language model (LLM) owns planning and implementation. Do not delegate or launch another coding agent. Follow the repository's Response Style, engineering, Git workflow, and attribution rules without duplicating them here.
+The current session's large language model (LLM) owns planning and implementation. Never call the Agent tool, Task tool, workflow delegation, or any subagent mechanism at any step. Follow the repository's Response Style, engineering, Git workflow, and attribution rules without duplicating them here.
 
 ## Determine the requested outcome
 
