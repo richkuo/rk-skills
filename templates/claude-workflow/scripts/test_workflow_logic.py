@@ -451,19 +451,19 @@ class ResolveModelTest(unittest.TestCase):
     def test_opus_shorthand_selects_opus_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude opus review")["model_id"],
-            "claude-opus-5",
+            "claude-opus-5-5",
         )
 
     def test_opus5_shorthand_selects_opus_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude opus5 review")["model_id"],
-            "claude-opus-5",
+            "claude-opus-5-5",
         )
 
     def test_capitalized_opus5_shorthand_selects_opus_5(self):
         self.assertEqual(
             run_resolve_model("issue_comment", "@claude Opus5 review")["model_id"],
-            "claude-opus-5",
+            "claude-opus-5-5",
         )
 
     def test_sonnet5_shorthand_selects_sonnet_5(self):

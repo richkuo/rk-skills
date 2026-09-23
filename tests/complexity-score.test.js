@@ -44,7 +44,7 @@ export function complexityScore(axes) {
   return { capability, volume, score: formula.weight * capability + volume }
 }
 
-const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5': 'opus', 'Fable 5.1': 'fable' }
+const MODEL_KEY = { 'Sonnet 5': 'sonnet', 'Opus 5.5': 'opus', 'Fable 5.1': 'fable' }
 const spec = (cell) => {
   const [model, effort] = cell.split('·').map((part) => part.trim())
   return { model: MODEL_KEY[model], effort }
@@ -112,7 +112,7 @@ describe('complexity score band encoding', () => {
     const owner = ownerBands()
     const line = milestoneplan.match(/^- \*\*Validate\*\*[^\n]*$/m)?.[0]
     expect(line, 'milestoneplan states its Validate mapping').toBeTruthy()
-    const ranges = [...line.matchAll(/`((?:Sonnet 5|Opus 5|Fable 5\.1) · \w+)` at `\[C(\d+)\]`(?:–`\[C(\d+)\]`| and above)/g)]
+    const ranges = [...line.matchAll(/`((?:Sonnet 5|Opus 5\.5|Fable 5\.1) · \w+)` at `\[C(\d+)\]`(?:–`\[C(\d+)\]`| and above)/g)]
       .map(([, cell, min, max]) => ({ validate: spec(cell), min: Number(min), max: max === undefined ? Infinity : Number(max) }))
     expect(ranges.length, 'milestoneplan states validate ranges').toBeGreaterThan(0)
     for (const row of owner) {

@@ -96,7 +96,7 @@ jobs:
           MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -ioE '(^|(\r?\n))[[:space:]]*@claude[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' || true)
 
           case "$MODEL_SHORT" in
-            opus|opus5)     MODEL_ID="claude-opus-5" ;;
+            opus|opus5)     MODEL_ID="claude-opus-5-5" ;;
             sonnet|sonnet5) MODEL_ID="claude-sonnet-5" ;;
             fable|fable5)   MODEL_ID="claude-fable-5-1" ;;
             *)              MODEL_ID="claude-opus-4-8[1m]" ;;

@@ -15,7 +15,7 @@ Follow `run-plan.md`: bucket every issue as build, resume, or skip; settle cross
 
 ### 2. Present the run plan; approval is mandatory
 
-Show the target branch (repo default, or the user's `targetBranch`, which also means no release), numbered tracks with titles, hard `after` edges apart from `runsAfter` edges, inferred edges, each issue's model/effort/fableplan (plan effort: stamped, else high) with the harness named on every Codex CLI or Cursor CLI build or Codex CLI validate (`cli-dispatch` under an Opus 5 driver, never a substituted Claude run), the readiness boundary, and merge order. **Do not invoke the Workflow tool until the user approves**; the approval is the multi-agent opt-in and step 2 is never skipped.
+Show the target branch (repo default, or the user's `targetBranch`, which also means no release), numbered tracks with titles, hard `after` edges apart from `runsAfter` edges, inferred edges, each issue's model/effort/fableplan (plan effort: stamped, else high) with the harness named on every Codex CLI or Cursor CLI build or Codex CLI validate (`cli-dispatch` under an Opus 5.5 driver, never a substituted Claude run), the readiness boundary, and merge order. **Do not invoke the Workflow tool until the user approves**; the approval is the multi-agent opt-in and step 2 is never skipped.
 
 State the GitHub writes: issue-body corrections, plan comments, PRs, review comments, and, with merging on, squash-merges at LGTM plus green CI, branch deletion, issue closure, a docs-sync change, and a release. Approval authorizes them; `merge: false` keeps merging manual.
 

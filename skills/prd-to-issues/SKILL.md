@@ -45,7 +45,7 @@ Append exactly one Execution block before the footer; local keys appear only in 
 - **fableplan first:** the band's `Yes` or `No`
 - **PR review:** standard `@claude` review trigger
 
-First-review routing belongs to the pipeline and the `validate-issue` step 6 table; copy no review rules here. Omit **Validate model:**, **Validate effort:**, and **Plan effort:** unless requested; a user-directed validate override writes **Validate model:** `Fable 5.1`, `Opus 5`, or `<Name> (Codex CLI[, <model-id>])` and the tier to **Validate effort:**. Never stamp Fable 5.1 as the Build model without a specific user instruction. Never stamp an external CLI harness as the Build model without one either; CLI overrides use `<Name> (Codex CLI[, <model-id>])` or `<Name> (Cursor CLI[, <model-id>])`. For user-directed overrides, apply the validation and clamp rules in [execution-plan-review](../execution-plan-review/SKILL.md) without running its workflow.
+First-review routing belongs to the pipeline and the `validate-issue` step 6 table; copy no review rules here. Omit **Validate model:**, **Validate effort:**, and **Plan effort:** unless requested; a user-directed validate override writes **Validate model:** `Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])` and the tier to **Validate effort:**. Never stamp Fable 5.1 as the Build model without a specific user instruction. Never stamp an external CLI harness as the Build model without one either; CLI overrides use `<Name> (Codex CLI[, <model-id>])` or `<Name> (Cursor CLI[, <model-id>])`. For user-directed overrides, apply the validation and clamp rules in [execution-plan-review](../execution-plan-review/SKILL.md) without running its workflow.
 
 ## 4. Review the filing plan
 
