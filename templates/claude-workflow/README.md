@@ -1,8 +1,8 @@
 # claude-workflow — full @claude GitHub Actions bundle
 
 The two-workflow setup behind the rk-skills PR loop: a least-privilege `@claude`
-bot that reviews PRs, implements issues, and fixes PR reviews, with its prompts,
-comment-patching scripts, and regression tests. `templates/codex-workflow/` is
+bot that reviews PRs, implements issues, and fixes PR reviews, with its prompts
+and comment-patching scripts. `templates/codex-workflow/` is
 the Codex twin and documents only what differs from this file.
 
 ## What's inside

@@ -101,7 +101,7 @@ The `workflows/milestone-pipeline.js` dynamic workflow validates the dependency 
 
 The PR-review skills (`fix-pr-review` and every `-loop` variant) need an automated reviewer that answers `@claude review` comments with an `LGTM` / `Needs Updates` verdict and structured findings. Without one, the loop skills detect its absence and stop. This repo ships:
 
-- **Claude bundle: [`templates/claude-workflow/`](./templates/claude-workflow/)**: the least-privilege setup with `@claude review` (read-only), `@claude ...` fix routes on trusted-author PRs, `@claude` issue implementation, prompt files, and tests. See its [README](./templates/claude-workflow/README.md) for install and triggers.
+- **Claude bundle: [`templates/claude-workflow/`](./templates/claude-workflow/)**: the least-privilege setup with `@claude review` (read-only), `@claude ...` fix routes on trusted-author PRs, `@claude` issue implementation, and prompt files. See its [README](./templates/claude-workflow/README.md) for install and triggers.
 - **Codex full bundle: [`templates/codex-workflow/`](./templates/codex-workflow/)**: the same routes driven by `openai/codex-action`. Needs `OPENAI_API_KEY`, your own GitHub App for the write routes, and the `CODEX_BOT_LOGIN` variable. See its [README](./templates/codex-workflow/README.md).
 - **Codex minimal: [`templates/codex-review.yml`](./templates/codex-review.yml)**: review only; copy it into `.github/workflows/` and add `OPENAI_API_KEY`.
 
