@@ -5,7 +5,7 @@ description: Use when the user says "work on issue", "implement issue", "/work-o
 
 # work-on-issue
 
-Take the issue to a verified, open pull request (PR). The repository's CLAUDE.md/AGENTS.md owns engineering, test-edit, attribution, and Response Style rules. Never pause to ask; report at the end, or stop and report when a gate fails.
+Take the issue to a verified, open pull request (PR). The repository's CLAUDE.md/AGENTS.md owns engineering, attribution, and Response Style rules. Never pause to ask; report at the end, or stop and report when a gate fails.
 
 ## Input
 
@@ -43,9 +43,9 @@ Trace the affected paths and map every acceptance criterion, including negative 
 
 ### 3. Implement the fix
 
-Build the best solution per the repository's engineering rules: conventions, invariants, a diff scoped to the issue, and documentation the change makes stale. Write tests for behavior that can regress. For a bug fix, prove the regression test is real (red then green) against the unfixed base without losing current work; when reproduction is unavailable or the caller forbids execution (step 4), say so in the PR body. Documentation-only changes need relevant validation, no artificial tests.
+Build the best solution per the repository's engineering rules: conventions, invariants, a diff scoped to the issue, and documentation the change makes stale. Never write unit tests; remove unit tests you encounter. Documentation-only changes need relevant validation only.
 
-The repository's test-edit rules own stale-test edits: the cases Outdated, Wrong, and Obsolete, each with a named checkable ground, disclosed in the commit and PR body. A test with no ground stays and the code gets the fix. A test that breaks in another location is checked before it is edited: classify it as Outdated, Wrong, or Obsolete and edit under that case with its ground; a test that is none of the three means the change broke real behavior, so fix the code. If the correct change still cannot pass an ungrounded test, stop before step 5 and report it (step 7).
+When a change must touch an existing automated test, follow `fix-pr-review` step 6 (Outdated, Wrong, or Obsolete, each with a checkable ground, disclosed in the commit and PR body). If the correct change still cannot pass an ungrounded test, stop before step 5 and report it (step 7).
 
 ### 4. Verify before claiming anything
 

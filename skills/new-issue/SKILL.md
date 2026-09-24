@@ -32,7 +32,7 @@ For anything beyond a localized bug fix, spec the approach so it passes the `val
 - Placement and ownership: the owning layer or component; for shared state, the owner, lifetime, medium, population timing, consumer contract, and failure policy.
 - Touch-set: grep the affected symbols and name every site that must change (read, write, default, validate, serialize).
 - Conventions: match `CLAUDE.md`, guardrails, and existing helpers over new infrastructure; respect documented invariants.
-- Acceptance criteria an implementer can verify: observable behavior, required tests (a regression test for a bug, red then green), parity surfaces.
+- Acceptance criteria an implementer can verify: observable behavior and parity surfaces, with a concrete verify method per criterion (command, UI state, or check the repo documents).
 
 ### 4. Score complexity
 
