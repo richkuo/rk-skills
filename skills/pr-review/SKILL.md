@@ -67,4 +67,4 @@ In an interactive session, the Response Style definition is the trusted CLAUDE.m
 
 ## Maintaining this skill
 
-The Review contract section is the source of the Actions review prompts. After you edit it, run `bun bin/sync-pr-review.mjs --write`, then `bun run test`; `bun bin/sync-pr-review.mjs` alone reports drift. The synchronizer adds each route's own execution, posting, and attribution rules, and the inline Plain simple English definition, because the Actions routes cannot read the trusted CLAUDE.md. Keep the contract free of double quotes and dollar signs: the Claude engine passes the prompt through a shell.
+The Review contract section is the source of the Actions review prompts. After you edit it, run `bun bin/sync-pr-review.mjs --write`; `bun bin/sync-pr-review.mjs` alone reports drift. The synchronizer adds each route's own execution, posting, and attribution rules, and the inline Plain simple English definition, because the Actions routes cannot read the trusted CLAUDE.md. Keep the contract free of double quotes and dollar signs: the Claude engine passes the prompt through a shell.

@@ -18,7 +18,6 @@ is named (see **Skills default to Claude**).
 | `workflows/codex.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`. |
 | `../../.github/workflows/codex-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/codex-run.yml@main`. Fetches the prompts, the shared comment-patch scripts, and the `skills/` tree at run time. |
 | `prompts/*.md` | One prompt per route, fetched at run time. `pr-review-format.md` is byte-identical to the Claude copy; the others differ only where the harness does. |
-| `scripts/test_workflow_logic.py` | Executes the real classifier shell out of `codex.yml`, pinning every route including the `CODEX_BOT_LOGIN` fail-closed cases. |
 
 Comment-patch helpers are not duplicated: `codex-run.yml` reuses
 `templates/claude-workflow/scripts/`, which key off `BOT_LOGIN`, `RUN_ID`, and
@@ -56,8 +55,6 @@ Only `codex.yml` is copied; everything else is fetched at run time. Then:
 5. Prompt overrides work as in the Claude bundle: `.github/prompts/<name>.md`
    replaces, `.github/prompts/<name>-local.md` appends, both read from the
    default branch.
-6. Tests:
-   `python3 -m unittest discover -s /tmp/rk-skills/templates/codex-workflow/scripts -p 'test_*.py'`.
 
 ## Customization inputs
 

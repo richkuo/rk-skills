@@ -127,7 +127,7 @@ Also included:
 
 - `CLAUDE.md`: the global instructions these skills are tuned for. `AGENTS.md` is a symlink to it.
 - `commands/commit.md`: a `/commit` slash command.
-- `docs/contract-inventory.md`: the shared pipeline rules the loop and validate skills must carry; `bun test` fails when a covered skill drops one.
+- `docs/contract-inventory.md`: the shared pipeline rules the loop and validate skills must carry.
 
 ## Install (from a clone)
 
