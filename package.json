@@ -3,9 +3,6 @@
   "version": "1.37.0",
   "description": "Installer for Claude Code workflow skills — GitHub issue/PR/release automation and Fable-driven planning.",
   "type": "module",
-  "scripts": {
-    "test": "bun test"
-  },
   "bin": {
     "rk-skills": "bin/install.mjs"
   },

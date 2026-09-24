@@ -12,7 +12,7 @@ the Codex twin and documents only what differs from this file.
 | `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`. |
 | `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Resolves the model id and effort, and fetches the prompts and scripts below from rk-skills at run time, so an rk-skills update reaches every consumer on its next run. |
 | `prompts/*.md` | One prompt per route, fetched at run time. Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
-| `scripts/` | Comment patch/compose helpers plus unit tests. `test_workflow_logic.py` executes the real classifier shell out of `claude.yml` and the model resolve step out of `claude-run.yml`. |
+| `scripts/` | Comment patch/compose helpers. |
 
 ## Install
 
@@ -35,8 +35,6 @@ Only `claude.yml` is copied; everything else is fetched at run time. Then:
    rule: no `"`, backticks, or `$`. Overrides are read from the repository's
    **default branch**, never the event checkout, so a change lands only after
    it merges and a fork PR cannot alter the prompt for its own review.
-4. Tests:
-   `python3 -m unittest discover -s /tmp/rk-skills/templates/claude-workflow/scripts -p 'test_*.py'`.
 
 **Migrating from the retired review-only template** (single workflow,
 `ANTHROPIC_API_KEY`): replace the workflow file per the steps above, add the
