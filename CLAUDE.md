@@ -42,7 +42,7 @@
 - Keep solutions minimal unless correctness or safety demands more.
 - **Correctness and safety outrank cleanliness, elegance, and minimal surface, always.** Never pick the tidier design if it leaves any correctness or safety gap (money, data integrity, security, auto-protective mechanisms). Weigh gaps against the realistic worst case. Derive the right solution from first principles even if it means more code.
 - **Always pursue the absolute best solution.** Cost, compute, time, token spend, code volume, and convenience never narrow the option space. Use the most capable models and the most thorough verification. Only correctness, safety, and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best".
-- **Never write unit tests.** When you see unit tests, remove them.
+- **Never write unit tests.**
 - Make parallel tool calls when operations are independent. Check git status before commits. Prefer editing existing files over creating new ones.
 - **Use matching skills when available.** When a skill's description matches the task (for example `pr-review` for any PR review comment, `github-issue-format` for any issue create or edit), load it before composing the artifact. In a harness with no skill list, read `~/.claude/skills/<name>/SKILL.md`, `~/.codex/skills/<name>/SKILL.md`, or `skills/<name>/SKILL.md` in the rk-skills checkout.
 
