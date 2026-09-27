@@ -48,8 +48,8 @@ jobs:
 
           GIT_AUTH="credential.${GITHUB_SERVER_URL}.helper=!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
           BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
-          git -c "$GIT_AUTH" fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
-          git -c "$GIT_AUTH" fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
+          git -c credential.helper= -c "$GIT_AUTH" fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
+          git -c credential.helper= -c "$GIT_AUTH" fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
           git checkout --quiet --detach refs/rk-codex/pr-head
           echo "base_sha=$(git merge-base refs/rk-codex/pr-base refs/rk-codex/pr-head)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -85,9 +85,9 @@ jobs:
             echo "::error::A git config value holds the job token."
             FOUND=1
           fi
-          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" 2>/dev/null || true)
+          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" "$HOME/.git-credentials" "${XDG_CONFIG_HOME:-$HOME/.config}/git/credentials" 2>/dev/null || true)
           if [ -n "$LEAKED" ]; then
-            echo "::error::Files under RUNNER_TEMP hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
+            echo "::error::Files under RUNNER_TEMP or in a git credential store hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
             FOUND=1
           fi
           if [ "$FOUND" -ne 0 ]; then

@@ -69,6 +69,7 @@ jobs:
       - name: Read review git credentials from the environment at fetch time
         if: inputs.mode == 'review'
         run: |
+          git config --local credential.helper ""
           git config --local "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
 
       - name: Checkout rk-skills (shared prompts and scripts)
@@ -317,9 +318,9 @@ jobs:
             echo "::error::A git config value holds the job token."
             FOUND=1
           fi
-          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" 2>/dev/null || true)
+          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" "$HOME/.git-credentials" "${XDG_CONFIG_HOME:-$HOME/.config}/git/credentials" 2>/dev/null || true)
           if [ -n "$LEAKED" ]; then
-            echo "::error::Files under RUNNER_TEMP hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
+            echo "::error::Files under RUNNER_TEMP or in a git credential store hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
             FOUND=1
           fi
           if [ "$FOUND" -ne 0 ]; then

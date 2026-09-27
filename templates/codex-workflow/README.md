@@ -107,9 +107,10 @@ this table, as `claude-run.yml` does for Claude.
 - **No write credential on the read path.** The review route mints no App
   token, its job token is `contents: read`, and Codex runs in the read-only
   sandbox, which denies writes and network. Its checkouts set
-  `persist-credentials: false`, its fetches read the job token at fetch time,
-  and a step fails the job before Codex starts when git config or
-  `$RUNNER_TEMP` holds the job token. The agent never posts; a trusted
+  `persist-credentials: false`, its fetches read the job token at fetch time
+  through the only credential helper git consults, and a step fails the job
+  before Codex starts when git config, `$RUNNER_TEMP`, or a git credential
+  store file holds the job token. The agent never posts; a trusted
   step posts its final message with the job token via `--body-file`, so model
   output is never shell-evaluated.
 - **Everything the review needs is staged first.** `codex-run.yml` checks out
