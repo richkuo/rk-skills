@@ -7,7 +7,7 @@ Reference for SKILL.md step 9.
 ```
 Addressed review feedback (<reviewer(s)> · <timestamp(s)>) in <commit-sha>.
 
-Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <N>.
+Growth check: diff <lines> lines vs <lines> at first push (<ratio>x); cycle <pr_cycle_count>.
 
 ### Fixed
 1. **<finding title>** — <what changed> (`file:line`). <Scope rule 1 note when required — see below.>

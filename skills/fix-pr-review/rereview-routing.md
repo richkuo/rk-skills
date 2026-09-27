@@ -12,7 +12,7 @@ Route by whether the addressed set contained **any blocking finding** (fix-pr-re
 
 **Non-blocking only** (optional improvements or follow-ups): the cheap shorthand, `@claude sonnet review` or `@codex luna review`, in any band, consuming no rung.
 
-**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule): the same cheap shorthand when step 7 decided the hand-resolved diff changes behavior or was in doubt, consuming no rung; no trigger when it decided prose only. Step 7's behavior decision is the test and the file class is evidence only; `milestone-workflow` step 5 sub-step 3 makes the same decision before a merge.
+**Bare LGTM, merge only** (fix-pr-review step 7's merge re-review rule, the one owner of the decision): the same cheap shorthand when step 7 decided the diff from the reviewed head to the new head changes behavior, was in doubt, or had no established reviewed head, consuming no rung; no trigger when it decided prose only. `milestone-workflow` step 5 sub-step 3 applies that decision before a merge.
 
 **Blocking** → the step-down below, **keyed to the reviewer that actually ran cycle 1**; the score band never decides it.
 
@@ -38,7 +38,10 @@ Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. N
 
 ### Fallback table
 
-**The fallback table applies ONLY when the PR carries no cycle-1 trigger comment**, none at all or none left after the skip. Its rows are the rows of the first-review table in `validate-issue` step 6, which owns every boundary; read the band there and take the matching row here. Read the score from the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the closed issue. A stamped `PR review:` line is no score source; it selects the reviewer directly.
+**The fallback applies ONLY when the PR carries no cycle-1 trigger comment**, none at all or none left after the skip. Read in this order and stop at the first hit:
+
+1. **A stamped `PR review:` line** in the linked issue's Execution block. It is no score source; it selects the reviewer directly. On Claude, stamped `sonnet` or `haiku` posts `@claude sonnet review`, and stamped `opus` or `fable` posts the standard `@claude review` with no effort suffix, which runs Opus 5.5 at high: a heavy trigger never repeats, and Fable never opens a re-review cycle. A stamped bare `@claude review` with an `effort:<tier>` counts as `opus`; with no tier it selects nothing here, and the band decides. On Codex, map the stamp per Codex cycles above.
+2. **The band.** The rows below are the rows of the first-review table in `validate-issue` step 6, which owns every boundary; read the band there and take the matching row here. Read the score from the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the closed issue.
 
 | Owner's first-review row | Claude fallback trigger | Codex fallback trigger |
 |---|---|---|
@@ -53,8 +56,37 @@ A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), n
 
 ## Growth check
 
-Inputs for fix-pr-review step 4, all read from the PR so a resumed loop sees the same values:
+Inputs for fix-pr-review step 4 and the loops' stop rules, all read from the PR so a resumed loop sees the same values:
 
 - **`<first-push-sha>`**: from `gh pr view <N> --json commits`, the newest commit whose `committedDate` is at or before the cycle-1 trigger comment's timestamp; with no trigger comment, the PR's `createdAt`. A first push of several commits resolves to the last.
 - **Measurement**: `git diff --stat $(git merge-base origin/<baseRefName> HEAD)..HEAD` against the same reading at `<first-push-sha>`. Never a plain `<first-push-sha>..HEAD` two-dot diff, which counts every base change since the branch point, including step 7 merges, as PR growth.
-- **`pr_cycle_count`**: the PR's trigger comments read chronologically per the cycle-1 rule, skipping the cheap non-blocking re-triggers, plus one when review feedback predates every trigger comment. Never the loop's in-memory `review_count`.
+- **`review_count` and `pr_cycle_count`**: per Round counts below.
+
+### Round counts
+
+This section owns both counts. `fix-pr-review` step 4, `fix-pr-review-loop` steps 1 to 5, and `work-on-issue-loop` read them here. Recompute both from the complete PR history each time you read them. Never increment a count when a trigger is posted, never seed a minimum, and never carry a count in memory across a restart. Trigger wording never decides a count.
+
+**History.** Every issue comment and every formal review on the PR, from the REST calls in [fetch-recipes.md](fetch-recipes.md) with `--paginate` (comments with `id`, `created_at`; reviews with `id`, `state`, `submitted_at`). A failed or truncated page, or an output whose author, type, or timestamp is missing, stops the reader with `**Verification limitation:** round history unavailable: <the missing channel, page, or field>`. Never report a zero count, and never grant an approval, from incomplete history.
+
+**Bot output.** A comment or formal review whose REST author is in the review-bot set ([fetch-recipes.md](fetch-recipes.md) Author trust). Text from any other author never becomes a round, whatever its verdict line says. A `PENDING` review is not history. A `DISMISSED` bot review keeps its round: dismissal removes its current-feedback eligibility (the Collection rules skip it) but never rewrites history, so a count never falls.
+
+**Completed verdict.** A bot output is complete when its verdict position holds a standalone verdict line: a line whose trimmed text is exactly `LGTM` or `Needs Updates`. The verdict position is the first non-blank line, or, after the supported header, the first non-blank line after it. The supported header is the Claude review route's first line, `**Claude finished …**` with its `[View job](…/actions/runs/<run-id>)` link, and the `---` line that follows it; the Codex routes put the verdict first. An output is incomplete, and counts zero, when its verdict position holds no verdict line (a placeholder that is still in progress, a disposition, a trigger line, a status comment) or when it carries a workflow status note (`**Workflow cancelled before completion.**` or `**Workflow failed before completion.**`). Read the current body: a placeholder edited in place keeps its comment `id` and becomes complete when an edit adds the verdict.
+
+**Triggers.** A comment whose whole body is one `@<bot> … review` trigger line, from an author the answering workflow admits: an `OWNER`, `MEMBER`, or `COLLABORATOR` association, `claude[bot]`, or the Codex write-route login.
+
+**Round identity.**
+
+1. **Run.** The `/actions/runs/<run-id>` link in an output body (the Claude header's View job link, the Codex route's run-log link) names its run. Outputs that share a run ID are one run, across both channels and every attempt of that run.
+2. **Start time.** The run's `created_at` from `gh api repos/{owner}/{repo}/actions/runs/<run-id>`. With no run link, or when that call fails, the output's own `created_at` (a comment) or `submitted_at` (a review).
+3. **Round.** Each run, and each output with no run link, maps to the newest trigger created at or before its start time. Every output mapped to one trigger is one round, keyed by that trigger's comment `id`: several outputs, two workflows that answered one trigger, and runs that started after a newer trigger all count once against that trigger. An output with no earlier trigger is a triggerless round, keyed by its run ID, else by its own `id`.
+4. **Round verdict.** `Needs Updates` when any completed output in the round says so; else `LGTM` when a completed output says so; else the round has no verdict and counts zero.
+
+Reading unchanged history again gives the same counts: a re-read output, an edited placeholder, a re-attempted run, and a reused trigger each map to the round that already holds them.
+
+**Counts.**
+
+- **`review_count`**: the number of rounds with a verdict, `LGTM` or `Needs Updates`. A fresh PR has `review_count = 0`.
+- **`pr_cycle_count`**: the number of rounds whose verdict is `Needs Updates`, plus the initial-feedback adjustment.
+- **Initial-feedback adjustment**: add one when the initial episode holds actionable blocking feedback from a trusted author outside the review-bot set. The initial episode is every item created before the first trigger, or the whole history while no trigger exists. Blocking feedback is a `Needs Updates` verdict line, a `Needs Fixing` or `Requires Human Review` section, a `CHANGES_REQUESTED` review, or a comment or inline thread that asserts a defect (fix-pr-review step 1's blocking test). An approval with no items, and feedback that holds only optional or follow-up items, add nothing. When a triggerless `Needs Updates` round also sits in the initial episode, that round already counts the episode, and the adjustment adds nothing.
+
+**Pending trigger.** The newest trigger, when no output mapped to it has a verdict or a workflow status note. It counts zero until its verdict arrives, and a loop waits on it (fix-pr-review-loop step 2) instead of posting another trigger. A mapped output that carries a status note means the run ended without a verdict: no trigger is pending, and the loop reports the bot-never-responded row.
