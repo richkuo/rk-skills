@@ -31,7 +31,7 @@ Otherwise (one issue filed cleanly), continue.
 
 ### 3. Hand off to validate-issue-loop
 
-Invoke the `validate-issue-loop` skill (Skill tool, `skill: validate-issue-loop`) with the issue from step 1 passed explicitly — don't let it default to "latest open issue" and risk racing another just-filed issue. If new-issue filed to a repo other than the current checkout (`-R owner/repo`), pass the full `owner/repo#N` reference, not the bare number — a bare number resolves against the current repo and would target the wrong issue. Its own scope gate (too large / infeasible / already-addressed) still applies and may stop the run; that's the designed behavior, not a failure.
+Invoke the `validate-issue-loop` skill (Skill tool, `skill: validate-issue-loop`) with the issue from step 1 passed explicitly, so it never resolves a different issue from session context. If new-issue filed to a repo other than the current checkout (`-R owner/repo`), pass the full `owner/repo#N` reference, not the bare number — a bare number resolves against the current repo and would target the wrong issue. Its own scope gate (too large / infeasible / already-addressed) still applies and may stop the run; that's the designed behavior, not a failure.
 
 Validating an issue this same session just wrote is not redundant: validate-issue re-traces the claims against the code independently, catching anything the filing pass got wrong.
 
@@ -47,5 +47,5 @@ Relay validate-issue-loop's final summary (PR URL, review cycles, verdict), pref
 |---|---|
 | Tempted to skip new-issue's grounding/duplicate check to get to implementation faster | Never — a fabricated or duplicate issue poisons the whole chain |
 | new-issue stopped on a duplicate | Stop and report per step 2 — don't file anyway |
-| Tempted to hand off without an explicit issue reference | Always pass the issue from step 1 — `owner/repo#N` if filed cross-repo — "latest issue" can race |
+| Tempted to hand off without an explicit issue reference | Always pass the issue from step 1 — `owner/repo#N` if filed cross-repo, so session context cannot pick a different issue |
 | validate-issue-loop's scope gate stops the run | Report its disposition faithfully — don't override and implement anyway |

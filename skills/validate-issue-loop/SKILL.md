@@ -11,7 +11,7 @@ Chain validate-issue → (conditional) update issue → work-on-issue-loop into 
 
 ## Input
 
-Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (defaults to the latest open issue in the current repo).
+Same defaults as validate-issue: issue URL, `#<N>` / `<N>` / `owner/repo#N`, or nothing (the issue named, validated, planned, or filed in this session; with none, stop and ask). Never pick an issue from a list.
 
 Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose "target branch <name>"): passed unchanged to every validate, plan, and build step in the chain, so the baseline and the PR base are that branch instead of the repo default. `work-on-issue` step 1 ("Target") owns its validation.
 
@@ -35,11 +35,11 @@ Check the verdict's **Scope** field, **Architecture** section, and **Concerns** 
 |---|---|
 | `Scope: too large` (validate-issue step 7 flagged split / umbrella / narrow) | **STOP.** Report the disposition and proposed parts; do not proceed to work-on-issue-loop. Implementing a multi-part issue as one PR reproduces the scope problem in the diff — that needs a human call on how to split it. |
 | `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to build. |
-| Architecture marked ❌ **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; auto-implementing a design the validation itself rejected would ship the wrong fix. |
+| Architecture marked **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note; auto-implementing a design the validation itself rejected would ship the wrong fix. |
 | A **merged** PR already implements the fix (verdict recommends closing/repurposing the issue) | **STOP.** Report the PR and the close/repurpose recommendation — there's nothing left to implement. |
 | An **open** PR is already addressing the issue (named under Concerns) | **STOP.** Report the overlapping PR; whether to supersede, join, or wait on in-flight work is a human call — auto-implementing duplicates it. |
 
-Otherwise (Scope: OK; architecture ✅/⚠️ or not applicable; no PR already addressing it), continue.
+Otherwise (Scope: OK; architecture Viable or Underspecified, or not applicable; no PR already addressing it), continue.
 
 ### 3. Apply the update-issue edits, if called for
 
@@ -49,7 +49,7 @@ If **No**, skip straight to step 4.
 
 ### 4. Hand off to work-on-issue-loop
 
-Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly — don't let it re-resolve "latest issue" and risk picking a different one.
+Invoke the `work-on-issue-loop` skill for the same issue number (Skill tool, `skill: work-on-issue-loop`). Pass the issue number through explicitly, so it cannot resolve a different issue from session context.
 
 ### 5. Report
 
@@ -62,6 +62,6 @@ Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run,
 | Situation | Action |
 |---|---|
 | Tempted to skip validation and go straight to work-on-issue-loop | Never reorder — validate-first is the point of this skill |
-| `Scope: too large`, Architecture ❌ Infeasible, or a PR already addressing the issue | Stop and report per step 2 — the cases the loop can't safely auto-resolve |
+| `Scope: too large`, Architecture Infeasible, or a PR already addressing the issue | Stop and report per step 2 — the cases the loop can't safely auto-resolve |
 | Tempted to wait for a literal user reply to validate-issue's prompt | Parse the verdict yourself and proceed per step 2 |
 | Verdict says Update issue description? Yes | Apply the edits before handing off; don't defer |

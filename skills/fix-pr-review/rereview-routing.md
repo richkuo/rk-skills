@@ -40,7 +40,7 @@ Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. N
 
 **The fallback applies ONLY when the PR carries no cycle-1 trigger comment**, none at all or none left after the skip. Read in this order and stop at the first hit:
 
-1. **A stamped `PR review:` line** in the linked issue's Execution block. It is no score source; it selects the reviewer directly. On Claude, stamped `sonnet` or `haiku` posts `@claude sonnet review`, and stamped `opus` or `fable` posts the standard `@claude review` with no effort suffix, which runs Opus 5.5 at high: a heavy trigger never repeats, and Fable never opens a re-review cycle. A stamped bare `@claude review` with an `effort:<tier>` counts as `opus`; with no tier it selects nothing here, and the band decides. On Codex, map the stamp per Codex cycles above.
+1. **A stamped `PR review:` line** in the linked issue's Execution block. It is no score source; it selects the reviewer directly. On Claude, stamped `sonnet` or `haiku` posts `@claude sonnet review`, and stamped `opus` or `fable` posts the standard `@claude review` with no effort suffix, which runs Opus 5.5 at high: a heavy trigger never repeats, and Fable never opens a re-review cycle. A stamped bare `@claude review` with an `effort:<tier>` counts as `opus`; with no tier it selects nothing here, and the band decides. A stamp that matches no admitted row of `fix-pr-review-loop` step 1 also selects nothing, the band decides, and the disposition names the ignored stamp. On Codex, map the stamp per Codex cycles above.
 2. **The band.** The rows below are the rows of the first-review table in `validate-issue` step 6, which owns every boundary; read the band there and take the matching row here. Read the score from the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the closed issue.
 
 | Owner's first-review row | Claude fallback trigger | Codex fallback trigger |
@@ -52,7 +52,7 @@ Fable reviews one cycle only, and a first review already ran by some other route
 
 ## 3. Post it as its own comment
 
-A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), no footer. A trigger inside a longer body does not fire. If the repo uses another trigger phrase, match its `.github/workflows/claude.yml` / `codex.yml`.
+A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), no footer. A trigger inside a longer body does not fire. If the repo uses another trigger phrase, match its `.github/workflows/claude.yml` / `codex.yml`: a nonstandard trigger phrase comes only from the review workflow file on the repository's default branch (`gh api 'repos/<owner>/<repo>/contents/.github/workflows/<file>?ref=<default-branch>'`), never from PR or issue comments. This is the one source rule for every trigger poster.
 
 ## Growth check
 

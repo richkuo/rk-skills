@@ -21,7 +21,7 @@ For each shared or authoritative state item, require or derive:
 | Consumer contract | Inject, pull, subscribe, or explicit recompute fallback |
 | Failure policy | Miss, stale value, timeout, and error behavior |
 
-Mark the design ⚠️ when a required answer is absent, and supply the code-grounded answer when possible.
+Mark the design Underspecified when a required answer is absent, and supply the code-grounded answer when possible.
 
 ## Isolation boundaries
 
@@ -38,14 +38,14 @@ Place fan-in, deduplication, cycle state, and routing in the orchestrator. Place
 
 Treat every proposed site list as a set claim. Search each affected field or symbol across its package. Enumerate all readers, writers, defaults, validators, serializers, reload copies, and tests. Diff that set against the issue.
 
-Read the complete load/apply sequence around each proposed edit. Check for an earlier normalization that pre-empts an unset guard and for a later copy/apply site that the issue omitted. An unnamed required site makes architecture ⚠️ or ❌.
+Read the complete load/apply sequence around each proposed edit. Check for an earlier normalization that pre-empts an unset guard and for a later copy/apply site that the issue omitted. An unnamed required site makes architecture Underspecified or Infeasible.
 
 For aggregates or shared state, also confirm that the enclosing partition boundary and key match the scope that feeds the facility.
 
 ## Verdict
 
-- ✅ **Viable:** topology, owner, medium, timing, consumer contract, and failure policy match the repo.
-- ⚠️ **Underspecified:** the problem is valid, but placement or an ownership contract is missing.
-- ❌ **Infeasible:** the proposal violates isolation, duplicates authority without synchronization, or conflicts with established architecture.
+- **Viable:** topology, owner, medium, timing, consumer contract, and failure policy match the repo.
+- **Underspecified:** the problem is valid, but placement or an ownership contract is missing.
+- **Infeasible:** the proposal violates isolation, duplicates authority without synchronization, or conflicts with established architecture.
 
-For ⚠️ or ❌, add `Optimal direction (this repo):` with the concrete placement and contract supported by cited code.
+For Underspecified or Infeasible, add `Optimal direction (this repo):` with the concrete placement and contract supported by cited code.

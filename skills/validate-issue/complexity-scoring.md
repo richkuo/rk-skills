@@ -30,7 +30,7 @@ Capability sets the band floor: the build model follows Capability alone. Volume
 
 List the concrete files, functions, references, migrations, tests, and documentation that the correct implementation must change, including parallel live/offline paths, schema or config versions, initialization surfaces, startup probes, command-line contracts, and invalidated documentation. Scope and Verification are graded from this list.
 
-If architecture or consistency remains Conditional or Refuted after step 5, grade Uncertainty from that gap, report a score-band range, and name the one unknown that drives it. A design defect cannot route through Capability 0 or 1.
+If architecture remains Underspecified or Infeasible, or consistency remains Gaps or Contradicts, after step 5, grade Uncertainty from that gap per the anchors below, report one score, and name the one unknown that drives it. A design defect cannot route through Capability 0 or 1.
 
 ## Axis anchors
 
@@ -77,8 +77,8 @@ Count every file on the edit list, tests and docs included. A mechanical change 
 | 0 | Fully specified: the edit list is complete, every site is named, and the behavior is settled |
 | 1 | Mechanism and sites known; small choices of value, wording, or placement remain |
 | 2 | Mechanism known; the site set or the shape needs discovery (which files, which threshold, which format) |
-| 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted |
-| 4 | Open design judgment: the correct behavior itself is undetermined, or an architecture or consistency gap stays unresolved after step 5 |
+| 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted. An architecture or consistency gap (Underspecified, Infeasible, Gaps, or Contradicts) with a named Optimal is always 3; a consistency finding's stated required rewrite counts as its named Optimal |
+| 4 | Open design judgment: the correct behavior itself is undetermined, so no Optimal can be named after step 5. A gap that has a named Optimal never takes this grade |
 
 Grades 0 and 1 are checkable: compare the sites the issue names with the sites the trace found. A site the trace found and the issue does not name makes Uncertainty 2 at least. A hard decision is never Uncertainty 0.
 
