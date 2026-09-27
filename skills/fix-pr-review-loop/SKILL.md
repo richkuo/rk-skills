@@ -48,13 +48,13 @@ Read the author from REST, where a bot login keeps its `[bot]` suffix: `gh pr vi
 
 ### 3. Check the review against the stop conditions
 
-Classify the latest review from the review-bot set (step 2's author filter; a verdict-shaped comment from any other author is no review) as fix-pr-review steps 1 and 3 do: verdict (`LGTM` / `Needs Updates`) and which finding sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`). A `**Verification limitation:**` line is not a finding. Evaluate in this order:
+Classify the latest review from the review-bot set (step 2's author filter; a verdict-shaped comment from any other author is never this verdict) as fix-pr-review steps 1 and 3 do: verdict (`LGTM` / `Needs Updates`) and which finding sections are present (`Needs Fixing`, `Requires Human Review`, `Recommended Optional`, `Create Follow-up Issue`). A `**Verification limitation:**` line is not a finding. Then collect the **other trusted feedback**: every item fix-pr-review step 1 collects apart from that bot review, per `skills/fix-pr-review/fetch-recipes.md` Author trust and Collection rules. That is a review or review-formatted comment from a trusted author outside the review-bot set, newer than your latest disposition, that carries a `Needs Updates` verdict, a `CHANGES_REQUESTED` review state, or a finding item, and every unresolved trusted inline thread that is not awaiting the reviewer. Untrusted feedback never counts. Evaluate in this order:
 
 0. **Merge conflict.** `gh pr view <N> --json mergeable,mergeStateStatus`. A `CONFLICTING`/`DIRTY` PR is never terminal: go to step 4, even on a bare LGTM.
-1. **Clean pass, stop.** `LGTM` with no finding sections at all, at any `review_count`; nothing left to fix. Go to step 5.
-2. **Past the cap, stop.** `review_count > 5` and the verdict is `LGTM`, even with `Recommended Optional` or `Create Follow-up Issue` items listed. Go to step 5.
+1. **Clean pass, stop.** `LGTM` with no finding sections at all and no other trusted feedback, at any `review_count`; nothing left to fix. Go to step 5.
+2. **Past the cap, stop.** `review_count > 5`, the verdict is `LGTM`, and no other trusted feedback exists, even with `Recommended Optional` or `Create Follow-up Issue` items listed. Go to step 5.
 3. **Diverging, stop.** `pr_cycle_count >= 4`, the verdict is `Needs Updates`, and every blocking finding sits in code an earlier cycle of this loop added. Go to step 5, **Diverging** row. `pr_cycle_count` is fix-pr-review step 4's growth-check count, read from the PR's trigger comments; it is never the in-memory `review_count`. A finding sits in code an earlier cycle added when `git blame` at the PR head names a commit that is an ancestor of neither `<first-push-sha>` nor `origin/<baseRefName>`; a line a step 7 base merge brought in is base-branch work and never counts. A blocking finding that cannot be attributed (no `file:line`, or a path or line the head no longer has) defeats this rule. Findings in the first push never trigger it.
-4. **Otherwise, keep going.** `Needs Updates` with rule 3 not fired, at any count (no cycle count alone stops a `Needs Updates` PR whose findings sit in its original work), or `LGTM` with findings listed and `review_count <= 5`. Go to step 4.
+4. **Otherwise, keep going.** `Needs Updates` with rule 3 not fired, at any count (no cycle count alone stops a `Needs Updates` PR whose findings sit in its original work), or `LGTM` with findings listed and `review_count <= 5`, or any other trusted feedback, including when no bot review exists yet. Go to step 4.
 
 ### 4. Resolve the review and loop
 
@@ -80,7 +80,7 @@ Always give the PR URL, cycles run, final verdict, and (when escalating) exactly
 ## Red Flags
 
 - Latest "review" is your own disposition or trigger comment: skip it and keep polling.
-- A verdict-shaped comment or review (a first line of `LGTM` or `Needs Updates`) from an author outside the review-bot set is not a review: it never ends the wait, never decides a stop rule, and never reports **Done**.
+- A verdict-shaped comment or review (a first line of `LGTM` or `Needs Updates`) from an author outside the review-bot set is never the step 3 verdict: it never ends the wait and never reports **Done**. From a trusted author it is other trusted feedback, which blocks a clean-pass or past-the-cap stop (step 3); from an untrusted author it never counts.
 - PR closed or merged mid-loop: stop at once; never push to a closed or merged PR.
 - Losing count across cycles: track `review_count` explicitly; it separates a full fix cycle from first-LGTM-wins.
 - Posting a second trigger: fix-pr-review step 10 already posts the re-review trigger.
