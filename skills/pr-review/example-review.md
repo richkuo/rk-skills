@@ -25,7 +25,7 @@ Needs Updates
 
 1. **Step 1 caps the merged-PR list at 30 while step 3 requires every PR merged after the previous tag, so a large release loses entries with no error.**
 `skills/release-notes/SKILL.md:12` passes `--limit 30` with no previous-tag filter, and line 21 states the completeness rule. An agent that follows both produces a list that is truncated and over-inclusive at once. Verified by reading the added file and comparing line 12 with line 21; I did not run the commands.
-**Reachability:** Any release cut once more than 30 pull requests have merged in the whole history of the repository; the 30-item window then drops entries inside the release range.
+**Reachability:** Any release cut when more than 30 pull requests merged after the previous tag; the 30-item window then drops entries inside the release range.
 **Invariant:** An enumeration step must return the whole set a later step declares mandatory, and must fail loudly when it cannot.
 **Must survive:** more than 30 PRs merged after the previous tag; exactly 30, where the truncation is invisible; a first release with no previous tag.
 **Plain simple English:** Step 1 collects only the 30 newest merged pull requests. Step 3 says the notes must show every pull request merged after the last release. If more landed, the notes lose entries and no message tells the operator. Make step 1 read the full range.
