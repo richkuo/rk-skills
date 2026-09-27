@@ -18,7 +18,7 @@ Nothing (the current branch's PR via `gh pr view`), or `#<N>` / `<N>` / URL / `o
 `gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,state,isDraft`. A `merged` or `closed` PR: stop and report. Otherwise fetch existing feedback with fix-pr-review step 1's three-channel query (reviews, issue comments, inline threads).
 
 - **Unaddressed feedback present** (trusted feedback per fix-pr-review step 1's author-trust rule, newer than any prior disposition comment, or an unresolved trusted inline thread): it is review 1. Set `review_count = 1`, note its timestamp, go to step 3. Never post a redundant trigger.
-- **No feedback yet** (fresh PR, or only your own disposition or trigger comments): post the first-review trigger as its own one-line comment, `gh pr comment <N> --body "<trigger>"`. Record its timestamp, set `review_count = 1`, go to step 2.
+- **No trusted feedback yet** (fresh PR, only your own disposition or trigger comments, or only untrusted feedback): post the first-review trigger as its own one-line comment, `gh pr comment <N> --body "<trigger>"`. Record its timestamp, set `review_count = 1`, go to step 2.
 
 **First-review trigger.** `validate-issue` step 6 owns the first-review table with its Claude and Codex columns; this file states no boundary of its own. Read the score in this order and stop at the first hit: a stamped `PR review:` line in the linked issue's Execution block (it overrides the band), the `[C<score>, …]` bracket in the PR title, the `[C<score>]` prefix of the issue the PR closes. A missing score routes to the top row. Fable runs at high unless the user asks for xhigh or stamps it.
 
