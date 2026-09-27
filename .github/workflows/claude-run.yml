@@ -164,6 +164,22 @@ jobs:
             echo "Credential guard: $1. The job token can be readable, so stop the review and report that this run is unsafe." >&2
             exit 2
           }
+          AFTER_ACTION=0
+          [ "${1:-}" = "--after-action" ] && AFTER_ACTION=1
+          action_token_output_only() {
+            case "$1" in
+              "${RUNNER_TEMP:-/nonexistent}"/_runner_file_commands/set_output_*) ;;
+              *) return 1 ;;
+            esac
+            [ -f "$1" ] && [ ! -L "$1" ] || return 1
+            awk -v t="$2" -v b="$3" '
+              state == 1 { if ($0 != t) bad = 1; state = 2; next }
+              state == 2 { if ($0 != delim) bad = 1; state = 0; next }
+              /^github_token<<ghadelimiter_[0-9a-f-]+$/ { delim = substr($0, 15); state = 1; next }
+              index($0, t) || index($0, b) { bad = 1 }
+              END { exit (bad || state != 0) }
+            ' "$1"
+          }
           WS="${GITHUB_WORKSPACE:-$PWD}"
           CONFIG=$(git -C "$WS" config --list 2>/dev/null) || block "git config cannot be read"
           if printf '%s\n' "$CONFIG" | grep -qiE '^http\..*\.extraheader='; then
@@ -184,8 +200,16 @@ jobs:
             if printf '%s\n' "$CONFIG" | grep -qF -e "$TOKEN" -e "$AUTH_B64"; then
               block "a git config value holds the job token"
             fi
-            if grep -rlqF -e "$TOKEN" -e "$AUTH_B64" "${RUNNER_TEMP:-/nonexistent}" "$HOME/.git-credentials" "${XDG_CONFIG_HOME:-$HOME/.config}/git/credentials" 2>/dev/null; then
-              block "a file under RUNNER_TEMP or a git credential store holds the job token"
+            LEAKED=""
+            while IFS= read -r FILE; do
+              [ -n "$FILE" ] || continue
+              if [ "$AFTER_ACTION" = 1 ] && action_token_output_only "$FILE" "$TOKEN" "$AUTH_B64"; then
+                continue
+              fi
+              LEAKED="$LEAKED $FILE"
+            done < <(grep -rlF -e "$TOKEN" -e "$AUTH_B64" "${RUNNER_TEMP:-/nonexistent}" "$HOME/.git-credentials" "${XDG_CONFIG_HOME:-$HOME/.config}/git/credentials" 2>/dev/null)
+            if [ -n "$LEAKED" ]; then
+              block "a file under RUNNER_TEMP or a git credential store holds the job token:$LEAKED"
             fi
           done
           exit 0
@@ -430,7 +454,7 @@ jobs:
             echo "::error::The review settings file changed while Claude ran."
             exit 1
           fi
-          if ! bash "$GUARD_FILE"; then
+          if ! bash "$GUARD_FILE" --after-action; then
             echo "::error::The job token persisted on disk while Claude ran."
             exit 1
           fi
