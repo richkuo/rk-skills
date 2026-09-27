@@ -495,7 +495,7 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
   const missingContext = skippedContext(skipped)
   return [
     `You are a read-only validation agent in this repo. Invoke the \`validate-issue\` skill with args \`${issue}\` and follow its procedure exactly:`,
-    `fetch GitHub issue #${issue} with \`gh issue view ${issue}\`, verify every factual claim (including PRD section references) against the actual code and PRD with file:line citations,`,
+    `fetch GitHub issue #${issue} in one call, \`gh issue view ${issue} --json title,body,comments,updatedAt\`, so the read time and the text you validate come from one snapshot, verify every factual claim (including PRD section references) against the actual code and PRD with file:line citations,`,
     `check architectural feasibility and self-consistency of the approach, and check for staleness: whether code merged since the issue was filed changes its best approach.`,
     predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}` : '',
     missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}` : '',
@@ -505,7 +505,7 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
     `the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes),`,
     `rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it;`,
-    `and issue_updated_at: the issue updatedAt that validate-issue step 1 recorded (\`gh issue view ${issue} --json updatedAt\`), verbatim.`,
+    `and issue_updated_at: the updatedAt from that same one-call read (validate-issue step 1), verbatim; never from a later call.`,
     `If validate-issue ends in Validation blocked, return verdict INVALID with the missing input as invalid_reason and rescored_complexity 0.`,
   ].join(' ')
 }

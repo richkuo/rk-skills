@@ -39,7 +39,7 @@ Do not validate the issue yourself first — the subagent owns the validation. *
 - `description`: `Validate issue #<N>`
 - `prompt`: hand it everything needed to validate independently:
   - The issue reference exactly as the user gave it, or the one resolved from this session, plus the working directory.
-  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, fetch with `--comments` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
+  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, the one-call issue read with its `updatedAt` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
   - It must STOP at step 8: no step 9 to 12 actions, no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
   - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against, and one line `Issue updatedAt: <value>` with the `updatedAt` that validate-issue step 1 recorded.
 

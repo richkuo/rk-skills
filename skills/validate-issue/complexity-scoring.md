@@ -77,7 +77,7 @@ Count every file on the edit list, tests and docs included. A mechanical change 
 | 0 | Fully specified: the edit list is complete, every site is named, and the behavior is settled |
 | 1 | Mechanism and sites known; small choices of value, wording, or placement remain |
 | 2 | Mechanism known; the site set or the shape needs discovery (which files, which threshold, which format) |
-| 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted. An architecture or consistency gap (Underspecified, Infeasible, Gaps, or Contradicts) with a named Optimal is always 3 |
+| 3 | Two or more viable designs, and the choice changes the edit list; the issue does not settle it, or the verdict settles it with a named Optimal that the issue has not adopted. An architecture or consistency gap (Underspecified, Infeasible, Gaps, or Contradicts) with a named Optimal is always 3; a consistency finding's stated required rewrite counts as its named Optimal |
 | 4 | Open design judgment: the correct behavior itself is undetermined, so no Optimal can be named after step 5. A gap that has a named Optimal never takes this grade |
 
 Grades 0 and 1 are checkable: compare the sites the issue names with the sites the trace found. A site the trace found and the issue does not name makes Uncertainty 2 at least. A hard decision is never Uncertainty 0.
