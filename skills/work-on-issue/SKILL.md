@@ -43,7 +43,7 @@ Trace the affected paths and map every acceptance criterion, including negative 
 
 ### 3. Implement the fix
 
-Build the best solution per the repository's engineering rules: conventions, invariants, a diff scoped to the issue, and documentation the change makes stale. Never write unit tests; remove unit tests you encounter. Documentation-only changes need relevant validation only.
+Build the best solution per the repository's engineering rules: conventions, invariants, a diff scoped to the issue, and documentation the change makes stale. Never write unit tests. Documentation-only changes need relevant validation only.
 
 When a change must touch an existing automated test, follow `fix-pr-review` step 6 (Outdated, Wrong, or Obsolete, each with a checkable ground, disclosed in the commit and PR body). If the correct change still cannot pass an ungrounded test, stop before step 5 and report it (step 7).
 
