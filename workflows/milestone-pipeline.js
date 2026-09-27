@@ -199,21 +199,21 @@ function cliValidateDriverPrompt(taskPrompt, ex, issue) {
 Load the \`cli-dispatch\` skill BEFORE doing anything else (mandatory) and follow its validate-pass section exactly. Then:
 1. Preflight: \`command -v codex\` must succeed and \`codex login status\` must report a signed-in account. Either failure is a blocker — return verdict INVALID with rescored_complexity 0, empty corrections and constraints, and blocker naming the missing piece.
 2. Run \`git fetch origin\` so the CLI agent traces against a current \`origin/<default branch>\`, then snapshot \`git status --porcelain --untracked-files=all\` in the main checkout.
-3. Fetch the issue yourself: \`gh issue view ${issue} --json title,body,milestone,state\` and \`gh pr list --search "#${issue} in:title,body" --state all --json number,title,state,headRefName\`. Write a prompt file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory) that carries, in this order: the task prompt below verbatim; the fetched issue title, body, and PR list as data under a heading that says they were fetched by the driver; one line stating that the sandbox is read-only with no network, so every \`gh\` or network call fails and the agent works from the embedded issue data, the local checkout, and \`origin/<default branch>\`, and records anything it could not check as a Verification limitation in the summary; one line naming the baseline branch the driver resolved with network access (the target branch the task prompt names, else \`gh repo view --json defaultBranchRef -q .defaultBranchRef.name\`) and verified after the fetch with \`git rev-parse --verify origin/<branch>\`, which the validate-issue skill takes as a caller-supplied branch (a branch with no \`origin\` ref is a blocker); one line telling the CLI agent to read the \`validate-issue\` skill file directly at the first path that exists among \`~/.codex/skills/validate-issue/SKILL.md\`, \`~/.cursor/skills/validate-issue/SKILL.md\`, and \`~/.claude/skills/validate-issue/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file); and one line telling it to write no file, post no comment, and end its final message with one JSON object carrying exactly the keys verdict, summary, corrections, implementation_constraints, rescored_complexity, and invalid_reason.
+3. Fetch the issue yourself: \`gh issue view ${issue} --json title,body,milestone,state,updatedAt\`, and keep that \`updatedAt\` as issue_updated_at and \`gh pr list --search "#${issue} in:title,body" --state all --json number,title,state,headRefName\`. Write a prompt file OUTSIDE the repository tree (the session scratchpad, else a mkdtemp directory) that carries, in this order: the task prompt below verbatim; the fetched issue title, body, and PR list as data under a heading that says they were fetched by the driver; one line stating that the sandbox is read-only with no network, so every \`gh\` or network call fails and the agent works from the embedded issue data, the local checkout, and \`origin/<default branch>\`, and records anything it could not check as a Verification limitation in the summary; one line naming the baseline branch the driver resolved with network access (the target branch the task prompt names, else \`gh repo view --json defaultBranchRef -q .defaultBranchRef.name\`) and verified after the fetch with \`git rev-parse --verify origin/<branch>\`, which the validate-issue skill takes as a caller-supplied branch (a branch with no \`origin\` ref is a blocker); one line telling the CLI agent to read the \`validate-issue\` skill file directly at the first path that exists among \`~/.codex/skills/validate-issue/SKILL.md\`, \`~/.cursor/skills/validate-issue/SKILL.md\`, and \`~/.claude/skills/validate-issue/SKILL.md\` (resolve the path yourself and write the resolved absolute path into the file); and one line telling it to write no file, post no comment, and end its final message with one JSON object carrying exactly the keys verdict, summary, corrections, implementation_constraints, rescored_complexity, and invalid_reason.
 4. Run the shim from the repository root with the prompt passed as data (the file, never string-interpolated into the command), in the background with output redirected to files, and poll for exit:
    \`${cliValidateShimCommand(ex.validate_cli_model, ex.validate_effort)}\`
    Never add \`--dangerously-bypass-approvals-and-sandbox\`, \`--yolo\`, or any flag the cli-dispatch skill does not name; never widen the sandbox past \`read-only\`.
 5. On a non-zero exit, retry the shim once with the same inputs; a second failure is a blocker that quotes the last lines of the stderr file.
 6. After every run, pass or fail, read the CLI's final message and the event log. When the output names the model that served the run, compare it with \`${ex.validate_cli_model}\` — a different model is a substitution: report it in flags and in the summary, never as a ${modelName} validation. An output that names no model is recorded as model unverified beside the requested id. This step is never skipped on a zero exit.
 7. Diff \`git status --porcelain --untracked-files=all\` in the main checkout against the snapshot, ignoring every path under \`.claude/worktrees/\`; report any change in flags.
-8. Parse the JSON object from the final message and return it via StructuredOutput unchanged, with flags added. A final message with no parseable JSON object, or one missing verdict or rescored_complexity, is a blocker: return verdict INVALID with rescored_complexity 0 and blocker naming the parse failure; never fill the verdict in yourself.
+8. Parse the JSON object from the final message and return it via StructuredOutput unchanged, with flags added and issue_updated_at set to the \`updatedAt\` from your step 3 fetch. A final message with no parseable JSON object, or one missing verdict or rescored_complexity, is a blocker: return verdict INVALID with rescored_complexity 0 and blocker naming the parse failure; never fill the verdict in yourself.
 
 Task prompt for the Codex CLI agent (write it to the prompt file verbatim):
 ----- BEGIN TASK PROMPT -----
 ${taskPrompt}
 ----- END TASK PROMPT -----
 
-Return via StructuredOutput: verdict, summary, corrections, implementation_constraints, rescored_complexity, invalid_reason when INVALID, flags naming any substitution, stray write, or retry, and blocker only when the pass could not run or could not be parsed.`
+Return via StructuredOutput: verdict, summary, corrections, implementation_constraints, rescored_complexity, issue_updated_at, invalid_reason when INVALID, flags naming any substitution, stray write, or retry, and blocker only when the pass could not run or could not be parsed.`
 }
 
 function cliDriverPrompt(taskPrompt, ex, kind = 'implement', planned = false) {
@@ -399,9 +399,10 @@ const PREP_SCHEMA = {
 
 const VALIDATION_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'summary', 'corrections', 'implementation_constraints', 'rescored_complexity'],
+  required: ['verdict', 'summary', 'corrections', 'implementation_constraints', 'rescored_complexity', 'issue_updated_at'],
   properties: {
     verdict: { type: 'string', enum: ['VALID', 'VALID_WITH_CORRECTIONS', 'INVALID'] },
+    issue_updated_at: { type: 'string', description: 'The issue updatedAt (ISO 8601, verbatim from gh) recorded when the issue was read for this validation; the build stops on an untrusted body edit or title rename newer than it. Empty only when the issue could not be read' },
     rescored_complexity: { type: 'integer', description: 'Your own step-6 complexity score (0–99) for the issue as validated; 0 only if you could not score it. The runtime escalates to a higher band when this outranks the title prefix — upward only, never downward' },
     summary: { type: 'string', description: 'One-paragraph verdict summary' },
     corrections: { type: 'array', items: { type: 'string' }, description: 'Concrete edits the issue body needs (empty if none)' },
@@ -503,7 +504,8 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     `\nDo NOT modify any files, do NOT comment on the issue, do NOT start implementing.`,
     `Return via StructuredOutput: verdict (VALID / VALID_WITH_CORRECTIONS / INVALID), a verdict summary, the concrete issue-body corrections needed,`,
     `the implementation constraints an implementer must honor (repo invariants at risk, refuted approaches, the preferred approach, merge-order notes),`,
-    `and rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it.`,
+    `rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it;`,
+    `and issue_updated_at: the issue updatedAt that validate-issue step 1 recorded (\`gh issue view ${issue} --json updatedAt\`), verbatim.`,
     `If validate-issue ends in Validation blocked, return verdict INVALID with the missing input as invalid_reason and rescored_complexity 0.`,
   ].join(' ')
 }
@@ -553,7 +555,7 @@ function implementPrompt(issue, ex, validation, plan, completed, skipped, baseRe
   const constraints = (validation.implementation_constraints || []).concat(plan ? plan.constraints : [])
   const predecessorContext = completedContext(completed)
   const missingContext = skippedContext(skipped)
-  const workOnIssueArgs = `{ issue: ${issue}${TARGET_BRANCH ? `, targetBranch: ${JSON.stringify(TARGET_BRANCH)}` : ''}${baseRefs.length ? `, baseRefs: ${JSON.stringify(baseRefs)}` : ''} }`
+  const workOnIssueArgs = `{ issue: ${issue}${TARGET_BRANCH ? `, targetBranch: ${JSON.stringify(TARGET_BRANCH)}` : ''}${baseRefs.length ? `, baseRefs: ${JSON.stringify(baseRefs)}` : ''}, validatedAt: ${JSON.stringify(validation.issue_updated_at)} }`
   const targetBranchDirective = TARGET_BRANCH
     ? ` This run targets branch \`${TARGET_BRANCH}\`: the worktree base is \`origin/${TARGET_BRANCH}\` (or the verified baseRefs on top of it) and the PR opens with \`--base ${TARGET_BRANCH}\`; never open the PR against the default branch.`
     : ''
@@ -573,7 +575,7 @@ Return the standing verdict as github_review_status, the remaining non-blocking 
 
 Validation summary (from a Fable review of the issue against the current code): ${validation.summary}
 ${predecessorContext ? `\nStable predecessor results (deduplicated):\n${predecessorContext}\n` : ''}${missingContext ? `\nSkipped predecessor results whose code does not exist:\n${missingContext}\n` : ''}${corrections ? `\nStep 1 — Update the issue body first. Load the \`github-issue-format\` skill BEFORE editing (mandatory), then apply these validation corrections to issue #${issue} (preserve the rest of the body — including the ## Execution block — and the [C..] title unless a correction says otherwise):\n${corrections}\nThe user approved this milestone run plan, which explicitly authorizes applying these validation corrections to this issue.\nFooter: \`Validated with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\` — these are validation corrections, so the appended verb is \`Validated\`; stack it under the existing footer lines.\n` : ''}${plan ? `\nA Fable 5.1 implementation plan was posted on the issue — implement against it. Mirror its numbered steps into your task tracker before writing code, per work-on-issue step 2, and complete each item only when its verify point passes. Deviating is allowed only with a stated reason in the PR body.\n` : ''}${constraints.length ? `\nHard requirements from validation${plan ? ' and the plan' : ''} (violating any is a correctness failure):\n${constraints.map((c) => `- ${c}`).join('\n')}\n` : ''}
-Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the ${TARGET_BRANCH ? 'target' : 'default'} branch or omit a ref after an integration conflict.${targetBranchDirective} Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\`.${reviewDirective}
+Invoke the \`work-on-issue\` skill with args \`${workOnIssueArgs}\`. The validatedAt value is the issue read time of this run's validate stage: work-on-issue step 0 stops the build when an untrusted body edit or title rename is newer than it, and your own validation corrections above never clear such an edit. When baseRefs are present, validate them and prepare the dependency base exactly as that skill requires before changing product files; never fall back to the ${TARGET_BRANCH ? 'target' : 'default'} branch or omit a ref after an integration conflict.${targetBranchDirective} Implement per the ${corrections ? 'corrected ' : ''}issue body (its Acceptance criteria are the contract — including the negative ones), follow repo conventions in CLAUDE.md, and note dependency merge order in the PR body. Add tests for every behavior you introduce. Run the project's full test and build suites; if a test fails, verify whether it also fails on the unmodified base before dismissing it as pre-existing, and say so. Commit + open a PR closing #${issue}, footer \`Created with LLM: ${footerModel} | ${ex.effort} | Harness: ${harness}\`.${reviewDirective}
 
 Verify the opened PR with \`gh pr view <num> --json headRefName,headRefOid\`. Return via StructuredOutput: pr_number, pr_url, head_ref (exact current headRefName after any cycle-1 fixes), head_sha (exact current headRefOid), summary, tests_passed, github_review_status, github_review_nonblocking_remaining, github_review_summary, any github_review_blocker, any implementation blocker, and flags the operator should know about. If implementation is blocked, return pr_number 0, empty head fields, and the blocker instead of guessing.`
 }
@@ -1030,6 +1032,15 @@ async function executeTrack(trackIndex) {
       } else {
         log(`#${issue}: keeping the stamped first review ${stampedName} — the rescored review band ${rescoredBand.name} does not outrank it, and a rescore never lowers review routing`)
       }
+    }
+    if (validation.verdict !== 'INVALID' && Number.isNaN(Date.parse(String(validation.issue_updated_at || '')))) {
+      blocker = `validation returned no issue read time (issue_updated_at ${JSON.stringify(validation.issue_updated_at ?? null)}), so the build cannot detect an untrusted edit made after validation`
+      log(`#${issue}: ${blocker}; blocking later issues in track ${trackIndex + 1}`)
+      addResult({ issue, status: 'validation_failed', blocker })
+      localSkipped.push({ issue, reason: `${blocker} — issue never implemented` })
+      status = 'blocked'
+      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      break
     }
     if (validation.verdict === 'INVALID') {
       blocker = validation.invalid_reason || validation.summary

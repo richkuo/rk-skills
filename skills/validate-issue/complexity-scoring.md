@@ -30,7 +30,7 @@ Capability sets the band floor: the build model follows Capability alone. Volume
 
 List the concrete files, functions, references, migrations, tests, and documentation that the correct implementation must change, including parallel live/offline paths, schema or config versions, initialization surfaces, startup probes, command-line contracts, and invalidated documentation. Scope and Verification are graded from this list.
 
-If architecture or consistency remains Conditional or Refuted after step 5, grade Uncertainty from that gap per the anchors below, report one score, and name the one unknown that drives it. A design defect cannot route through Capability 0 or 1.
+If architecture remains Underspecified or Infeasible, or consistency remains Gaps or Contradicts, after step 5, grade Uncertainty from that gap per the anchors below, report one score, and name the one unknown that drives it. A design defect cannot route through Capability 0 or 1.
 
 ## Axis anchors
 
