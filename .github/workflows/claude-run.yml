@@ -146,6 +146,43 @@ jobs:
           done
           git worktree prune
 
+      - name: Choose the home directory for the Claude step
+        id: agent_home
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ -z "${HOME:-}" ]; then
+            echo "::error::HOME is not set, so the Claude step has no home directory."
+            exit 1
+          fi
+          AGENT_HOME="$HOME"
+          TEMP_HOME=false
+          if [ "$MODE" = review ] && [ "${CLAUDE_CODE_SUBPROCESS_ENV_SCRUB:-}" != 0 ] && [ "$RUNNER_OS" = Linux ]; then
+            under_scrub_runner_dir() {
+              local P D
+              for P in "$1" "$(realpath -m "$1")"; do
+                for D in "$HOME/actions-runner" "$HOME/runners" "$(realpath -m "$HOME/actions-runner")" "$(realpath -m "$HOME/runners")"; do
+                  case "$P/" in
+                    "$D"/*) return 0 ;;
+                  esac
+                done
+              done
+              return 1
+            }
+            if under_scrub_runner_dir "$GITHUB_WORKSPACE"; then
+              AGENT_HOME=$(mktemp -d /tmp/rk-claude-review-home.XXXXXX)
+              if under_scrub_runner_dir "$AGENT_HOME"; then
+                rm -rf "$AGENT_HOME"
+                echo "::error::The temporary Claude home is inside a runner directory that the secret scrub protects."
+                exit 1
+              fi
+              TEMP_HOME=true
+              echo "::notice::The workspace is inside $HOME/actions-runner or $HOME/runners. The Claude Code secret scrub makes that directory read-only, and then every Bash command of the review agent fails. The Claude step uses the temporary home $AGENT_HOME."
+            fi
+          fi
+          echo "home=$AGENT_HOME" >> "$GITHUB_OUTPUT"
+          echo "temp_home=$TEMP_HOME" >> "$GITHUB_OUTPUT"
+
       - name: Stage the pull request under review
         if: inputs.mode == 'review'
         id: pr_context
@@ -415,6 +452,8 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@8cf3482550831fb35a4fc3fbf7ca139cf8028b4c # v1.0.233 (Claude Code 2.1.281)
+        env:
+          HOME: ${{ steps.agent_home.outputs.home }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -443,6 +482,7 @@ jobs:
           SETTINGS_FILE: ${{ runner.temp }}/claude-review-settings.json
           GUARD_OID: ${{ steps.pr_context.outputs.guard_oid }}
           SETTINGS_OID: ${{ steps.pr_context.outputs.settings_oid }}
+          AGENT_HOME: ${{ steps.agent_home.outputs.home }}
         run: |
           echo "Git config keys, each with the file that sets it:"
           git config --list --show-origin --name-only
@@ -458,6 +498,20 @@ jobs:
             echo "::error::The job token persisted on disk while Claude ran."
             exit 1
           fi
+          if [ -n "$AGENT_HOME" ] && [ "$AGENT_HOME" != "$HOME" ] && ! HOME="$AGENT_HOME" bash "$GUARD_FILE" --after-action; then
+            echo "::error::The job token persisted on disk while Claude ran with the temporary home."
+            exit 1
+          fi
+
+      - name: Remove the temporary Claude home
+        if: always() && steps.agent_home.outputs.temp_home == 'true'
+        env:
+          AGENT_HOME: ${{ steps.agent_home.outputs.home }}
+        run: |
+          case "$AGENT_HOME" in
+            /tmp/rk-claude-review-home.*) rm -rf "$AGENT_HOME" ;;
+            *) echo "::error::The temporary Claude home path is not the expected path, so it is not removed." ; exit 1 ;;
+          esac
 
       - name: Fail if Claude Code returned an error
         if: steps.claude.outcome == 'success'

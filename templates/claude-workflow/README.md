@@ -117,3 +117,15 @@ own model until you copy the template again.
   runner, pass `review_subprocess_scrub: false` to `claude-run.yml` in the
   `review` job. This also turns off the scrub, so tool subprocesses can see the
   Claude credential.
+- **Runner installed in the home directory:** the scrub runs each Bash command
+  in a bubblewrap sandbox that makes `$HOME/actions-runner` and
+  `$HOME/runners` read-only. When the workspace is inside one of them (the
+  default self-hosted layout), bubblewrap cannot create its mount point at
+  `.git/config.lock`, and every Bash command of the review agent fails. In
+  that case the review route gives the Claude step a temporary home under
+  `/tmp`. The post-run credential check runs with the temporary home and with
+  the real home, and a later step removes the temporary home. The scrub, the
+  credential helper, and the guard hook stay on. The sandbox then protects the
+  files of the temporary home, so the real home and the runner installation
+  are writable from the sandbox. To keep that protection, move the runner work
+  folder out of the home directory with `./config.sh --work <path>`.
