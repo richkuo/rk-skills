@@ -103,10 +103,17 @@ own model until you copy the template again.
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
   the action uses a token-free credential helper and scrubs secrets from
   subprocess environments. The action's write-permission check still applies
-  to every actor. A `PreToolUse` hook blocks every tool call if the token
-  reaches git config or `$RUNNER_TEMP`, and `/proc` reads and file-reading
-  flags such as `git diff --no-index` are denied. The token stays in the agent
-  process environment for `gh pr comment`; this is an accepted residual risk
-  because the token has only this job's permissions and expires when the job
-  ends. On a self-hosted Linux runner, the secret scrub needs `bubblewrap`,
-  which the action installs only when `sudo apt-get` works.
+  to every actor. Git offers the token only to the GitHub server. A
+  `PreToolUse` hook blocks every tool call if the token reaches git config,
+  `$RUNNER_TEMP`, or a git credential store, or if the guard script changed.
+  `/proc` reads, `git --output`, and file-reading flags such as
+  `git diff --no-index` are denied. The token stays in the agent process
+  environment for `gh pr comment`; this is an accepted residual risk because
+  the token has only this job's permissions and expires when the job ends.
+- **Host changes on self-hosted Linux runners:** for the secret scrub, each
+  review runs `sudo apt-get install bubblewrap socat` and
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
+  setting stays until the machine restarts. To skip both on a persistent
+  runner, pass `review_subprocess_scrub: false` to `claude-run.yml` in the
+  `review` job. This also turns off the scrub, so tool subprocesses can see the
+  Claude credential.
