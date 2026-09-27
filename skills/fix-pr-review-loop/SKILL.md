@@ -18,7 +18,7 @@ Nothing (the current branch's PR via `gh pr view`), or `#<N>` / `<N>` / URL / `o
 `gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName,url,state,isDraft`. A `merged` or `closed` PR: stop and report. Otherwise read the round history and compute `review_count` and `pr_cycle_count` per Round counts in `skills/fix-pr-review/rereview-routing.md`, which owns both counts and the pending trigger; a fresh PR has `review_count = 0`. A verification limitation there stops the loop: report the missing evidence and post nothing. Then fetch existing feedback with fix-pr-review step 1's three-channel query (reviews, issue comments, inline threads), and take the first case that applies:
 
 - **Pending trigger present** (Round counts' pending trigger, naming the selected bot): recover it. Record that comment's `id` and `created_at` as the pending trigger and go to step 2. Never post another trigger. A pending trigger that names the other bot stops the loop: report it, because a second trigger would split the cycle across bots.
-- **Newest trigger's run ended without a verdict** (an output mapped to it carries a workflow status note, per Round counts): post nothing and go to step 5, bot-never-responded row.
+- **Newest trigger's review run ended without a verdict** (Round counts: its round has no verdict and a `github-actions[bot]` output mapped to it carries a workflow status note): post nothing and go to step 5, bot-never-responded row. A round that holds a verdict never takes this case, and a status note on a `claude[bot]` write-route or question output never does. A **stale** trigger (Round counts) takes neither of the first two cases; the cases below apply, and the last posts a fresh trigger.
 - **Unaddressed feedback present** (a completed bot round newer than any prior disposition comment, or trusted feedback that fix-pr-review step 1 would act on, which means its bare-LGTM check fails): go to step 3. Never post a redundant trigger.
 - **Nothing to act on yet** (fresh PR, only your own disposition or trigger comments, only untrusted feedback, or only a trusted bare `LGTM` or empty approval): post the first-review trigger as its own one-line comment, `gh pr comment <N> --body "<trigger>"`. Record that comment's `id` and `created_at` as the pending trigger, go to step 2.
 
@@ -35,23 +35,22 @@ Nothing (the current branch's PR via `gh pr view`), or `#<N>` / `<N>` / URL / `o
 Poll for a completed verdict on the pending trigger: an output from the **review-bot set**, posted after the pending trigger's `created_at`, that passes Round counts' completed-verdict test (`skills/fix-pr-review/rereview-routing.md`). `skills/fix-pr-review/fetch-recipes.md` (Author trust) owns the set: `github-actions[bot]` and `claude[bot]`. A comment or review from any other author never ends the wait, whatever its first line says. The `@claude` route edits its placeholder comment in place: `created_at` still follows your trigger, and the placeholder ends the wait only when an edit puts the verdict under the `**Claude finished …**` header. A Codex review is a plain `github-actions[bot]` comment with the verdict first.
 
 ```bash
-until {
-  gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq '
-    [.[] | select(.created_at > "<trigger_ts>")
-         | select(.user.type == "Bot" and (.user.login == "github-actions[bot]" or .user.login == "claude[bot]"))
-         | select((.body // "") | test("\\*\\*Workflow (cancelled|failed) before completion\\.\\*\\*") | not)
-         | select((.body // "") | sub("^[ \\t\\r\\n]*\\*\\*Claude finished [^\\n]*\\n[ \\t\\r\\n]*---[ \\t\\r]*\\n"; "")
-                        | test("^[ \\t\\r\\n]*(LGTM|Needs Updates)[ \\t\\r]*(\\n|$)"))] | length > 0'
-  gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq '
-    [.[] | select(.submitted_at > "<trigger_ts>")
-         | select(.user.type == "Bot" and (.user.login == "github-actions[bot]" or .user.login == "claude[bot]"))
-         | select((.body // "") | test("\\*\\*Workflow (cancelled|failed) before completion\\.\\*\\*") | not)
-         | select((.body // "") | sub("^[ \\t\\r\\n]*\\*\\*Claude finished [^\\n]*\\n[ \\t\\r\\n]*---[ \\t\\r]*\\n"; "")
-                        | test("^[ \\t\\r\\n]*(LGTM|Needs Updates)[ \\t\\r]*(\\n|$)"))] | length > 0'
-} | grep -q true; do sleep 60; done
+st='select(.user.type == "Bot" and (.user.login == "github-actions[bot]" or .user.login == "claude[bot]"))
+  | (.body // "") as $b
+  | if ($b | test("\\*\\*Workflow (cancelled|failed) before completion\\.\\*\\*"))
+    then (if .user.login == "github-actions[bot]" then "failed" else empty end)
+    elif ($b | sub("^[ \\t\\r\\n]*\\*\\*Claude finished [^\\n]*\\n[ \\t\\r\\n]*---[ \\t\\r]*\\n"; "")
+              | test("^[ \\t\\r\\n]*(LGTM|Needs Updates)[ \\t\\r]*(\\n|$)")) then "verdict"
+    else empty end'
+state() {
+  gh api repos/{owner}/{repo}/issues/<N>/comments --paginate --jq ".[] | select(.created_at > \"<trigger_ts>\") | $st"
+  gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate --jq ".[] | select(.submitted_at > \"<trigger_ts>\") | $st"
+}
+until state | grep -qE '^(verdict|failed)$'; do sleep 60; done
+state | grep -qx verdict && echo verdict || echo failed
 ```
 
-Read the author from REST, where a bot login keeps its `[bot]` suffix and `type` is `Bot`: `gh pr view` drops the suffix and shows no account type, and a user account named `claude` exists. The `sub` strips the supported header, and the `test` accepts only a standalone verdict line in the verdict position; a first-line-only filter misses every verdict under the header, and a match anywhere in the body accepts quoted or verdict-shaped text. Pipe through `grep -q true`: `gh --jq` exits 0 on `false`, and `--paginate` prints one result per page, so any page that prints `true` ends the wait. Run the loop in the background (Monitor tool) after one inline sanity check that prints `true` against a review already present. An output after the trigger that carries a workflow status note means the run ended without a verdict: stop the wait and report that the bot did not respond. Cap the wait at roughly 30 minutes, then stop and report the same.
+Read the author from REST, where a bot login keeps its `[bot]` suffix and `type` is `Bot`: `gh pr view` drops the suffix and shows no account type, and a user account named `claude` exists. The `sub` strips the supported header, and the `test` accepts only a standalone verdict line in the verdict position; a first-line-only filter misses every verdict under the header, and a match anywhere in the body accepts quoted or verdict-shaped text. The filter prints `verdict` for each completed verdict and `failed` for each review-route status note (a `github-actions[bot]` output; a `claude[bot]` write-route or question run that fails never ends the wait). `--paginate` applies `--jq` to each page, so the loop greps every page's output. Run the loop in the background (Monitor tool) after one inline sanity check that prints `verdict` against a review already present. When the loop exits, the last line decides: `verdict` wins whenever any completed verdict exists, so go to step 3; `failed` means the review run ended without a verdict, so stop and report that the bot did not respond. Cap the wait at roughly 30 minutes, then stop and report the same.
 
 ### 3. Check the review against the stop conditions
 
@@ -80,7 +79,7 @@ Report the terminal state; never claim blanket success.
 | Rule 3 fired | **Diverging, escalate the scope call.** Report `pr_cycle_count`, the PR's growth measured base-excluded per fix-pr-review step 4's growth check, and the chain: per cycle, the finding it fixed and the finding that fix produced. Name the mechanisms the PR grew that its scope yardstick (the linked issue(s), else the PR body) never asked for. Recommend one: revert to the last cycle whose findings were all in the original work and file the rest, or narrow the PR to the yardstick and file the remainder. Do not start another cycle. |
 | fix-pr-review stopped before commit on an ungrounded failing test | **Blocked on a test.** Report the test with its `file:line`, what it asserts, and the conflict; no push or re-review happened, and the maintainer decides. |
 | fix-pr-review stopped with no trigger for another reason (an irreconcilable conflict, a rejected push, a head mismatch) | **Fixer stopped, escalate.** Relay the stop reason fix-pr-review gave, the blocking work left, and any work it left uncommitted, unpushed, or unposted; no re-review happened, and the maintainer decides. |
-| Bot never responded within the wait window | **Escalate.** The PR is pushed but review never landed; the user checks the bot's Action status. |
+| Bot never responded within the wait window | **Escalate.** The PR is pushed but review never landed; name the unanswered trigger's URL, and the user checks the bot's Action status. A restart posts a fresh trigger once that trigger is stale (Round counts); the user can also post it again. |
 | PR was already `merged`/`closed` at start | **Nothing to drive.** Report the state; zero cycles ran. |
 
 Always give the PR URL, cycles run, final verdict, and (when escalating) exactly what is left. Write the report per the Response Style rules in CLAUDE.md/AGENTS.md; the unverified-source list sits outside the word cap.
