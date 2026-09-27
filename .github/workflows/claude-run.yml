@@ -70,7 +70,8 @@ jobs:
         if: inputs.mode == 'review'
         run: |
           git config --local credential.helper ""
-          git config --local "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
+          git config --local "credential.${GITHUB_SERVER_URL}.helper" ""
+          git config --local --add "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
 
       - name: Checkout rk-skills (shared prompts and scripts)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,7 +146,40 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
           SETTINGS_FILE: ${{ runner.temp }}/claude-review-settings.json
+          GUARD_FILE: ${{ runner.temp }}/claude-review-credential-guard.sh
         run: |
+          cat > "$GUARD_FILE" <<'GUARD_EOF'
+          #!/usr/bin/env bash
+          set -u
+          block() {
+            echo "Credential guard: $1. The job token can be readable, so stop the review and report that this run is unsafe." >&2
+            exit 2
+          }
+          WS="${GITHUB_WORKSPACE:-$PWD}"
+          CONFIG=$(git -C "$WS" config --list 2>/dev/null) || block "git config cannot be read"
+          if printf '%s\n' "$CONFIG" | grep -qiE '^http\..*\.extraheader='; then
+            block "git config sets an http extraheader entry"
+          fi
+          if printf '%s\n' "$CONFIG" | grep -qiE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@'; then
+            block "a git remote URL holds a credential"
+          fi
+          if printf '%s\n' "$CONFIG" | grep -qF 'x-access-token:'; then
+            block "a git config value holds an access token"
+          fi
+          for TOKEN in "${GH_TOKEN:-}" "${GITHUB_TOKEN:-}"; do
+            [ -n "$TOKEN" ] || continue
+            AUTH_B64=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
+            if printf '%s\n' "$CONFIG" | grep -qF -e "$TOKEN" -e "$AUTH_B64"; then
+              block "a git config value holds the job token"
+            fi
+            if grep -rlqF -e "$TOKEN" -e "$AUTH_B64" "${RUNNER_TEMP:-/nonexistent}" 2>/dev/null; then
+              block "a file under RUNNER_TEMP holds the job token"
+            fi
+          done
+          exit 0
+          GUARD_EOF
+          chmod 700 "$GUARD_FILE"
+
           BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
           git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-claude/pr-head"
           git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-claude/pr-base"
@@ -166,7 +200,17 @@ jobs:
               "${GITHUB_WORKSPACE}/**/AGENTS.md",
               "${GITHUB_WORKSPACE}/**/.claude/CLAUDE.md",
               "${GITHUB_WORKSPACE}/**/.claude/rules/**"
-            ]
+            ],
+            "hooks": {
+              "PreToolUse": [
+                {
+                  "matcher": "*",
+                  "hooks": [
+                    { "type": "command", "command": "bash ${GUARD_FILE}" }
+                  ]
+                }
+              ]
+            }
           }
           EOF
 
@@ -286,7 +330,7 @@ jobs:
           fi
           ARGS="--model ${MODEL_ID} --effort ${EFFORT} --append-system-prompt \"${PROMPT}\" --allowedTools \"${ALLOWED}\""
           if [ "$MODE" = "review" ]; then
-            ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task\" --setting-sources user --settings ${SETTINGS_FILE}"
+            ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task,Read(//proc/**),Bash(git diff*--no-index*),Bash(git fetch*--upload-pack*),Bash(gh pr comment*--body-file*),Bash(gh pr comment* -F*)\" --setting-sources user --settings ${SETTINGS_FILE}"
           fi
           {
             printf 'claude_args<<CLAUDE_ARGS_EOF\n'
@@ -336,6 +380,8 @@ jobs:
 
           github_token: ${{ inputs.mode == 'review' && github.token || '' }}
 
+          allowed_non_write_users: ${{ inputs.mode == 'review' && 'rk-skills:no-login-matches' || '' }}
+
           allowed_bots: 'claude'
 
           show_full_output: true
@@ -348,6 +394,18 @@ jobs:
             rk-skills@rk-skills
 
           claude_args: ${{ steps.compose_prompt.outputs.claude_args }}
+
+      - name: Confirm no job credential persisted on disk while Claude ran
+        if: always() && inputs.mode == 'review' && steps.claude.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Git config keys, each with the file that sets it:"
+          git config --list --show-origin --name-only
+          if ! bash "$RUNNER_TEMP/claude-review-credential-guard.sh"; then
+            echo "::error::The job token persisted on disk while Claude ran."
+            exit 1
+          fi
 
       - name: Fail if Claude Code returned an error
         if: steps.claude.outcome == 'success'

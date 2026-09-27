@@ -98,3 +98,15 @@ own model until you copy the template again.
   interpreters; CI owns checks.
 - **Fail-closed routing:** anything ambiguous classifies as read-only review;
   untrusted PR authors never reach a push-capable route.
+- **No job token on disk during review:** the review route keeps the job token
+  out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
+  `allowed_non_write_users` input to a value that no GitHub login can equal, so
+  the action uses a token-free credential helper and scrubs secrets from
+  subprocess environments. The action's write-permission check still applies
+  to every actor. A `PreToolUse` hook blocks every tool call if the token
+  reaches git config or `$RUNNER_TEMP`, and `/proc` reads and file-reading
+  flags such as `git diff --no-index` are denied. The token stays in the agent
+  process environment for `gh pr comment`; this is an accepted residual risk
+  because the token has only this job's permissions and expires when the job
+  ends. On a self-hosted Linux runner, the secret scrub needs `bubblewrap`,
+  which the action installs only when `sudo apt-get` works.
