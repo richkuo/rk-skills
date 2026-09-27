@@ -13,7 +13,7 @@ Same as `validate-issue`:
 - Full URL: `https://github.com/<owner>/<repo>/issues/<N>`
 - Short form: `#<N>` or bare `<N>` (current repo)
 - `owner/repo#N`
-- **Nothing** — default to the latest open issue in the current repo.
+- **Nothing** — the issue named, validated, planned, or filed in this session, per validate-issue's input rule; with none, stop and ask. Never pick an issue from a list.
 
 ## Steps
 
@@ -27,7 +27,7 @@ Locate the `validate-issue` SKILL.md the subagent must follow — prefer the pro
 
 Record the absolute path. If none of these resolves, stop and tell the user.
 
-If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–8 of the procedure, including fetching. If no issue was referenced, the subagent resolves the latest open issue itself per the procedure.
+If the user referenced an issue, note the number/repo but do NOT fetch or pre-validate it yourself — the subagent owns steps 0–8 of the procedure, including fetching. If no issue was referenced, resolve it from this session per validate-issue's input rule before dispatch; with none, stop and ask. The subagent never picks an issue itself.
 
 ### 2. Dispatch the Fable 5.1 validation subagent
 
@@ -36,11 +36,11 @@ Do not validate the issue yourself first — the subagent owns the validation. *
 - `subagent_type`: `Plan` (read-only: no Edit/Write, keeps validation side-effect-free)
 - `model`: `fable` (the whole point — the validation must come from Fable 5.1)
 - `run_in_background`: `false` — everything downstream depends on the verdict
-- `description`: `Validate issue #<N>` (or `Validate latest issue`)
+- `description`: `Validate issue #<N>`
 - `prompt`: hand it everything needed to validate independently:
-  - The issue reference exactly as the user gave it (or "no issue referenced — resolve the latest open issue per the procedure"), plus the working directory.
+  - The issue reference exactly as the user gave it, or the one resolved from this session, plus the working directory.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, fetch with `--comments` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
-  - It must STOP at step 8: no step 9/10/11 actions, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
+  - It must STOP at step 8: no step 9 to 12 actions, no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7.
   - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against.
 
 The subagent's final message comes back as the tool result; it is not shown to the user.
@@ -49,7 +49,7 @@ When the result arrives, save the verdict verbatim to a scratchpad file immediat
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any ❌/⚠️ claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
 
 ### 4. Relay the verdict to the user
 
@@ -61,7 +61,7 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 
 - **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: since the findings came from the Fable 5.1 subagent, use `Validated with LLM: Fable 5.1 | high | Harness: <harness> | fable-validate`, where `<harness>` names the harness actually running per `fable-dispatch` section 6, and the model names the one that actually served the dispatch (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
-- **"split issue" / "decompose"** → file the proposed parts per validate-issue step 7, each fully specified.
+- **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
 
 ## Notes
 

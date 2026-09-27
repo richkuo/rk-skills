@@ -12,7 +12,7 @@ Fetch `refs/pull/<pr>/head` into a unique local ref and compare it with the pin,
 
 ## Integrate before implementation
 
-The first verified SHA is the initial base. In the clean worktree, merge each remaining SHA separately in caller order with `git merge --no-commit --no-ff <sha>`, committing each real merge with a dependency-integration message and the attribution footer; an already-contained SHA needs no merge. Sequential merges expose which predecessor conflicts.
+The fetched target commit from step 1 is the initial base, so the build carries every target commit. In the clean worktree, merge every verified SHA separately in caller order with `git merge --no-commit --no-ff <sha>`, committing each real merge with a dependency-integration message and the attribution footer; an already-contained SHA, such as a merged pin, needs no merge. Sequential merges expose which predecessor conflicts.
 
 On a conflict, record the conflicting paths and pin, abort the merge, and stop: no resolution, no implementation, no PR. Keep earlier integration commits and report them. A failed abort blocks; never reset or clean the worktree to hide it.
 

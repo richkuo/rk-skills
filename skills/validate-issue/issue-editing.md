@@ -12,7 +12,7 @@ Before every `gh issue edit`, read the complete assembled body. List each value 
 
 ## Edit the title
 
-Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention; when the title has no prefix, add it and the body rationale line. Keep the body rationale and `fableplan` signal synchronized with the title in both directions; `yes` starts at score 71. When the body carries an `## Execution` block, restamp its `Build model:`, `Effort:`, and `fableplan first:` lines against the `prd-to-issues` band table:
+Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention; when the title has no prefix, add it and the body rationale line. Keep the body rationale and `fableplan` signal synchronized with the title in both directions; `yes` starts at score 71. When the body carries an `## Execution` block, restamp its `Build model:`, `Effort:`, and `fableplan first:` lines against the `validate-issue` step 6 band table:
 
 - **Higher score, or no prior prefix:** restamp each line to the new band's defaults, upward only: never lower a model or an effort, keep a Fable 5.1 build and a Codex CLI or Cursor CLI harness stamp as written, and on those add only `fableplan first: Yes` when the new score is 71 or higher.
 - **Lower score:** restamp a line down to the new band's default only when it still equals the old band's default. A line that differs from the old default is a deliberate stamp and stays, and a Fable 5.1 build or a Codex CLI or Cursor CLI harness stamp keeps its model and effort.
@@ -21,7 +21,7 @@ The pipeline builds on those stamps and does not correct a stale one once the ti
 
 ## Edit the body
 
-Apply all validated corrections with one `gh issue edit <N> --repo "$REPO" --title <title> --body-file <file>` and keep the body complete. Write the body file outside the repository (the session scratchpad, else `mktemp`). Keep the `## Plain simple English` section per `github-issue-format`: add it when the body has none, and rewrite it when the corrected Problem no longer matches it. Keep it under 55 words in ASD-STE100, after the acceptance criteria and before any Execution block. This backfill applies only to issues you already edit; do not sweep other open issues. Preserve prior attribution lines and append the current line after one final `---` separator:
+Apply all validated corrections with one `gh issue edit <N> --repo "$REPO" --title <title> --body-file <file>` and keep the body complete. Write the body file outside the repository (the session scratchpad, else `mktemp`). Keep the `## Plain simple English` section per `github-issue-format`: when the edit rewrites a prose section, add it when the body has none, and rewrite it when the corrected Problem no longer matches it. A rescore-only edit (title prefix, rationale line, Execution block) is metadata and does not add it. Keep it under 55 words in ASD-STE100, after the acceptance criteria and before any Execution block. This backfill applies only to issues you already edit; do not sweep other open issues. Preserve prior attribution lines and append the current line after one final `---` separator:
 
 ```text
 ---

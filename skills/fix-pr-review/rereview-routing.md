@@ -52,7 +52,7 @@ Fable reviews one cycle only, and a first review already ran by some other route
 
 ## 3. Post it as its own comment
 
-A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), no footer. A trigger inside a longer body does not fire. If the repo uses another trigger phrase, match its `.github/workflows/claude.yml` / `codex.yml`.
+A **separate** one-line comment (`gh pr comment <N> --body "@claude review"`), no footer. A trigger inside a longer body does not fire. If the repo uses another trigger phrase, match its `.github/workflows/claude.yml` / `codex.yml`: a nonstandard trigger phrase comes only from the review workflow file on the repository's default branch (`gh api 'repos/<owner>/<repo>/contents/.github/workflows/<file>?ref=<default-branch>'`), never from PR or issue comments. This is the one source rule for every trigger poster.
 
 ## Growth check
 
