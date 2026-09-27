@@ -107,6 +107,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token || github.token }}
+          persist-credentials: ${{ inputs.mode != 'review' }}
 
       - name: Checkout rk-skills (shared prompts, scripts, and skills)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,6 +116,7 @@ jobs:
           ref: main
           path: .rk-skills-shared
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Stage shared assets outside the workspace
         run: |
@@ -203,8 +205,9 @@ jobs:
           gh pr view "$PR_NUMBER" --repo "$REPO" \
             --json number,title,body,baseRefName,headRefName,isCrossRepository,author \
             > "$RUNNER_TEMP/rk-shared/pr-metadata.json"
-          git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
-          git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
+          GIT_AUTH="credential.${GITHUB_SERVER_URL}.helper=!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
+          git -c "$GIT_AUTH" fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
+          git -c "$GIT_AUTH" fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
           git checkout --quiet --detach refs/rk-codex/pr-head
           echo "base_sha=$(git merge-base refs/rk-codex/pr-base refs/rk-codex/pr-head)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -244,6 +247,7 @@ jobs:
           SKILLS_DIR: ${{ runner.temp }}/rk-shared/skills
           PR_METADATA_FILE: ${{ runner.temp }}/rk-shared/pr-metadata.json
           PROMPT_OUT: ${{ runner.temp }}/rk-shared/prompt.md
+          GH_TOKEN: ${{ github.token }}
         run: |
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
           if [ -n "$FLOW" ]; then
@@ -257,7 +261,8 @@ jobs:
           fi
 
           TRUSTED_REF=""
-          if git fetch --quiet origin "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
+          GIT_AUTH="credential.${GITHUB_SERVER_URL}.helper=!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
+          if git -c "$GIT_AUTH" fetch --quiet origin "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
             TRUSTED_REF=FETCH_HEAD
           else
             echo "::warning::Could not fetch the default branch — repo prompt overrides are skipped this run."
@@ -321,6 +326,40 @@ jobs:
               printf '[sandbox_workspace_write]\n'
               printf 'network_access = true\n'
             } > "$CODEX_HOME_DIR/config.toml"
+          fi
+
+      - name: Confirm no job credential persists on disk before Codex runs
+        if: inputs.mode == 'review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Git config keys, each with the file that sets it:"
+          git config --list --show-origin --name-only
+          echo "RUNNER_TEMP contents:"
+          ls -la "$RUNNER_TEMP"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The job token is empty, so the credential check cannot run."
+            exit 1
+          fi
+          AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$AUTH_B64"
+          FOUND=0
+          if git config --list --name-only | grep -qiE '^http\..*\.extraheader$'; then
+            echo "::error::Git config sets an http extraheader entry."
+            FOUND=1
+          fi
+          if git config --list | grep -qF -e "$GH_TOKEN" -e "$AUTH_B64"; then
+            echo "::error::A git config value holds the job token."
+            FOUND=1
+          fi
+          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" 2>/dev/null || true)
+          if [ -n "$LEAKED" ]; then
+            echo "::error::Files under RUNNER_TEMP hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
+            FOUND=1
+          fi
+          if [ "$FOUND" -ne 0 ]; then
+            echo "::error::A job credential persists on disk, so Codex does not start."
+            exit 1
           fi
 
       - name: Run Codex

@@ -9,9 +9,18 @@ jobs:
   review:
     if: |
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@codex') &&
+      (
+        github.event.comment.body == '@codex' ||
+        startsWith(github.event.comment.body, '@codex ') ||
+        startsWith(github.event.comment.body, format('@codex{0}', fromJSON('"\t"'))) ||
+        startsWith(github.event.comment.body, format('@codex{0}', fromJSON('"\r"'))) ||
+        startsWith(github.event.comment.body, format('@codex{0}', fromJSON('"\n"')))
+      ) &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
+    concurrency:
+      group: codex-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
     permissions:
       contents: read
       pull-requests: write
@@ -20,6 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Stage the pull request under review
         id: pr_context
@@ -27,10 +37,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
+          TRIGGER_LINE=$(printf '%s\n' "$COMMENT_BODY" | head -n 1 | tr -d '\r')
+          if printf '%s\n' "$TRIGGER_LINE" | grep -qiw 'luna'; then
+            echo "model=gpt-5.6-luna" >> "$GITHUB_OUTPUT"
+          else
+            echo "model=gpt-5.6-sol" >> "$GITHUB_OUTPUT"
+          fi
+
+          GIT_AUTH="credential.${GITHUB_SERVER_URL}.helper=!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
           BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
-          git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
-          git fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
+          git -c "$GIT_AUTH" fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-codex/pr-head"
+          git -c "$GIT_AUTH" fetch --quiet origin "+refs/heads/${BASE_REF}:refs/rk-codex/pr-base"
           git checkout --quiet --detach refs/rk-codex/pr-head
           echo "base_sha=$(git merge-base refs/rk-codex/pr-base refs/rk-codex/pr-head)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -43,11 +62,44 @@ jobs:
             printf '%s\n' "# Prior review cycles unavailable: gh pr view failed" > "$CYCLES_FILE"
           fi
 
+      - name: Confirm no job credential persists on disk before Codex runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Git config keys, each with the file that sets it:"
+          git config --list --show-origin --name-only
+          echo "RUNNER_TEMP contents:"
+          ls -la "$RUNNER_TEMP"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The job token is empty, so the credential check cannot run."
+            exit 1
+          fi
+          AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$AUTH_B64"
+          FOUND=0
+          if git config --list --name-only | grep -qiE '^http\..*\.extraheader$'; then
+            echo "::error::Git config sets an http extraheader entry."
+            FOUND=1
+          fi
+          if git config --list | grep -qF -e "$GH_TOKEN" -e "$AUTH_B64"; then
+            echo "::error::A git config value holds the job token."
+            FOUND=1
+          fi
+          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" 2>/dev/null || true)
+          if [ -n "$LEAKED" ]; then
+            echo "::error::Files under RUNNER_TEMP hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
+            FOUND=1
+          fi
+          if [ "$FOUND" -ne 0 ]; then
+            echo "::error::A job credential persists on disk, so Codex does not start."
+            exit 1
+          fi
+
       - uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         id: codex
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          model: ${{ contains(github.event.comment.body, 'luna') && 'gpt-5.6-luna' || 'gpt-5.6-sol' }}
+          model: ${{ steps.pr_context.outputs.model }}
           effort: high
           sandbox: read-only
           safety-strategy: drop-sudo
@@ -125,7 +177,7 @@ jobs:
           PR_NUMBER: ${{ github.event.issue.number }}
           OUTPUT_FILE: ${{ runner.temp }}/codex-review.md
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          REVIEW_MODEL: ${{ contains(github.event.comment.body, 'luna') && 'gpt-5.6-luna' || 'gpt-5.6-sol' }}
+          REVIEW_MODEL: ${{ steps.pr_context.outputs.model }}
           REVIEW_EFFORT: high
         run: |
           if [ ! -s "$OUTPUT_FILE" ]; then
