@@ -71,3 +71,4 @@ Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`
 - Use the caller's harness suffix in place of `fableplan` in step 4's footer.
 - Keep the scratchpad file for the caller's implementation or report stage.
 - On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan, and never plan the task yourself in fableplan's place.
+- When the step 2 snapshot diff shows that the planning subagent wrote, stop before step 4 and report the changed paths to the caller. Do not ask about a revert, revert, or post the plan; the caller relays the state and the user decides.
