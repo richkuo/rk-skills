@@ -124,8 +124,18 @@ own model until you copy the template again.
   `.git/config.lock`, and every Bash command of the review agent fails. In
   that case the review route gives the Claude step a temporary home under
   `/tmp`. The post-run credential check runs with the temporary home and with
-  the real home, and a later step removes the temporary home. The scrub, the
-  credential helper, and the guard hook stay on. The sandbox then protects the
-  files of the temporary home, so the real home and the runner installation
-  are writable from the sandbox. To keep that protection, move the runner work
-  folder out of the home directory with `./config.sh --work <path>`.
+  the real home. A later step empties the temporary home and keeps the empty
+  mode `700` folder, because the action adds the `.local/bin` and `.bun/bin`
+  folders of that home to the job `PATH` for the rest of the job. If the
+  folder were removed, another local user could create it again in `/tmp`.
+  The scrub, the credential helper, and the guard hook stay on. The sandbox
+  deny entries that use the home directory (shell startup files, `.ssh`,
+  `.gitconfig`, `.config/gh`, `.netrc`, `actions-runner`, and `runners`) then
+  protect the temporary home. The real home is inside the sandbox write paths
+  (`/home` or `/root`), so its files and the runner installation become
+  writable from the sandbox. The runner file-command folder, the action
+  folders, and the event file keep their own deny entries. The workspace also
+  becomes writable, as on a GitHub-hosted runner, and its `.git` config,
+  hooks, and `.github` deny entries still apply. To keep full protection,
+  move the runner work folder out of the home directory with
+  `./config.sh --work <path>`.

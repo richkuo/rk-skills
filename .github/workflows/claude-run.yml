@@ -503,15 +503,26 @@ jobs:
             exit 1
           fi
 
-      - name: Remove the temporary Claude home
+      - name: Empty the temporary Claude home
         if: always() && steps.agent_home.outputs.temp_home == 'true'
         env:
           AGENT_HOME: ${{ steps.agent_home.outputs.home }}
         run: |
           case "$AGENT_HOME" in
-            /tmp/rk-claude-review-home.*) rm -rf "$AGENT_HOME" ;;
-            *) echo "::error::The temporary Claude home path is not the expected path, so it is not removed." ; exit 1 ;;
+            /tmp/rk-claude-review-home.*) ;;
+            *) echo "::error::The temporary Claude home path is not the expected path, so it is not emptied." ; exit 1 ;;
           esac
+          if [ -L "$AGENT_HOME" ] || [ ! -d "$AGENT_HOME" ] || [ ! -O "$AGENT_HOME" ]; then
+            echo "::error::The temporary Claude home is not a directory that the runner user owns, so it is not emptied. Its bin folders stay on the job PATH."
+            exit 1
+          fi
+          chmod 700 "$AGENT_HOME"
+          find "$AGENT_HOME" -mindepth 1 -type d ! -perm -u+w -exec chmod u+w {} +
+          find "$AGENT_HOME" -mindepth 1 -delete
+          if [ -n "$(find "$AGENT_HOME" -mindepth 1 -print -quit)" ]; then
+            echo "::error::The temporary Claude home is not empty after cleanup."
+            exit 1
+          fi
 
       - name: Fail if Claude Code returned an error
         if: steps.claude.outcome == 'success'
