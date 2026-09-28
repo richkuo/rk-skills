@@ -28,7 +28,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks claims against the code first, adds the score, the `fableplan` signal, and a plain-language summary. |
 | `new-issue-loop` | Runs `new-issue`, then validates, implements, and drives the PR through review. Stops on a duplicate. |
 | `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it up or down. Stops as blocked when the issue or its central claim cannot be verified. |
-| `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. |
+| `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. Never plans; its report says when a plan was due. |
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
 | `work-on-issue` | Implements an issue in an isolated git worktree, builds to the newest trusted plan, one posted by the user or a collaborator (plans from other authors are named and skipped; deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
 | `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
@@ -58,10 +58,10 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `fable-new-issue` | `new-issue` drafted by a read-only Fable 5.1 subagent; your session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the issue to a reviewed PR. |
 | `fable-validate` | `validate-issue` run on a Fable 5.1 subagent; your session presents the verdict and acts on it. |
-| `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 71 or higher or the code is safety-critical, then drives to a reviewed PR. |
+| `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 71 or higher, the code is safety-critical, or the issue stamps `fableplan first: Yes`, then drives to a reviewed PR. |
 | `fable-validate-fableplan-loop` | Same, with an unconditional Fable plan. |
 | `fable-validate-fableplan` | Fable validates, fixes are applied, a Fable plan is posted, and it stops there. |
-| `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 71 or higher or when safety-flagged, then drives to a reviewed PR. |
+| `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 71 or higher, when safety-flagged, or when the issue stamps `fableplan first: Yes`, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | Fable plans, `work-on-issue` builds and opens the PR. No validation, no review loop. |
 | `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
 | `fable-advisor` | Your session builds; a persistent Fable 5.1 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.1 reviewer issues a binding pre-commit verdict. |

@@ -1,6 +1,6 @@
 ---
 name: validate-fableplan-loop
-description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped when the verdict's title-floored signal reads `fableplan: no`, which means the title score and the recomputed score are both below 71, with no safety flags), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR. The non-Fable-validation counterpart to fable-validate-loop.
+description: Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `fableplan: no`, which means the title score and the recomputed score are both below 71, with no safety flags and no `fableplan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or when the issue edit does not land. The non-Fable-validation counterpart to fable-validate-loop.
 ---
 
 # validate-fableplan-loop
@@ -19,13 +19,13 @@ Same as fable-validate-loop, including the optional `targetBranch`.
 
 Follow **fable-validate-loop steps 1 through 6** with these changes:
 
-**Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process — steps 0 through 8 — and produce the standard verdict block that fable-validate-loop step 1 quotes. Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue number; every later step targets exactly this issue.
+**Step 1 (validation):** invoke the plain `validate-issue` skill (Skill tool, `skill: validate-issue`) instead of `fable-validate`. Let it run its full process — steps 0 through 8 — and produce the standard verdict block that fable-validate-loop step 1 quotes. Treat the verdict as structured output to parse yourself, and don't ask the user to confirm. Record the resolved issue as `owner/repo#N` per fable-validate-loop step 1; every later step passes that full reference and targets exactly this issue.
 
-**Step 2 (scope gate):** fable-validate-loop step 2's STOP table applies unchanged, sourced from the plain validation (the already-addressing PR comes from validate-issue's step 1 linked-PR check; `too large` from validate-issue step 7).
+**Step 2 (scope gate):** fable-validate-loop step 2's STOP table applies, sourced from the plain validation (the already-addressing PR comes from validate-issue's step 1 linked-PR check; `too large` from validate-issue step 7). Rows (a) to (c) are **Fable validation only** and do not apply here.
 
-**Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0). The stacked `Validated with LLM: …` attribution line uses the harness suffix `validate-fableplan-loop` and names the session model that ran the validation; the `Fable 5.1` model string in fable-validate-loop's step 3 does not apply here.
+**Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0), with fable-validate-loop step 3's read-back and STOP row unchanged. The stacked attribution line is `Validated with LLM: <session model> | <session tier> | Harness: <harness> | validate-fableplan-loop`, naming the session model and tier that ran the validation.
 
-**Step 4 (fableplan):** fable-validate-loop step 4's score gate, safety carve-out, and top-band note apply unchanged. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
+**Step 4 (fableplan):** fable-validate-loop step 4's score gate, safety carve-out, stamped plan flag, and top-band note apply, except that here the posted plan is the only Fable 5.1 stage: validation runs on the session model. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 
@@ -33,4 +33,4 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 
 ## Red Flags — STOP
 
-fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate".
+fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate", except the row for step 2 rows (a) to (c).
