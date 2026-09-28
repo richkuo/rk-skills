@@ -21,16 +21,16 @@ A task description, with an optional issue reference (URL, `#<N>`, bare `<N>`, o
 
 Do not plan the task yourself first. **Load the `fable-dispatch` skill before dispatching.** It owns the ladder, the CLI shim (`--effort <tier>` carries the tier there), result parsing, attribution (section 6), and the hygiene rules every caller follows (section 7). On the Agent-tool path, call the Agent tool with:
 
-- `subagent_type`: `Plan`; `model`: `fable`; `run_in_background`: `false`; `description`: `Plan <short task name>`.
-- `effort`: the step 1 tier, passed explicitly when the Agent tool's schema exposes an `effort` property. When it does not, dispatch without it; when the check is inconclusive and the call fails input validation on that parameter, re-dispatch once without it. A dispatch without `effort` is a degradation to report in step 5, never a step failure.
-- `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched, the working directory, and the user's constraints. Instruct it to:
+- `subagent_type`: `Plan`; `model`: `fable`; `description`: `Plan <short task name>`.
+- `effort`: the step 1 tier. `fable-dispatch` section 2 owns when `effort` and `run_in_background` are passed and the re-dispatch on a rejected parameter.
+- `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched (inside the `fable-dispatch` section 7 untrusted-data block), the working directory, and the user's constraints. Instruct it to:
   - Produce a concrete, ordered plan: files to create or modify, approach, build sequence, risks and edge cases, verification.
   - Number the implementation steps (`1.`, `2.`, ...) and end each with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state). Builders mirror these steps into their task tracker.
   - Plan the absolute-best solution; only correctness and safety override "best".
   - Return the plan as its final message in clean Markdown, fit to post verbatim as an issue comment.
-  - Make no file edits and no commits, including through Bash (`fable-dispatch` section 7).
+  - Obey the read-only rule of `fable-dispatch` section 7, stated in full in the prompt.
 
-When the plan arrives: save it verbatim to a scratchpad file at once (it must survive context summarization, and step 4 posts from it); run the section 7 snapshot diff; **record the model and effort that actually ran**. The model is `Fable 5.1` unless the ladder substituted another. The effort is the step 1 tier unless the harness accepted no `effort` parameter; then record that tier as requested, note it was not honored, and do not guess the session's own tier. Steps 4 and 5 use these values.
+When the plan arrives: save it verbatim to a scratchpad file at once (it must survive context summarization, and step 4 posts from it); run the section 7 snapshot diff; **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6. Steps 4 and 5 use these values.
 
 ### 3. Sanity-check the plan against the code
 
@@ -38,7 +38,7 @@ Verify the load-bearing claims: named files exist, named symbols are real, repos
 
 ### 4. Post the plan to the GitHub issue (only if one was resolved in step 1)
 
-Post before building; never update the comment afterwards. Body from the scratchpad file: the heading `## Implementation plan (Fable 5.1)`, the plan, the line `Issue read at: <step 1 issue read time>` for the `work-on-issue` step 0 untrusted-edit check, then the footer:
+Post before building; never update the comment afterwards. Body from the scratchpad file: the heading `## Implementation plan (<model that actually ran>)`, filled from step 2's record (`Fable 5.1` when Fable served), the plan, the line `Issue read at: <step 1 issue read time>` for the `work-on-issue` step 0 untrusted-edit check, then the footer:
 
 ```
 ---
@@ -70,5 +70,5 @@ Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`
 - Run **steps 1 through 5 only**; skip step 6's question and steps 7 and 8. The caller owns implementation.
 - Use the caller's harness suffix in place of `fableplan` in step 4's footer.
 - Keep the scratchpad file for the caller's implementation or report stage.
-- On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan, and never plan the task yourself in fableplan's place.
+- On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan. Never plan the task yourself in fableplan's place, except under `fable-dispatch` ladder step 3(c): when no subagent facility exists and `command -v claude` fails, plan inline as a reported downgrade, with the step 4 heading and footer naming the model that planned. That plan earns no `, fableplan` marker.
 - When the step 2 snapshot diff shows that the planning subagent wrote, stop before step 4 and report the changed paths to the caller. Do not ask about a revert, revert, or post the plan; the caller relays the state and the user decides.

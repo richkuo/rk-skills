@@ -64,7 +64,7 @@ Otherwise invoke `fableplan` (Skill tool) for the step 1 `owner/repo#N` under it
 
 ### 5. Hand off to work-on-issue-loop
 
-Invoke `work-on-issue-loop` (Skill tool) with the step 1 `owner/repo#N` passed explicitly. Point it at the plan's scratchpad file and the posted `## Implementation plan (Fable 5.1)` comment, and tell it deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body. Do not narrow that policy here. If step 4 was skipped by the score gate, hand off the issue alone and note the skip.
+Invoke `work-on-issue-loop` (Skill tool) with the step 1 `owner/repo#N` passed explicitly. Point it at the plan's scratchpad file and the posted `## Implementation plan (<model>)` comment, and tell it deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body. Do not narrow that policy here. If step 4 was skipped by the score gate, hand off the issue alone and note the skip.
 
 ### 6. Report
 

@@ -25,14 +25,14 @@ Present the decomposition briefly, then proceed; pause only for a decision only 
 
 ### 2. Set up the task worktree
 
-Create the worktree per `work-on-issue` step 1, named `cc/fable-orchestrate/<short-task-name>`, with no `baseRefs` and with the user's `targetBranch` when one was named. Everything lands on this one branch; one PR is the deliverable regardless of worker count.
+Create the worktree per `work-on-issue` step 1, named `cc/fable-orchestrate/<short-task-name>`, where `<short-task-name>` is one path segment with no `/`, with no `baseRefs` and with the user's `targetBranch` when one was named. Everything lands on this one branch; one PR is the deliverable regardless of worker count.
 
 ### 3. Dispatch workers
 
 | Shape | Dispatch |
 |---|---|
-| 1–2 sequential pieces | Agent calls, `subagent_type: general-purpose`, `model: sonnet`, `run_in_background: false` when the next piece depends on it. Workers build in the task worktree (path stated in the spec). **Commit each accepted piece before dispatching the next**; step 4's reset restores to committed HEAD. |
-| Fan-out (3+ parallel pieces, disjoint files) | A Workflow script (invoking this skill is the user's opt-in). Implementation `agent()` calls pass `model: 'sonnet'` and `isolation: 'worktree'`; judgment stages omit the model override to inherit Fable. Isolated worktrees are auto-cleaned when unchanged, so each spec instructs the worker to **commit on the branch** `cc/fable-orchestrate/<short-task-name>/worker-<n>-r<round>` (`-r0` first; each step 4 re-dispatch increments it) and **return that branch name** or an explicit "no changes". A result with neither has failed; re-dispatch under the step 4 cap. |
+| 1–2 sequential pieces | Agent calls, `subagent_type: general-purpose`, `model: sonnet`, with the Agent parameters and the wait rule of `fable-dispatch` section 2; a piece that depends on another waits for that worker's result. Workers build in the task worktree (path stated in the spec). **Commit each accepted piece before dispatching the next**; step 4's reset restores to committed HEAD. |
+| Fan-out (3+ parallel pieces, disjoint files) | A Workflow script (invoking this skill is the user's opt-in). Implementation `agent()` calls pass `model: 'sonnet'` and `isolation: 'worktree'`; judgment stages omit the model override to inherit Fable. Isolated worktrees are auto-cleaned when unchanged, so each spec instructs the worker to **commit on the branch** `cc/fable-orchestrate-workers/<short-task-name>/worker-<n>-r<round>` (`-r0` first; each step 4 re-dispatch increments it) and **return that branch name** or an explicit "no changes". Git stores refs as paths, so a worker branch cannot live under the task branch's name; the `-workers` namespace keeps them apart. A result with neither has failed; re-dispatch under the step 4 cap. |
 
 Each worker prompt is its spec verbatim, plus: run the verification command(s) and report actual output; the final message states what changed, verification results, and anything it could not do. If the `sonnet` id errors, use the closest available tier and name it in the footer and report.
 
@@ -50,14 +50,14 @@ On failure, two corrective rounds per piece, each a different move:
 
 ### 5. Integrate and verify the whole
 
-- Fan-out: merge each piece's **latest accepted attempt's branch** into the task branch with `git -C <task-worktree> merge <worker-branch>` and resolve conflicts yourself. Never merge branches from rejected attempts or from a piece you took over; a "no changes" worker has nothing to merge. Two workers touching the same file despite disjoint specs is a seam defect: resolve it yourself, never re-dispatch it.
+- Fan-out: merge each piece's **latest accepted attempt's branch** (`cc/fable-orchestrate-workers/<short-task-name>/worker-<n>-r<round>`) into the task branch with `git -C <task-worktree> merge <worker-branch>` and resolve conflicts yourself. Never merge branches from rejected attempts or from a piece you took over; a "no changes" worker has nothing to merge. Two workers touching the same file despite disjoint specs is a seam defect: resolve it yourself, never re-dispatch it.
 - Run the repo's full verification on the merged result and fix integration failures yourself.
 
 ### 6. Binding final review by a fresh reviewer
 
-**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, `run_in_background: false`) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the read-only rule. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
+**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at `high` or the tier the user asked for) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the section 7 read-only rule. The original task and the diff go inside the section 7 untrusted-data block. Record the model that served, the tier, and whether it was honored, per section 6. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
 
-The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer via SendMessage with the new diff and per-finding dispositions. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 6 and apply unchanged.
+The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, apply the `fable-advisor` step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 6 and apply unchanged.
 
 ### 7. Commit, push, PR
 
