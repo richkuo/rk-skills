@@ -45,7 +45,7 @@ Do not validate the issue yourself first — the subagent owns the validation. *
 
 The subagent's final message comes back as the tool result; it is not shown to the user.
 
-When the result arrives, record its `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue step 11 use, and save the verdict verbatim to a scratchpad file immediately, so it survives context summarization and later steps can quote it exactly.
+When the result arrives, record its `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue step 11 use. Also **record the model and effort that actually ran**, per `fable-dispatch` section 6: the model is `Fable 5.1` on the Agent path unless the ladder substituted another, and on the shim path the model `.modelUsage` reports; the effort is the `--effort` tier the shim passed. The Agent-path dispatch passes no `effort`, so record `high`, the Fable default, and note that no effort was passed; never guess another tier. Step 5's footer and every chain footer use these recorded values. Save the verdict verbatim to a scratchpad file immediately, so it survives context summarization and later steps can quote it exactly.
 
 ### 3. Spot-check the verdict
 
@@ -59,7 +59,7 @@ Present the vetted verdict in the validate-issue step-8 format, noting it was pr
 
 Handle the user's reply per the validate-issue procedure — these are main-agent actions, never re-delegated:
 
-- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: `Validated with LLM: <served model> | <accepted tier> | Harness: <harness> | fable-validate`, with all three values per `fable-dispatch` section 6: the model that actually served the dispatch (Fable 5.1 unless the ladder substituted another), the tier that was passed and accepted, and the harness actually running (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
+- **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: `Validated with LLM: <served model> | <accepted tier> | Harness: <harness> | fable-validate`, with the model and effort that step 2 recorded and the harness actually running per `fable-dispatch` section 6 (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
 

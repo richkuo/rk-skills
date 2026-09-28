@@ -39,8 +39,9 @@ Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run,
 
 ## Red Flags — STOP
 
-fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate", except the rows about fableplan and rows (a) to (c). In addition:
+fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate" and "the step 4 handoff" wherever it says "fableplan runs". Three owner rows do not apply: the row for step 2 rows (a) to (c), the `fableplan about to enter its build steps` row, and the `fableplan's sanity-check` row. The owner's first row reads, for this chain, as the row below. In addition:
 
 | Situation | Action |
 |---|---|
+| Tempted to skip validation and jump to implementation | Never skip validation; this chain has no plan stage and no sanctioned skip |
 | Tempted to run fableplan because the signal reads `yes` | This chain never plans; build without a plan and name `validate-fableplan-loop` in the report |

@@ -46,7 +46,7 @@ Otherwise continue.
 
 ### 3. Apply the update-issue edits, if called for
 
-On **Update issue description? Yes**, apply the edits now per fable-validate step 5 (validate-issue step 11 and `skills/validate-issue/issue-editing.md`), from the current checkout, against the step 1 `owner/repo#N`. The stacked attribution line is `Validated with LLM: <served model> | <accepted tier> | Harness: <harness> | fable-validate-loop`: the model that served the validation dispatch, the tier that was passed and accepted, and the harness running the session, all three per `fable-dispatch` section 6. A delta skill that reuses this step substitutes its own suffix and, when it validates on the session model, that model and tier. The edits land before fableplan so the planner plans against the corrected issue. On **No**, go to step 4.
+On **Update issue description? Yes**, apply the edits now per fable-validate step 5 (validate-issue step 11 and `skills/validate-issue/issue-editing.md`), from the current checkout, against the step 1 `owner/repo#N`. The stacked attribution line is `Validated with LLM: <served model> | <accepted tier> | Harness: <harness> | fable-validate-loop`: the model and effort that fable-validate step 2 recorded, and the harness running the session per `fable-dispatch` section 6. A delta skill that reuses this step substitutes its own suffix and, when it validates on the session model, that model and tier. The edits land before fableplan so the planner plans against the corrected issue. On **No**, go to step 4.
 
 After the edit, take the result of the editing procedure's "Verify the saved issue" read-back. Continue only when that read-back shows the corrected title, the first complexity line, and the appended footer line.
 

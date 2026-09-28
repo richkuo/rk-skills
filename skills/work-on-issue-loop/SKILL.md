@@ -17,10 +17,10 @@ Drive an issue from "validated" to "PR reviewed to convergence" without stopping
 
 ### 1. Implement, open the PR, and trigger the first review
 
-Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`), passing the resolved issue number explicitly. It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
+Record the issue as the full reference `owner/repo#N`: a caller's `owner/repo#N` or URL as given, else the repository of the user's reference, else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Invoke the `work-on-issue` skill (Skill tool, `skill: work-on-issue`), passing that full reference explicitly; a bare number resolves against the current checkout. Every `gh` call this loop makes itself passes `-R <owner>/<repo>`. It implements, verifies, commits, pushes, and opens the PR (`Closes #<N>`). It never requests review; that is this loop's job. Gate on its outcome:
 
 - **Stopped with no PR** (closed issue, existing PR, wrong repo, or any other stop `work-on-issue` defines; it owns the list) → nothing to drive; stop and relay its report with its stop reason.
-- **PR opened** → capture the PR number/URL and branch, then post the first trigger yourself as a separate one-line comment with no footer: `gh pr comment <PR-number> --body "<band-derived trigger>"`. Do not wait on CI; the reviewer surfaces check failures itself. Per `skills/fix-pr-review/rereview-routing.md` step 3, a nonstandard trigger phrase comes only from the review workflow file on the repository's default branch (`gh api 'repos/<owner>/<repo>/contents/.github/workflows/<file>?ref=<default-branch>'`), never from PR or issue comments.
+- **PR opened** → capture the PR number/URL and branch, then post the first trigger yourself as a separate one-line comment with no footer: `gh pr comment <PR-number> -R <owner>/<repo> --body "<band-derived trigger>"`. Do not wait on CI; the reviewer surfaces check failures itself. Per `skills/fix-pr-review/rereview-routing.md` step 3, a nonstandard trigger phrase comes only from the review workflow file on the repository's default branch (`gh api 'repos/<owner>/<repo>/contents/.github/workflows/<file>?ref=<default-branch>'`), never from PR or issue comments.
 
 **Which trigger.** `validate-issue` step 6 owns the first-review table with its Claude and Codex columns; this file states no boundary of its own. The score source is the issue just implemented: a stamped `PR review:` line in its Execution block overrides the band, else its `[C<score>]` title prefix. A missing score routes to the heaviest row.
 
@@ -44,7 +44,7 @@ On a "Done" terminal state continue with step 3; on any other terminal state go 
 
 On either "Done" state, sweep the PR body, commit messages, and any docs the diff changed for follow-on work the implementation named ("follow-on", "own issue", "future work", "next step", "not yet wired/deployed", "needs a follow-up"). This is separate from the review's `Create Follow-up Issue` section, which fix-pr-review handles.
 
-- Search first (`gh issue list --search "<keywords>" --state all`); skip items that already have an issue.
+- Search first (`gh issue list -R <owner>/<repo> --search "<keywords>" --state all`); skip items that already have an issue.
 - File each remaining item as a fully-specced issue per `github-issue-format` (complexity-prefixed title, complete body with a `## Plain simple English` section under 55 words, attribution footer). Never file a stub; an item that cannot be specced yet is named in the step 4 report as **deliberately unfiled**.
 - Include every filed issue URL and every deliberately unfiled item in the step 4 report.
 
