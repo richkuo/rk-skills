@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
@@ -54,7 +54,7 @@ function checkEmoji() {
     buffer.toString('utf8').split('\n').forEach((line, index) => {
       for (const [char] of line.matchAll(emoji)) {
         const code = char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
-        failures.push(`${file}:${index + 1}: emoji U+${code}`)
+        failures.push(`${file}:${index + 1}: emoji or pictographic symbol U+${code}`)
       }
     })
   }
@@ -66,11 +66,21 @@ if (typeof Bun === 'undefined') {
   process.exit(2)
 }
 
-const skills = readdirSync(`${root}skills`, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && existsSync(`${root}skills/${entry.name}/SKILL.md`))
-  .map((entry) => entry.name)
-  .sort()
-const failures = [...skills.flatMap(checkSkill), ...checkEmoji()]
+const skills = []
+const folderFailures = []
+for (const name of readdirSync(`${root}skills`).sort()) {
+  let stats
+  try {
+    stats = statSync(`${root}skills/${name}`)
+  } catch (error) {
+    folderFailures.push(`skills/${name}: cannot be read (${error.message})`)
+    continue
+  }
+  if (!stats.isDirectory()) continue
+  if (readdirSync(`${root}skills/${name}`).includes('SKILL.md')) skills.push(name)
+  else folderFailures.push(`skills/${name}: skill folder has no SKILL.md`)
+}
+const failures = [...folderFailures, ...skills.flatMap(checkSkill), ...checkEmoji()]
 if (!failures.length) {
   console.log(`All ${skills.length} skill frontmatter blocks are valid, and no tracked text file has an emoji.`)
 } else {
