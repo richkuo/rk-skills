@@ -55,7 +55,7 @@ Before presenting it, spot-check the verdict's load-bearing findings against the
 
 ### 4. Relay the verdict to the user
 
-Present the vetted verdict in the validate-issue step-8 format, noting it was produced by Fable 5.1 and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
+Present the vetted verdict in the validate-issue step-8 format, noting the model that served, as step 2 recorded it (with the downgrade stated when another model served), and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
 
 ### 5. Follow-on actions (main agent)
 
