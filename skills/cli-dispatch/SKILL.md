@@ -49,6 +49,7 @@ agent -p --output-format stream-json --model '<model-id>' --force --trust \
 
 ```sh
 set -m
+rm -f "$RUN/exit" "$RUN/limit" "$RUN/pid"
 ( <shim> ; echo $? > "$RUN/exit" ) < /dev/null > /dev/null 2>&1 &
 echo $! > "$RUN/pid"
 date +%s > "$RUN/start"
@@ -56,7 +57,7 @@ cp "$RUN/start" "$RUN/changed"
 echo 0 > "$RUN/bytes"
 ```
 
-- Run it with `bash "$RUN/launch.sh"`. Under bash, `set -m` gives the run its own process group; zsh refuses `set -m` in a non-interactive shell, and dash turns job control off with no terminal (both checked on macOS, 2026-09-28). Then confirm that `ps -o pgid= -p "$(cat "$RUN/pid")"` prints the same process id. A mismatch means no limit can end the run: end the processes it started and block.
+- Run it with `bash "$RUN/launch.sh"`. Under bash, `set -m` gives the run its own process group; zsh refuses `set -m` in a non-interactive shell, and dash turns job control off with no terminal (both checked on macOS, 2026-09-28). The `rm -f` line makes every launch, a retry included, start with no end-state file from an earlier attempt, so the poll reads only the attempt it polls; never retake the `before` snapshot for a retry, so a stray write by the first attempt still shows in the final diff. Then read `$RUN/exit` first: when it exists, the shim already ended (a bad model id or a login error can end it at once), so skip the group check and handle the run under section 5. Otherwise confirm that `ps -o pgid= -p "$(cat "$RUN/pid")"` prints the same process id. A different id means no limit can end the run: end the processes it started and block. Nothing printed and no `$RUN/exit` counts as a non-zero exit, as the limit bullet below states.
 - Poll with short calls; never wait in the foreground. Each poll sums the bytes of `$EVENTS`, `$RESULT`, and `$STDERR` (`cat "$EVENTS" "$RESULT" "$STDERR" 2>/dev/null | wc -c`). When the sum differs from `$RUN/bytes`, write it there and write `date +%s` to `$RUN/changed`. The run has ended when `$RUN/exit` exists. The run is **stalled** after 30 minutes with no new byte, and it reaches its **cap** 4 hours after `$RUN/start` for a build, or 2 hours for a fix pass or a validate pass. These values are reasoned defaults, and no run has measured them. One long command inside a run (an install, a test suite) can write no event for several minutes.
 - On a stall or the cap, write the reason to `$RUN/limit` and send `kill -TERM -- -"$(cat "$RUN/pid")"`. On a poll at least 30 seconds later, send `kill -KILL` to the same group while `kill -0 -- -"$(cat "$RUN/pid")"` still succeeds. The group kill ends the subshell too, so a killed run has a limit file and no exit file. Handle it as a non-zero exit under section 5, landed-work check first, and name the limit in any blocker. A group that is gone with no exit file and no limit file is also a non-zero exit. The kill reaches only processes still in the shim's process group.
 
@@ -88,18 +89,25 @@ git -C "$REPO" for-each-ref --format='ref %(refname) %(objectname)'
 git -C "$REPO" worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r W; do
   if [ ! -d "$W" ]; then printf 'missing %s\n' "$W"; continue; fi
   printf 'head %s %s %s\n' "$W" "$(git -C "$W" rev-parse HEAD 2>&1)" "$(git -C "$W" symbolic-ref -q HEAD || echo detached)"
-  git -C "$W" --no-optional-locks status --porcelain --untracked-files=all --ignored | grep -v '^.. \.claude/worktrees/' | W="$W" awk '{ print "status " ENVIRON["W"] " " $0 }'
+  git -C "$W" --no-optional-locks status --porcelain --untracked-files=all --ignored=matching | grep -v '^.. \.claude/worktrees/' | W="$W" awk '{ print "status " ENVIRON["W"] " " $0 }'
   printf 'hash %s %s\n' "$W" "$({
     git -C "$W" diff-index -p --binary HEAD
-    git -C "$W" ls-files --others --exclude-standard | grep -v '/$' | grep -v '^\.claude/worktrees/' | git -C "$W" hash-object --no-filters --stdin-paths
+    ( cd "$W" && git ls-files -z --others --exclude-standard | xargs -0 -n1 sh -c '
+      f=$1
+      [ -n "$f" ] || exit 0
+      case "$f" in .claude/worktrees/*) exit 0 ;; esac
+      if [ -L "$f" ]; then printf "link %s %s\n" "$f" "$(readlink "$f")"
+      elif [ -f "$f" ]; then printf "file %s %s\n" "$f" "$(git hash-object --no-filters -- "$f" 2>&1)"
+      else printf "unhashed %s\n" "$f"; fi
+    ' sh )
   } 2>&1 | git hash-object --stdin)"
 done
 ```
 
-- Each line names what it records: `ref` (every ref in the repository), `head` (a worktree's path, `HEAD` commit, and branch or `detached`), `status` (one porcelain line of a worktree, untracked and ignored paths included), `hash` (one hash over a worktree's diff against `HEAD` and the content of its untracked files), and `missing` (a listed worktree whose directory is gone). The script covers every worktree that `git worktree list --porcelain` lists; the main checkout's lines leave out `.claude/worktrees/`, because each worktree has its own lines. It takes no index lock and writes no object (`--no-optional-locks`, the plumbing `diff-index`, `hash-object` without `-w`), so it never blocks a concurrent track's git command.
+- Each line names what it records: `ref` (every ref in the repository), `head` (a worktree's path, `HEAD` commit, and branch or `detached`), `status` (one porcelain line of a worktree, untracked and ignored paths included), `hash` (one hash over a worktree's diff against `HEAD` and the content of each untracked file, read from a NUL-delimited listing so a name with a quote, backslash, or non-ASCII byte still hashes; a path that is no regular file or link, such as a nested repository directory or a file that vanished mid-run, enters the hash as an `unhashed` line naming it), and `missing` (a listed worktree whose directory is gone). The script covers every worktree that `git worktree list --porcelain` lists; the main checkout's lines leave out `.claude/worktrees/`, because each worktree has its own lines. It takes no index lock and writes no object (`--no-optional-locks`, the plumbing `diff-index`, `hash-object` without `-w`), so it never blocks a concurrent track's git command.
 - **Flag rules, build or fix pass.** The issue's own worktree is excluded, together with its branch's `refs/heads/` and `refs/remotes/origin/` refs: on a build, the worktree whose branch starts with `<prefix>/issue-<N>-`; on a fix pass, the worktree whose branch equals the PR's `headRefName`. Every other changed line is a stray change, reported in flags with the worktree path and branch: a `head`, `status`, or `hash` line of the main checkout or of another worktree, and any `ref` line outside `refs/remotes/`. A concurrent track's own work in its worktree also shows up here; the snapshot cannot tell it from a stray write, so the flag names the branch and the reader decides.
 - A worktree that appears during the run, with its new branch ref, is noted in the summary and not flagged, because concurrent tracks create worktrees. A worktree whose lines vanish or turn into a `missing` line is flagged as removed during the run and not attributable. Never drop that flag: a concurrent track that removes its own worktree and a destructive write look the same. A `refs/remotes/` change other than the issue's own branch is a summary observation, because a fetch or a concurrent push moves those refs.
-- **Reach.** The guard sees the repository, its worktrees, and its refs. It cannot see an edit inside an existing ignored file, a write outside the repository, a push, or a GitHub write.
+- **Reach.** The guard sees the repository, its worktrees, and its refs. `status` lists an ignored directory such as `node_modules/` as one `!!` line (`--ignored=matching`), so the diff stays small when a track installs dependencies. The guard cannot see an edit or a new file inside an ignored directory, an edit inside an existing ignored file, a write outside the repository, a push, or a GitHub write.
 - **(b) PR check, build only.** Verify the PR with `gh` as a Claude builder would: number, head ref, head commit. A zero exit with no PR is a blocker.
 - **(c) Head check, fix pass only.** After a fix pass the driver checks `gh pr view <num> --json headRefName,headRefOid`; a zero exit with neither a new head commit nor a disposition comment is a blocker.
 - **(d) Review cycles, build and fix pass.** The driver owns every read or write of GitHub review state (the standing review, the stop decision, the cycle-1 trigger and every re-trigger the caller's routing selects, the Actions run, the verdict) and forwards each fix pass to the same shim with the section 3 fix-pass file. The CLI agent runs `fix-pr-review` through its disposition comment and never posts a trigger; when the caller forbids re-triggering (subagent review mode), the driver posts nothing.
@@ -112,7 +120,7 @@ done
 | `codex login status` or `agent status` signed out | Block the issue, login named |
 | Shim exits non-zero | Check for landed work (section 5); else retry once, then block with the last stderr lines |
 | Stall window or hard cap reached | Kill the process group (section 4), then handle it as a non-zero exit under section 5: landed-work check first, retry once, then block naming the limit |
-| Launched run has no process group of its own | End the processes it started and block: no limit can end the run |
+| Launched run is still running and has no process group of its own (checked only when `$RUN/exit` does not exist) | End the processes it started and block: no limit can end the run |
 | Output names another model | Report the substitution in summary, flags, footer; never present as the stamped build |
 | Zero exit, no PR (build only; a validate pass has no PR) | Block; never open a PR for the CLI agent |
 | Stray change under the section 8 flag rules: a write, commit, or ref change outside the issue's worktree (a validate pass excludes no worktree) | Report in flags; leave for the user |
