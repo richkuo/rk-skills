@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,32 @@ const claudeDir = project
 const skillsDir = join(claudeDir, 'skills');
 const agentsDir = join(claudeDir, 'agents');
 const workflowsDir = join(claudeDir, 'workflows');
+
+function otherCheckout(dir) {
+	let real;
+	try {
+		real = realpathSync(dir);
+	} catch {
+		return null;
+	}
+	const root = dirname(real);
+	if (root === realpathSync(pkgRoot)) return null;
+	try {
+		return JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name === 'rk-skills' ? real : null;
+	} catch {
+		return null;
+	}
+}
+
+const foreignDirs = [skillsDir, agentsDir, workflowsDir]
+	.map((dir) => ({ dir, real: otherCheckout(dir) }))
+	.filter((entry) => entry.real !== null);
+if (foreignDirs.length > 0) {
+	console.error('rk-skills: installed nothing. These folders resolve into a different rk-skills checkout, and writing through them would change that checkout:');
+	for (const { dir, real } of foreignDirs) console.error(`  ${dir} -> ${real}`);
+	console.error('Remove each link, or run install.sh from that checkout instead.');
+	process.exit(1);
+}
 
 const BACKUP_LIMIT = 99;
 
