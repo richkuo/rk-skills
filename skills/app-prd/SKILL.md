@@ -69,7 +69,7 @@ The user will refine in bursts ("change X", "add Y", "rename call date to unseal
 
 ## Output
 
-PR URL plus a one-line summary of coverage and where the open questions are listed. The PR merges when the user says so — typically after the `prd-questions` stage empties the Open Questions section.
+PR URL plus a one-line summary of coverage and where the open questions are listed. The PR merges when the user says so, after the review gate above (a `fix-pr-review-loop` run to LGTM on the PRD PR) — typically once the `prd-questions` stage empties the Open Questions section.
 
 ## Failure modes
 
