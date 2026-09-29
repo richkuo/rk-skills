@@ -65,7 +65,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `fableplan-work-on-issue` | Fable plans, `work-on-issue` builds and opens the PR. No validation, no review loop. |
 | `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
 | `fable-advisor` | Your session builds; a persistent Fable 5.1 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.1 reviewer issues a binding pre-commit verdict. |
-| `fable-orchestrate` | Runs on Fable 5.1: splits the task into worker specs, dispatches Sonnet 5 workers, reviews each result, integrates one branch, and gets a binding verdict from a fresh Fable 5.1 reviewer before opening the PR. |
+| `fable-orchestrate` | Runs on Fable 5.1: splits the task into worker specs, dispatches Sonnet 5.5 workers, reviews each result, integrates one branch, and gets a binding verdict from a fresh Fable 5.1 reviewer before opening the PR. |
 | `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue. |
 | `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.1 on the current harness, with the fallback ladder and its reporting. Loaded before any Fable subagent is dispatched. |
 

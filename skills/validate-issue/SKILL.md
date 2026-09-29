@@ -70,8 +70,8 @@ Read [complexity-scoring.md](complexity-scoring.md) completely. Grade every axis
 
 | Band | Score | Validate | fableplan | Build |
 |---|---|---|---|---|
-| 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5 · high |
-| 1 | 10–20 | Opus 5.5 · high | No | Sonnet 5 · xhigh |
+| 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
+| 1 | 10–20 | Opus 5.5 · high | No | Sonnet 5.5 · xhigh |
 | 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 3 | 50–70 | Opus 5.5 · xhigh | No | Opus 5.5 · xhigh |
 | 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5.5 · xhigh |
@@ -81,7 +81,7 @@ fableplan is yes when the score is 71 or higher. The Build column is the Claude 
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
-| 0–20 | Sonnet 5 · high | `@claude sonnet review` | `@codex luna review` |
+| 0–20 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
 | 21–80 | Opus 5.5 · high | `@claude review` | `@codex review` |
 | 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
 

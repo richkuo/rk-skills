@@ -131,7 +131,7 @@ for (const entry of MERGED_INPUT) {
 const CONSUMED_MERGE_RECORDS = new Set()
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
-const MODEL_NAMES = { fable: 'Fable 5.1', opus: 'Opus 5.5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5' }
+const MODEL_NAMES = { fable: 'Fable 5.1', opus: 'Opus 5.5', sonnet: 'Sonnet 5.5', haiku: 'Haiku 4.5' }
 
 const CLI_HARNESSES = {
   codex: {
