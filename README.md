@@ -143,7 +143,7 @@ Also included:
 npx rk-skills
 ```
 
-Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. A skill or workflow already symlinked to this package is left as is, a symlink that points elsewhere is replaced (its target is not touched), an existing entry of the same kind (a real skill folder, a regular workflow file) is copied over in place, and any other entry in the way is moved to a free `.bak` name. When the skills, agents, or workflows folder itself resolves into a different rk-skills checkout (a whole-folder symlink), it installs nothing and exits with an error, so that checkout is never changed. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
+Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. A skill or workflow already symlinked to this package is left as is, a symlink that points elsewhere is replaced (its target is not touched), an existing entry of the same kind (a real skill folder, a regular workflow file) is copied over in place, and any other entry in the way is moved to a free `.bak` name. When the skills, agents, or workflows folder itself resolves into a different rk-skills checkout (a whole-folder symlink), it installs nothing and exits with an error, so that checkout is never changed; remove that folder link first, then run it again. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
 
 ## Install (as a plugin)
 

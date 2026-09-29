@@ -54,7 +54,7 @@ const foreignDirs = [skillsDir, agentsDir, workflowsDir]
 if (foreignDirs.length > 0) {
 	console.error('rk-skills: installed nothing. These folders resolve into a different rk-skills checkout, and writing through them would change that checkout:');
 	for (const { dir, real } of foreignDirs) console.error(`  ${dir} -> ${real}`);
-	console.error('Remove each link, or run install.sh from that checkout instead.');
+	console.error('Remove each folder link first (rm on the link itself, never on the folder it points to), then run npx rk-skills again. Do not run install.sh while such a link is in place: it would move that checkout\'s skill folders aside.');
 	process.exit(1);
 }
 
