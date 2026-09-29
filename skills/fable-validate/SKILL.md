@@ -43,7 +43,7 @@ Do not validate the issue yourself first — the subagent owns the validation. *
   - It must STOP at step 8: no step 9 to 12 actions, no `gh issue create`, no `gh issue edit`, no comments posted, no file edits. State the full read-only rule of `fable-dispatch` section 7 in the prompt.
   - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against, and one line `Issue updatedAt: <value>` with the `updatedAt` that validate-issue step 1 recorded.
 
-On the shim path, the `--allowedTools` list is the `fable-validate` example in `fable-dispatch` section 3, and `--add-dir` names the directories that section gives for the recorded SKILL.md path.
+On the shim path, the `--allowedTools` list is the `fable-validate` example in `fable-dispatch` section 3, and `--add-dir` names the directories that section gives for the recorded SKILL.md path. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
 
 The subagent's final message comes back as the tool result; it is not shown to the user.
 
