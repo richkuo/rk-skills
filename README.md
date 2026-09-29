@@ -46,9 +46,9 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 
 | Skill | What it does |
 |-------|--------------|
-| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits changed. |
-| `create-release` | Bumps the package version, tags it, and publishes a GitHub release with generated notes. |
-| `sync-docs-release` | Runs `sync-docs`, lands the doc changes on a PR, asks whether to merge, then runs `create-release`. |
+| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits changed, working from the latest default branch and opening a PR. |
+| `create-release` | Bumps the package version through a PR, then tags a commit on the default branch and publishes a GitHub release with generated notes. |
+| `sync-docs-release` | Runs `sync-docs`, asks whether to merge its docs PR, then runs `create-release`. |
 
 ### Fable-driven skills
 
@@ -131,7 +131,7 @@ Also included:
 
 ## Install (from a clone)
 
-`install.sh` symlinks every skill into `~/.claude/skills` (and `~/.codex/skills` when `~/.codex` exists), plus `CLAUDE.md`, `AGENTS.md`, the workflows, and the `/commit` command. Re-run after pulling.
+`install.sh` symlinks every skill into `~/.claude/skills`, plus `CLAUDE.md`, the workflows, and the `/commit` command into `~/.claude`. When `~/.codex` exists, it also links the skills into `~/.codex/skills` and `AGENTS.md` into `~/.codex`. An existing file or folder at a target, such as your own `~/.claude/CLAUDE.md` or an edited skill folder, is moved to a free `.bak` name first; an existing symlink is replaced with no backup. Re-run after pulling.
 
 ```sh
 ./install.sh
@@ -143,7 +143,7 @@ Also included:
 npx rk-skills
 ```
 
-Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
+Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. A skill or workflow already symlinked to this package is left as is, a symlink that points elsewhere is replaced (its target is not touched), an existing entry of the same kind (a real skill folder, a regular workflow file) is copied over in place, and any other entry in the way is moved to a free `.bak` name. When the skills, agents, or workflows folder itself resolves into a different rk-skills checkout (a whole-folder symlink), it installs nothing and exits with an error, so that checkout is never changed; remove that folder link first, then run it again. A skills or workflows folder path that holds a dangling symlink, or a symlink to a file, has that link removed (its target is not touched), and a regular file there is moved to a free `.bak` name, before the folder is created. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
 
 ## Install (as a plugin)
 
@@ -152,7 +152,7 @@ Copies the skills and workflow scripts into `~/.claude/`; add `--project` for th
 /plugin install rk-skills@rk-skills
 ```
 
-The plugin auto-discovers `skills/` and the `/commit` command and auto-updates; `CLAUDE.md` is a reference only. Restart Claude Code, then trigger any skill by name, e.g. `/fableplan <task>`. To install one skill, copy its directory's `SKILL.md` into `~/.claude/skills/<name>/`.
+The plugin auto-discovers `skills/`, the `/commit` command, and `workflows/`, and auto-updates; `CLAUDE.md` is a reference only. Plugin workflows are namespaced, so the milestone script runs as `rk-skills:milestone-pipeline`. Restart Claude Code, then trigger any skill by name, e.g. `/fableplan <task>`. To install one skill, copy its whole `skills/<name>/` directory into `~/.claude/skills/<name>/`: some skills keep support files beside `SKILL.md`.
 
 ## License
 
