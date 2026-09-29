@@ -131,7 +131,7 @@ Also included:
 
 ## Install (from a clone)
 
-`install.sh` symlinks every skill into `~/.claude/skills`, plus `CLAUDE.md`, the workflows, and the `/commit` command into `~/.claude`. When `~/.codex` exists, it also links the skills into `~/.codex/skills` and `AGENTS.md` into `~/.codex`. An existing file or folder at a target, such as your own `~/.claude/CLAUDE.md` or an edited skill folder, is moved to a free `.bak` name first; an existing symlink is replaced with no backup. Re-run after pulling.
+`install.sh` symlinks every skill into `~/.claude/skills`, plus `CLAUDE.md`, the workflows, and the `/commit` command into `~/.claude`. When `~/.codex` exists, it also links the skills into `~/.codex/skills` and `AGENTS.md` into `~/.codex`. An existing file or folder at a target, such as your own `~/.claude/CLAUDE.md` or an edited skill folder, is moved to a free `.bak` name first; an existing symlink is replaced with no backup. When `~/.claude`, `~/.codex`, or one of their skills, agents, workflows, or commands folders resolves into a different rk-skills checkout (a folder symlink), it installs nothing and exits with an error, so that checkout is never changed; remove that folder link first, then run it again. When such a folder resolves into this same checkout, each target that already is its source is reported as already linked and left as is. Re-run after pulling.
 
 ```sh
 ./install.sh
