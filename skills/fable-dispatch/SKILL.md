@@ -1,6 +1,7 @@
 ---
 name: fable-dispatch
-description: Required dispatch procedure for running a subagent on Fable 5.1: positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, the attribution rule, and the caller dispatch-hygiene rules (read-only prompt, snapshot/diff, retry). Load BEFORE dispatching any `model: fable` subagent.
+description: >-
+  Required dispatch procedure for running a subagent on Fable 5.1: positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, the attribution rule, and the caller dispatch-hygiene rules (read-only prompt, snapshot/diff, retry). Load BEFORE dispatching any `model: fable` subagent.
 ---
 
 # Fable dispatch

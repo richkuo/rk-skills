@@ -1,6 +1,7 @@
 ---
 name: fableplan-work-on-issue
-description: Use when the user wants a GitHub issue planned by Fable 5.1 and then implemented in one shot, without validation or a review loop — "fableplan-work-on-issue", "fableplan and work on #N", "plan #N with fable then implement it". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue, which implements the plan in an isolated worktree and opens a PR that closes the issue. Stops at the open PR — it does not request review or loop. The trimmed counterpart to validate-fableplan-loop (no validate-issue step, no @claude review cycle).
+description: >-
+  Use when the user wants a GitHub issue planned by Fable 5.1 and then implemented in one shot, without validation or a review loop — "fableplan-work-on-issue", "fableplan and work on #N", "plan #N with fable then implement it". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue, which implements the plan in an isolated worktree and opens a PR that closes the issue. Stops at the open PR — it does not request review or loop. The trimmed counterpart to validate-fableplan-loop (no validate-issue step, no @claude review cycle).
 ---
 
 # fableplan-work-on-issue
