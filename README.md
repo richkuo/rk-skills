@@ -131,7 +131,7 @@ Also included:
 
 ## Install (from a clone)
 
-`install.sh` symlinks every skill into `~/.claude/skills`, plus `CLAUDE.md`, the workflows, and the `/commit` command into `~/.claude`. When `~/.codex` exists, it also links the skills into `~/.codex/skills` and `AGENTS.md` into `~/.codex`. An existing regular file at a target, such as your own `~/.claude/CLAUDE.md`, is moved to a free `.bak` name first; an existing symlink is replaced with no backup. Re-run after pulling.
+`install.sh` symlinks every skill into `~/.claude/skills`, plus `CLAUDE.md`, the workflows, and the `/commit` command into `~/.claude`. When `~/.codex` exists, it also links the skills into `~/.codex/skills` and `AGENTS.md` into `~/.codex`. An existing file or folder at a target, such as your own `~/.claude/CLAUDE.md` or an edited skill folder, is moved to a free `.bak` name first; an existing symlink is replaced with no backup. Re-run after pulling.
 
 ```sh
 ./install.sh
@@ -143,7 +143,7 @@ Also included:
 npx rk-skills
 ```
 
-Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. A skill or workflow already symlinked to this package is left as is, a symlink that points elsewhere is replaced (its target is not touched), and a file in the way is moved to a free `.bak` name. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
+Copies the skills and workflow scripts into `~/.claude/`; add `--project` for the current repo's `.claude/`. Re-run to update. A skill or workflow already symlinked to this package is left as is, a symlink that points elsewhere is replaced (its target is not touched), an existing entry of the same kind (a real skill folder, a regular workflow file) is copied over in place, and any other entry in the way is moved to a free `.bak` name. It does not install `CLAUDE.md`, the `/commit` command, or anything into `~/.codex`.
 
 ## Install (as a plugin)
 
