@@ -1,11 +1,11 @@
 ---
 name: fable-orchestrate
-description: Use when the user wants a task decomposed and driven by a Fable 5.1 orchestrator delegating implementation to Sonnet 5 workers. Fable decomposes into self-contained specs, dispatches Sonnet workers (Agents for 1–2 pieces, a Workflow for fan-out), reviews each result, merges into one branch, and takes a binding verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
+description: Use when the user wants a task decomposed and driven by a Fable 5.1 orchestrator delegating implementation to Sonnet 5.5 workers. Fable decomposes into self-contained specs, dispatches Sonnet workers (Agents for 1–2 pieces, a Workflow for fan-out), reviews each result, merges into one branch, and takes a binding verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
 ---
 
 # fable-orchestrate
 
-Run an ad-hoc task with **Fable 5.1 as orchestrator** and **Sonnet 5 workers**. You own decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Issue-based milestone work with Execution blocks uses `milestone-workflow`.
+Run an ad-hoc task with **Fable 5.1 as orchestrator** and **Sonnet 5.5 workers**. You own decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Issue-based milestone work with Execution blocks uses `milestone-workflow`.
 
 **Input:** a task description in prose; if none is obvious, ask what to orchestrate.
 
