@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const emoji = /[\p{Extended_Pictographic}\u{FE0F}]/gu
+const emoji = /[\p{Extended_Pictographic}\u{FE0F}\u{20E3}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu
 
 function descriptionSource(lines) {
   const index = lines.findIndex((line) => line.startsWith('description:'))
