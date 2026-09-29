@@ -9,7 +9,7 @@ Rules for every mode:
 
 Documentation-sync procedure (run first in sync-docs and sync-release mode):
 
-1. Baseline: use git log to find the most recent commit whose subject mentions docs together with sync or CLAUDE; record its short hash. If none exists, review the last ten commits, pick a sensible starting point, and state your choice.
+1. Baseline: use git log to find the most recent docs-sync commit and record its short hash. A docs-sync commit has a docs or docs(scope) subject that begins with sync, a docs(sync) scope, or the words sync docs; a docs commit that only names CLAUDE.md or SKILL.md does not count. If none exists, review the last ten commits, pick a sensible starting point, and state your choice.
 2. List commits in the baseline..HEAD range with git log --oneline. Ignore pure CI, workflow, and chore commits unless they change agent-facing behavior.
 3. Classify each in-scope commit and update the affected docs surgically. AGENTS.md is the dense agent-facing reference for current behavior. Before editing it, run readlink on AGENTS.md. When readlink reports CLAUDE.md, the two paths are one file: apply each edit once through CLAUDE.md and never again through AGENTS.md, or the insert lands twice. When AGENTS.md is a real separate file and CLAUDE.md also exists, keep CLAUDE.md byte-identical to AGENTS.md by applying each edit to both. README.md is the public entry point and changes only when the public surface changes. Edit only the sections that changed; never rewrite whole files.
 4. Sync bidirectionally: add what is new, and delete or correct any statement the code now contradicts (stale paths, renamed symbols, removed fields, dead defaults). Verify a claim against the code before deleting it; never remove a claim you have not confirmed is wrong.
@@ -21,14 +21,14 @@ Then follow the branch and pull-request procedure for the current mode.
 sync-docs mode:
 - Confirm git status shows only your documentation edits; if unrelated changes are present, stage only the documentation files by name.
 - Branch: git checkout -b docs-sync/<short hash of HEAD from git rev-parse --short HEAD>.
-- Commit only the documentation files with a message that references a docs sync and ends with this repository's standard attribution footer.
+- Commit only the documentation files with a message whose subject begins with docs: sync, so the next baseline search finds it, and that ends with this repository's standard attribution footer.
 - git push origin <branch>, then gh pr create with base main. The body summarizes what changed and how it was verified and does not mention any release. Report the pull-request URL and stop.
 
 sync-release mode:
 - Determine the next semantic version: list tags with git tag --sort -v:refname, review the commits since the latest tag, and state the bump rationale in plain words (breaking change is major, new feature is minor, fixes or polish are patch).
 - Confirm git status as in sync-docs mode.
 - Branch: git checkout -b docs-release/v<version>, for example docs-release/v1.2.3. The exact branch-name shape is load-bearing: a separate workflow parses the version out of it and publishes the release only after this pull request merges. If the repository has no such merge-triggered release workflow, stop and post a comment saying so.
-- Commit only the documentation files, ending the message with the standard attribution footer. git push origin <branch>, then gh pr create with base main. The body states the exact version that will be published, the bump rationale, a preview of the release notes, and a warning line that merging publishes that release and closing without merging publishes nothing. Report the pull-request URL and stop.
+- Commit only the documentation files with a message whose subject begins with docs: sync, ending the message with the standard attribution footer. git push origin <branch>, then gh pr create with base main. The body states the exact version that will be published, the bump rationale, a preview of the release notes, and a warning line that merging publishes that release and closing without merging publishes nothing. Report the pull-request URL and stop.
 - Create no tag and publish no release yourself. The human merge is the only release gate.
 
 create-release mode publishes a release immediately from the current main tip. This is real and irreversible.
