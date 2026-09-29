@@ -32,17 +32,19 @@ If the input is conversation-derived, write the scratchpad summary now (see Inpu
 
 **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
-- `subagent_type`: `Plan` (read-only: no Edit/Write, keeps drafting side-effect-free)
-- `model`: `fable` (the whole point — the draft must come from Fable 5.1)
-- `run_in_background`: `false` — filing depends on the draft
+- `subagent_type`: `Plan` (no Edit or Write; the section 7 prompt rule covers Bash and MCP tools)
+- `model`: `fable` (the draft must come from Fable 5.1)
+- `effort`: `high` unless the user asked for another tier, with the other Agent parameters per `fable-dispatch` section 2; filing waits for the draft
 - `description`: `Draft issue: <short topic>`
 - `prompt`: hand it everything needed to draft independently:
   - The user's description verbatim (or the scratchpad summary path), the working directory, and the target repo if not the current checkout.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 1 through 6 exactly** — repo/duplicate check, claim grounding with `file:line` citations traced against the correct baseline, approach design, complexity score, scope check, and full body composition per the step-6 template.
-  - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits — state the read-only rule explicitly in the prompt per `fable-dispatch` section 7. Read-only `gh` calls (`gh issue list`, `gh pr list`, `gh repo view`, `gh label list`) are expected and allowed.
+  - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits. State the full read-only rule of `fable-dispatch` section 7 in the prompt. Read-only `gh` calls (`gh repo view`, `gh label list`) are expected and allowed; the two duplicate searches are the caller's, per step 2.
   - Return as its final message: (a) any duplicate found (URL + why it matches) — in which case no draft; (b) otherwise the complete issue draft — exact title with `[C<score>]` prefix and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
 
-When the result arrives, save the draft verbatim to a scratchpad file immediately, so it survives context summarization.
+On every path, first resolve `REPO` and `DEFAULT` per `new-issue` step 1, then run the two duplicate searches of `new-issue` step 1 yourself (`gh issue list --repo "$REPO" --state open --search "<keywords>"` and the `gh pr list` form) before the snapshot, and embed their output in the prompt inside the `fable-dispatch` section 7 untrusted-data block, with one line telling the subagent to take it as step 1's search results and never to run either search; a failed search is embedded as that failure. Then, when `REPO` is the checkout's `origin`, run the `fable-dispatch` section 3 caller-run fetch before the snapshot and tell the subagent it is done: it executes steps 1 through 6 exactly except the step 1 searches and that fetch, which it skips, and it never runs `git fetch`. On the shim, the `--allowedTools` list is those `gh` reads plus the read-only `git` forms the procedure runs: `"Bash(gh repo view <REPO> --json nameWithOwner)" "Bash(gh repo view <REPO> --json defaultBranchRef --jq .defaultBranchRef.name)" "Bash(gh label list --repo <REPO>)" "Bash(git show *)" "Bash(git grep *)" "Bash(git log *)" "Bash(git rev-parse *)"`. The prompt lists each allowed `gh` command verbatim, as that section states. `--add-dir` names the directories `fable-dispatch` section 3 gives for the recorded SKILL.md path and, for a conversation-derived input, the scratchpad directory. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
+
+When the result arrives, save the draft verbatim to a scratchpad file immediately, so it survives context summarization. Then run the section 7 snapshot diff and **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6; step 5's footer uses these values.
 
 ### 3. Duplicate gate
 
@@ -56,7 +58,7 @@ Before filing, spot-check the draft's load-bearing `file:line` citations against
 
 File per new-issue step 6: `gh issue create --title "[C<score>] <title>" --body-file <body-file>` (with `-R owner/repo` if cross-repo; labels only when the repo visibly uses them and the fit is unambiguous).
 
-Footer: since the draft came from the Fable 5.1 subagent, use `Created with LLM: Fable 5.1 | high | Harness: <harness> | fable-new-issue`, where `<harness>` names the harness actually running per `fable-dispatch` section 6 and the model names the one that actually served the dispatch. A repo CLAUDE.md footer format overrides.
+Footer: `Created with LLM: <model that served> | <recorded tier> | Harness: <harness> | fable-new-issue`, with the model and tier that step 2 recorded and `<harness>` naming the harness actually running, per `fable-dispatch` section 6. A repo CLAUDE.md footer format overrides.
 
 ### 6. Report
 
@@ -64,6 +66,6 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 
 ## Notes
 
-- The drafting subagent runs on Fable 5.1 regardless of the main agent's model — `model: fable` forces it.
+- The dispatch requests Fable 5.1 with `model: fable`, whatever the main agent's model. A harness can map `fable` to another model with no error, so `fable-dispatch` sections 1 and 5 detect a substitution, and the footer names the model that served.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
 - Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.
