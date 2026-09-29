@@ -68,7 +68,7 @@ claude -p --model fable --effort <tier> --output-format json \
 - `.is_error`: `true` means the call failed.
 - `.modelUsage`: its keys name the model(s) that served the call, each with its own token counts. Never assume the requested model ran. Observed live: a `--model` alias the CLI accepts can be served by a different model, and `.modelUsage` is the only honest record.
 - `.session_id`: the session the call ran in. Section 8 checks it against the UUID it passed.
-- `.permission_denials`: a non-empty list means a command was blocked. A denied read the procedure needs gets its `--allowedTools` entry, or its `--add-dir` directory, and one re-run. A denied write means the prompt's read-only rule failed and section 3 stopped it: report the command, and never add a write to the list.
+- `.permission_denials`: a non-empty list means a command was blocked. A denied read the procedure needs gets its `--allowedTools` entry, or its `--add-dir` directory, and one re-run; a denied read that the caller runs itself (a search or a `gh api` read) gets no entry. A denied write means the prompt's read-only rule failed and section 3 stopped it: report the command, and never add a write to the list.
 
 ## 5. Shim failure and substitution
 
