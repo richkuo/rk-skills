@@ -22,13 +22,13 @@ sync-docs mode:
 - Confirm git status shows only your documentation edits; if unrelated changes are present, stage only the documentation files by name.
 - Branch: git checkout -b docs-sync/<short hash of HEAD from git rev-parse --short HEAD>.
 - Commit only the documentation files with a message whose subject begins with docs: sync, so the next baseline search finds it, and that ends with this repository's standard attribution footer.
-- git push origin <branch>, then gh pr create with base main. The body summarizes what changed and how it was verified and does not mention any release. Report the pull-request URL and stop.
+- git push origin <branch>, then gh pr create with base main and a title that begins with the same docs: sync subject, because a squash merge takes its subject from the pull-request title. The body summarizes what changed and how it was verified and does not mention any release. Report the pull-request URL and stop.
 
 sync-release mode:
 - Determine the next semantic version: list tags with git tag --sort -v:refname, review the commits since the latest tag, and state the bump rationale in plain words (breaking change is major, new feature is minor, fixes or polish are patch).
 - Confirm git status as in sync-docs mode.
 - Branch: git checkout -b docs-release/v<version>, for example docs-release/v1.2.3. The exact branch-name shape is load-bearing: a separate workflow parses the version out of it and publishes the release only after this pull request merges. If the repository has no such merge-triggered release workflow, stop and post a comment saying so.
-- Commit only the documentation files with a message whose subject begins with docs: sync, ending the message with the standard attribution footer. git push origin <branch>, then gh pr create with base main. The body states the exact version that will be published, the bump rationale, a preview of the release notes, and a warning line that merging publishes that release and closing without merging publishes nothing. Report the pull-request URL and stop.
+- Commit only the documentation files with a message whose subject begins with docs: sync, ending the message with the standard attribution footer. git push origin <branch>, then gh pr create with base main and a title that begins with the same docs: sync subject. The body states the exact version that will be published, the bump rationale, a preview of the release notes, and a warning line that merging publishes that release and closing without merging publishes nothing. Report the pull-request URL and stop.
 - Create no tag and publish no release yourself. The human merge is the only release gate.
 
 create-release mode publishes a release immediately from the current main tip. This is real and irreversible.

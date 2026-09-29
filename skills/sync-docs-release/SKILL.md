@@ -17,19 +17,19 @@ sync-docs works in its own worktree off the latest `origin/<default>` and ends w
 
 If sync-docs reported no doc changes, go straight to Step 3.
 
-Otherwise a release cut before the docs PR merges will not contain the doc changes, so ask the user once — via AskUserQuestion — how Step 3 should relate to it:
+Otherwise a release cut before the docs PR merges will not contain the doc changes. When the caller's approved plan already authorizes the docs-sync PR and its merge (as the `milestone-workflow` close-out does with merging on), take the merge-then-release choice below without asking. Otherwise ask the user once — via AskUserQuestion — how Step 3 should relate to it:
 
 - **Merge the doc PR once its checks pass, then release from the updated default branch** (recommend this one).
 - **Release now without the doc changes**, leaving the PR open.
 - **Stop here** — no release.
 
-Treat their answer as authorization for that one merge only. It never authorizes the version-bump PR merge that create-release asks about. Never merge without asking, and never merge past failing checks.
+Treat their answer, or the caller's plan, as authorization for that one merge only. Their answer never authorizes the version-bump PR merge that create-release asks about. Never merge without that answer or that plan, and never merge past a failing or pending check.
 
 ## Step 3 — Create a release
 
 Skip this step entirely if the user chose "stop here".
 
-If they chose merge-then-release, first wait for the PR's checks (`gh pr checks <n> --watch`), merge it with its head pinned (`--match-head-commit <head-sha>`), remove the sync-docs worktree, and run `git fetch origin`. Do not check out or pull the local default branch: create-release reads `origin/<default>`, never the local branch.
+If they chose merge-then-release, first wait for the PR's checks (`gh pr checks <n> --watch`); a failing or pending check stops the run with the PR left open and no release. Then merge it with its head pinned (`--match-head-commit <head-sha>`). On both release paths, remove the sync-docs worktree (`git worktree remove <path>`; the branch and the PR stay) and run `git fetch origin` before create-release starts, so its clean-tree precondition sees no leftover worktree. Do not check out or pull the local default branch: create-release reads `origin/<default>`, never the local branch.
 
 Then invoke the `create-release` skill via the Skill tool and follow it to completion here, carrying the user's original context (target version or bump type, release-notes specifics) and how the doc changes landed — the PR number and merge commit, or the fact that they are still unmerged.
 
