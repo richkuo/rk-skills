@@ -1,6 +1,7 @@
 ---
 name: fableplan-loop
-description: Use when the user wants a GitHub issue planned by Fable 5.1 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
+description: >-
+  Use when the user wants a GitHub issue planned by Fable 5.1 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
 ---
 
 # fableplan-loop

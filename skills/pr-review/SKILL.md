@@ -1,6 +1,7 @@
 ---
 name: pr-review
-description: Required format and rules for any pull request (PR) review comment: verdict line, finding sections, materiality filter, safety carve-out. Load BEFORE composing or posting a PR review.
+description: >-
+  Required format and rules for any pull request (PR) review comment: verdict line, finding sections, materiality filter, safety carve-out. Load BEFORE composing or posting a PR review.
 ---
 
 # PR review format
