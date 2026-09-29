@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,7 +101,43 @@ function record(results, name, outcome) {
 
 const emptyResults = () => ({ linked: [], replaced: [], backedUp: [], kept: [], copied: [] });
 
-mkdirSync(skillsDir, { recursive: true });
+function prepareDir(dir) {
+	const stat = lstatSync(dir, { throwIfNoEntry: false });
+	if (stat === undefined) return { status: 'create' };
+	if (stat.isSymbolicLink()) {
+		if (statSync(dir, { throwIfNoEntry: false })?.isDirectory()) return { status: 'ready' };
+		return { status: 'removeLink' };
+	}
+	if (stat.isDirectory()) return { status: 'ready' };
+	const backup = freeBackupPath(dir);
+	if (backup === null) return { status: 'blocked' };
+	return { status: 'backUp', backup };
+}
+
+const workflows = existsSync(workflowsSrc)
+	? readdirSync(workflowsSrc).filter((name) => name.endsWith('.js')).sort()
+	: [];
+
+const dirPlans = [skillsDir, ...(workflows.length > 0 ? [workflowsDir] : [])].map((dir) => ({ dir, ...prepareDir(dir) }));
+const blockedDirs = dirPlans.filter((plan) => plan.status === 'blocked');
+if (blockedDirs.length > 0) {
+	console.error(`rk-skills: installed nothing. A file is in the way at these folder paths and no free backup name exists after ${BACKUP_LIMIT} tries:`);
+	for (const { dir } of blockedDirs) console.error(`  ${dir}`);
+	process.exit(1);
+}
+const removedDirLinks = [];
+const backedUpDirs = [];
+for (const plan of dirPlans) {
+	if (plan.status === 'removeLink') {
+		rmSync(plan.dir);
+		removedDirLinks.push(plan.dir);
+	} else if (plan.status === 'backUp') {
+		renameSync(plan.dir, plan.backup);
+		backedUpDirs.push(`${plan.dir} -> ${basename(plan.backup)}`);
+	}
+	if (plan.status !== 'ready') mkdirSync(plan.dir, { recursive: true });
+}
+
 const skillResults = emptyResults();
 for (const name of skills) {
 	const src = join(skillsSrc, name);
@@ -129,7 +165,9 @@ for (const name of retiredSkills) {
 	}
 }
 
-const retiredAgents = ['sync-docs-runner.md', 'create-release-runner.md'];
+const retiredAgents = statSync(agentsDir, { throwIfNoEntry: false })?.isDirectory()
+	? ['sync-docs-runner.md', 'create-release-runner.md']
+	: [];
 const removedAgents = [];
 const backedUpAgents = [];
 const keptAgents = [];
@@ -151,12 +189,8 @@ for (const name of retiredAgents) {
 	backedUpAgents.push(`${name} -> ${basename(backup)}`);
 }
 
-const workflows = existsSync(workflowsSrc)
-	? readdirSync(workflowsSrc).filter((name) => name.endsWith('.js')).sort()
-	: [];
 const workflowResults = emptyResults();
 if (workflows.length > 0) {
-	mkdirSync(workflowsDir, { recursive: true });
 	for (const name of workflows) {
 		const src = join(workflowsSrc, name);
 		const dest = join(workflowsDir, name);
@@ -170,6 +204,14 @@ const scope = project ? 'this project' : 'your personal skills';
 console.log(`rk-skills installed ${installedSkills.length} skills into ${scope}:`);
 console.log(`  ${skillsDir}`);
 console.log(`  ${installedSkills.join(', ') || '(none)'}`);
+if (removedDirLinks.length > 0) {
+	console.log(`\nRemoved ${removedDirLinks.length} folder symlinks that did not point to a folder (their targets are unchanged) and created real folders:`);
+	console.log(`  ${removedDirLinks.join(', ')}`);
+}
+if (backedUpDirs.length > 0) {
+	console.log(`\nBacked up ${backedUpDirs.length} files that were in the way at a folder path:`);
+	console.log(`  ${backedUpDirs.join(', ')}`);
+}
 if (skillResults.linked.length > 0) {
 	console.log(`\nLeft ${skillResults.linked.length} skills as-is (already symlinked to this checkout):`);
 	console.log(`  ${skillResults.linked.join(', ')}`);
