@@ -22,7 +22,7 @@ A task description, with an optional issue reference (URL, `#<N>`, bare `<N>`, o
 Do not plan the task yourself first. **Load the `fable-dispatch` skill before dispatching.** It owns the ladder, the CLI shim (`--effort <tier>` carries the tier there), result parsing, attribution (section 6), and the hygiene rules every caller follows (section 7). On the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan`; `model`: `fable`; `description`: `Plan <short task name>`.
-- `effort`: the step 1 tier. `fable-dispatch` section 2 owns when `effort` and `run_in_background` are passed and the re-dispatch on a rejected parameter.
+- `effort`: the step 1 tier. `fable-dispatch` section 2 owns when `effort` and `run_in_background` are passed and the re-dispatch on a rejected parameter. On the shim path, `--allowedTools` is the `fable-dispatch` section 3 planning list.
 - `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched (inside the `fable-dispatch` section 7 untrusted-data block), the working directory, and the user's constraints. Instruct it to:
   - Produce a concrete, ordered plan: files to create or modify, approach, build sequence, risks and edge cases, verification.
   - Number the implementation steps (`1.`, `2.`, ...) and end each with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state). Builders mirror these steps into their task tracker.
@@ -70,5 +70,5 @@ Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`
 - Run **steps 1 through 5 only**; skip step 6's question and steps 7 and 8. The caller owns implementation.
 - Use the caller's harness suffix in place of `fableplan` in step 4's footer.
 - Keep the scratchpad file for the caller's implementation or report stage.
-- On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan. Never plan the task yourself in fableplan's place, except under `fable-dispatch` ladder step 3(c): when no subagent facility exists and `command -v claude` fails, plan inline as a reported downgrade, with the step 4 heading and footer naming the model that planned. That plan earns no `, fableplan` marker.
+- On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan. Never plan the task yourself in fableplan's place, except under `fable-dispatch` ladder step 3(c): when no subagent facility exists and `command -v claude` fails, plan inline as a reported downgrade, with the step 4 heading and footer naming the model that planned. The marker follows the `work-on-issue` title rule from that heading: a Fable 5.1 session that plans inline earns it, and any other model does not.
 - When the step 2 snapshot diff shows that the planning subagent wrote, stop before step 4 and report the changed paths to the caller. Do not ask about a revert, revert, or post the plan; the caller relays the state and the user decides.

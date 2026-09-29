@@ -55,17 +55,17 @@ On failure, two corrective rounds per piece, each a different move:
 
 ### 6. Binding final review by a fresh reviewer
 
-**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at `high` or the tier the user asked for) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the section 7 read-only rule. The original task and the diff go inside the section 7 untrusted-data block. Record the model that served, the tier, and whether it was honored, per section 6. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
+**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at `high` or the tier the user asked for, with the empty `--allowedTools` list on the shim path) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the section 7 read-only rule. The original task and the diff go inside the section 7 untrusted-data block. Record the model that served, the tier, and whether it was honored, per section 6. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
 
 The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, apply the `fable-advisor` step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 6 and apply unchanged.
 
 ### 7. Commit, push, PR
 
-On approval, commit, push, and open one PR per the repo's conventions. The PR body carries an **Orchestration log**: decomposition (pieces to workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the verdict trail. If takeovers dominate, say the task was a poor fit for delegation. Footer per convention, with `<harness>` per `fable-dispatch` section 6:
+On approval, commit, push, and open one PR per the repo's conventions. The PR body carries an **Orchestration log**: decomposition (pieces to workers), per-piece disposition (accepted round 0/1/2 or taken over), integration fixes, and the verdict trail. If takeovers dominate, say the task was a poor fit for delegation. Footer per convention, with the session model and effort as the session observes them (`unknown` for a value the harness does not expose) and `<harness>` per `fable-dispatch` section 6:
 
 ```
 ---
-Created with LLM: <session model> | high | Harness: <harness> | fable-orchestrate
+Created with LLM: <session model> | <observed session effort> | Harness: <harness> | fable-orchestrate
 ```
 
 ### 8. Report

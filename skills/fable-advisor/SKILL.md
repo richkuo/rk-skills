@@ -23,7 +23,7 @@ If the main agent already runs on Fable 5.1, say the advisor is redundant and as
 
 ### 2. Spawn the advisor and get the plan
 
-The advisor owns the plan; do not plan yourself. **Load `fable-dispatch` before dispatching**; its section 7 hygiene rules also govern the step 6 reviewer. Agent-tool path: `subagent_type: Plan`, `model: fable`, `description: Advise on <short task name>`, and `effort` with the other Agent parameters per `fable-dispatch` section 2. The tier is the step 1 **Plan effort** stamp when present, else the tier the user asked for, else `high`; record the model that served, the tier, and whether it was honored, per section 6. The prompt briefs a standing, read-only advisor with the full task (issue title and body for a bare reference), the working directory, the user's constraints, and its charter:
+The advisor owns the plan; do not plan yourself. **Load `fable-dispatch` before dispatching**; its section 7 hygiene rules also govern the step 6 reviewer. Agent-tool path: `subagent_type: Plan`, `model: fable`, `description: Advise on <short task name>`, and `effort` with the other Agent parameters per `fable-dispatch` section 2. On the shim path, `--allowedTools` is the `fable-dispatch` section 3 planning list, and every `--resume` keeps it. The tier is the step 1 **Plan effort** stamp when present, else the tier the user asked for, else `high`; record the model that served, the tier, and whether it was honored, per section 6. The prompt briefs a standing, read-only advisor with the full task (issue title and body for a bare reference), the working directory, the user's constraints, and its charter:
 
 - First deliverable: a concrete, ordered plan with the implementation steps numbered, each ending in a **verify point** (the check that proves it done). Plan the absolute-best solution per CLAUDE.md.
 - Each consult reply carries **recommendation**, **rationale**, **confidence** (high/medium/low), and a flag: **advisory** (the executor may overrule with a stated reason) or **blocking** (must be resolved before commit).
@@ -65,17 +65,17 @@ Each consult carries the question, the current diff or excerpt, and what was tri
 
 ### 6. Binding pre-commit review (fresh reviewer, never the advisor)
 
-Spawn a new one-shot Fable 5.1 reviewer (`subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at the step 2 tier; record the model that served, the tier, and whether it was honored, per section 6) with the task, the final plan including deviations and overruled findings, the full diff, and the verification results. It reviews for correctness, safety, and plan conformance and returns **approve**, or **blocked** with numbered findings (file:line and a failure scenario), non-blocking suggestions kept separate.
+Spawn a new one-shot Fable 5.1 reviewer (`subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at the step 2 tier, with the empty `--allowedTools` list on the shim path; record the model that served, the tier, and whether it was honored, per section 6) with the task, the final plan including deviations and overruled findings, the full diff, and the verification results. It reviews for correctness, safety, and plan conformance and returns **approve**, or **blocked** with numbered findings (file:line and a failure scenario), non-blocking suggestions kept separate.
 
-The verdict is binding. On blocked, fix each finding or produce evidence it is wrong, then re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, apply the step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user. **Deadlock cap**: when the reviewer rejects the same finding's resolution twice, stop and let the user rule. Never drop a blocking finding. If the reviewer call fails twice, tell the user and ask whether to commit unreviewed.
+The verdict is binding. On blocked, fix each finding or produce evidence it is wrong, then re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, or a `--resume` re-submit has failed twice, apply the step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user; the replacement reviewer is a new spawn. **Deadlock cap**: when the reviewer rejects the same finding's resolution twice, stop and let the user rule. Never drop a blocking finding. If the initial spawn of a reviewer, or of its replacement, fails twice, tell the user and ask whether to commit unreviewed.
 
 ### 7. Commit and PR markers
 
-On both paths the PR body carries an **Advisor log** (plan source, each consult with its disposition, overruled advisory findings, the verdict trail), `Closes #<N>` when an issue was resolved, and this footer with the executor model actually in use, also on the commit:
+On both paths the PR body carries an **Advisor log** (plan source, each consult with its disposition, overruled advisory findings, the verdict trail), `Closes #<N>` when an issue was resolved, and this footer with the executor model and effort the session observes (`unknown` for a value the harness does not expose, per `fable-dispatch` section 6), also on the commit:
 
 ```
 ---
-Created with LLM: <executor model> | high | Harness: <harness> | fable-advisor
+Created with LLM: <executor model> | <observed session effort> | Harness: <harness> | fable-advisor
 ```
 
 ### 8. Post the verdict to the issue (only if one was resolved)
