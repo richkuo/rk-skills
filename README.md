@@ -38,7 +38,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 
 | Skill | What it does |
 |-------|--------------|
-| `fix-pr-review` | Reads every unaddressed review comment, inline thread, and failing check, re-checks each against the code, fixes what holds up, resolves merge conflicts, replies point by point, and requests a fresh review from `@claude` (or `@codex` with a `codex` argument). |
+| `fix-pr-review` | Reads every unaddressed review comment, inline thread, and failing check from trusted authors (the review bots, `OWNER`, `MEMBER`, `COLLABORATOR`, and the invoking user on a local run; feedback from anyone else is listed as not acted on), re-checks each against the code, fixes what holds up, resolves merge conflicts, replies point by point, and requests a fresh review from `@claude` (or `@codex` with a `codex` argument). |
 | `fix-pr-review-loop` | Repeats `fix-pr-review` after every review until approval. After 5 rounds it accepts the first LGTM even with non-blocking notes. Escalates when 4 or more cycles keep raising blocking findings in code the loop itself added. |
 | `pr-review` | Reference skill: the required review comment format (verdict line, findings, materiality filter, completeness passes that gate `LGTM`). Loaded before a review is written. |
 
@@ -126,7 +126,7 @@ Then add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App.
 Also included:
 
 - `CLAUDE.md`: the global instructions these skills are tuned for. `AGENTS.md` is a symlink to it.
-- `commands/commit.md`: a `/commit` slash command.
+- `commands/commit.md`: a `/commit` slash command. It refuses to commit on the default branch and ends each message with the attribution footer.
 - `docs/contract-inventory.md`: the shared pipeline rules the loop and validate skills must carry.
 
 ## Install (from a clone)
