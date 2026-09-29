@@ -15,7 +15,7 @@ Preconditions: `gh auth status` succeeds. Resolve `DEFAULT=$(gh repo view --json
 
 ## Steps
 
-1. **Baseline.** `git log --oneline "origin/$DEFAULT" | grep -m1 -E '^[0-9a-f]+ (docs(\([^)]*\))?: sync\b|docs\(sync\):)|sync docs'`. A sync is a `docs:` or `docs(<scope>):` subject that begins with "sync", a `docs(sync):` scope, or the words "sync docs"; a docs commit that only names CLAUDE.md or SKILL.md is no sync. If none, ask the user for the last-known-good tag or SHA, or use the initial commit for a first sync.
+1. **Baseline.** `git log --oneline "origin/$DEFAULT" | grep -m1 -E '^[0-9a-f]+ ([Ss]ync docs\b|docs(\([^)]*\))?: sync\b|docs\(sync\):)'`. A sync is a `docs:` or `docs(<scope>):` subject that begins with "sync", a `docs(sync):` scope, or a subject that begins with "sync docs"; a commit that mentions "sync docs" later in its subject is no sync, and a docs commit that only names CLAUDE.md or SKILL.md is no sync. If none, ask the user for the last-known-good tag or SHA, or use the initial commit for a first sync.
 2. **Range.** `git log <last-sync-sha>.."origin/$DEFAULT" --oneline`. Skip pure CI, workflow, and chore commits unless they change agent- or operator-facing behavior.
 3. **Classify each commit** (an unrelated-areas commit is classified per area):
 

@@ -9,7 +9,7 @@ Rules for every mode:
 
 Documentation-sync procedure (run first in sync-docs and sync-release mode):
 
-1. Baseline: use git log to find the most recent docs-sync commit and record its short hash. A docs-sync commit has a docs or docs(scope) subject that begins with sync, a docs(sync) scope, or the words sync docs; a docs commit that only names CLAUDE.md or SKILL.md does not count. If none exists, review the last ten commits, pick a sensible starting point, and state your choice.
+1. Baseline: use git log to find the most recent docs-sync commit and record its short hash. A docs-sync commit has a docs or docs(scope) subject that begins with sync, a docs(sync) scope, or a subject that begins with sync docs; a commit that mentions sync docs later in its subject, or a docs commit that only names CLAUDE.md or SKILL.md does not count. If none exists, review the last ten commits, pick a sensible starting point, and state your choice.
 2. List commits in the baseline..HEAD range with git log --oneline. Ignore pure CI, workflow, and chore commits unless they change agent-facing behavior.
 3. Classify each in-scope commit and update the affected docs surgically. CLAUDE.md is the dense agent-facing reference for current behavior. README.md is the public entry point and changes only when the public surface changes. Edit only the sections that changed; never rewrite whole files.
 4. Sync bidirectionally: add what is new, and delete or correct any statement the code now contradicts (stale paths, renamed symbols, removed fields, dead defaults). Verify a claim against the code before deleting it; never remove a claim you have not confirmed is wrong.
