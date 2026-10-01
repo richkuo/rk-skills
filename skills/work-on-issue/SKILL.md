@@ -52,7 +52,7 @@ Trace the affected paths; map each acceptance criterion, negative ones too, to a
 
 ### 3. Implement the fix
 
-Build the best solution per the repository's engineering rules: conventions, invariants, an issue-scoped diff, and docs the change makes stale. Never write unit tests. Docs-only changes need only relevant validation. An existing automated test edit follows `fix-pr-review` step 6 (Outdated, Wrong, or Obsolete, each with a checkable ground, disclosed in the commit and PR body); if the correct change still cannot pass an ungrounded test, stop before step 5 and report it (step 7).
+Build the best solution per the repository's engineering rules: conventions, invariants, an issue-scoped diff, and docs the change makes stale. Never write unit tests; integration tests are allowed. Docs-only changes need only relevant validation. An existing automated test edit follows `fix-pr-review` step 6 (Outdated, Wrong, or Obsolete, each with a checkable ground, disclosed in the commit and PR body); if the correct change still cannot pass an ungrounded test, stop before step 5 and report it (step 7).
 
 ### 4. Verify before claiming anything
 
