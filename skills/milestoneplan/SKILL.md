@@ -9,7 +9,7 @@ Show a milestone's execution plan as one table. **This skill never writes**: no 
 
 ## Input
 
-A milestone title (`v1`, `v1 — Desktop core call loop`), matched loosely on prefix. With no input, or when two titles match, list the open milestones with open/closed counts and ask which.
+A milestone title (`v1`, `v1-Desktop-core-call-loop`), matched loosely on prefix. Existing titles with spaces still match; quote them in every `gh` call and in any `milestone:` filter link, and when you name a milestone filter to the user, quote a title that has spaces. With no input, or when two titles match, list the open milestones with open/closed counts and ask which.
 
 ## Steps
 
