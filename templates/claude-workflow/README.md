@@ -102,7 +102,8 @@ own model until you copy the template again.
   out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
   the action uses a token-free credential helper and scrubs secrets from
-  subprocess environments. The action's write-permission check still applies
+  subprocess environments, except where the scrub is off by default on a
+  self-hosted runner (see below). The action's write-permission check still applies
   to every actor. Git offers the token only to the GitHub server. A
   `PreToolUse` hook blocks every tool call if the token reaches git config,
   `$RUNNER_TEMP`, or a git credential store, or if the guard script changed.
@@ -111,12 +112,13 @@ own model until you copy the template again.
   environment for `gh pr comment`; this is an accepted residual risk because
   the token has only this job's permissions and expires when the job ends.
 - **Secret scrub on self-hosted runners:** the review route turns the scrub
-  off by default on a self-hosted runner, so tool subprocesses there can see
-  the Claude credential. The scrub's bubblewrap sandbox fails every Bash call
-  on a runner installed under the home directory as root
-  (anthropics/claude-code#97730, anthropics/claude-code#97731), and the
-  reviewer then cannot run `git diff`. GitHub-hosted runners keep the scrub.
-  To keep the scrub on a self-hosted runner whose layout works with it, pass
+  off by default on a self-hosted runner whose workspace (literal or resolved)
+  is under the home directory, so tool subprocesses there can see the Claude
+  credential. The scrub's bubblewrap sandbox fails every Bash call in that
+  layout (anthropics/claude-code#97730, anthropics/claude-code#97731), and the
+  reviewer then cannot run `git diff`. GitHub-hosted runners and self-hosted
+  workspaces outside the home directory keep the scrub.
+  To keep the scrub on a self-hosted runner in that layout anyway, pass
   `review_subprocess_scrub_self_hosted: true` to `claude-run.yml` in the
   `review` job. Each such review then runs
   `sudo apt-get install bubblewrap socat` and
