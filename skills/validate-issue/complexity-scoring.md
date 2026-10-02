@@ -86,9 +86,9 @@ Grades 0 and 1 are checkable: compare the sites the issue names with the sites t
 
 | Grade | Anchor |
 |---|---|
-| 0 | A pure helper with a unit test and no fixture |
-| 1 | Unit tests with a small fixture or a golden file |
-| 2 | Several units and fixtures, or a contract test that reads several files |
+| 0 | No new test: a docs or wording change, or a pure helper an existing integration test already exercises |
+| 1 | An existing integration test with a small fixture or a golden file covers the change |
+| 2 | Several fixtures, or a contract test that reads several files |
 | 3 | An integration test with a subprocess, a network or service stub, or a database fixture, or a parity test across two implementations |
 | 4 | End-to-end or live-service proof, hardware, timing or concurrency reproduction, or state that is hard to reproduce |
 

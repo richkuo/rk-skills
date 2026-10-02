@@ -83,7 +83,7 @@ Implement every in-scope Confirmed, Partial, Judgment, and `Recommended Optional
 
 ### 8. Commit and push
 
-Only after step 6's verification: `git status`; stage each fix file by name (never `git add -A`; leave a step 7 merge commit as git made it); `git commit -F <msg-file>`; `git push` to the tracked upstream. Rejected push (head moved since step 0) → stop, post nothing, report; never force-push. Message: "Address review on #<N>: <summary>", every test edit disclosed, plus the **Updated**-verb LLM Attribution Footer per CLAUDE.md/AGENTS.md, `Harness: Claude Code`. Confirm `gh pr view <N> --json headRefOid` equals `git rev-parse HEAD`; mismatch → stop, post nothing, report.
+Only after step 6's verification: `git status`; stage each fix file by name (never `git add -A`; leave a step 7 merge commit as git made it); `git commit -F <msg-file>`; `git push` to the tracked upstream. Rejected push (head moved since step 0) → stop, post nothing, report; never force-push. Message: "Address review on #<N>: <summary>", every test edit disclosed, plus the **Updated**-verb LLM Attribution Footer per CLAUDE.md/AGENTS.md, with the harness that actually ran. Confirm `gh pr view <N> --json headRefOid` equals `git rev-parse HEAD`; mismatch → stop, post nothing, report.
 
 ### 9. Post the disposition comment
 

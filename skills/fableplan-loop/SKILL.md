@@ -47,7 +47,7 @@ It runs its full loop: work-on-issue implements in a fresh worktree and opens th
 
 Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final verdict, which model each fix cycle ran on, any follow-on issues it filed), prefixed with one line covering the head of the chain: plan posted (comment URL). Relay every terminal state of `work-on-issue-loop` step 4 under its own name: **Done**, **Done, with leftovers**, **Diverging**, **Blocked on a test**, **Fixer stopped**, the bot-never-responded escalation, and **Nothing to drive**. Only the two **Done** states report a finished review; never imply an approved PR exists when it does not.
 
-**Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
+**Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: lead with the outcome, and keep every item the relayed terminal-state row requires.
 
 ## Red Flags — STOP
 

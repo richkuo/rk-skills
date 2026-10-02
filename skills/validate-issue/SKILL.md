@@ -74,7 +74,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 | 1 | 10–20 | Opus 5.5 · high | No | Sonnet 5.5 · xhigh |
 | 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 3 | 50–70 | Opus 5.5 · xhigh | No | Opus 5.5 · xhigh |
-| 4 | 71–80 | Fable 5.1 · medium | **Yes** | Opus 5.5 · xhigh |
+| 4 | 71–80 | Fable 5.1 · high | **Yes** | Opus 5.5 · xhigh |
 | 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5.5 · xhigh |
 
 Overrides:

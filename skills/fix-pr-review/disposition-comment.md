@@ -56,5 +56,5 @@ For findings from inline diff threads, also post a one-line reply in the thread 
 
 ```
 ---
-Created with LLM: <current model> | <effort> | Harness: Claude Code
+Created with LLM: <current model> | <effort> | Harness: <harness>
 ```

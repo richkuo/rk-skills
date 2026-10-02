@@ -36,7 +36,7 @@ Invoke the `work-on-issue-loop` skill (Skill tool, `skill: work-on-issue-loop`) 
 
 Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run, final verdict). Prefix it with a one-line note of what happened in steps 2 and 3 (issue updated or not; scope check passed), so the user sees the whole chain. When step 4 recorded a due plan, say that a plan was due and that `validate-fableplan-loop` is the chain that plans. On a STOP row, report the row and its evidence in place of the summary.
 
-**Cap the whole report (prefix + relayed summary) at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
+**Write the whole report (prefix + relayed summary) in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase or its internals: lead with the outcome, and keep every item the relayed terminal-state row requires.
 
 ## Red Flags — STOP
 

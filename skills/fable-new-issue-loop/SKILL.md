@@ -23,5 +23,5 @@ Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5
 | The drafting dispatch failed a second time on the Agent path (`fable-dispatch` section 7) | **STOP.** Relay the failure report. Do not re-dispatch, and do not draft or file the issue yourself. |
 | The section 7 snapshot diff shows that the drafting subagent wrote | **STOP.** Relay the changed paths. Do not revert them, file, or continue on that tree; the user decides. |
 - **Step 3, why validation still runs.** Validating an issue this chain just filed stays useful: validate-issue re-traces the claims against the code independently and catches anything the Fable draft or the spot-check got wrong.
-- **Step 4, report.** Mark the issue line as drafted by the model that served, as `fable-new-issue` recorded it (Fable 5.1 when Fable served). **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
+- **Step 4, report.** Mark the issue line as drafted by the model that served, as `fable-new-issue` recorded it (Fable 5.1 when Fable served). The new-issue-loop report rule applies.
 - **One extra Red Flag.** Tempted to skip the Fable subagent and draft or file the issue yourself to go faster: never. The draft coming from Fable 5.1 is the point of this skill.

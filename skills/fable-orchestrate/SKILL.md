@@ -13,11 +13,11 @@ Run an ad-hoc task with **Fable 5.1 as orchestrator** and **Sonnet 5.5 workers**
 
 ## Steps
 
-### 1. Decompose, biased against fan-out
+### 1. Decompose
 
 Read the relevant code first, then split:
 
-- **Fewer, larger, sequential pieces by default.** Parallelize only when pieces touch disjoint files. One worker doing the whole task is valid.
+- **Split along file and dependency boundaries.** Run pieces in parallel when they touch disjoint files and none needs another's output; sequence the rest. One worker doing the whole task is valid.
 - **Pin every interface between pieces upfront** (signature, schema, event shape, route contract). Workers never invent their side of a seam.
 - **Each spec is self-contained** for a worker with zero context: scope, exact files, acceptance criteria, non-goals, pinned interfaces, relevant repo conventions, and the exact verification command(s) the worker must run and pass before returning.
 
