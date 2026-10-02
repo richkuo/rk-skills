@@ -110,10 +110,16 @@ own model until you copy the template again.
   `git diff --no-index` are denied. The token stays in the agent process
   environment for `gh pr comment`; this is an accepted residual risk because
   the token has only this job's permissions and expires when the job ends.
-- **Host changes on self-hosted Linux runners:** for the secret scrub, each
-  review runs `sudo apt-get install bubblewrap socat` and
-  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
-  setting stays until the machine restarts. To skip both on a persistent
-  runner, pass `review_subprocess_scrub: false` to `claude-run.yml` in the
-  `review` job. This also turns off the scrub, so tool subprocesses can see the
-  Claude credential.
+- **Secret scrub on self-hosted runners:** the review route turns the scrub
+  off by default on a self-hosted runner, so tool subprocesses there can see
+  the Claude credential. The scrub's bubblewrap sandbox fails every Bash call
+  on a runner installed under the home directory as root
+  (anthropics/claude-code#97730, anthropics/claude-code#97731), and the
+  reviewer then cannot run `git diff`. GitHub-hosted runners keep the scrub.
+  To keep the scrub on a self-hosted runner whose layout works with it, pass
+  `review_subprocess_scrub_self_hosted: true` to `claude-run.yml` in the
+  `review` job. Each such review then runs
+  `sudo apt-get install bubblewrap socat` and
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, and the
+  sysctl setting stays until the machine restarts. Pass
+  `review_subprocess_scrub: false` to turn the scrub off on every runner.

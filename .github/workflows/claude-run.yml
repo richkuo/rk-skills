@@ -52,6 +52,11 @@ on:
         required: false
         type: boolean
         default: true
+      review_subprocess_scrub_self_hosted:
+        description: 'Review route only. On a self-hosted runner the secret scrub runs only when this is true and review_subprocess_scrub is true. Default false, because the scrub bubblewrap sandbox fails every Bash call on runners installed under the home directory as root (anthropics/claude-code#97730, anthropics/claude-code#97731). GitHub-hosted runners ignore this input.'
+        required: false
+        type: boolean
+        default: false
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         description: 'Claude Code OAuth token for agent authentication'
@@ -64,8 +69,26 @@ jobs:
     env:
       CLAUDE_HARNESS: anthropics/claude-code-action@v1
       BOT_LOGIN: ${{ inputs.mode == 'review' && 'github-actions[bot]' || 'claude[bot]' }}
-      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: ${{ inputs.mode == 'review' && !inputs.review_subprocess_scrub && '0' || '' }}
     steps:
+      - name: Resolve the review subprocess scrub for this runner
+        if: inputs.mode == 'review'
+        env:
+          SCRUB: ${{ inputs.review_subprocess_scrub }}
+          SCRUB_SELF_HOSTED: ${{ inputs.review_subprocess_scrub_self_hosted }}
+        run: |
+          if [ "$SCRUB" != "true" ]; then
+            echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
+            echo "Review subprocess scrub off: review_subprocess_scrub is false."
+          elif [ "$RUNNER_ENVIRONMENT" != "self-hosted" ]; then
+            echo "Review subprocess scrub on: runner environment '${RUNNER_ENVIRONMENT:-unknown}'."
+          elif [ "$SCRUB_SELF_HOSTED" = "true" ]; then
+            echo "Review subprocess scrub on: review_subprocess_scrub_self_hosted is true."
+          else
+            echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
+            echo "::warning::Review subprocess scrub off on this self-hosted runner, so tool subprocesses can see the Claude credential. Set review_subprocess_scrub_self_hosted: true to keep it on."
+          fi
+
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
