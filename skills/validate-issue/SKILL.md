@@ -71,7 +71,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 | Band | Score | Validate | fableplan | Build |
 |---|---|---|---|---|
 | 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
-| 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · xhigh |
+| 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 3 | 50–70 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 4 | 71–80 | Fable 5.1 · high | **Yes** | Opus 5.5 · high |

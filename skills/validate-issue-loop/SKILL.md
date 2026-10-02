@@ -40,7 +40,7 @@ Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run,
 
 ## Red Flags — STOP
 
-fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate" and "the step 4 handoff" wherever it says "fableplan runs". Three owner rows do not apply: the row for step 2 rows (a) to (c), the `fableplan about to enter its build steps` row, and the `fableplan's sanity-check` row. The owner's first row reads, for this chain, as the row below. In addition:
+fable-validate-loop's Red Flags table applies, reading "validate-issue" wherever it says "fable-validate" and "the step 4 handoff" wherever it says "fableplan runs". Two owner rows do not apply: the row for step 2 rows (a) to (c) and the `fableplan's sanity-check` row. The owner's first row reads, for this chain, as the row below. In addition:
 
 | Situation | Action |
 |---|---|

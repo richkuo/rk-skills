@@ -120,7 +120,7 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Ba
 | Axes (S,C,R,U,V) | Capability | Volume | Score | Score rationale |
 |---|---|---|---|---|
 | (4,0,0,0,0) | 0 | 8 | **8** | Scope raises Volume without raising Capability |
-| (4,2,1,1,4) | 0 | 20 | **20** | The largest Capability 0 score: a mechanical grind stays on Sonnet at xhigh |
+| (4,2,1,1,4) | 0 | 20 | **20** | The largest Capability 0 score: a mechanical grind stays on Sonnet at high |
 | (0,0,2,0,0) | 1 | 0 | **25** | Risk 2 alone moves the build to Opus |
 | (0,0,0,4,0) | 3 | 0 | **75** | Uncertainty 4 maps to Capability 3 |
 | (0,4,1,1,0) | 2 | 8 | **58** | Coupling 4 forces Capability 2 |
@@ -134,6 +134,6 @@ Scores 21 to 24 and 46 to 49 cannot occur. Band 2 holds exactly Capability 1. Ba
 ## Routing details
 
 - The main skill's band table owns the `fableplan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
-- Build capability never decreases as the band rises: bands 0 and 1 build on Sonnet 5.5 (at high, then xhigh), and bands 2 to 5 all build on Opus 5.5 at high. Bands 4 and 5 differ only in first reviewer.
+- Build capability never decreases as the band rises: bands 0 and 1 build on Sonnet 5.5 at high, and bands 2 to 5 all build on Opus 5.5 at high. Bands 4 and 5 differ only in first reviewer.
 - A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review until a validation stamps the traced score on the issue (step 8).
 - When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. A lower traced score restamps the title and rationale line down per step 8, and every stage that reads the issue after the edit lands routes on it. A read-only validator rescore that writes no issue edit never lowers routing: the milestone pipeline keeps the band it already chose from the title for that run. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.

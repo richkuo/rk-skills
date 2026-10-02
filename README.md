@@ -32,7 +32,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
 | `work-on-issue` | Implements an issue in an isolated git worktree, builds to the newest trusted plan, one posted by the user or a collaborator (plans from other authors are named and skipped; deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
 | `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
-| `issueplan` | Plans on the session's model without subagents. A bare issue invocation posts the plan and asks whether to build; a task description with no issue builds and opens a PR by default. A planning-only request stops after the plan, and explicit build authorization continues to a PR. |
+| `issueplan` | Plans on the session's model without subagents, posts the plan to the issue (or presents it when there is no issue), and stops. It never builds; `work-on-issue` builds from the posted plan. |
 
 ### PR review skills
 
@@ -54,7 +54,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 
 | Skill | What it does |
 |-------|--------------|
-| `fableplan` | A Fable 5.1 subagent writes an implementation plan, posts it to the issue, and asks whether to build now. |
+| `fableplan` | A Fable 5.1 subagent writes an implementation plan, the main agent checks it and posts it to the issue, and the skill stops. It never builds. |
 | `fable-new-issue` | `new-issue` drafted by a read-only Fable 5.1 subagent; your session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the issue to a reviewed PR. |
 | `fable-validate` | `validate-issue` run on a Fable 5.1 subagent; your session presents the verdict and acts on it. |
