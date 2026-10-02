@@ -32,7 +32,7 @@ Follow **fable-validate-loop steps 1 through 4** with the changes below, then ru
 
 Report, in order: scope gate passed, issue updated or not, plan posted (comment URL), and one line on what the plan proposes. Then name the follow-on options in one line — `work-on-issue` to build the plan and stop at the PR, `work-on-issue-loop` to build it and drive review to convergence, or `fable-validate-fableplan-loop` for the same chain end-to-end next time. **Do not start any of them.**
 
-**Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: the outcome first, then each item above.
+**Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 

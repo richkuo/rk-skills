@@ -50,7 +50,7 @@ On either "Done" state, sweep the PR body, commit messages, and any docs the dif
 
 ### 4. Report
 
-Report per fix-pr-review-loop step 5: same terminal-state table and same `**Verification limitation:**` handling (a `Verification limitation` line is not a finding; list each unverified source, omit when none). Three deltas:
+Report per fix-pr-review-loop step 5: same terminal-state table and same `**Verification limitation:**` handling (a `Verification limitation` line is not a finding; list each unverified source outside the word cap, omit when none). Three deltas:
 
 - Replace its "PR was already `merged`/`closed`" row with: work-on-issue stopped with no PR → **Nothing to drive.** Relay its report with the stop reason it gave; zero review cycles ran.
 - Add every follow-on issue filed in step 3 (URLs) and any item deliberately left unfiled.

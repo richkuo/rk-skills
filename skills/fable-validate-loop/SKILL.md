@@ -69,7 +69,7 @@ Invoke `work-on-issue-loop` (Skill tool) with the step 1 `owner/repo#N` passed e
 
 ### 6. Report
 
-Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line for the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate. On a STOP row, report the row and its evidence in place of the summary. **Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: lead with the outcome, and keep every item the relayed terminal-state row requires.
+Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line for the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate. On a STOP row, report the row and its evidence in place of the summary. **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100**, per the Response Style rules in CLAUDE.md/AGENTS.md.
 
 ## Red Flags — STOP
 
