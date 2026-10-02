@@ -6,7 +6,7 @@
 
 ## Response Style (every response)
 
-- **Hard cap: 55 words, 5 sentences.** Stay under it. Lead with the answer, then at most one sentence of justification. No "here's why" paragraphs, rejected alternatives, recaps, or volunteered breakdowns (risk tables, per-item estimates): give the headline and offer detail in one line.
+- **Hard cap: 55 words, 5 sentences, for text shown to me.** Stay under it. The cap covers chat replies and skill final reports. It does not cover written artifacts (PR bodies, issue bodies, comments, commit messages, plans, docs, skills) or a subagent's result to its parent agent. Lead with the answer, then at most one sentence of justification. No "here's why" paragraphs, rejected alternatives, recaps, or volunteered breakdowns (risk tables, per-item estimates): give the headline and offer detail in one line.
 - **Only cap exception:** I explicitly ask for detail, depth, or "more". Multi-part or deep questions do not license going over.
 - **No code blocks or diffs unless I explicitly ask to see code.** Edit with tools and describe in prose. If showing code is the only way, ask first.
 - **The cap holds at every effort level.** Higher effort means more thinking and the same reply length.
