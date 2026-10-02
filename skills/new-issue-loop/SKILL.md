@@ -41,7 +41,7 @@ Validating an issue this same session just wrote is not redundant: validate-issu
 
 Relay validate-issue-loop's final summary (PR URL, review cycles, verdict), prefixed with one line covering the front of the chain: issue number/URL filed, complexity score, and any unfiled follow-ups from step 2.
 
-**Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: lead with the outcome, and keep every item the relayed terminal-state row requires.
+**Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 
