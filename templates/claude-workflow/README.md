@@ -111,17 +111,21 @@ own model until you copy the template again.
   `git diff --no-index` are denied. The token stays in the agent process
   environment for `gh pr comment`; this is an accepted residual risk because
   the token has only this job's permissions and expires when the job ends.
-- **Secret scrub on self-hosted runners:** the review route turns the scrub
-  off by default on a self-hosted runner whose workspace (literal or resolved)
-  is under the home directory, so tool subprocesses there can see the Claude
-  credential. The scrub's bubblewrap sandbox fails every Bash call in that
-  layout (anthropics/claude-code#97730, anthropics/claude-code#97731), and the
-  reviewer then cannot run `git diff`. GitHub-hosted runners and self-hosted
-  workspaces outside the home directory keep the scrub.
-  To keep the scrub on a self-hosted runner in that layout anyway, pass
-  `review_subprocess_scrub_self_hosted: true` to `claude-run.yml` in the
-  `review` job. Each such review then runs
+- **Secret scrub on self-hosted runners:** the scrub's bubblewrap sandbox
+  fails every Bash call in two self-hosted Linux layouts, and the reviewer then
+  cannot run `git diff`: the literal or resolved workspace is inside
+  `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730), or
+  the review runs as root and a workspace ancestor owned by another uid lacks
+  `.claude` or `.mcp.json` (anthropics/claude-code#97731). In those layouts
+  the review route turns the scrub off by default, so tool subprocesses there
+  can see the Claude credential, and the step emits a warning naming the
+  cause. GitHub-hosted runners and every other self-hosted layout keep the
+  scrub. Pass `review_subprocess_scrub_self_hosted: true` to `claude-run.yml`
+  in the `review` job to keep the scrub in those layouts anyway.
+- **Host changes on self-hosted Linux runners:** every review on a
+  self-hosted Linux runner that keeps the scrub runs
   `sudo apt-get install bubblewrap socat` and
-  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, and the
-  sysctl setting stays until the machine restarts. Pass
-  `review_subprocess_scrub: false` to turn the scrub off on every runner.
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
+  setting stays until the machine restarts. Pass
+  `review_subprocess_scrub: false` in the `review` job to skip both; this also
+  turns off the scrub on every runner.

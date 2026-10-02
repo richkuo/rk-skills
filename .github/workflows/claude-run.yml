@@ -48,12 +48,12 @@ on:
         type: string
         default: ''
       review_subprocess_scrub:
-        description: 'Review route only. true lets the action secret scrub run, except on a self-hosted runner whose workspace is under the home directory unless review_subprocess_scrub_self_hosted is true; on Linux the scrub installs bubblewrap and socat with sudo apt-get and sets kernel.apparmor_restrict_unprivileged_userns=0. false skips those host changes and the scrub on every runner, so tool subprocesses can see the Claude credential.'
+        description: 'Review route only. true lets the action secret scrub run, except on a self-hosted Linux runner with a layout known to break the scrub sandbox (see review_subprocess_scrub_self_hosted) unless review_subprocess_scrub_self_hosted is true; on Linux the scrub installs bubblewrap and socat with sudo apt-get and sets kernel.apparmor_restrict_unprivileged_userns=0. false skips those host changes and the scrub on every runner, so tool subprocesses can see the Claude credential.'
         required: false
         type: boolean
         default: true
       review_subprocess_scrub_self_hosted:
-        description: 'Review route only. On a self-hosted runner whose workspace (literal or resolved) is under the home directory, the secret scrub runs only when this is true and review_subprocess_scrub is true; otherwise tool subprocesses can see the Claude credential. Default false, because the scrub bubblewrap sandbox fails every Bash call in that layout (anthropics/claude-code#97730, anthropics/claude-code#97731). GitHub-hosted runners and self-hosted workspaces outside the home directory ignore this input.'
+        description: 'Review route only. On a self-hosted Linux runner with a layout known to break the scrub bubblewrap sandbox, the secret scrub runs only when this is true and review_subprocess_scrub is true; otherwise tool subprocesses can see the Claude credential. The layouts: the literal or resolved workspace is inside $HOME/actions-runner or $HOME/runners (anthropics/claude-code#97730), or the review runs as root and a workspace ancestor owned by another uid lacks .claude or .mcp.json (anthropics/claude-code#97731). Default false, because the sandbox fails every Bash call in those layouts. GitHub-hosted runners and other self-hosted layouts ignore this input.'
         required: false
         type: boolean
         default: false
@@ -83,24 +83,41 @@ jobs:
             echo "Review subprocess scrub on: runner environment '${RUNNER_ENVIRONMENT:-unknown}'."
           elif [ "$SCRUB_SELF_HOSTED" = "true" ]; then
             echo "Review subprocess scrub on: review_subprocess_scrub_self_hosted is true."
+          elif [ "$(uname -s)" != "Linux" ]; then
+            echo "Review subprocess scrub on: self-hosted runner is not Linux."
           else
             HOME_REAL=$(cd -P "${HOME:-/nonexistent}" 2>/dev/null && pwd -P || true)
             WS_REAL=$(cd -P "$GITHUB_WORKSPACE" 2>/dev/null && pwd -P || true)
-            UNDER_HOME=false
+            UID_NOW=$(id -u)
+            REASON=""
             for h in "${HOME:-}" "$HOME_REAL"; do
               h="${h%/}"
               [ -n "$h" ] || continue
               for w in "$GITHUB_WORKSPACE" "$WS_REAL"; do
                 case "$w" in
-                  "$h"/*) UNDER_HOME=true ;;
+                  "$h"/actions-runner/*|"$h"/runners/*)
+                    REASON="the workspace $w is inside a denied runner path under $h (anthropics/claude-code#97730)" ;;
                 esac
               done
             done
-            if [ "$UNDER_HOME" = "true" ]; then
+            if [ -z "$REASON" ] && [ "$UID_NOW" = "0" ]; then
+              for w in "$GITHUB_WORKSPACE" "$WS_REAL"; do
+                [ -n "$w" ] || continue
+                d=$(dirname "$w")
+                while [ "$d" != "/" ] && [ "$d" != "." ] && [ -z "$REASON" ]; do
+                  OWNER=$(stat -c %u "$d" 2>/dev/null || echo 0)
+                  if [ "$OWNER" != "0" ] && { [ ! -e "$d/.claude" ] || [ ! -e "$d/.mcp.json" ]; }; then
+                    REASON="the workspace ancestor $d is owned by uid $OWNER and lacks .claude or .mcp.json, while the review runs as root (anthropics/claude-code#97731)"
+                  fi
+                  d=$(dirname "$d")
+                done
+              done
+            fi
+            if [ -n "$REASON" ]; then
               echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
-              echo "::warning::Review subprocess scrub off: this self-hosted runner's workspace is under the home directory, where the scrub sandbox fails every Bash call (anthropics/claude-code#97730, anthropics/claude-code#97731). Tool subprocesses can see the Claude credential. Set review_subprocess_scrub_self_hosted: true to keep the scrub on."
+              echo "::warning::Review subprocess scrub off: $REASON, so the scrub sandbox would fail every Bash call. Tool subprocesses can see the Claude credential. Set review_subprocess_scrub_self_hosted: true to keep the scrub on."
             else
-              echo "Review subprocess scrub on: this self-hosted runner's workspace is outside the home directory."
+              echo "Review subprocess scrub on: this self-hosted runner has no layout known to break the scrub sandbox."
             fi
           fi
 
