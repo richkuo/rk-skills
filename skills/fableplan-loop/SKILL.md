@@ -33,7 +33,7 @@ If the issue is closed, or a merged/open PR already addresses it, **do not plan 
 
 ### 1. Run fableplan — planning phase only
 
-Invoke the `fableplan` skill for the recorded `owner/repo#N` (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**: run fableplan steps 1 through 5 only, and do not execute its steps 7–8. Implementation belongs to work-on-issue-loop in step 2. Instruct fableplan to use the harness suffix `fableplan-loop` in the posted comment's attribution footer.
+Invoke the `fableplan` skill for the recorded `owner/repo#N` (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**. Implementation belongs to work-on-issue-loop in step 2. Instruct fableplan to use the harness suffix `fableplan-loop` in the posted comment's attribution footer.
 
 Keep the vetted plan's scratchpad file — step 2 passes it through. On a structurally wrong plan, a fableplan dispatch failure after its internal retry, or a snapshot diff that shows the planning subagent wrote, **stop and report** per that section; don't hand a broken plan to work-on-issue-loop, and don't implement unplanned.
 
@@ -47,7 +47,7 @@ It runs its full loop: work-on-issue implements in a fresh worktree and opens th
 
 Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final verdict, which model each fix cycle ran on, any follow-on issues it filed), prefixed with one line covering the head of the chain: plan posted (comment URL). Relay every terminal state of `work-on-issue-loop` step 4 under its own name: **Done**, **Done, with leftovers**, **Diverging**, **Blocked on a test**, **Fixer stopped**, the bot-never-responded escalation, and **Nothing to drive**. Only the two **Done** states report a finished review; never imply an approved PR exists when it does not.
 
-**Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
+**Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: lead with the outcome, and keep every item the relayed terminal-state row requires.
 
 ## Red Flags — STOP
 
@@ -55,7 +55,6 @@ Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final
 |---|---|
 | Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill |
 | Tempted to run validate-issue first | Not part of this skill — that's validate-fableplan-loop; this variant deliberately skips validation |
-| fableplan about to enter its build steps (7–8) | Don't — stop it at step 5; work-on-issue-loop owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong, its dispatch fails after the retry, or its snapshot diff shows a write | Stop and report per fableplan's planning-phase-only section; don't hand a broken plan to work-on-issue-loop, and don't re-plan yourself |
 | Handing off a bare issue number | Pass the recorded `owner/repo#N` to every invoked skill |
 | Tempted to stop at the open PR without triggering review | The review loop is the point of this variant — that trimmed behavior is fableplan-work-on-issue; here work-on-issue-loop owns the trigger and the cycles |

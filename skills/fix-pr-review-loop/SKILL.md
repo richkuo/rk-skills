@@ -24,7 +24,7 @@ Run `gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName
 
 Record each recovered or posted trigger comment's `id` and `created_at` as the pending trigger, then go to step 2.
 
-**First-review trigger.** `validate-issue` step 6 owns the table; this file states no boundary. Score, first hit: a stamped `PR review:` line in the linked issue's Execution block (overrides the band), the PR title's `[C<score>, …]` bracket, the closed issue's `[C<score>]` prefix. A missing score routes to the top row. Fable runs at high unless the user asks for xhigh or stamps it.
+**First-review trigger.** `validate-issue` step 6 owns the table; this file states no boundary. Score, first hit: a stamped `PR review:` line in the linked issue's Execution block (overrides the band), the PR title's `[C<score>, …]` bracket, the closed issue's `[C<score>]` prefix. A missing score routes to the heaviest row, the one that takes no score. Fable runs at high unless the user asks for xhigh or stamps it.
 
 **Map a stamped model before posting it.** `claude.yml` resolves only `opus`, `sonnet`, `fable`. Stamped `sonnet`/`haiku`: `@claude sonnet review`; `opus`: `@claude opus review effort:high`; `fable`: `@claude fable review effort:high`; each keeps a stamped `effort:<tier>` in place of `high`. A stamped bare `@claude review` with `effort:<tier>` names Opus 5.5: `@claude opus review effort:<tier>`; with no tier, the band. Codex: `sonnet`/`haiku` post `@codex luna review`, `opus`/`fable` the bare `@codex review`; never carry a `@claude` shorthand to `@codex`. **A stamp outside these rows is ignored.** Admitted: a model word (`sonnet`, `haiku`, `opus`, `fable`) in `@claude <model> review`, a bare `@claude review`, or a line naming the standard `@claude` trigger, each with at most one `effort:<tier>` of `low`, `medium`, `high`, `xhigh`. Any other model word, a route word, extra trigger text, or another tier: post the band trigger and name the ignored stamp in the report. Blocking re-reviews: `skills/fix-pr-review/rereview-routing.md` owns the ladder (a heavier cycle-1 reviewer steps down to `@claude review` on the first blocking re-review and stays) and the Codex rule.
 
@@ -93,7 +93,7 @@ Only the step 1 stop and the merge rule's prose-only case report **Done**.
 
 ### 5. Report
 
-Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. Follow the Response Style rules in CLAUDE.md/AGENTS.md; the unverified-source list sits outside the word cap.
+Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. Follow the Response Style rules in CLAUDE.md/AGENTS.md, and list each unverified source.
 
 | Terminal state | Report as |
 |---|---|

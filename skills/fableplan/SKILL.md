@@ -1,11 +1,11 @@
 ---
 name: fableplan
-description: Use when the user wants a task planned by a Fable 5.1 planning subagent before building it. Spins up a Plan subagent running on Fable 5.1 to produce an implementation plan, relays the plan back to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue and asks the user whether to continue building now before proceeding. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
+description: Use when the user wants a task planned by a Fable 5.1 planning subagent. Spins up a Plan subagent running on Fable 5.1 to produce an implementation plan, checks it against the code, relays it to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue, then stops. It never builds; `work-on-issue` or `fableplan-work-on-issue` builds from the plan. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
 ---
 
 # fableplan
 
-A **Fable 5.1** Plan subagent writes the plan. The main agent checks it, posts it, and builds from it. The subagent never builds.
+A **Fable 5.1** Plan subagent writes the plan. The main agent checks it, posts it, and stops. Neither one builds: no worktree, no code edits, no pull request.
 
 ## Input
 
@@ -49,25 +49,12 @@ Fill model and effort from step 2's recorded values, never a constant; `<harness
 
 ### 5. Relay the plan to the user
 
-Present the checked plan. Say in one line if step 2 could not honor the requested tier; otherwise say nothing about tiers.
-
-### 6. Ask whether to continue building (only if an issue was referenced)
-
-Ask (for example via `AskUserQuestion`) whether to build now or stop. On stop, end the skill; the user can resume with `work-on-issue`. With no issue, nothing is posted to fall back to, so skip the question and build.
-
-### 7. Set up an isolated git worktree
-
-Never build in the user's current checkout; if the directory is not a git repository, tell the user and ask how to proceed. Create the worktree and branch per `work-on-issue` step 1. Deltas: the name is `<agent-prefix>/fableplan/<short-task-name>`, and with no `baseRefs` the base is the fetched `origin/<target>` (the `targetBranch` the user named, else the default branch); the PR opens against that target. Build there, open a PR per the repository's conventions, and remove the worktree when done (`git worktree remove <path>`).
-
-### 8. Build
-
-Build per the plan. Before writing any code, mirror the plan's numbered steps into the task tracker per `work-on-issue` step 2, which owns the mirroring rule, its fallbacks, and the disposition of an overridden step. Confirm with the user first only when the plan exposes a decision that is theirs.
+Present the checked plan. Say in one line if step 2 could not honor the requested tier; otherwise say nothing about tiers. Then stop and keep the scratchpad file. Never ask whether to build and never build; `work-on-issue` builds from the posted plan when the user asks for it.
 
 ## Planning-phase-only invocation
 
-Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`) invoke this skill for planning only:
+Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`) invoke this skill for its plan. Every invocation stops after step 5, and the caller owns implementation:
 
-- Run **steps 1 through 5 only**; skip step 6's question and steps 7 and 8. The caller owns implementation.
 - Use the caller's harness suffix in place of `fableplan` in step 4's footer.
 - Keep the scratchpad file for the caller's implementation or report stage.
 - On a structurally wrong plan, or a dispatch that fails after the `fable-dispatch` section 7 retry, stop and report to the caller. Never post a broken plan. Never plan the task yourself in fableplan's place, except under `fable-dispatch` ladder step 3(c): when no subagent facility exists and `command -v claude` fails, plan inline as a reported downgrade, with the step 4 heading and footer naming the model that planned. The marker follows the `work-on-issue` title rule from that heading: a Fable 5.1 session that plans inline earns it, and any other model does not.

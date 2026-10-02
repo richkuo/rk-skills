@@ -61,7 +61,7 @@ Continue only when the editing procedure's "Verify the saved issue" read-back sh
 
 **Top-band note:** the signal is `yes` for every score of 71 or higher, so band-5 issues (81 or higher) always plan here. Implementation runs on the session model, so in this chain Fable 5.1 involvement ends with the validation and the posted plan.
 
-Otherwise invoke `fableplan` (Skill tool) for the step 1 `owner/repo#N` under its "Planning-phase-only invocation" section: steps 1 through 5 only, never steps 7–8, harness suffix `fable-validate-loop` in the posted footer (a delta skill that reuses this step substitutes its own name). Give the planner the validation verdict alongside the issue; the plan must respect the verified/refuted claims, the Optimal-direction note when architecture was Underspecified, and the 5c concerns. Keep the plan's scratchpad file for step 5. On a structurally wrong plan, a fableplan dispatch failure after its internal retry, or a snapshot diff that shows the planning subagent wrote, stop and report per that section; never implement unplanned.
+Otherwise invoke `fableplan` (Skill tool) for the step 1 `owner/repo#N` under its "Planning-phase-only invocation" section, with harness suffix `fable-validate-loop` in the posted footer (a delta skill that reuses this step substitutes its own name). Give the planner the validation verdict alongside the issue; the plan must respect the verified/refuted claims, the Optimal-direction note when architecture was Underspecified, and the 5c concerns. Keep the plan's scratchpad file for step 5. On a structurally wrong plan, a fableplan dispatch failure after its internal retry, or a snapshot diff that shows the planning subagent wrote, stop and report per that section; never implement unplanned.
 
 ### 5. Hand off to work-on-issue-loop
 
@@ -69,7 +69,7 @@ Invoke `work-on-issue-loop` (Skill tool) with the step 1 `owner/repo#N` passed e
 
 ### 6. Report
 
-Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line for the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate. On a STOP row, report the row and its evidence in place of the summary. **Cap the whole report at 55 words, plain simple English in ASD-STE100**, per the Response Style rules in CLAUDE.md/AGENTS.md.
+Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict), prefixed with one line for the head of the chain: scope gate passed, issue updated or not, plan posted (comment URL) or skipped by the score gate. On a STOP row, report the row and its evidence in place of the summary. **Write the whole report in ASD-STE100** per the Response Style rules in CLAUDE.md/AGENTS.md, for a reader with no context on this codebase: lead with the outcome, and keep every item the relayed terminal-state row requires.
 
 ## Red Flags — STOP
 
@@ -81,5 +81,4 @@ Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict),
 | Tempted to wait for a literal user reply to the verdict's `→` next-step line | Parse the verdict yourself and proceed per the step rules. This row covers only that next-step prompt; every STOP row in steps 2 to 4 and in fableplan's planning-phase-only section outranks it |
 | Handing off a bare issue number | Pass the step 1 `owner/repo#N` to every invoked skill |
 | Verdict says Update issue description? Yes | Apply the edits **before** fableplan runs, and continue only when the read-back confirms them (step 3) |
-| fableplan about to enter its build steps (7–8) | Stop it at step 5; work-on-issue-loop owns implementation |
 | fableplan's sanity-check finds the plan structurally wrong, its dispatch fails after the retry, or its snapshot diff shows a write | Stop and report per fableplan's planning-phase-only section; never hand a broken plan to work-on-issue-loop, and never re-plan yourself |

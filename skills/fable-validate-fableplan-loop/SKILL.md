@@ -30,7 +30,7 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 
-**Step 6 (report)** applies unchanged. **Cap the whole report at 55 words, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
+**Step 6 (report)** applies unchanged.
 
 ## Red Flags — STOP
 
