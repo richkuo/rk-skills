@@ -102,7 +102,8 @@ own model until you copy the template again.
   out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
   the action uses a token-free credential helper and scrubs secrets from
-  subprocess environments. The action's write-permission check still applies
+  subprocess environments, except where the scrub is off by default on a
+  self-hosted runner (see below). The action's write-permission check still applies
   to every actor. Git offers the token only to the GitHub server. A
   `PreToolUse` hook blocks every tool call if the token reaches git config,
   `$RUNNER_TEMP`, or a git credential store, or if the guard script changed.
@@ -110,10 +111,21 @@ own model until you copy the template again.
   `git diff --no-index` are denied. The token stays in the agent process
   environment for `gh pr comment`; this is an accepted residual risk because
   the token has only this job's permissions and expires when the job ends.
-- **Host changes on self-hosted Linux runners:** for the secret scrub, each
-  review runs `sudo apt-get install bubblewrap socat` and
+- **Secret scrub on self-hosted runners:** the scrub's bubblewrap sandbox
+  fails every Bash call in two self-hosted Linux layouts, and the reviewer then
+  cannot run `git diff`: the literal or resolved workspace is inside
+  `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730), or
+  the review runs as root and a workspace ancestor owned by another uid lacks
+  `.claude` or `.mcp.json` (anthropics/claude-code#97731). In those layouts
+  the review route turns the scrub off by default, so tool subprocesses there
+  can see the Claude credential, and the step emits a warning naming the
+  cause. GitHub-hosted runners and every other self-hosted layout keep the
+  scrub. Pass `review_subprocess_scrub_self_hosted: true` to `claude-run.yml`
+  in the `review` job to keep the scrub in those layouts anyway.
+- **Host changes on self-hosted Linux runners:** every review on a
+  self-hosted Linux runner that keeps the scrub runs
+  `sudo apt-get install bubblewrap socat` and
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
-  setting stays until the machine restarts. To skip both on a persistent
-  runner, pass `review_subprocess_scrub: false` to `claude-run.yml` in the
-  `review` job. This also turns off the scrub, so tool subprocesses can see the
-  Claude credential.
+  setting stays until the machine restarts. Pass
+  `review_subprocess_scrub: false` in the `review` job to skip both; this also
+  turns off the scrub on every runner.
