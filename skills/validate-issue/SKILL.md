@@ -74,13 +74,13 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 | 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 3 | 50–70 | Opus 5.5 · high | No | Opus 5.5 · high |
-| 4 | 71–80 | Fable 5.1 · high | **Yes** | Opus 5.5 · high |
-| 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5.5 · high |
+| 4 | 71–80 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
+| 5 | 81–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 
 Overrides:
 
 - Build column: the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim.
-- Validate column: the band default; an `## Execution` block's `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, run through the `cli-dispatch` read-only validate shim) and `Validate effort:` override it. `Plan effort:` overrides the fableplan stage's `high` default, and `Plan model:` (`Fable 5.1` or `Opus 5.5`) overrides its Fable 5.1 default; an Opus plan runs `low` at `high`.
+- Validate column: the band default; an `## Execution` block's `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, run through the `cli-dispatch` read-only validate shim) and `Validate effort:` override it. The fableplan column turns on the plan stage, which runs on Opus 5.5 at `high`: `Plan model: Fable 5.1` overrides the model, `Plan effort:` overrides the tier, and an Opus plan runs `low` at `high`. Fable 5.1 runs a validate, plan, or review stage only on an explicit stamp or request.
 - Effort clamp, per the effective model and CLAUDE.md's effort tiers: `low` is the only Fable-only tier, so an Opus validate at `low`, stamped or band default, runs at `high`; at `medium`, `high`, or `xhigh` it runs as stamped or as the band default (bands 0 and 1 keep `Opus 5.5 · medium`). A Fable validate runs every tier as stamped; a Codex CLI validate runs `low` to `max` as stamped.
 
 **First review** (each row starts on a band edge):
@@ -88,10 +88,9 @@ Overrides:
 | Score | First review | Claude | Codex |
 |---|---|---|---|
 | 0–20 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
-| 21–80 | Opus 5.5 · high | `@claude review` | `@codex review` |
-| 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
+| 21–99, or no score | Opus 5.5 · high | `@claude review` | `@codex review` |
 
-Bare `@claude review` is the standard review: Opus 5.5 at high, same as `@claude opus review effort:high`. Blocking re-reviews key to the reviewer that actually ran cycle 1: a heavier one steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).
+Bare `@claude review` is the standard review: Opus 5.5 at high, same as `@claude opus review effort:high`. A Fable first review runs only on a stamped `PR review:` line. Blocking re-reviews key to the reviewer that actually ran cycle 1: a heavier one steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).
 
 ### 7. Scope disposition
 
@@ -138,17 +137,17 @@ Yes for a material Refuted or Conditional claim, architecture or consistency gap
 
 **Next-step line.** Post the first matching string verbatim. With fableplan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 
-1. Split/umbrella scope: `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "fableplan" to plan first.`
-2. Update is Yes: `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "fableplan" to plan first.`
-3. Otherwise: `→ Reply "work on issue" to proceed, "update issue" to edit, or "fableplan" to plan first.`
+1. Split/umbrella scope: `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "issueplan" to plan first.`
+2. Update is Yes: `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "issueplan" to plan first.`
+3. Otherwise: `→ Reply "work on issue" to proceed, "update issue" to edit, or "issueplan" to plan first.`
 
 ### 9. Handle "work on issue"
 
 Invoke `work-on-issue` with the issue number; surface any step-7 disposition first.
 
-### 10. Handle "fableplan"
+### 10. Handle "issueplan"
 
-Invoke `fableplan` with the issue number; honor an explicit request even at signal no.
+Invoke `issueplan` with the issue number; honor an explicit request even at signal no. On Opus 5.5 the plan is an Opus plan. A request for "fableplan" invokes `fableplan` for a Fable 5.1 plan.
 
 ### 11. Handle "update issue"
 

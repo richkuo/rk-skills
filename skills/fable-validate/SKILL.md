@@ -64,6 +64,7 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 - **"update issue"** → apply the suggested title/body edits per validate-issue step 11, including its claim-verification gate and final consistency pass. Footer: `Validated with LLM: <served model> | <accepted tier> | Harness: <harness> | fable-validate`, with the model and effort that step 2 recorded and the harness actually running per `fable-dispatch` section 6 (stack under any existing footer lines per step 11; a repo CLAUDE.md footer format overrides).
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
+- **"issueplan"** or **"fableplan"** → apply validate-issue step 10.
 
 ## Notes
 
