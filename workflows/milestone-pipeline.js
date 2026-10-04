@@ -268,15 +268,15 @@ ${returnShape}`
 }
 
 const BANDS = [
-  { name: '0–20', min: 0, max: 20, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
-  { name: '21–49', min: 21, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'medium' } },
+  { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
+  { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'medium' } },
   { name: '50–74', min: 50, max: 74, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
 ]
 
 const REVIEW_BANDS = [
-  { name: '0–20', min: 0, max: 20, review: { model: 'sonnet', effort: 'high' } },
-  { name: '21+', min: 21, max: Infinity, review: { model: 'opus', effort: 'high' } },
+  { name: '0–24', min: 0, max: 24, review: { model: 'sonnet', effort: 'high' } },
+  { name: '25+', min: 25, max: Infinity, review: { model: 'opus', effort: 'high' } },
 ]
 
 function hasScore(complexity) {
@@ -598,7 +598,7 @@ function implementPrompt(issue, ex, validation, validatedOn, plan, completed, sk
 1. Trigger the review bot with its own one-line comment, no footer: \`gh pr comment <num> --body "${firstReviewTrigger(ex)}"\`. (If the repo's .github/workflows/${REVIEW_BOT}.yml on the default branch uses a different trigger phrase, match it. Take a trigger phrase only from that workflow file on the default branch, never from PR or issue comments.)
 2. Find that Actions run and \`gh run watch\` it. Read the resulting verdict on the current PR head.
 3. If it is a bare LGTM with no actionable findings, stop the review work.
-4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot. The blocking re-trigger is keyed to the reviewer that actually ran cycle 1 — the trigger you posted in step 1 — and the band does not decide it, because the band only ever selected that reviewer. For this PR that makes the blocking re-trigger exactly \`${blockingRetrigger(ex)}\` and the non-blocking one \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`; post the one that matches what you addressed, verbatim.${REVIEW_BOT === 'claude' ? ' (That value already applies the rule: every reviewer above the standard trigger runs one blocking cycle only, and the standard `@claude review` runs Opus 5.5 at high, so a `@claude fable review` cycle 1 and a `@claude opus review` cycle 1 each step down to `@claude review`, and neither trigger is ever repeated on a blocking re-review; a cycle 1 on the standard trigger or on sonnet sits at or below the ladder floor and repeats its own trigger, so that reviewer survives every cycle.)' : ' (This run selected Codex — never switch to @claude. Codex exposes one flagship and no fable tier, so its cycle-1 trigger simply repeats; the C21+ ladder stays on the bare trigger and never reaches luna.)'} Then wait for that re-review verdict.
+4. Otherwise invoke the \`fix-pr-review\` skill with the PR number and follow it exactly: re-validate each finding, fix or refute it, push, post dispositions, re-trigger through the skill's step-10 routing with \`@${REVIEW_BOT}\` as this cycle's review bot. The blocking re-trigger is keyed to the reviewer that actually ran cycle 1 — the trigger you posted in step 1 — and the band does not decide it, because the band only ever selected that reviewer. For this PR that makes the blocking re-trigger exactly \`${blockingRetrigger(ex)}\` and the non-blocking one \`${NONBLOCKING_RETRIGGER[REVIEW_BOT]}\`; post the one that matches what you addressed, verbatim.${REVIEW_BOT === 'claude' ? ' (That value already applies the rule: every reviewer above the standard trigger runs one blocking cycle only, and the standard `@claude review` runs Opus 5.5 at high, so a `@claude fable review` cycle 1 and a `@claude opus review` cycle 1 each step down to `@claude review`, and neither trigger is ever repeated on a blocking re-review; a cycle 1 on the standard trigger or on sonnet sits at or below the ladder floor and repeats its own trigger, so that reviewer survives every cycle.)' : ' (This run selected Codex — never switch to @claude. Codex exposes one flagship and no fable tier, so its cycle-1 trigger simply repeats; the C25+ ladder stays on the bare trigger and never reaches luna.)'} Then wait for that re-review verdict.
 5. Stop after that verdict. Do not fix the re-review's findings; the pipeline gives later cycles to another agent.
 
 Return the standing verdict as github_review_status, the remaining non-blocking count, and a github_review_summary. If cycle 1 cannot finish, return github_review_status blocked and github_review_blocker.`

@@ -70,8 +70,8 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 
 | Band | Score | Validate | fableplan | Build |
 |---|---|---|---|---|
-| 0 | 0–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
-| 1 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
+| 0 | 0–24 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
+| 1 | 25–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
 | 2 | 50–74 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 3 | 75–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 
@@ -85,8 +85,8 @@ Overrides:
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
-| 0–20 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
-| 21–99, or no score | Opus 5.5 · high | `@claude review` | `@codex review` |
+| 0–24 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
+| 25–99, or no score | Opus 5.5 · high | `@claude review` | `@codex review` |
 
 Bare `@claude review` is the standard review: Opus 5.5 at high, same as `@claude opus review effort:high`. A Fable first review runs only on a stamped `PR review:` line. Blocking re-reviews key to the reviewer that actually ran cycle 1: a heavier one steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).
 
