@@ -14,7 +14,7 @@ Five grades route the issue; each answers one question about the correct impleme
 | Scope | How many files change? | Volume |
 | Verification | What proof does the builder need, and can it run locally? | Volume |
 
-Capability sets the band floor: the build model follows Capability alone. Volume is the size inside the band: it selects effort, and it can carry the score across the next band edge, which moves the validate model, the fableplan signal, and the first reviewer (see Reachable scores). The title score `25 × Capability + Volume` carries both in one number. The grades are the source of truth; a consumer that needs one grade reads it from the rationale line.
+Capability sets the band: each band holds exactly one Capability grade, so the validate route, the build route, the plan stage, and the first reviewer all follow Capability (see Reachable scores). Volume is the size inside the band, and it never moves the score across a band edge. The title score `25 × Capability + Volume` carries both in one number. The grades are the source of truth; a consumer that needs one grade reads it from the rationale line.
 
 ## Grading rules
 
@@ -113,7 +113,7 @@ Volume is always even. Capability 0 and 1 need Coupling 2 or lower, so their Vol
 | 2 | 50 to 74 |
 | 3 | 75 to 99 |
 
-Scores 21 to 24 and 46 to 49 cannot occur. Bands 0 and 1 hold Capability 0, band 2 holds exactly Capability 1, band 3 holds exactly Capability 2, and band 4 holds exactly Capability 3, so the plan stage runs exactly at Capability 3.
+Scores 21 to 24 and 46 to 49 cannot occur. Each band holds exactly one Capability grade: band 0 is Capability 0, band 1 is Capability 1, band 2 is Capability 2, and band 3 is Capability 3, so the plan stage runs exactly at Capability 3.
 
 ## Golden examples (consistency checklist)
 
@@ -127,13 +127,13 @@ Scores 21 to 24 and 46 to 49 cannot occur. Bands 0 and 1 hold Capability 0, band
 | (0,3,0,0,0) | 2 | 6 | **56** | Coupling 3 is the floor boundary and forces Capability 2 |
 | (0,2,0,0,0) | 0 | 4 | **4** | Coupling 2 sits below the floor and forces nothing |
 | (0,0,4,0,0) | 3 | 0 | **75** | Risk 4 maps to Capability 3 |
-| (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2, so score 50 opens band 3 |
+| (0,0,3,0,0) | 2 | 0 | **50** | Risk 3 maps to Capability 2, so score 50 opens band 2 |
 | (2,2,3,2,2) | 2 | 12 | **62** | The common shape: one persisted write with a known mechanism |
 | (2,2,4,3,3) | 3 | 14 | **89** | A money path at Risk 4 with an open design choice; fableplan yes |
 
 ## Routing details
 
 - The main skill's band table owns the `fableplan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
-- Build capability never decreases as the band rises: bands 0 and 1 build on Sonnet 5.5 at high, band 2 builds on Opus 5.5 at medium, and bands 3 and 4 build on Opus 5.5 at high. Bands 3 and 4 differ only in the plan stage.
+- Build capability never decreases as the band rises: band 0 builds on Sonnet 5.5 at high, band 1 builds on Opus 5.5 at medium, and bands 2 and 3 build on Opus 5.5 at high. Bands 2 and 3 differ only in the plan stage.
 - A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review until a validation stamps the traced score on the issue (step 8).
 - When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. A lower traced score restamps the title and rationale line down per step 8, and every stage that reads the issue after the edit lands routes on it. A read-only validator rescore that writes no issue edit never lowers routing: the milestone pipeline keeps the band it already chose from the title for that run. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.

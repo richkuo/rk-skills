@@ -268,8 +268,7 @@ ${returnShape}`
 }
 
 const BANDS = [
-  { name: '0–9', min: 0, max: 9, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
-  { name: '10–20', min: 10, max: 20, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
+  { name: '0–20', min: 0, max: 20, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
   { name: '21–49', min: 21, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'medium' } },
   { name: '50–74', min: 50, max: 74, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
