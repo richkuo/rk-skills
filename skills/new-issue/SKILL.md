@@ -36,7 +36,7 @@ For anything beyond a localized bug fix, spec the approach so it passes the `val
 
 ### 4. Score complexity
 
-Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). The score routes model and effort; never write a duration. Set the fableplan signal per `github-issue-format` (`yes` when the score is ≥ 71).
+Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). The score routes model and effort; never write a duration. Set the fableplan signal per `github-issue-format` (`yes` when the score is ≥ 75).
 
 ### 5. Scope check
 

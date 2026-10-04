@@ -12,9 +12,9 @@ Before every `gh issue edit`, read the complete assembled body. List each value 
 
 ## Edit the title
 
-Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention; when the title has no prefix, add it and the body rationale line. Keep the body rationale and `fableplan` signal synchronized with the title in both directions; `yes` starts at score 71. When the body carries an `## Execution` block, restamp its `Build model:`, `Effort:`, and `fableplan first:` lines against the `validate-issue` step 6 band table:
+Change the title when it names the wrong behavior, component, root cause, scope, or complexity score. Use `[C<score>] <plain simple English title>` when the repo follows that convention; when the title has no prefix, add it and the body rationale line. Keep the body rationale and `fableplan` signal synchronized with the title in both directions; `yes` starts at score 75. When the body carries an `## Execution` block, restamp its `Build model:`, `Effort:`, and `fableplan first:` lines against the `validate-issue` step 6 band table:
 
-- **Higher score, or no prior prefix:** restamp each line to the new band's defaults, upward only: never lower a model or an effort, keep a Fable 5.1 build and a Codex CLI or Cursor CLI harness stamp as written, and on those add only `fableplan first: Yes` when the new score is 71 or higher.
+- **Higher score, or no prior prefix:** restamp each line to the new band's defaults, upward only: never lower a model or an effort, keep a Fable 5.1 build and a Codex CLI or Cursor CLI harness stamp as written, and on those add only `fableplan first: Yes` when the new score is 75 or higher.
 - **Lower score:** restamp a line down to the new band's default only when it still equals the old band's default. A line that differs from the old default is a deliberate stamp and stays, and a Fable 5.1 build or a Codex CLI or Cursor CLI harness stamp keeps its model and effort.
 
 The pipeline builds on those stamps and does not correct a stale one once the title matches the validator's score.

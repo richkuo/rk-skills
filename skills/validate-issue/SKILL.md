@@ -73,9 +73,8 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 | 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
-| 3 | 50–70 | Opus 5.5 · high | No | Opus 5.5 · high |
-| 4 | 71–80 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
-| 5 | 81–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
+| 3 | 50–74 | Opus 5.5 · high | No | Opus 5.5 · high |
+| 4 | 75–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 
 Overrides:
 
@@ -131,7 +130,7 @@ Axes:
 <next-step line>
 ```
 
-Yes for a material Refuted or Conditional claim, architecture or consistency gap, material concern, missing scope, required restructure, or rescore: no `[C<score>]` title prefix in a repo that follows that convention, a prefix that differs from the recomputed score either way, or rationale-line grades that differ from the traced ones. Rescore edits restamp the title prefix and rationale line (grades, score, model and effort, fableplan signal) to the recomputed values, adding both when missing, and the `## Execution` block, per [issue-editing.md](issue-editing.md) Edit the title. Restamp down only on evidence: each lowered grade the rationale line states has its `Differs:` line, and the `Axes:` evidence names what the issue over-scored. `Complexity:` is always the recomputed score. `fableplan:` is a routing signal: `yes` when the title score or the recomputed score is 71 or higher, keeping the title floor for this run's plan decision. A downward restamp takes effect when the edit lands, so a loop that applies it before the build routes later stages, such as the first review, on the lower score. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
+Yes for a material Refuted or Conditional claim, architecture or consistency gap, material concern, missing scope, required restructure, or rescore: no `[C<score>]` title prefix in a repo that follows that convention, a prefix that differs from the recomputed score either way, or rationale-line grades that differ from the traced ones. Rescore edits restamp the title prefix and rationale line (grades, score, model and effort, fableplan signal) to the recomputed values, adding both when missing, and the `## Execution` block, per [issue-editing.md](issue-editing.md) Edit the title. Restamp down only on evidence: each lowered grade the rationale line states has its `Differs:` line, and the `Axes:` evidence names what the issue over-scored. `Complexity:` is always the recomputed score. `fableplan:` is a routing signal: `yes` when the title score or the recomputed score is 75 or higher, keeping the title floor for this run's plan decision. A downward restamp takes effect when the edit lands, so a loop that applies it before the build routes later stages, such as the first review, on the lower score. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
 
 **Validation blocked.** When the issue cannot be read, no `BASE` resolves, or the central claim (the behavior the issue exists to change) stays Unverified after step 3, output `**#<N>: Validation blocked** — <missing input>` with the evidence so far and no completed-verdict line, score, or next-step line. A loop treats it as STOP; a caller with a fixed verdict vocabulary maps it to its failing value (INVALID, the missing input as reason, complexity 0), never a passing one.
 
