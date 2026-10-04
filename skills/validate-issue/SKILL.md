@@ -70,28 +70,25 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 
 | Band | Score | Validate | fableplan | Build |
 |---|---|---|---|---|
-| 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
-| 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
-| 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
-| 3 | 50–70 | Opus 5.5 · high | No | Opus 5.5 · high |
-| 4 | 71–80 | Fable 5.1 · high | **Yes** | Opus 5.5 · high |
-| 5 | 81–99 | Fable 5.1 · high | **Yes** | Opus 5.5 · high |
+| 0 | 0–24 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
+| 1 | 25–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
+| 2 | 50–74 | Opus 5.5 · high | No | Opus 5.5 · high |
+| 3 | 75–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 
 Overrides:
 
-- Build column: the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim.
-- Validate column: the band default; an `## Execution` block's `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, run through the `cli-dispatch` read-only validate shim) and `Validate effort:` override it. `Plan effort:` overrides the fableplan stage's `high` default.
-- Effort clamp, per the effective model and CLAUDE.md's effort tiers: `low` is the only Fable-only tier, so an Opus validate at `low`, stamped or band default, runs at `high`; at `medium`, `high`, or `xhigh` it runs as stamped or as the band default (bands 0 and 1 keep `Opus 5.5 · medium`). A Fable validate runs every tier as stamped; a Codex CLI validate runs `low` to `max` as stamped.
+- Build column: the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. An Opus build runs `medium`, `high`, or `xhigh` as stamped and `low` at `high`; a Sonnet or Haiku build runs `low` or `medium` at `high`.
+- Validate column: the band default; an `## Execution` block's `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, run through the `cli-dispatch` read-only validate shim) and `Validate effort:` override it. The fableplan column turns on the plan stage, which runs on Opus 5.5 at `high`: `Plan model: Fable 5.1` overrides the model, `Plan effort:` overrides the tier, and an Opus plan runs `low` at `high`. Fable 5.1 runs a validate, plan, or review stage only on an explicit stamp or request.
+- Effort clamp, per the effective model and CLAUDE.md's effort tiers: `low` is the only Fable-only tier, so an Opus validate at `low`, stamped or band default, runs at `high`; at `medium`, `high`, or `xhigh` it runs as stamped or as the band default (band 0 keeps `Opus 5.5 · medium`). A Fable validate runs every tier as stamped; a Codex CLI validate runs `low` to `max` as stamped.
 
 **First review** (each row starts on a band edge):
 
 | Score | First review | Claude | Codex |
 |---|---|---|---|
-| 0–20 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
-| 21–80 | Opus 5.5 · high | `@claude review` | `@codex review` |
-| 81–99, or no score | Fable 5.1 · high | `@claude fable review effort:high` | `@codex review` |
+| 0–24 | Sonnet 5.5 · high | `@claude sonnet review` | `@codex luna review` |
+| 25–99, or no score | Opus 5.5 · high | `@claude review` | `@codex review` |
 
-Bare `@claude review` is the standard review: Opus 5.5 at high, same as `@claude opus review effort:high`. Blocking re-reviews key to the reviewer that actually ran cycle 1: a heavier one steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).
+Bare `@claude review` is the standard review: Opus 5.5 at high, same as `@claude opus review effort:high`. A Fable first review runs only on a stamped `PR review:` line. Blocking re-reviews key to the reviewer that actually ran cycle 1: a heavier one steps down to `@claude review` on the first blocking re-review and stays there (`skills/fix-pr-review/rereview-routing.md`).
 
 ### 7. Scope disposition
 
@@ -132,23 +129,23 @@ Axes:
 <next-step line>
 ```
 
-Yes for a material Refuted or Conditional claim, architecture or consistency gap, material concern, missing scope, required restructure, or rescore: no `[C<score>]` title prefix in a repo that follows that convention, a prefix that differs from the recomputed score either way, or rationale-line grades that differ from the traced ones. Rescore edits restamp the title prefix and rationale line (grades, score, model and effort, fableplan signal) to the recomputed values, adding both when missing, and the `## Execution` block, per [issue-editing.md](issue-editing.md) Edit the title. Restamp down only on evidence: each lowered grade the rationale line states has its `Differs:` line, and the `Axes:` evidence names what the issue over-scored. `Complexity:` is always the recomputed score. `fableplan:` is a routing signal: `yes` when the title score or the recomputed score is 71 or higher, keeping the title floor for this run's plan decision. A downward restamp takes effect when the edit lands, so a loop that applies it before the build routes later stages, such as the first review, on the lower score. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
+Yes for a material Refuted or Conditional claim, architecture or consistency gap, material concern, missing scope, required restructure, or rescore: no `[C<score>]` title prefix in a repo that follows that convention, a prefix that differs from the recomputed score either way, or rationale-line grades that differ from the traced ones. Rescore edits restamp the title prefix and rationale line (grades, score, model and effort, fableplan signal) to the recomputed values, adding both when missing, and the `## Execution` block, per [issue-editing.md](issue-editing.md) Edit the title. Restamp down only on evidence: each lowered grade the rationale line states has its `Differs:` line, and the `Axes:` evidence names what the issue over-scored. `Complexity:` is always the recomputed score. `fableplan:` is a routing signal: `yes` when the title score or the recomputed score is 75 or higher, keeping the title floor for this run's plan decision. A downward restamp takes effect when the edit lands, so a loop that applies it before the build routes later stages, such as the first review, on the lower score. No only when accurate, feasible, consistent, and complete, with no rescore edit due.
 
 **Validation blocked.** When the issue cannot be read, no `BASE` resolves, or the central claim (the behavior the issue exists to change) stays Unverified after step 3, output `**#<N>: Validation blocked** — <missing input>` with the evidence so far and no completed-verdict line, score, or next-step line. A loop treats it as STOP; a caller with a fixed verdict vocabulary maps it to its failing value (INVALID, the missing input as reason, complexity 0), never a passing one.
 
 **Next-step line.** Post the first matching string verbatim. With fableplan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 
-1. Split/umbrella scope: `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "fableplan" to plan first.`
-2. Update is Yes: `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "fableplan" to plan first.`
-3. Otherwise: `→ Reply "work on issue" to proceed, "update issue" to edit, or "fableplan" to plan first.`
+1. Split/umbrella scope: `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "issueplan" to plan first.`
+2. Update is Yes: `→ Recommend "update issue" to apply the edits above; or "work on issue" to build as-is, "issueplan" to plan first.`
+3. Otherwise: `→ Reply "work on issue" to proceed, "update issue" to edit, or "issueplan" to plan first.`
 
 ### 9. Handle "work on issue"
 
 Invoke `work-on-issue` with the issue number; surface any step-7 disposition first.
 
-### 10. Handle "fableplan"
+### 10. Handle "issueplan"
 
-Invoke `fableplan` with the issue number; honor an explicit request even at signal no.
+Invoke `issueplan` with the issue number; honor an explicit request even at signal no. On Opus 5.5 the plan is an Opus plan. A request for "fableplan" invokes `fableplan` for a Fable 5.1 plan.
 
 ### 11. Handle "update issue"
 

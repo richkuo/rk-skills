@@ -34,13 +34,13 @@ A heavy trigger with another effort suffix takes the same row. Neither heavy tri
 
 ### Codex cycles
 
-Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. Never post a `@claude` rung on a Codex cycle, and never discard a stamp back to the band: stamped `sonnet`/`haiku` becomes `@codex luna review`, stamped `opus`/`fable` the bare `@codex review`, each keeping a stamped `effort:<tier>`. A stamped bare `@claude review` with an `effort:<tier>` names Opus 5.5, so it becomes `@codex review effort:<tier>`; with no tier it takes the band.
+Codex has no ladder: its cycle-1 trigger repeats for every blocking re-review. Never post a `@claude` rung on a Codex cycle, and never discard a stamp back to the band: stamped `sonnet`/`haiku` becomes `@codex luna review`, stamped `opus`/`fable` the bare `@codex review`, each keeping a stamped `effort:<tier>`. A stamped bare `@claude review` names Opus 5.5, so it becomes `@codex review`, keeping a stamped `effort:<tier>`; a line that names the standard `@claude` trigger in prose takes the band.
 
 ### Fallback table
 
 **The fallback applies ONLY when the PR carries no cycle-1 trigger comment**, none at all or none left after the skip. Read in this order and stop at the first hit:
 
-1. **A stamped `PR review:` line** in the linked issue's Execution block. It is no score source; it selects the reviewer directly. On Claude, stamped `sonnet` or `haiku` posts `@claude sonnet review`, and stamped `opus` or `fable` posts the standard `@claude review` with no effort suffix, which runs Opus 5.5 at high: a heavy trigger never repeats, and Fable never opens a re-review cycle. A stamped bare `@claude review` with an `effort:<tier>` counts as `opus`; with no tier it selects nothing here, and the band decides. A stamp that matches no admitted row of `fix-pr-review-loop` step 1 also selects nothing, the band decides, and the disposition names the ignored stamp. On Codex, map the stamp per Codex cycles above.
+1. **A stamped `PR review:` line** in the linked issue's Execution block. It is no score source; it selects the reviewer directly. On Claude, stamped `sonnet` or `haiku` posts `@claude sonnet review`, and stamped `opus` or `fable` posts the standard `@claude review` with no effort suffix, which runs Opus 5.5 at high: a heavy trigger never repeats, and Fable never opens a re-review cycle. A stamped bare `@claude review` counts as `opus`, with or without an `effort:<tier>`; a line that names the standard `@claude` trigger in prose selects nothing here, and the band decides. A stamp that matches no admitted row of `fix-pr-review-loop` step 1 also selects nothing, the band decides, and the disposition names the ignored stamp. On Codex, map the stamp per Codex cycles above.
 2. **The band.** The rows below are the rows of the first-review table in `validate-issue` step 6, which owns every boundary; read the band there and take the matching row here. Read the score from the `[C<score>, …]` bracket in the PR title, then the `[C<score>]` prefix of the closed issue.
 
 | Owner's first-review row | Claude fallback trigger | Codex fallback trigger |
