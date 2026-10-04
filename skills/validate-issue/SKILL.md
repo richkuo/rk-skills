@@ -72,14 +72,14 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 |---|---|---|---|---|
 | 0 | 0–9 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 1 | 10–20 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
-| 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · high |
+| 2 | 21–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
 | 3 | 50–70 | Opus 5.5 · high | No | Opus 5.5 · high |
 | 4 | 71–80 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 | 5 | 81–99 | Opus 5.5 · high | **Yes** | Opus 5.5 · high |
 
 Overrides:
 
-- Build column: the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim.
+- Build column: the Claude default; an Execution block stamped `<Name> (Codex CLI)` or `<Name> (Cursor CLI)` overrides it through the `cli-dispatch` shim. An Opus build runs `medium`, `high`, or `xhigh` as stamped and `low` at `high`; a Sonnet or Haiku build runs `low` or `medium` at `high`.
 - Validate column: the band default; an `## Execution` block's `Validate model:` (`Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`, run through the `cli-dispatch` read-only validate shim) and `Validate effort:` override it. The fableplan column turns on the plan stage, which runs on Opus 5.5 at `high`: `Plan model: Fable 5.1` overrides the model, `Plan effort:` overrides the tier, and an Opus plan runs `low` at `high`. Fable 5.1 runs a validate, plan, or review stage only on an explicit stamp or request.
 - Effort clamp, per the effective model and CLAUDE.md's effort tiers: `low` is the only Fable-only tier, so an Opus validate at `low`, stamped or band default, runs at `high`; at `medium`, `high`, or `xhigh` it runs as stamped or as the band default (bands 0 and 1 keep `Opus 5.5 · medium`). A Fable validate runs every tier as stamped; a Codex CLI validate runs `low` to `max` as stamped.
 
