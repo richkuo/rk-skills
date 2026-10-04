@@ -1182,7 +1182,7 @@ async function executeTrack(trackIndex) {
     let impl
     try {
       const taskPrompt = implementPrompt(issue, ex, validation, validatedOn, plan, completed, skipped, baseRefs, REVIEW_LOOP)
-      impl = await agent(cliBuild ? cliDriverPrompt(taskPrompt, ex, 'implement', Boolean(plan)) : taskPrompt, {
+      impl = await agent(cliBuild ? cliDriverPrompt(taskPrompt, ex, 'implement', Boolean(plan) && planModel === 'fable') : taskPrompt, {
         model: cliBuild ? CLI_DRIVER.model : modelId,
         effort: cliBuild ? CLI_DRIVER.effort : ex.effort,
         schema: IMPLEMENT_SCHEMA,

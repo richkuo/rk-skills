@@ -72,4 +72,4 @@ File with `gh issue create --repo "$REPO" --title "[C<score>] <title>" --body-fi
 
 ### 7. Report
 
-Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `fableplan: yes`, also ask in one line whether to post a plan before building (`issueplan` on Opus 5.5); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.
+Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `fableplan: yes`, also ask in one line whether to post a plan before building (`issueplan`, which plans on the session model); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.
