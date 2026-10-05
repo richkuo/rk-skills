@@ -94,7 +94,7 @@ The `workflows/milestone-pipeline.js` dynamic workflow validates the dependency 
 
 | Skill | What it does |
 |-------|--------------|
-| `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English), aiming for under 35 words and never over 55. |
+| `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English), aiming for under 30 words and never over 55. |
 | `wans` | Answers "what are next steps?" in ASD-STE100 as a numbered list, each step marked `You:` or `Me:`. |
 
 ### Review bot prerequisite
