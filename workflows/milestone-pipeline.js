@@ -614,6 +614,8 @@ const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\[bot\])?$/
 const FOOTER_LINE = /^(Created|Updated|Validated|Reviewed) with LLM: /
 const VALIDATED_LINE = /^Validated with LLM: /
+const HARNESS_FIELD = / \| Harness: (.+)$/
+const PIPELINE_HARNESSES = ['milestone-pipeline', 'Codex', 'Cursor']
 const RATIONALE_LINE = /^\*\*Complexity: \d+\/100\*\*/
 const EXECUTION_LINE = /^- \*\*[^*]+:\*\* /
 const SCORE_PREFIX = /^\s*\[C(\d+)\]\s*/
@@ -693,8 +695,22 @@ function splitBody(body) {
     execution: execution.join('\n'),
     prose: prose.join('\n').replace(/\n{2,}/g, '\n\n').trim(),
     validated: footer.filter((line) => VALIDATED_LINE.test(line)).length,
+    validated_lines: footer.filter((line) => VALIDATED_LINE.test(line)),
     footer_ends_validated: footer.length > 0 && VALIDATED_LINE.test(footer[footer.length - 1]),
   }
+}
+
+function addsPipelineValidation(before, after) {
+  const remaining = before.validated_lines.slice()
+  return after.validated_lines.some((line) => {
+    const index = remaining.indexOf(line)
+    if (index !== -1) {
+      remaining.splice(index, 1)
+      return false
+    }
+    const match = HARNESS_FIELD.exec(line)
+    return !match || PIPELINE_HARNESSES.includes(match[1].trim())
+  })
 }
 
 function stripScore(title) {
@@ -809,6 +825,7 @@ function main() {
       validated_before: before.validated,
       validated_after: after.validated,
       footer_ends_validated: after.footer_ends_validated,
+      pipeline_harness: addsPipelineValidation(before, after),
     })
   }
 
@@ -1025,6 +1042,7 @@ function skipEligibility(issue, ex, entry, result) {
     if (index === -1) return { reason: 'rule 3: no body edit adds a Validated with LLM: line, and no session record was passed' }
     const edit = edits[index]
     if (!SKIP_TRUSTED.has(edit.trust)) return { reason: `rule 3: the validating ${skipEditNote('body edit', edit)} is ${edit.trust}` }
+    if (edit.pipeline_harness !== false) return { reason: `rule 3: the validating ${skipEditNote('body edit', edit)} adds a Validated with LLM: line from a pipeline build harness (milestone-pipeline, Codex, or Cursor) or with no harness, so that validation's base branch and hard constraints are unknown; pass a session record` }
     const earlyEdit = edits.slice(0, index).find((item) => !SKIP_TRUSTED.has(item.trust))
     if (earlyEdit) return { reason: `rule 3: the ${skipEditNote('body edit', earlyEdit)} before the validating edit is ${earlyEdit.trust}` }
     const earlyRenames = renames.filter((rename) => rename.at < edit.at)
@@ -1082,11 +1100,12 @@ const SKIPPED_VALIDATION_STATEMENT = 'validation was skipped by the operator\'s 
 
 function skippedValidation(grant) {
   const source = grant.source === 'session' ? 'the orchestrating session\'s validation record' : 'a trusted edit that added a Validated with LLM: footer line'
+  const footerLimit = grant.source === 'footer' ? ' Footer evidence does not record which base branch the prior validation traced or any hard constraints it returned; none of them reach this run.' : ''
   return {
     verdict: 'SKIPPED',
     skipped: true,
     skip: grant,
-    summary: `Evidence: ${source}; prior validation baseline ${grant.baseline}; base ${grant.base_branch} @ ${grant.base_sha}.`,
+    summary: `Evidence: ${source}; prior validation baseline ${grant.baseline}; base ${grant.base_branch} @ ${grant.base_sha}.${footerLimit}`,
     corrections: [],
     implementation_constraints: [],
     rescored_complexity: 0,
