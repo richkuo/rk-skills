@@ -13,7 +13,7 @@ Show a milestone's per-issue ordering and execution assignments as one table, ta
 
 Fetch every milestone issue (`gh issue list --milestone "<title>" --json number,title,body`, with the title quoted) and parse the `## Execution` blocks:
 
-| Issue | C | Depends on | Runs after | Build model | Effort | Validate | fableplan first? | Plan |
+| Issue | C | Depends on | Runs after | Build model | Effort | Validate | plan first? | Plan |
 |---|---|---|---|---|---|---|---|---|
 
 Cell rules:

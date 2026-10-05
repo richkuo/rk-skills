@@ -68,7 +68,7 @@ Read [complexity-scoring.md](complexity-scoring.md) completely and grade per its
 2. Volume is `(Scope + Coupling + Verification) × 2`.
 3. Score is `25 × Capability + Volume`.
 
-| Band | Score | Validate | fableplan | Build |
+| Band | Score | Validate | plan | Build |
 |---|---|---|---|---|
 | 0 | 0–24 | Opus 5.5 · medium | No | Sonnet 5.5 · high |
 | 1 | 25–49 | Opus 5.5 · high | No | Opus 5.5 · medium |
