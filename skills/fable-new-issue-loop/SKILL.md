@@ -7,7 +7,7 @@ description: Use when the user asks to have a Fable 5.1 subagent draft and file 
 
 Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5.1 subagent drafts the issue, the main agent files it, and the loop drives it to a reviewed PR without a human in between.
 
-**This skill is `new-issue-loop` with a different front of the chain.** Follow the `new-issue-loop` skill for the full procedure: the complete-issue rule, the input contract, the stop gate, the handoff to validate-issue-loop (always the explicit `owner/repo#N` reference), the ownership of the `fableplan: yes` signal, the report format, and the Red Flags. Apply only the deltas below.
+**This skill is `new-issue-loop` with a different front of the chain.** Follow the `new-issue-loop` skill for the full procedure: the complete-issue rule, the input contract, the stop gate, the handoff to validate-issue-loop (always the explicit `owner/repo#N` reference), the ownership of the `plan: yes` signal, the report format, and the Red Flags. Apply only the deltas below.
 
 ## Deltas from new-issue-loop
 

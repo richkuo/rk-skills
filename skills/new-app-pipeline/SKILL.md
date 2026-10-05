@@ -16,7 +16,7 @@ The end-to-end process for starting a new app: capture the idea as a PRD, refine
 | 3 | Review and merge the PRD PR | `fix-pr-review-loop` | PRD on main | Review loop to LGTM on the PRD PR, then explicit user go |
 | 4 | Issues + milestones | `prd-to-issues` | Milestones, complete scoped issues with Execution blocks | User reviews the breakdown table |
 | 5 | Execution plan | `execution-plan-review` | Revised Execution blocks | User settles the final table |
-| 6 | Show the plan | `milestoneplan` | Single per-issue plan table (complexity, dependencies, models, efforts, fableplan, first review) | User reviews the table (recommended, not required) |
+| 6 | Show the plan | `milestoneplan` | Single per-issue plan table (complexity, dependencies, models, efforts, plan, first review) | User reviews the table (recommended, not required) |
 | 7 | Run a milestone | `milestone-workflow` | Workflow run → PRs → LGTMs | User approves the run plan (mandatory) |
 
 ## Rules

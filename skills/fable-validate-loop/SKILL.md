@@ -1,7 +1,7 @@
 ---
 name: fable-validate-loop
 description: >-
-  Use when the user asks to validate a GitHub issue with Fable 5.1 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `fableplan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `fableplan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, when a step holds for a human decision, or when the issue edit does not land.
+  Use when the user asks to validate a GitHub issue with Fable 5.1 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `plan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, when a step holds for a human decision, or when the issue edit does not land.
 ---
 
 # fable-validate-loop
@@ -23,7 +23,7 @@ Optional `targetBranch` (`{ issue, targetBranch }` or a prose "target branch <na
 Invoke `fable-validate` (Skill tool) for the issue and let it run fully. It emits the standard verdict block:
 
 ```
-**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · fableplan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
+**#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · plan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
 Parse it yourself. Record the resolved issue as the full reference `owner/repo#N`: the repository from the user's reference (URL or `owner/repo#N`), else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Every later step and every skill this chain invokes gets that full reference and targets exactly this issue. A bare number resolves against the current checkout, so no handoff passes one.
@@ -57,7 +57,7 @@ Continue only when the editing procedure's "Verify the saved issue" read-back sh
 
 ### 4. Run fableplan, planning phase only
 
-**Score gate:** skip fableplan and go straight to step 5 only when the verdict signal is `fableplan: no` (validate-issue step 8 emits it only when the title score and the recomputed score are both **below 75**) and neither override below applies. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out:** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. **Stamped plan flag:** if the issue's `## Execution` block, read as the issue stands after step 3 (`gh issue view <N> -R <owner>/<repo> --json body`), stamps `fableplan first: Yes`, run fableplan regardless of score, as the milestone pipeline does. For an unconditional plan use `fable-validate-fableplan-loop`.
+**Score gate:** skip fableplan and go straight to step 5 only when the verdict signal is `plan: no` (validate-issue step 8 emits it only when the title score and the recomputed score are both **below 75**) and neither override below applies. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out:** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. **Stamped plan flag:** if the issue's `## Execution` block, read as the issue stands after step 3 (`gh issue view <N> -R <owner>/<repo> --json body`), stamps `plan first: Yes` (or the legacy `fableplan first: Yes`), run fableplan regardless of score, as the milestone pipeline does. For an unconditional plan use `fable-validate-fableplan-loop`.
 
 **Top-band note:** the signal is `yes` for every score of 75 or higher, so band-3 issues always plan here. Implementation runs on the session model, so in this chain Fable 5.1 involvement ends with the validation and the posted plan.
 

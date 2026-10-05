@@ -1,6 +1,6 @@
 ---
 name: milestoneplan
-description: Use when the user wants a milestone's execution plan shown as a table — "milestoneplan v1", "/milestoneplan", "show the plan for v1". Read-only - reads every issue in the milestone and renders one table of issue number, description, complexity, dependencies, validate/build model and effort, fableplan, plan effort, and first-review trigger. Never edits an issue and never launches a run. Stage 6 of the new-app-pipeline.
+description: Use when the user wants a milestone's execution plan shown as a table — "milestoneplan v1", "/milestoneplan", "show the plan for v1". Read-only - reads every issue in the milestone and renders one table of issue number, description, complexity, dependencies, validate/build model and effort, plan, plan effort, and first-review trigger. Never edits an issue and never launches a run. Stage 6 of the new-app-pipeline.
 ---
 
 # milestoneplan
@@ -20,7 +20,7 @@ gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate --jq 
 gh issue list --milestone "<title>" --state all --limit 500 --json number,title,state,body
 ```
 
-`state=all` and `--paginate` with `per_page=100` are required: the defaults are open-only and 30 per page, so a closed or late milestone reads as not found. If the issue count equals `--limit`, re-fetch at a higher limit until a fetch returns strictly below its own limit. Strip `\r` from bodies (the API returns CRLF), then parse the `[C<score>]` title prefix and the `## Execution` block: `Depends on`, `Runs after`, build model, effort, fableplan, `PR review:`, and the optional `Validate model:`, `Validate effort:`, `Plan model:`, and `Plan effort:` lines.
+`state=all` and `--paginate` with `per_page=100` are required: the defaults are open-only and 30 per page, so a closed or late milestone reads as not found. If the issue count equals `--limit`, re-fetch at a higher limit until a fetch returns strictly below its own limit. Strip `\r` from bodies (the API returns CRLF), then parse the `[C<score>]` title prefix and the `## Execution` block: `Depends on`, `Runs after`, build model, effort, `plan first:` (also read the legacy `fableplan first:`), `PR review:`, and the optional `Validate model:`, `Validate effort:`, `Plan model:`, and `Plan effort:` lines.
 
 ### 2. Render the table
 

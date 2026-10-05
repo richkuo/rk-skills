@@ -19,13 +19,13 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fableplan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `fableplan` is `yes` at score 75 or higher, and a plan is then posted before the build: Opus 5.5 by default, or Fable 5.1 on a `Plan model: Fable 5.1` stamp. "Fable" skills hand part of the work to a subagent on the Fable 5.1 model; it runs at `high` by default and at `xhigh` only when you ask for it.
+Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `plan` is `yes` at score 75 or higher, and a plan is then posted before the build: Opus 5.5 by default, or Fable 5.1 on a `Plan model: Fable 5.1` stamp. "Fable" skills hand part of the work to a subagent on the Fable 5.1 model; it runs at `high` by default and at `xhigh` only when you ask for it.
 
 ### Issue skills
 
 | Skill | What it does |
 |-------|--------------|
-| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks claims against the code first, adds the score, the `fableplan` signal, and a plain-language summary. |
+| `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks claims against the code first, adds the score, the `plan` signal, and a plain-language summary. |
 | `new-issue-loop` | Runs `new-issue`, then validates, implements, and drives the PR through review. Stops on a duplicate. |
 | `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it up or down. Stops as blocked when the issue or its central claim cannot be verified. |
 | `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. Never plans; its report says when a plan was due. |
@@ -58,10 +58,10 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `fablepl
 | `fable-new-issue` | `new-issue` drafted by a read-only Fable 5.1 subagent; your session spot-checks and files it. |
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the issue to a reviewed PR. |
 | `fable-validate` | `validate-issue` run on a Fable 5.1 subagent; your session presents the verdict and acts on it. |
-| `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 75 or higher, the code is safety-critical, or the issue stamps `fableplan first: Yes`, then drives to a reviewed PR. |
+| `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 75 or higher, the code is safety-critical, or the issue stamps `plan first: Yes`, then drives to a reviewed PR. |
 | `fable-validate-fableplan-loop` | Same, with an unconditional Fable plan. |
 | `fable-validate-fableplan` | Fable validates, fixes are applied, a Fable plan is posted, and it stops there. |
-| `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 75 or higher, when safety-flagged, or when the issue stamps `fableplan first: Yes`, then drives to a reviewed PR. |
+| `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 75 or higher, when safety-flagged, or when the issue stamps `plan first: Yes`, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | Fable plans, `work-on-issue` builds and opens the PR. No validation, no review loop. |
 | `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
 | `fable-advisor` | Your session builds; a persistent Fable 5.1 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.1 reviewer issues a binding pre-commit verdict. |
