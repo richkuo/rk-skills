@@ -28,7 +28,7 @@ Then run this skill's steps 4 and 5 in place of fable-validate-loop's steps 4 to
 
 ### 4. Hand off to work-on-issue-loop
 
-This chain never plans, by design. Read the plan signal once: a plan is due when fable-validate-loop step 4's gate would run fableplan, that is, when the verdict signal is `fableplan: yes`, the validation flags a safety concern, or the issue's `## Execution` block (read after step 3) stamps `fableplan first: Yes`. When a plan is due, build with no plan and record it for step 5.
+This chain never plans, by design. Read the plan signal once: a plan is due when fable-validate-loop step 4's gate would run fableplan, that is, when the verdict signal is `plan: yes`, the validation flags a safety concern, or the issue's `## Execution` block (read after step 3) stamps `plan first: Yes` (or the legacy `fableplan first: Yes`). When a plan is due, build with no plan and record it for step 5.
 
 Invoke the `work-on-issue-loop` skill (Skill tool, `skill: work-on-issue-loop`) with the step 1 `owner/repo#N` passed explicitly, so it cannot resolve a different issue from session context or the current checkout.
 

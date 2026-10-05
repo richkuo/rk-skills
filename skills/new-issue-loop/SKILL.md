@@ -33,7 +33,7 @@ Otherwise (one issue filed cleanly), continue.
 
 Invoke the `validate-issue-loop` skill (Skill tool, `skill: validate-issue-loop`) with the step 1 `owner/repo#N` passed explicitly, always, whichever repository new-issue filed to. A bare number resolves against the current checkout, and validate-issue-loop carries the full reference to every later stage. Its own scope gate (too large / infeasible / already-addressed) and its edit-landing stop still apply and may stop the run. That stop is designed behavior, and the report relays it as a stop.
 
-`validate-issue-loop` owns the `fableplan: yes` signal that new-issue reports: that chain never plans, and its report says when a plan was due. This skill adds no plan gate of its own.
+`validate-issue-loop` owns the `plan: yes` signal that new-issue reports: that chain never plans, and its report says when a plan was due. This skill adds no plan gate of its own.
 
 Validating an issue this same session just wrote is not redundant: validate-issue re-traces the claims against the code independently, catching anything the filing pass got wrong.
 

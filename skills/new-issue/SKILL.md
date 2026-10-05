@@ -36,7 +36,7 @@ For anything beyond a localized bug fix, spec the approach so it passes the `val
 
 ### 4. Score complexity
 
-Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). The score routes model and effort; never write a duration. Set the fableplan signal per `github-issue-format` (`yes` when the score is ≥ 75).
+Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). The score routes model and effort; never write a duration. Set the plan signal per `github-issue-format` (`yes` when the score is ≥ 75).
 
 ### 5. Scope check
 
@@ -47,7 +47,7 @@ If the deliverables are separable, apply the split gates in `validate-issue` ste
 `github-issue-format` owns the title, rationale line, section order, plain-language section rule, and footer (verb `Created`). A repo issue template or `CLAUDE.md` issue format overrides it. Fill the body from the steps above:
 
 ```
-**Complexity: <score>/100** — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) — <model/effort from band> · fableplan: <yes|no>
+**Complexity: <score>/100** — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) — <model/effort from band> · plan: <yes|no>
 
 ## Problem
 <Current behavior with the file:line citations from step 2; what is wrong or missing and why it matters.>
@@ -72,4 +72,4 @@ File with `gh issue create --repo "$REPO" --title "[C<score>] <title>" --body-fi
 
 ### 7. Report
 
-Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `fableplan: yes`, also ask in one line whether to post a plan before building (`issueplan`, which plans on the session model); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.
+Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `plan: yes`, also ask in one line whether to post a plan before building (`issueplan`, which plans on the session model); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.
