@@ -45,7 +45,7 @@ On a "Done" terminal state continue with step 3; on any other terminal state go 
 On either "Done" state, sweep the PR body, commit messages, and any docs the diff changed for follow-on work the implementation named ("follow-on", "own issue", "future work", "next step", "not yet wired/deployed", "needs a follow-up"). This is separate from the review's `Create Follow-up Issue` section, which fix-pr-review handles.
 
 - Search first (`gh issue list -R <owner>/<repo> --search "<keywords>" --state all`); skip items that already have an issue.
-- File each remaining item as a fully-specced issue per `github-issue-format`. Never file a stub; an item that cannot be specced yet is named in the step 4 report as **deliberately unfiled**.
+- File each remaining item as a fully-specced issue per `github-issue-format` (complexity-prefixed title, complete body with a `## Plain simple English` section under 55 words, attribution footer). Never file a stub; an item that cannot be specced yet is named in the step 4 report as **deliberately unfiled**.
 - Include every filed issue URL and every deliberately unfiled item in the step 4 report.
 
 ### 4. Report

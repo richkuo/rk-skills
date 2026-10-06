@@ -93,7 +93,7 @@ Only the step 1 stop and the merge rule's prose-only case report **Done**.
 
 ### 5. Report
 
-Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. **Write the report per the Response Style rules in CLAUDE.md/AGENTS.md**; the unverified-source list sits outside the word cap.
+Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100**; apply the Response Style rules in CLAUDE.md/AGENTS.md; the unverified-source list sits outside the word cap.
 
 | Terminal state | Report as |
 |---|---|
