@@ -1541,6 +1541,13 @@ function blockIssues(track, startIndex, reason, skipped, status = 'dependency_bl
   }
 }
 
+function invalidDependentReason(issue, validation, blocker) {
+  if (/^\s*Close recommended \(Completed\)/i.test(String(validation.invalid_reason || ''))) {
+    return `prerequisite #${issue} is recommended for closure as completed; check its evidence, close #${issue}, and re-run: ${blocker}`
+  }
+  return `unmet in-track hard prerequisite #${issue}: ${blocker}`
+}
+
 function trackOutcome(status, completed, skipped, head, unresolved, blocker) {
   return {
     status,
@@ -1724,7 +1731,7 @@ async function executeTrack(trackIndex) {
       addResult({ issue, status: 'invalid', reason: blocker, validation: validationRecord })
       localSkipped.push({ issue, reason: `validated INVALID — ${blocker}` })
       status = 'blocked'
-      blockIssues(track, issueIndex + 1, `unmet in-track hard prerequisite #${issue}: ${blocker}`, localSkipped)
+      blockIssues(track, issueIndex + 1, invalidDependentReason(issue, validation, blocker), localSkipped)
       break
     }
 
