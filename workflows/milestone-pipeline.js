@@ -254,7 +254,7 @@ Task prompt for the Codex CLI agent (write it to the prompt file verbatim):
 ${taskPrompt}
 ----- END TASK PROMPT -----
 
-Return via StructuredOutput: verdict, summary, corrections, implementation_constraints, rescored_complexity, issue_updated_at (your step 2 read time of record, never the CLI agent's), invalid_reason when INVALID, flags naming any substitution, stray write, issue change, or retry, blocker only when the pass could not run or could not be parsed, an issue read failed, or the issue's title, body, or comments changed during the pass, and blocker_kind with every blocker (before_launch when no shim was launched, issue_unchanged only after a step 7 after read showed no blocking change, else issue_changed).`
+Return via StructuredOutput: verdict, summary, corrections, implementation_constraints, rescored_complexity, issue_updated_at (your step 2 read time of record, never the CLI agent's), invalid_reason when INVALID, flags naming any substitution, stray write, issue change, or retry, blocker only when the pass could not run or could not be parsed, an issue read failed, or the issue's state, title, body, or comments changed during the pass, and blocker_kind with every blocker (before_launch when no shim was launched, issue_unchanged only after a step 7 after read showed no blocking change, else issue_changed).`
 }
 
 function cliDriverPrompt(taskPrompt, ex, kind = 'implement', planned = false) {
@@ -467,7 +467,7 @@ const VALIDATION_SCHEMA = {
     implementation_constraints: { type: 'array', items: { type: 'string' }, description: 'Hard requirements the implementer must honor (invariants, refuted approaches, preferred option, merge-order notes)' },
     invalid_reason: { type: 'string', description: 'Only when verdict is INVALID: why' },
     flags: { type: 'array', items: { type: 'string' }, description: 'Only from a CLI validate driver: substitution, stray write, issue change during the pass, retry, or model-unverified notes' },
-    blocker: { type: 'string', description: 'Only from a CLI validate driver: why the pass could not run or be parsed, an issue read failed, or the issue title, body, or comments changed during the pass; the runtime treats the result as a failed attempt' },
+    blocker: { type: 'string', description: 'Only from a CLI validate driver: why the pass could not run or be parsed, an issue read failed, or the issue state, title, body, or comments changed during the pass; the runtime treats the result as a failed attempt' },
     blocker_kind: { type: 'string', enum: ['before_launch', 'issue_unchanged', 'issue_changed'], description: 'Only with blocker: before_launch when no shim was launched (preflight, the step 2 reads, or the prompt file); issue_unchanged only when a step 7 after read showed no blocking issue change; issue_changed for every other blocker, including an issue-diff blocker and a failed after read. The runtime retries a CLI validate blocker once only for before_launch or issue_unchanged, and never for issue_changed or a missing or unknown kind, because a new before read would take a changed issue as its baseline' },
   },
 }

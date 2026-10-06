@@ -121,7 +121,7 @@ done
 | No PR, or no new head or disposition comment | Block (section 8) |
 | Stray change or removed worktree | Flag it (section 8) |
 | Cursor validate stamp, no verdict, or no read time of record | Block (section 9) |
-| Title or body changed beyond the allowed edit, a comment edited or removed, a new invoking-user comment, or a failed after read during a validate pass | Block, never retried by the driver or its caller (section 9) |
+| Open or closed state changed, title or body changed beyond the allowed edit, a comment edited or removed, a new invoking-user comment, or a failed after read during a validate pass | Block, never retried by the driver or its caller (section 9) |
 | Validate blocker after the shim launched | Run the Issue diff first; retry only when it shows no blocking change (section 9) |
 
 ## 9. Validate pass
