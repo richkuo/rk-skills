@@ -32,7 +32,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
 | `work-on-issue` | Implements an issue in an isolated git worktree, builds to the newest trusted plan, one posted by the user or a collaborator (plans from other authors are named and skipped; deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
 | `work-on-issue-loop` | Runs `work-on-issue`, triggers the first review, then delegates to `fix-pr-review-loop` until the PR gets an LGTM. |
-| `issueplan` | A Plan subagent on the session's model writes the plan; the skill checks it, posts the plan to the issue (or presents it when there is no issue), and stops. It never builds; `work-on-issue` builds from the posted plan. |
+| `issueplan` | A Plan subagent on the session's model writes the plan by default; ask for "in session" to plan in the main session with no subagent. The skill checks the plan, posts the plan to the issue (or presents it when there is no issue), and stops. It never builds; `work-on-issue` builds from the posted plan. |
 
 ### PR review skills
 
