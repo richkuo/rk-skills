@@ -21,7 +21,7 @@ The pipeline builds on those stamps and does not correct a stale one once the ti
 
 ## Edit the body
 
-Apply all validated corrections with one `gh issue edit <N> --repo "$REPO" --title <title> --body-file <file>` and keep the body complete. Write the body file outside the repository (the session scratchpad, else `mktemp`). Keep the `## Plain simple English` section per `github-issue-format`: when the edit rewrites a prose section, add it when the body has none, and rewrite it when the corrected Problem no longer matches it. A rescore-only edit (title prefix, rationale line, Execution block) is metadata and does not add it. Keep it under 55 words in ASD-STE100, after the acceptance criteria and before any Execution block. This backfill applies only to issues you already edit; do not sweep other open issues. Preserve prior attribution lines and append the current line after one final `---` separator:
+Apply all validated corrections with one `gh issue edit <N> --repo "$REPO" --title <title> --body-file <file>` and keep the body complete. Write the body file outside the repository (the session scratchpad, else `mktemp`). In a sandbox that blocks every file write (the `cli-dispatch` section 9 Codex validate shim), use `--body-file -` and feed the body through a pipe, such as `printf '%s\n' '<body>' |`; a here-document needs a temp file and fails there. Keep the `## Plain simple English` section per `github-issue-format`: when the edit rewrites a prose section, add it when the body has none, and rewrite it when the corrected Problem no longer matches it. A rescore-only edit (title prefix, rationale line, Execution block) is metadata and does not add it. Keep it under 55 words in ASD-STE100, after the acceptance criteria and before any Execution block. This backfill applies only to issues you already edit; do not sweep other open issues. Preserve prior attribution lines and append the current line after one final `---` separator:
 
 ```text
 ---
@@ -38,4 +38,4 @@ Immediately before `gh issue edit`, run `gh issue view <N> --repo "$REPO" --json
 
 ## Verify the saved issue
 
-Read the issue back from GitHub. Confirm the title, first complexity line, corrected sections, and final footer. Remove temporary body files and confirm that local status contains no new artifact.
+Read the issue back from GitHub. Confirm the title, first complexity line, corrected sections, and final footer. Remove temporary body files, when any were written, and confirm that local status contains no new artifact.
