@@ -40,7 +40,7 @@ If the user referenced an issue, note the number and repository, but do NOT read
 - `prompt`: hand it everything needed to validate independently:
   - The issue reference exactly as the user gave it, or the one resolved from this session, plus the working directory.
   - Instruct it to **read the SKILL.md at the recorded path and execute its steps 0 through 8 exactly** — baseline resolution, the one-call issue read with its `updatedAt` + PR timeline check, claim extraction, depth-rule verification with `file:line` citations, 5a/5b/5c proposal checks, complexity score, scope disposition, and the step-8 verdict format. It must read every mandatory reference file those steps name.
-  - It must STOP at step 8: no step 9 to 12 actions, no `gh issue create`, no `gh issue edit`, no comments posted, no file edits. State the full read-only rule of `fable-dispatch` section 7 in the prompt.
+  - It must STOP at step 8: no step 9 to 13 actions, no `gh issue create`, no `gh issue edit`, no `gh issue close`, no comments posted, no file edits. State the full read-only rule of `fable-dispatch` section 7 in the prompt.
   - Return the complete step-8 verdict verbatim as its final message, plus one line stating which baseline (branch/commit) claims were traced against, and one line `Issue updatedAt: <value>` with the `updatedAt` that validate-issue step 1 recorded.
 
 On every path, when `REPO` is the checkout's `origin`, step 1 has already run the `fable-dispatch` section 3 caller-run fetch before the snapshot. Tell the subagent it is done: it executes steps 0 through 8 exactly except that fetch, which it skips, and it never runs `git fetch`. On the shim, the `--allowedTools` list is the `fable-validate` example in `fable-dispatch` section 3, and `--add-dir` names the directories that section gives for the recorded SKILL.md path; the prompt lists each allowed `gh` command verbatim, as that section states. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
@@ -49,7 +49,7 @@ When the result arrives, run the section 7 snapshot diff, then record the result
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims, and every Evidence citation of a `Close issue?` verdict, resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
 
 ### 4. Relay the verdict to the user
 
@@ -63,6 +63,7 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
 - **"issueplan"** or **"fableplan"** → apply validate-issue step 10.
+- **"close issue"** → apply validate-issue step 13 to a `Close issue?` verdict, with the footer from the "update issue" bullet.
 
 ## Notes
 

@@ -577,6 +577,7 @@ function validatePrompt(issue, completed, skipped, baseRefs) {
     `rescored_complexity: your own step-6 complexity score (0–99) from the change surface you traced — independent of the title prefix; 0 only if you could not score it;`,
     `and issue_updated_at: the updatedAt from that same one-call read (validate-issue step 1), verbatim; never from a later call.`,
     `If validate-issue ends in Validation blocked, return verdict INVALID with the missing input as invalid_reason and rescored_complexity 0.`,
+    `If validate-issue ends in a Close issue? verdict (Completed or Invalid), return verdict INVALID with invalid_reason \`Close recommended (<Completed | Invalid>): <reason>\` and rescored_complexity 0; never close the issue.`,
   ].join(' ')
 }
 

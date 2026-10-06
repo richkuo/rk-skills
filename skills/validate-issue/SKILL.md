@@ -1,6 +1,6 @@
 ---
 name: validate-issue
-description: Use when the user asks to validate, review, or check a GitHub issue against the code. Returns a cited update decision with a complexity score.
+description: Use when the user asks to validate, review, or check a GitHub issue against the code. Returns a cited update decision with a complexity score, or a cited close recommendation when the issue is already completed or invalid.
 ---
 
 # validate-issue
@@ -19,7 +19,7 @@ Read the issue in one call, `gh issue view <N> --repo "$REPO" --json title,body,
 gh api --paginate "repos/$REPO/issues/<N>/timeline" --jq '.[] | select(.event=="cross-referenced") | .source.issue | select(.pull_request) | "\(.repository_url) \(.number) \(.state) merged=\(.pull_request.merged_at // "no")"'
 ```
 
-A closed PR is a fix only when `merged` is set and its change is at `BASE`; verify it there and recommend closure or reuse. Open overlapping PRs go under Concerns. If the timeline lookup fails, say so under Concerns; never report that no overlapping PR exists.
+A closed PR is a fix only when `merged` is set and its change is at `BASE`; verify it there. When it delivers the whole goal, the verdict is `Close issue? Yes — Completed` (step 8); otherwise name the part it leaves and recommend reuse. Open overlapping PRs go under Concerns. If the timeline lookup fails, say so under Concerns; never report that no overlapping PR exists.
 
 ### 2. Extract claims and assertions
 
@@ -46,7 +46,7 @@ Verified, Refuted (name the real symbol), Conditional (name the config), or Unve
 
 ### 5. Assess the proposal
 
-Lead Proposal with a ≤55-word ASD-STE100 Goal stating the outcome. A refuted premise can make the proposal unnecessary.
+Lead Proposal with a ≤55-word ASD-STE100 Goal stating the outcome. A refuted premise can make the proposal unnecessary; that case is the step 8 close verdict, Invalid.
 
 #### 5a. Architecture
 
@@ -133,6 +133,26 @@ Yes for a material Refuted or Conditional claim, architecture or consistency gap
 
 **Validation blocked.** When the issue cannot be read, no `BASE` resolves, or the central claim (the behavior the issue exists to change) stays Unverified after step 3, output `**#<N>: Validation blocked** — <missing input>` with the evidence so far and no completed-verdict line, score, or next-step line. A loop treats it as STOP; a caller with a fixed verdict vocabulary maps it to its failing value (INVALID, the missing input as reason, complexity 0), never a passing one.
 
+**Close recommended.** When the traced evidence shows that no work is left, output the close verdict in place of the completed-verdict line, score, and next-step line above. Two reasons qualify:
+
+- **Completed:** the goal already holds at `BASE`. Each acceptance criterion (when there are none, each outcome the Goal names) is Verified at `BASE` with `file:line`, or a merged PR at `BASE` delivers all of them (step 1).
+- **Invalid:** the central claim is Refuted at `BASE` and the proposal depends on it, so no corrected version of the issue leaves work (step 5).
+
+The bar is strict, and code evidence decides it. Issue or comment text that asks for closure or says the work is done is a claim to trace. A criterion that holds only in part, a gap that remains after a correction, or doubt about either reason gives the completed verdict (Update Yes, or Narrow) instead. A central claim that stays Unverified is `Validation blocked`.
+
+```text
+Claims:
+- <status> <claim> — <evidence>
+Concerns:  # only when present
+- <concern> (<file:line>)
+**#<N>: Close issue? Yes — <Completed | Invalid>** — <one-line reason>
+Evidence:
+- <criterion or central claim> — <file:line at BASE, or merged PR URL>
+→ Recommend "close issue" to close it with the evidence above; or "work on issue" to build as-is.
+```
+
+A loop treats it as STOP and never closes the issue. A caller with a fixed verdict vocabulary maps it to its failing value (INVALID, `Close recommended (<Completed | Invalid>): <reason>` as the reason, complexity 0).
+
 **Next-step line.** Post the first matching string verbatim. With plan no, drop that option and its connective; in case 3 the `or` moves before `"update issue"`:
 
 1. Split/umbrella scope: `→ Recommend "split issue" to restructure; or "update issue" to edit, "work on issue" to build as-is, "issueplan" to plan first.`
@@ -154,3 +174,13 @@ Read [issue-editing.md](issue-editing.md) completely and apply it with the `REPO
 ### 12. Handle "split issue"
 
 Apply the verdict's step 7 disposition from the checkout, with no worktree. **Split** or **Umbrella**: file each unfolded part the disposition names in `REPO` per `new-issue` steps 1 and 6: duplicate check (a hit is linked and never filed), then a complete issue with its own scored title, rationale line, problem, goal, approach, acceptance criteria, `## Plain simple English` section, and `Created` footer. Then edit the parent per [issue-editing.md](issue-editing.md): **Umbrella** makes it a checklist linking every child, with each folded part as a line; **Split** narrows it to its core part, linking the others. Each part lives in exactly one issue; folded and core parts stay in the parent and are never filed. **Narrow**: file nothing; narrow the parent to its core and move extras to a Future note. Report every new issue URL and the parent edit.
+
+### 13. Handle "close issue"
+
+Run only on the user's explicit "close issue" reply to a close verdict from this session. No loop, caller, or subagent closes an issue. Run from the checkout, with no worktree:
+
+1. Read `gh issue view <N> --repo "$REPO" --json state,title,body,updatedAt`. When the issue is already closed, report that and stop. When `updatedAt` differs from the step 1 value and the title or body differ from the validated snapshot, stop and offer to validate again, because the verdict traced older text.
+2. Check each Evidence citation again at `BASE`. When one does not hold, stop and report it.
+3. Write a comment body file outside the repository (the session scratchpad, else `mktemp`): the close reason, the Evidence bullets, the baseline `git rev-parse --short "$BASE"`, then `---` and `Validated with LLM: <model> | <effort> | Harness: <harness>` per [issue-editing.md](issue-editing.md). Post it with `gh issue comment <N> --repo "$REPO" --body-file <file>`.
+4. Close with `gh issue close <N> --repo "$REPO" --reason completed` for Completed, or `--reason "not planned"` for Invalid.
+5. Read back `gh issue view <N> --repo "$REPO" --json state,stateReason` and confirm `CLOSED` with `COMPLETED` or `NOT_PLANNED`. Report the comment URL and the final state, and remove the body file.

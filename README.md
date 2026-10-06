@@ -27,7 +27,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 |-------|--------------|
 | `new-issue` | Turns a bug, idea, or conversation into a complete GitHub issue. Checks claims against the code first, adds the score, the `plan` signal, and a plain-language summary. |
 | `new-issue-loop` | Runs `new-issue`, then validates, implements, and drives the PR through review. Stops on a duplicate. |
-| `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it up or down. Stops as blocked when the issue or its central claim cannot be verified. |
+| `validate-issue` | Fact-checks an issue against the code with file and line references, checks the approach, and rescores it up or down. Stops as blocked when the issue or its central claim cannot be verified. Recommends closure, with code evidence, when the issue is already completed or invalid; it closes the issue only when you reply "close issue". |
 | `validate-issue-loop` | Runs `validate-issue`, applies the verdict's fixes to the issue, then hands off to `work-on-issue-loop`. Never plans; its report says when a plan was due. |
 | `github-issue-format` | Reference skill: the required issue format. Loaded before any issue is filed or edited. |
 | `work-on-issue` | Implements an issue in an isolated git worktree, builds to the newest trusted plan, one posted by the user or a collaborator (plans from other authors are named and skipped; deviations named in the PR), verifies, and opens a PR that closes the issue. An optional `targetBranch` replaces the default branch as worktree and PR base. |
