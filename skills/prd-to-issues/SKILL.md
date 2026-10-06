@@ -55,7 +55,7 @@ Honor existing authorization. If the user asked to review first or has not autho
 
 ## 5. File in dependency order and verify
 
-- Recheck GitHub for concurrent changes. Reuse matching milestones; create missing ones with their completion outcome. Write every new milestone title as one hyphenated token with no spaces (`MCP-Read-foundations`), because an unquoted `milestone:` filter in GitHub splits a title at the first space and fails with "Invalid value ... for milestone". Name the target repo on every GitHub call. Pass bodies as data via `gh issue create --body-file`; never interpolate PRD text into shell code.
+- Recheck GitHub for concurrent changes. Reuse matching milestones; create missing ones with their completion outcome. Write every new milestone title as one hyphenated token with no spaces (`MCP-Read-foundations`). Name the target repo on every GitHub call. Pass bodies as data via `gh issue create --body-file`; never interpolate PRD text into shell code.
 - Create issues one at a time in topological order over both edge types, resolving each predecessor to its verified GitHub number first so every body and Execution block is final at creation. Use the numbers GitHub returns; never predict them. Read back each issue before continuing.
 - For approved updates, re-fetch the body and apply only the intended delta, preserving unrelated content and valid overrides. Never close, reopen, delete, or move existing work to make the backlog fit.
 - On a failed or uncertain write, stop dependent writes. Search GitHub for the source reference, title, and milestone before retrying so nothing is filed twice. Never rerun the batch blindly or roll back by closing or deleting filed work. Report what was filed, what remains, and the blocker.

@@ -5,9 +5,9 @@ description: Use when the user says "new issue", "create an issue", "file an iss
 
 # new-issue
 
-File a GitHub issue that a human or agent can pick up cold and implement correctly: grounded problem, goal, approach, acceptance criteria, complexity score, plain-language summary, attribution footer. Never file a placeholder, stub, or thin body; if it is not ready to spec, say so and track it in notes or a parent issue instead.
+File a GitHub issue that a human or agent can pick up cold and implement correctly. Never file a placeholder, stub, or thin body; if it is not ready to spec, say so and track it in notes or a parent issue instead.
 
-Spec the best solution per the CLAUDE.md Engineering rules: cost, compute, time, token spend, code volume, and convenience never narrow the option space; only correctness, safety, and the explicit non-negotiables (worktree+PR workflow, verifying claims against code, destructive-action safety) override "best". When the cheap design and the correct design diverge, spec the correct one and let the score say so.
+Spec the best solution per the CLAUDE.md Engineering rules. When the cheap design and the correct design diverge, spec the correct one and let the score say so.
 
 ## Input
 
@@ -23,7 +23,7 @@ Resolve `REPO` once: the `owner/repo` the input names (for a repo path, that clo
 
 ### 2. Ground every claim
 
-Each claim about current behavior is held to the `validate-issue` standard: trace the code path and keep the `file:line`. A claim you cannot trace is phrased as unverified ("appears to", "needs confirmation"). An issue derived from conversation is re-checked against the actual files; recollection goes stale. Run `git fetch origin "$DEFAULT"` in the clone of `REPO` and trace against `origin/$DEFAULT` (`git show "origin/$DEFAULT":<path>`), so a divergent or stale local branch cannot change the evidence.
+Each claim about current behavior is held to the `validate-issue` standard: trace the code path and keep the `file:line`. A claim you cannot trace is phrased as unverified ("appears to", "needs confirmation"). An issue derived from conversation is re-checked against the actual files. Run `git fetch origin "$DEFAULT"` in the clone of `REPO` and trace against `origin/$DEFAULT` (`git show "origin/$DEFAULT":<path>`).
 
 ### 3. Design the approach
 
@@ -36,11 +36,11 @@ For anything beyond a localized bug fix, spec the approach so it passes the `val
 
 ### 4. Score complexity
 
-Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). The score routes model and effort; never write a duration. Set the plan signal per `github-issue-format` (`yes` when the score is ≥ 75).
+Apply the formula and routing table in `validate-issue` step 6; do not restate them. Grade from the touch-set in step 3, and count surface hidden from the diff (tests, parity or offline paths, migrations, docs). Never write a duration. Set the plan signal per `github-issue-format` (`yes` when the score is ≥ 75).
 
 ### 5. Scope check
 
-If the deliverables are separable, apply the split gates in `validate-issue` step 7, the single owner of the split policy. When every gate passes, file the core issue, fold sub-floor satellites into it as checklist lines, and tell the user which substantial parts warrant their own fully specified issues. Otherwise keep one issue with the parts as checklist lines.
+If the deliverables are separable, apply the split gates in `validate-issue` step 7. When every gate passes, file the core issue, fold sub-floor satellites into it as checklist lines, and tell the user which substantial parts warrant their own fully specified issues. Otherwise keep one issue with the parts as checklist lines.
 
 ### 6. Compose and file
 
@@ -72,4 +72,4 @@ File with `gh issue create --repo "$REPO" --title "[C<score>] <title>" --body-fi
 
 ### 7. Report
 
-Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `plan: yes`, also ask in one line whether to post a plan before building (`issueplan`, which plans on the session model); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.
+Terse: issue URL, number, one-line summary, complexity score, and any follow-ups you did not file, with why. Offer "validate issue" / "work on issue" as next steps in one line. When the signal is `plan: yes`, also ask in one line whether to post a plan before building (`issueplan`); never launch a plan unprompted. Autonomous loop skills that wrap this one parse the signal and apply their own gates instead of asking.

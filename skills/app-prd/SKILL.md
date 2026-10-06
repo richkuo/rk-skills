@@ -5,7 +5,7 @@ description: Use when the user wants an app idea turned into a Product Requireme
 
 # app-prd
 
-Turn a raw idea dump into a complete, implementable PRD committed to the target repo. The PRD is the single source of truth every later stage (question refinement, issue filing, workflow execution) builds on — write it so a cold agent could implement from it plus nothing else.
+Turn a raw idea dump into a complete, implementable PRD committed to the target repo. Write it so a cold agent could implement from it plus nothing else.
 
 ## Input
 
@@ -19,7 +19,7 @@ Turn a raw idea dump into a complete, implementable PRD committed to the target 
 `git status`, `git log --oneline -3`, `git remote -v`, `git ls-remote origin`. Three cases:
 
 - **Normal repo**: proceed with the standard worktree + PR flow.
-- **Empty repo with remote** (no commits anywhere): bootstrap first — create `main`, one **empty** initial commit (`git commit --allow-empty -m "Initial commit"` + attribution footer), push. A PR needs a base branch to exist; never put the PRD itself in the bootstrap commit.
+- **Empty repo with remote** (no commits anywhere): bootstrap first. Create `main`, one **empty** initial commit (`git commit --allow-empty -m "Initial commit"` + attribution footer), push. Never put the PRD itself in the bootstrap commit.
 - **No repo/remote**: confirm repo creation with the user.
 
 ### 2. Draft `PRD.md`
@@ -30,7 +30,7 @@ Structure (adapt section names to the product, keep the skeleton):
 2. **Product Overview** — what it does, for whom, the emotional/business core in plain language.
 3. **Goals** — 3-5 bullets.
 4. **Platforms & Technology** — a table: each app surface, domains, payments, database, storage, email, auth. Record deferred infrastructure explicitly ("to be provisioned later; design compatible from day one").
-5. Feature sections — accounts, core domain objects, creation flows, privacy rules. **Number every section** (§4.2 style); later stages and issues cite these numbers.
+5. Feature sections — accounts, core domain objects, creation flows, privacy rules. **Number every section** (§4.2 style).
 6. **Pricing** — exact rates in tables, worked examples labeled *illustrative*, discount rules with the user's own example numbers preserved.
 7. Lifecycle/operations sections — storage tiers, scheduling windows with computed buffers (show the arithmetic: base time + buffer = trigger point).
 8. **Notifications** — every trigger, plus the implied supporting set (invites, receipts, warnings) marked as implied.
@@ -41,18 +41,18 @@ Structure (adapt section names to the product, keep the skeleton):
 
 ### 3. Faithfulness rules (integrity-critical)
 
-- Transcribe every stated number, rate, duration, and rule **exactly** — pricing tables and lifecycle windows are contract text, not paraphrase.
+- Transcribe every stated number, rate, duration, and rule **exactly**. Never paraphrase pricing tables or lifecycle windows.
 - Garbled or ambiguous input: make the best-effort interpretation in place **and** file the ambiguity in Open Questions. Never silently guess; never ask about things a sensible default covers.
 - Anything you inferred rather than were told (e.g. an implied App Store policy, an implied email type) — say so inline.
 
 ### 3b. Executable-spec rules (apply to every PRD edit)
 
-- A spec is executable: agents implement its lines literally. Every normative line must survive a literal reading. Ask whether an agent can follow the line exactly as written and still produce the wrong thing.
+- Every normative line must survive a literal reading. Ask whether an agent can follow the line exactly as written and still produce the wrong thing.
 - **Verify API claims against the installed SDK or type definitions.** Before the spec names a property, type, or signature, read the declaration at the deployment target (`*.swiftinterface` under `xcrun --sdk iphoneos --show-sdk-path`, or the package's own `.d.ts`). Web documentation alone is insufficient evidence. A sample written against a legacy API (for example the `VN*` Vision types) proves nothing about its modern replacement.
 - **In-repo evidence outranks external documentation.** A code comment that records a compile failure is ground truth. Contradict it only by reproducing the compile.
 - **Terminology edits sweep every dependent.** After the spec renames or forbids a mechanism, search the spec and all open issues for each remaining mention: implementation orders, tables, checklists, acceptance criteria.
-- **Realtime-path lines name the mechanism per component.** When components differ in units, coordinate spaces, or timelines, give each its own explicit statement. A shared phrase that groups them invites a wrong literal reading.
-- Spec pull requests get the same review gate as code pull requests. A spec error multiplies across every issue that cites the section.
+- **Realtime-path lines name the mechanism per component.** When components differ in units, coordinate spaces, or timelines, give each its own explicit statement.
+- Spec pull requests get the same review gate as code pull requests.
 
 ### 4. Land it
 
@@ -60,12 +60,12 @@ Worktree off latest `origin/main`, branch `cc/prd`, commit `PRD.md`, push, open 
 
 ### 5. Iterate on the same PR
 
-The user will refine in bursts ("change X", "add Y", "rename call date to unseal date"). For each revision:
+For each user revision:
 
 - Edit, commit, push to the **same branch** — one PR accumulates the whole draft history.
 - Rename sweeps: `grep -c` first, replace all occurrences and casing variants, fix grammar fallout (a/an).
 - Flip the PRD file's footer verb to `Updated` on first revision; commits use `Updated` thereafter.
-- Reply with what changed in one or two sentences, not a recap of the document.
+- Reply with what changed in one or two sentences. Do not recap the document.
 
 ## Output
 

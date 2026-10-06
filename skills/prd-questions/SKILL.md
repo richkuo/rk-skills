@@ -5,11 +5,11 @@ description: Use when the user wants every open question in a PRD resolved inter
 
 # prd-questions
 
-Resolve every open decision in the PRD by asking the user directly, then fold the answers into the spec so no reader ever needs the Q&A transcript. The deliverable is a PRD whose Open Questions section is empty because the answers live in the sections they govern.
+Resolve every open decision in the PRD by asking the user directly, then fold each answer into the section it governs and empty the Open Questions section.
 
 ## Input
 
-A repo containing `PRD.md` (or a named PRD file). No other input needed.
+A repo containing `PRD.md` (or a named PRD file).
 
 ## Steps
 
@@ -21,14 +21,14 @@ Collect, in order:
 2. Inline ambiguities elsewhere ("TBD", "confirm", "assumed", hedged examples).
 3. Decisions embedded in **Post-MVP / roadmap** sections that were deferred without being decided.
 
-"All questions" means all three groups — not just the numbered list.
+"All questions" means all three groups.
 
 ### 2. Ask in batches
 
 Use the AskUserQuestion tool, **max 4 questions per call**, sequential calls until done:
 
-- Each question: 2–4 concrete options with real tradeoff descriptions — not "yes/no" but the actual competing designs.
-- Put your recommended option **first**, labeled `(Recommended)`, and make the recommendation genuinely reasoned (privacy-preserving, simplest-correct, matches the PRD's stated priorities).
+- Each question: 2–4 concrete options that name the actual competing designs and their tradeoffs. No bare yes/no options.
+- Put your recommended option **first**, labeled `(Recommended)`, and base the recommendation on reasons (privacy-preserving, simplest-correct, matches the PRD's stated priorities).
 - One question per decision. Never bundle two decisions into one option.
 - Post-MVP questions are fair game but mark them as such in the question text, and offer "Defer to scoping" as a legitimate recommended option when deciding now has no benefit.
 
@@ -55,5 +55,5 @@ One reply listing each decision in a compact sentence series, plus where it land
 |---|---|
 | User picks "Other" with free text | Treat as the answer; fold it in verbatim, ask one follow-up only if it's internally contradictory |
 | An answer contradicts existing spec text elsewhere | Update every affected section; call out the ripple in your reply |
-| More than ~12 questions found | Still ask them all — batch by theme (pricing, privacy, lifecycle) so each AskUserQuestion call is coherent |
+| More than ~12 questions found | Still ask them all; batch each AskUserQuestion call by theme (pricing, privacy, lifecycle) |
 | A "question" is really a research task, not a user decision | Don't ask it; note it as a scoping task in the roadmap section |
