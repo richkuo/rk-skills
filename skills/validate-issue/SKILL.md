@@ -145,7 +145,7 @@ Invoke `work-on-issue` with the issue number; surface any step-7 disposition fir
 
 ### 10. Handle "issueplan"
 
-Invoke `issueplan` with the issue number; honor an explicit request even at signal no. On Opus 5.5 the plan is an Opus plan. A request for "fableplan" invokes `fableplan` for a Fable 5.1 plan.
+Invoke `issueplan` with the issue number, passing through an in-session request; honor an explicit request even at signal no. On Opus 5.5 the plan is an Opus plan. A request for "fableplan" invokes `fableplan` for a Fable 5.1 plan.
 
 ### 11. Handle "update issue"
 
