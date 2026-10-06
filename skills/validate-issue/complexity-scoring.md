@@ -1,6 +1,6 @@
 # Complexity scoring procedure
 
-The canonical formula and both routing tables live only in the main skill (step 6). This file owns what the score is, the grading rules, the axis anchors, the reachable-score lattice, and the golden examples.
+The canonical formula and both routing tables live only in the main skill (step 6).
 
 ## What the score is
 
@@ -14,17 +14,17 @@ Five grades route the issue; each answers one question about the correct impleme
 | Scope | How many files change? | Volume |
 | Verification | What proof does the builder need, and can it run locally? | Volume |
 
-Capability sets the band: each band holds exactly one Capability grade, so the validate route, the build route, the plan stage, and the first reviewer all follow Capability (see Reachable scores). Volume is the size inside the band, and it never moves the score across a band edge. The title score `25 × Capability + Volume` carries both in one number. The grades are the source of truth; a consumer that needs one grade reads it from the rationale line.
+Capability sets the band, so the validate route, the build route, the plan stage, and the first reviewer all follow Capability (see Reachable scores). Volume is the size inside the band, and it never moves the score across a band edge. The grades are the source of truth; a consumer that needs one grade reads it from the rationale line.
 
 ## Grading rules
 
 1. Grade from the edit list that the correct implementation needs, after step 5, with the verdict's Optimal included.
-2. At validation, grade first and compare second: derive all five grades from the edit list and write each `Axes:` line with its evidence before you look up the grades the issue's rationale line states. Then compare grade by grade; each difference is a `Differs:` line, and the traced grade wins. A grade copied from the rationale line has no evidence of its own. An issue with no rationale line yet (`new-issue` step 4) has nothing to compare.
-3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind. A grade with no evidence is a guess.
+2. At validation, grade first and compare second: derive all five grades from the edit list and write each `Axes:` line with its evidence before you look up the grades the issue's rationale line states. Then compare grade by grade; each difference is a `Differs:` line, and the traced grade wins. An issue with no rationale line yet (`new-issue` step 4) has nothing to compare.
+3. Cite one piece of evidence per grade: a file count, a named shared mechanism, a named persisted write, an open design question, or a test kind.
 4. When two anchors fit, take the higher one.
 5. Grade 2 needs its anchor like every other grade; it is never a default.
 6. The safety class (money, data integrity, security, auto-protective logic) has the Risk floors stated under the Risk anchors.
-7. Recompute the score from the five grades before you post it; a score the grades do not produce is an arithmetic slip. A missing title prefix in a repository that follows the `[C<score>]` convention, a prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ is an update (step 8). A lower score lands only with the `Differs:` and `Axes:` evidence step 8 requires.
+7. Recompute the score from the five grades before you post it. A missing title prefix in a repository that follows the `[C<score>]` convention, a prefix that differs from the recomputed score in either direction, or a rationale line whose grades differ is an update (step 8). A lower score lands only with the `Differs:` and `Axes:` evidence step 8 requires.
 
 ## Build the edit list first
 
@@ -113,7 +113,7 @@ Volume is always even. Capability 0 and 1 need Coupling 2 or lower, so their Vol
 | 2 | 50 to 74 |
 | 3 | 75 to 99 |
 
-Scores 21 to 24 and 46 to 49 cannot occur. Each band holds exactly one Capability grade: band 0 is Capability 0, band 1 is Capability 1, band 2 is Capability 2, and band 3 is Capability 3, so the plan stage runs exactly at Capability 3.
+Scores 21 to 24 and 46 to 49 cannot occur. Each band holds exactly one Capability grade, so the plan stage runs exactly at Capability 3.
 
 ## Golden examples (consistency checklist)
 
@@ -134,6 +134,6 @@ Scores 21 to 24 and 46 to 49 cannot occur. Each band holds exactly one Capabilit
 ## Routing details
 
 - The main skill's band table owns the `plan` signal, planner, builder, and effort; its first-review table owns every first-review boundary, and each row starts on a band edge, so a moved edge that a first-review row starts on moves that table, and any other edge change leaves it unchanged. Fable effort defaults are owned by CLAUDE.md; re-review step-down by `skills/fix-pr-review/rereview-routing.md`.
-- Build capability never decreases as the band rises: band 0 builds on Sonnet 5.5 at high, band 1 builds on Opus 5.5 at medium, and bands 2 and 3 build on Opus 5.5 at high. Bands 2 and 3 differ only in the plan stage.
+- Build capability never decreases as the band rises.
 - A missing score (no `[C<score>]` prefix at all; a literal `[C0]` is a real score) routes as the highest band at validate, build, and review until a validation stamps the traced score on the issue (step 8).
 - When validation produces a higher band than the title, revalidate once on the higher route and restamp every stale routing stamp per step 8. A lower traced score restamps the title and rationale line down per step 8, and every stage that reads the issue after the edit lands routes on it. A read-only validator rescore that writes no issue edit never lowers routing: the milestone pipeline keeps the band it already chose from the title for that run. The safety carve-out (money, data integrity, security, auto-protective logic) forces the capable path when Risk was under-scored.
