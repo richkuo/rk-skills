@@ -6,9 +6,9 @@ description: >-
 
 # validate-issue-loop
 
-Chain validate-issue → (conditional) update issue → work-on-issue-loop into one autonomous run, so an issue goes from "reported" to "PR through N rounds of review" without a human in the loop between steps. This is validate-issue's normal interactive handoff (its `→` next-step line) made unattended: the loop reads its own verdict and decides what to do next, where the interactive skill would wait for the user to type a reply.
+Chain validate-issue → (conditional) update issue → work-on-issue-loop into one autonomous run. Where validate-issue's `→` next-step line would wait for the user's reply, read the verdict yourself and decide the next step.
 
-**Do not skip validation.** Auto-implementing an issue whose factual claims or proposal you haven't traced against the code just reproduces the issue's own mistakes in a PR. Every step of validate-issue still runs; only the "wait for the user's reply" step is replaced by the decision rules below.
+**Do not skip validation.** Every step of validate-issue still runs; only the "wait for the user's reply" step is replaced by the decision rules below.
 
 ## Input
 
@@ -28,13 +28,13 @@ Then run this skill's steps 4 and 5 in place of fable-validate-loop's steps 4 to
 
 ### 4. Hand off to work-on-issue-loop
 
-This chain never plans, by design. Read the plan signal once: a plan is due when fable-validate-loop step 4's gate would run fableplan, that is, when the verdict signal is `plan: yes`, the validation flags a safety concern, or the issue's `## Execution` block (read after step 3) stamps `plan first: Yes` (or the legacy `fableplan first: Yes`). When a plan is due, build with no plan and record it for step 5.
+This chain never plans. Read the plan signal once: a plan is due when fable-validate-loop step 4's gate would run fableplan, that is, when the verdict signal is `plan: yes`, the validation flags a safety concern, or the issue's `## Execution` block (read after step 3) stamps `plan first: Yes` (or the legacy `fableplan first: Yes`). When a plan is due, build with no plan and record it for step 5.
 
-Invoke the `work-on-issue-loop` skill (Skill tool, `skill: work-on-issue-loop`) with the step 1 `owner/repo#N` passed explicitly, so it cannot resolve a different issue from session context or the current checkout.
+Invoke the `work-on-issue-loop` skill (Skill tool, `skill: work-on-issue-loop`) with the step 1 `owner/repo#N` passed explicitly.
 
 ### 5. Report
 
-Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run, final verdict). Prefix it with a one-line note of what happened in steps 2 and 3 (issue updated or not; scope check passed), so the user sees the whole chain. When step 4 recorded a due plan, say that a plan was due and that `validate-fableplan-loop` is the chain that plans. On a STOP row, report the row and its evidence in place of the summary.
+Relay work-on-issue-loop's final summary to the user (PR URL, review cycles run, final verdict). Prefix it with a one-line note of what happened in steps 2 and 3 (issue updated or not; scope check passed). When step 4 recorded a due plan, say that a plan was due and that `validate-fableplan-loop` is the chain that plans. On a STOP row, report the row and its evidence in place of the summary.
 
 **Cap the whole report (prefix + relayed summary) at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase or its internals.
 

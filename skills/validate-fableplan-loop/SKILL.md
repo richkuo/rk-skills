@@ -6,11 +6,11 @@ description: >-
 
 # validate-fableplan-loop
 
-Chain validate-issue → (conditional) update issue → (conditional) fableplan → work-on-issue-loop into one autonomous run: your session model validates the issue against the code, the main agent fixes the issue description if needed, Fable 5.1 plans the implementation for non-trivial issues (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence.
+Chain validate-issue → (conditional) update issue → (conditional) fableplan → work-on-issue-loop into one autonomous run.
 
-This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.1 subagent. Only the *planning* is delegated to Fable 5.1, and only when the issue is complex enough to warrant it. Reach for this over fable-validate-loop when you want cheaper, session-model validation but still want a Fable-vetted plan for the harder issues.
+This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.1 subagent.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). The only sanctioned skip is fable-validate-loop step 4's score gate, which step 4 below applies unchanged. Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
+**Do not skip or reorder the chain.** Validation gates planning, and the plan gates implementation. The only sanctioned skip is fable-validate-loop step 4's score gate, which step 4 below applies unchanged. Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 

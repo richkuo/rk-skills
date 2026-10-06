@@ -6,11 +6,11 @@ description: >-
 
 # fable-validate-fableplan-loop
 
-Chain fable-validate → (conditional) update issue → fableplan → work-on-issue-loop into one autonomous run: Fable 5.1 validates the issue, the main agent fixes the issue description if needed, Fable 5.1 plans the implementation (plan posted to the issue), and work-on-issue-loop implements the plan and drives the PR through review to convergence.
+Chain fable-validate → (conditional) update issue → fableplan → work-on-issue-loop into one autonomous run.
 
-This is **fable-validate-loop with the score gate removed** — the only difference is that fableplan **always runs**, regardless of the validated complexity score; there is no "skip when the score is below 75" rule. Reach for this when even simple issues should get a posted, Fable-vetted plan before implementation (e.g. the plan comment doubles as documentation, or the repo's simple-looking issues have a history of hiding traps). If skipping the plan for lower-band issues is fine, use `fable-validate-loop` instead — it's the cheaper default.
+This is **fable-validate-loop with the score gate removed**: fableplan **always runs**, whatever the validated complexity score, and there is no "skip when the score is below 75" rule. When skipping the plan for lower-band issues is fine, use `fable-validate-loop`.
 
-**Do not skip or reorder the chain.** Validation gates planning (a plan built on refuted claims is wrong), and the plan gates implementation (that's the point of routing through fableplan). This variant has no sanctioned skip: every step runs, and only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
+**Do not skip or reorder the chain.** Validation gates planning, and the plan gates implementation. This variant has no sanctioned skip: every step runs, and only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -26,7 +26,7 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 
 **Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan-loop`.
 
-**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score. Instruct fableplan to use the harness suffix `fable-validate-fableplan-loop` in the posted comment's attribution footer, so the comment records the actual entry point. The rest of the step applies unchanged: fableplan's planning-phase-only invocation, and the validation verdict handed to the planner (verified/refuted claims, the Optimal-direction note when architecture was Underspecified, 5c concerns), with the scratchpad kept for step 5.
+**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the step-2 scope gate, whatever the validated score. Instruct fableplan to use the harness suffix `fable-validate-fableplan-loop` in the posted comment's attribution footer. The rest of the step applies unchanged: fableplan's planning-phase-only invocation, and the validation verdict handed to the planner (verified/refuted claims, the Optimal-direction note when architecture was Underspecified, 5c concerns), with the scratchpad kept for step 5.
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 

@@ -19,11 +19,11 @@ Same as `validate-issue`:
 
 ### 1. Resolve the validation procedure and the issue
 
-Locate the `validate-issue` SKILL.md the subagent must follow — prefer the project-local copy over the global one, since a repo may customize the procedure:
+Locate the `validate-issue` SKILL.md the subagent must follow, using the first that resolves in this order:
 
 1. `<repo>/.claude/skills/validate-issue/SKILL.md` (if it exists)
 2. `~/.claude/skills/validate-issue/SKILL.md`
-3. Any other install location — search by name, e.g. `ls ~/.claude/plugins/*/skills/validate-issue/SKILL.md` (plugin-marketplace installs live under a plugin directory, not `~/.claude/skills/`).
+3. Any other install location — search by name, e.g. `ls ~/.claude/plugins/*/skills/validate-issue/SKILL.md`.
 
 Record the absolute path. If none of these resolves, stop and tell the user.
 
@@ -31,10 +31,10 @@ If the user referenced an issue, note the number and repository, but do NOT read
 
 ### 2. Dispatch the Fable 5.1 validation subagent
 
-Do not validate the issue yourself first — the subagent owns the validation. **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
+**Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
 - `subagent_type`: `Plan` (no Edit or Write; the section 7 prompt rule covers Bash and MCP tools)
-- `model`: `fable` (the validation must come from Fable 5.1)
+- `model`: `fable`
 - `effort`: `high` unless the user asked for another tier, with the other Agent parameters per `fable-dispatch` section 2; everything downstream waits for the verdict
 - `description`: `Validate issue #<N>`
 - `prompt`: hand it everything needed to validate independently:
@@ -45,9 +45,7 @@ Do not validate the issue yourself first — the subagent owns the validation. *
 
 On every path, when `REPO` is the checkout's `origin`, step 1 has already run the `fable-dispatch` section 3 caller-run fetch before the snapshot. Tell the subagent it is done: it executes steps 0 through 8 exactly except that fetch, which it skips, and it never runs `git fetch`. On the shim, the `--allowedTools` list is the `fable-validate` example in `fable-dispatch` section 3, and `--add-dir` names the directories that section gives for the recorded SKILL.md path; the prompt lists each allowed `gh` command verbatim, as that section states. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
 
-The subagent's final message comes back as the tool result; it is not shown to the user.
-
-When the result arrives, run the section 7 snapshot diff, then record the result's `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue step 11 use. Also **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6: the model is `Fable 5.1` on the Agent path unless the ladder substituted another, and on the shim path the model section 5 finds dominant in `.modelUsage`; the tier is the one passed per section 2 (`--effort` on the shim). Never guess another tier. Step 5's footer and every chain footer use these recorded values. Save the verdict verbatim to a scratchpad file immediately, so it survives context summarization and later steps can quote it exactly.
+When the result arrives, run the section 7 snapshot diff, then record the result's `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue step 11 use. Also **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6: the model is `Fable 5.1` on the Agent path unless the ladder substituted another, and on the shim path the model section 5 finds dominant in `.modelUsage`; the tier is the one passed per section 2 (`--effort` on the shim). Never guess another tier. Step 5's footer and every chain footer use these recorded values. Save the verdict verbatim to a scratchpad file immediately.
 
 ### 3. Spot-check the verdict
 
@@ -55,7 +53,7 @@ Before presenting it, spot-check the verdict's load-bearing findings against the
 
 ### 4. Relay the verdict to the user
 
-Present the vetted verdict in the validate-issue step-8 format, noting the model that served, as step 2 recorded it (with the downgrade stated when another model served), and which baseline it traced. Nothing is posted to GitHub at this stage — validation alone never writes to the issue.
+Present the vetted verdict in the validate-issue step-8 format, noting the model that served, as step 2 recorded it (with the downgrade stated when another model served), and which baseline it traced. Post nothing to GitHub at this stage.
 
 ### 5. Follow-on actions (main agent)
 
