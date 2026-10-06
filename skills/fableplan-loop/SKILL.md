@@ -8,9 +8,9 @@ description: >-
 
 Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5.1 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
 
-This is **fableplan-work-on-issue with the review loop added back** — the handoff goes to `work-on-issue-loop` (implement → PR → trigger `@claude` → fix-pr-review cycles until LGTM) instead of `work-on-issue` (single-shot, ends at the open PR). Equivalently, it's **validate-fableplan-loop with the validation stage removed**: no `validate-issue`, no update-issue edits, and no score gate — fableplan always runs. Reach for this when you already trust the issue, want a Fable-vetted plan, and want the PR reviewed to convergence without coming back.
+It has no `validate-issue` step, no update-issue edits, and no score gate: fableplan always runs.
 
-**Do not skip or reorder the chain.** The plan gates implementation — that's the point of routing through fableplan. There is no score gate here: unlike validate-fableplan-loop, this skill has no validation step to produce a score, so fableplan always runs. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
+**Do not skip or reorder the chain.** The plan gates implementation. Every step of each skill still runs; only the "wait for the user's reply" moments are replaced by the handoff below.
 
 ## Input
 
@@ -24,7 +24,7 @@ Optional `targetBranch` (orchestration form `{ issue, targetBranch }` or a prose
 
 ### 0. Pre-plan gate — check the issue is still worth planning
 
-Before dispatching any planning, run the cheap checks work-on-issue would otherwise only hit after a Fable plan had already been produced and posted:
+Before dispatching any planning:
 
 - `gh issue view <N> -R <owner>/<repo> --json state,title,url,closedByPullRequestsReferences`: is the issue still open?
 - Check for PRs already addressing it (linked PRs on the issue, or an open PR in `<owner>/<repo>` whose branch/body references `#<N>`, via `gh pr list -R <owner>/<repo>`).
@@ -33,9 +33,9 @@ If the issue is closed, or a merged/open PR already addresses it, **do not plan 
 
 ### 1. Run fableplan — planning phase only
 
-Invoke the `fableplan` skill for the recorded `owner/repo#N` (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**. Implementation belongs to work-on-issue-loop in step 2. Instruct fableplan to use the harness suffix `fableplan-loop` in the posted comment's attribution footer.
+Invoke the `fableplan` skill for the recorded `owner/repo#N` (Skill tool, `skill: fableplan`) and follow **fableplan's "Planning-phase-only invocation" section**. Instruct fableplan to use the harness suffix `fableplan-loop` in the posted comment's attribution footer.
 
-Keep the vetted plan's scratchpad file — step 2 passes it through. On a structurally wrong plan, a fableplan dispatch failure after its internal retry, or a snapshot diff that shows the planning subagent wrote, **stop and report** per that section; don't hand a broken plan to work-on-issue-loop, and don't implement unplanned.
+Keep the plan's scratchpad file for step 2. On a structurally wrong plan, a fableplan dispatch failure after its internal retry, or a snapshot diff that shows the planning subagent wrote, **stop and report** per that section; don't hand a broken plan to work-on-issue-loop, and don't implement unplanned.
 
 ### 2. Hand off to work-on-issue-loop
 
@@ -47,16 +47,16 @@ It runs its full loop: work-on-issue implements in a fresh worktree and opens th
 
 Relay work-on-issue-loop's final summary (PR URL, number of review cycles, final verdict, which model each fix cycle ran on, any follow-on issues it filed), prefixed with one line covering the head of the chain: plan posted (comment URL). Relay every terminal state of `work-on-issue-loop` step 4 under its own name: **Done**, **Done, with leftovers**, **Diverging**, **Blocked on a test**, **Fixer stopped**, the bot-never-responded escalation, and **Nothing to drive**. Only the two **Done** states report a finished review; never imply an approved PR exists when it does not.
 
-**Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md, written for a reader with no context on this codebase.
+**Write the report per the Response Style rules in CLAUDE.md/AGENTS.md (55-word cap, ASD-STE100)**, for a reader with no context on this codebase.
 
 ## Red Flags — STOP
 
 | Situation | Action |
 |---|---|
-| Tempted to skip planning and jump straight to implementation | Never reorder — plan-then-build is the point of this skill |
-| Tempted to run validate-issue first | Not part of this skill — that's validate-fableplan-loop; this variant deliberately skips validation |
+| Tempted to skip planning and jump straight to implementation | Never reorder; plan first, then build |
+| Tempted to run validate-issue first | Do not run it; the validated chain is validate-fableplan-loop |
 | fableplan's sanity-check finds the plan structurally wrong, its dispatch fails after the retry, or its snapshot diff shows a write | Stop and report per fableplan's planning-phase-only section; don't hand a broken plan to work-on-issue-loop, and don't re-plan yourself |
 | Handing off a bare issue number | Pass the recorded `owner/repo#N` to every invoked skill |
-| Tempted to stop at the open PR without triggering review | The review loop is the point of this variant — that trimmed behavior is fableplan-work-on-issue; here work-on-issue-loop owns the trigger and the cycles |
+| Tempted to stop at the open PR without triggering review | Do not stop there; work-on-issue-loop owns the trigger and the review cycles |
 | No issue given and none validated or planned this session | Stop and ask; never pick one from a list |
 | Issue is closed, or a PR already addresses it (step 0) | Don't plan — alert the user and ask what to do next; only proceed on their say-so |

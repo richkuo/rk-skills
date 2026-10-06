@@ -9,7 +9,7 @@ A **Fable 5.1** Plan subagent writes the plan. The main agent checks it, posts i
 
 ## Input
 
-A task description, with an optional issue reference (URL, `#<N>`, bare `<N>`, or `owner/repo#N`). With an issue, the plan is also posted as a comment. Ask what to plan only when the task is unclear. With no issue, never invent one or post anywhere.
+A task description, with an optional issue reference (URL, `#<N>`, bare `<N>`, or `owner/repo#N`). Ask what to plan only when the task is unclear. With no issue, never invent one or post anywhere.
 
 ## Steps
 
@@ -25,12 +25,12 @@ Do not plan the task yourself first. **Load the `fable-dispatch` skill before di
 - `effort`: the step 1 tier. `fable-dispatch` section 2 owns when `effort` and `run_in_background` are passed and the re-dispatch on a rejected parameter. On the shim path, `--allowedTools` is the `fable-dispatch` section 3 planning list.
 - `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched (inside the `fable-dispatch` section 7 untrusted-data block), the working directory, and the user's constraints. Instruct it to:
   - Produce a concrete, ordered plan: files to create or modify, approach, build sequence, risks and edge cases, verification.
-  - Number the implementation steps (`1.`, `2.`, ...) and end each with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state). Builders mirror these steps into their task tracker.
+  - Number the implementation steps (`1.`, `2.`, ...) and end each with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state).
   - Plan the absolute-best solution; only correctness and safety override "best".
   - Return the plan as its final message in clean Markdown, fit to post verbatim as an issue comment.
   - Obey the read-only rule of `fable-dispatch` section 7, stated in full in the prompt.
 
-When the plan arrives: save it verbatim to a scratchpad file at once (it must survive context summarization, and step 4 posts from it); run the section 7 snapshot diff; **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6. Steps 4 and 5 use these values.
+When the plan arrives: save it verbatim to a scratchpad file at once; run the section 7 snapshot diff; **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6.
 
 ### 3. Sanity-check the plan against the code
 
