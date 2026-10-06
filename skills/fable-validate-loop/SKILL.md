@@ -1,7 +1,7 @@
 ---
 name: fable-validate-loop
 description: >-
-  Use when the user asks to validate a GitHub issue with Fable 5.1 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `plan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, when a step holds for a human decision, or when the issue edit does not land.
+  Use when the user asks to validate a GitHub issue with Fable 5.1 and then autonomously drive it to a reviewed PR in one shot — "fable-validate-loop", "fable validate and work on #N", "fully automate issue #N with fable". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `plan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid, when a step holds for a human decision, or when the issue edit does not land.
 ---
 
 # fable-validate-loop
@@ -26,7 +26,7 @@ Invoke `fable-validate` (Skill tool) for the issue and let it run fully. It emit
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · plan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
-Parse it yourself. Record the resolved issue as the full reference `owner/repo#N`: the repository from the user's reference (URL or `owner/repo#N`), else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Every later step and every skill this chain invokes gets that full reference and targets exactly this issue. A bare number resolves against the current checkout, so no handoff passes one.
+A `Close issue?` verdict or a `Validation blocked` line takes the block's place (validate-issue step 8); step 2 stops on both. Parse it yourself. Record the resolved issue as the full reference `owner/repo#N`: the repository from the user's reference (URL or `owner/repo#N`), else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Every later step and every skill this chain invokes gets that full reference and targets exactly this issue. A bare number resolves against the current checkout, so no handoff passes one.
 
 ### 2. Scope and decision gate
 
@@ -36,6 +36,7 @@ First check the verdict's **Scope** field, **Architecture** section, and **Conce
 |---|---|
 | `Scope: too large` (split / umbrella / narrow flagged) | **STOP.** Report the disposition and proposed parts; splitting is a human call. |
 | `Validation blocked` (validate-issue step 8: no completed-verdict line) | **STOP.** Report the missing input; an incomplete validation is never approval to build. |
+| `Close issue? Yes — Completed` or `Close issue? Yes — Invalid` (validate-issue step 8) | **STOP.** Report the reason and its evidence. Closing the issue is a human call: never close it, edit it, or build. |
 | Architecture marked **Infeasible** | **STOP.** Report the infeasibility and the "Optimal direction" note. |
 | A **merged** PR already implements the fix | **STOP.** Report the PR and the close/repurpose recommendation. |
 | An **open** PR is already addressing the issue | **STOP.** Report the overlapping PR; supersede/join/wait is a human call. |
@@ -76,7 +77,7 @@ Relay work-on-issue-loop's final summary (PR URL, review cycles, final verdict),
 | Situation | Action |
 |---|---|
 | Tempted to skip validation or planning and jump to implementation | Never reorder; the only sanctioned skip is the step-4 score gate |
-| `Scope: too large`, Architecture Infeasible, or a PR already addressing the issue | Stop and report per step 2 |
+| `Scope: too large`, Architecture Infeasible, a `Close issue?` verdict, or a PR already addressing the issue | Stop and report per step 2 |
 | fable-validate held the verdict for the user, a dispatch failed twice, or a snapshot diff shows a write | Stop and report per step 2 rows (a) to (c) |
 | Tempted to wait for a literal user reply to the verdict's `→` next-step line | Parse the verdict yourself and proceed per the step rules. This row covers only that next-step prompt; every STOP row in steps 2 to 4 and in fableplan's planning-phase-only section outranks it |
 | Handing off a bare issue number | Pass the step 1 `owner/repo#N` to every invoked skill |

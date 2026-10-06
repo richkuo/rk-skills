@@ -1,7 +1,7 @@
 ---
 name: validate-issue-loop
 description: >-
-  Use when the user asks to validate a GitHub issue and then autonomously drive it to a reviewed PR in one shot — "validate and work on this issue", "validate-issue-loop", "fully automate issue #N". Runs validate-issue, auto-applies its update-issue edits when the verdict calls for it, then hands off to work-on-issue-loop with no plan stage — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or when the issue edit does not land.
+  Use when the user asks to validate a GitHub issue and then autonomously drive it to a reviewed PR in one shot — "validate and work on this issue", "validate-issue-loop", "fully automate issue #N". Runs validate-issue, auto-applies its update-issue edits when the verdict calls for it, then hands off to work-on-issue-loop with no plan stage — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid, or when the issue edit does not land.
 ---
 
 # validate-issue-loop
