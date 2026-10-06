@@ -31,8 +31,8 @@ Create the worktree per `work-on-issue` step 1, named `cc/fable-orchestrate/<sho
 
 | Shape | Dispatch |
 |---|---|
-| 1–2 sequential pieces | Agent calls, `subagent_type: general-purpose`, `model: sonnet`, with the Agent parameters and the wait rule of `fable-dispatch` section 2; a piece that depends on another waits for that worker's result. Workers build in the task worktree (path stated in the spec). **Commit each accepted piece before dispatching the next**; step 4's reset restores to committed HEAD. |
-| Fan-out (3+ parallel pieces, disjoint files) | A Workflow script (invoking this skill is the user's opt-in). Implementation `agent()` calls pass `model: 'sonnet'` and `isolation: 'worktree'`; judgment stages omit the model override to inherit Fable. Isolated worktrees are auto-cleaned when unchanged, so each spec instructs the worker to **commit on the branch** `cc/fable-orchestrate-workers/<short-task-name>/worker-<n>-r<round>` (`-r0` first; each step 4 re-dispatch increments it) and **return that branch name** or an explicit "no changes". Git stores refs as paths, so a worker branch cannot live under the task branch's name; the `-workers` namespace keeps them apart. A result with neither has failed; re-dispatch under the step 4 cap. |
+| 1–2 sequential pieces | Agent calls, `subagent_type: general-purpose`, `model: sonnet`, with the Agent parameters and the wait rule of `fable-dispatch` section 2; a piece that depends on another waits for that worker's result. Workers build in the task worktree (path stated in the spec). **Commit each accepted piece before dispatching the next.** |
+| Fan-out (3+ parallel pieces, disjoint files) | A Workflow script (invoking this skill is the user's opt-in). Implementation `agent()` calls pass `model: 'sonnet'` and `isolation: 'worktree'`; judgment stages omit the model override to inherit Fable. Each spec instructs the worker to **commit on the branch** `cc/fable-orchestrate-workers/<short-task-name>/worker-<n>-r<round>` (`-r0` first; each step 4 re-dispatch increments it) and **return that branch name** or an explicit "no changes". Never put a worker branch under the task branch's name; git cannot create it there. A result with neither has failed; re-dispatch under the step 4 cap. |
 
 Each worker prompt is its spec verbatim, plus: run the verification command(s) and report actual output; the final message states what changed, verification results, and anything it could not do. If the `sonnet` id errors, use the closest available tier and name it in the footer and report.
 
@@ -46,7 +46,7 @@ On failure, two corrective rounds per piece, each a different move:
 - **Round 2: corrective instructions.** The spec sufficed; the worker missed. Re-dispatch with the specific defects, file:line, and expected behavior.
 - **After round 2: take the piece over** yourself in the task worktree and note it for the report.
 
-**Clean slate before every sequential re-dispatch or takeover:** `git -C <task-worktree> reset --hard HEAD && git -C <task-worktree> clean -fdx` (safe because accepted pieces are committed; `-x` removes installed dependencies, so re-run the install step if the retry's verification needs it). Fan-out retries get a fresh isolated worktree automatically.
+**Clean slate before every sequential re-dispatch or takeover:** `git -C <task-worktree> reset --hard HEAD && git -C <task-worktree> clean -fdx`. Re-run the install step if the retry's verification needs it. Fan-out retries get a fresh isolated worktree automatically.
 
 ### 5. Integrate and verify the whole
 

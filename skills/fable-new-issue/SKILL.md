@@ -5,54 +5,54 @@ description: Use when the user wants a GitHub issue created by a Fable 5.1 subag
 
 # fable-new-issue
 
-Delegate issue drafting to a **Fable 5.1** subagent, then file it from the main agent. The subagent only researches and composes — it never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
+Delegate issue drafting to a **Fable 5.1** subagent, then file it from the main agent. The subagent only researches and composes. It never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
 
 ## Input
 
 Same as `new-issue`:
 - A description of the bug/feature/task to file.
-- **Nothing** — derive from the current conversation. Since the subagent can't see this conversation, the main agent first writes a faithful summary of the discussed bug/design/follow-up (with any file paths or symbols already named) to a scratchpad file and hands that path to the subagent as the source description.
+- **Nothing**: derive from the current conversation. The main agent first writes a faithful summary of the discussed bug/design/follow-up (with any file paths or symbols already named) to a scratchpad file and hands that path to the subagent as the source description.
 - Optionally `owner/repo` or a repo path when the issue belongs elsewhere.
 
 ## Steps
 
 ### 1. Resolve the drafting procedure
 
-Locate the `new-issue` SKILL.md the subagent must follow — prefer the project-local copy over the global one:
+Locate the `new-issue` SKILL.md the subagent must follow, preferring the first that exists:
 
 1. `<repo>/.claude/skills/new-issue/SKILL.md` (if it exists)
 2. `~/.claude/skills/new-issue/SKILL.md`
-3. Any other install location — search by name, e.g. `ls ~/.claude/plugins/*/skills/new-issue/SKILL.md` (plugin-marketplace installs live under a plugin directory, not `~/.claude/skills/`).
+3. Any other install location, searched by name, e.g. `ls ~/.claude/plugins/*/skills/new-issue/SKILL.md`.
 
 Record the absolute path. If none of these resolves, stop and tell the user.
 
-If the input is conversation-derived, write the scratchpad summary now (see Input). Do NOT pre-research or pre-draft the issue yourself — the subagent owns steps 1–6 of the procedure up to (but not including) the `gh issue create` call.
+If the input is conversation-derived, write the scratchpad summary now (see Input). Do NOT pre-research or pre-draft the issue yourself; the subagent owns steps 1–6 of the procedure up to (but not including) the `gh issue create` call.
 
 ### 2. Dispatch the Fable 5.1 drafting subagent
 
 **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
-- `subagent_type`: `Plan` (no Edit or Write; the section 7 prompt rule covers Bash and MCP tools)
-- `model`: `fable` (the draft must come from Fable 5.1)
+- `subagent_type`: `Plan`
+- `model`: `fable`
 - `effort`: `high` unless the user asked for another tier, with the other Agent parameters per `fable-dispatch` section 2; filing waits for the draft
 - `description`: `Draft issue: <short topic>`
 - `prompt`: hand it everything needed to draft independently:
   - The user's description verbatim (or the scratchpad summary path), the working directory, and the target repo if not the current checkout.
-  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 1 through 6 exactly** — repo/duplicate check, claim grounding with `file:line` citations traced against the correct baseline, approach design, complexity score, scope check, and full body composition per the step-6 template.
+  - Instruct it to **read the SKILL.md at the recorded path and execute its steps 1 through 6 exactly**, through full body composition per the step-6 template.
   - It must STOP before filing: no `gh issue create`, no `gh issue edit`, no comments posted, no file edits. State the full read-only rule of `fable-dispatch` section 7 in the prompt. Read-only `gh` calls (`gh repo view`, `gh label list`) are expected and allowed; the two duplicate searches are the caller's, per step 2.
-  - Return as its final message: (a) any duplicate found (URL + why it matches) — in which case no draft; (b) otherwise the complete issue draft — exact title with `[C<score>]` prefix and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
+  - Return as its final message: (a) any duplicate found (URL + why it matches), with no draft; (b) otherwise the complete issue draft — exact title with `[C<score>]` prefix and the full body per the template — plus one line stating which baseline claims were traced against, and any unfiled follow-up candidates from the scope check.
 
 On every path, first resolve `REPO` and `DEFAULT` per `new-issue` step 1, then run the two duplicate searches of `new-issue` step 1 yourself (`gh issue list --repo "$REPO" --state open --search "<keywords>"` and the `gh pr list` form) before the snapshot, and embed their output in the prompt inside the `fable-dispatch` section 7 untrusted-data block, with one line telling the subagent to take it as step 1's search results and never to run either search; a failed search is embedded as that failure. Then, when `REPO` is the checkout's `origin`, run the `fable-dispatch` section 3 caller-run fetch before the snapshot and tell the subagent it is done: it executes steps 1 through 6 exactly except the step 1 searches and that fetch, which it skips, and it never runs `git fetch`. On the shim, the `--allowedTools` list is those `gh` reads plus the read-only `git` forms the procedure runs: `"Bash(gh repo view <REPO> --json nameWithOwner)" "Bash(gh repo view <REPO> --json defaultBranchRef --jq .defaultBranchRef.name)" "Bash(gh label list --repo <REPO>)" "Bash(git show *)" "Bash(git grep *)" "Bash(git log *)" "Bash(git rev-parse *)"`. The prompt lists each allowed `gh` command verbatim, as that section states. `--add-dir` names the directories `fable-dispatch` section 3 gives for the recorded SKILL.md path and, for a conversation-derived input, the scratchpad directory. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
 
-When the result arrives, save the draft verbatim to a scratchpad file immediately, so it survives context summarization. Then run the section 7 snapshot diff and **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6; step 5's footer uses these values.
+When the result arrives, save the draft verbatim to a scratchpad file immediately. Then run the section 7 snapshot diff and **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6; step 5's footer uses these values.
 
 ### 3. Duplicate gate
 
-If the subagent reported a duplicate, stop and surface it — offer to update/comment on the existing issue instead. Nothing is filed.
+If the subagent reported a duplicate, stop and surface it, and offer to update/comment on the existing issue instead. Nothing is filed.
 
 ### 4. Spot-check the draft
 
-Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title prefix, Problem/Goal/Approach/Acceptance criteria all concrete, a `## Plain simple English` section after the criteria (under 55 words, ASD-STE100, no paths or symbols), no time/effort estimates, plain-simple-English (ASD-STE100) title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch — tell the user what's off and let them decide.
+Before filing, spot-check the draft's load-bearing `file:line` citations against the code and confirm the body meets the new-issue bar: complexity rationale as first line matching the title prefix, Problem/Goal/Approach/Acceptance criteria all concrete, a `## Plain simple English` section after the criteria (under 55 words, ASD-STE100, no paths or symbols), no time/effort estimates, plain-simple-English (ASD-STE100) title. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the draft is structurally wrong (untraceable central claim, stale baseline, stub-like body), do NOT silently re-dispatch; tell the user what's off and let them decide.
 
 ### 5. File it (main agent)
 
@@ -66,6 +66,5 @@ Terse: issue URL, number, one-line summary, complexity score, any unfiled follow
 
 ## Notes
 
-- The dispatch requests Fable 5.1 with `model: fable`, whatever the main agent's model. A harness can map `fable` to another model with no error, so `fable-dispatch` sections 1 and 5 detect a substitution, and the footer names the model that served.
 - One subagent, one draft: don't fan out or re-run for a second opinion unless the user asks.
-- Never file a placeholder or thin body — if the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.
+- Never file a placeholder or thin body. If the subagent's draft isn't complete, it doesn't get filed; that rule outranks finishing the run.

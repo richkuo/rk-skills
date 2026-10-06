@@ -5,7 +5,7 @@ description: Use when the user wants to review or revise the ordering/model/effo
 
 # execution-plan-review
 
-Show a milestone's per-issue ordering and execution assignments as one table, take the user's revisions, and sync the GitHub issues (the source of truth cold agents read). `milestoneplan` is the read-only view of this table; it routes Execution-block fixes here.
+Show a milestone's per-issue ordering and execution assignments as one table, take the user's revisions, and sync the GitHub issues, which are the source of truth. `milestoneplan` is the read-only view of this table; it routes Execution-block fixes here.
 
 ## Steps
 
@@ -51,12 +51,12 @@ Re-render the final table once after all revisions land, and say it is what the 
 | An issue lacks one or both ordering fields | Backfill from the approved prd-to-issues graph when available; otherwise infer from Approach/Problem, mark the value inferred in the table, and confirm before write-back |
 | Revision references a row that does not exist | Show the table again; ask which issue they meant |
 | Revision puts a non-Fable build's effort at `low` or `medium` | An Opus build at `medium` is written as stamped (`medium` is the band-1 default). Otherwise set `high`, or switch the build to Fable 5.1 if that tier was the point; an Opus build runs `medium` to `xhigh`, and a Sonnet build runs `high` or `xhigh`. A Codex CLI or Cursor CLI build accepts `low` to `xhigh` as stamped, and Codex also accepts `max` |
-| Revision names an external CLI build or validate without a known default model id | Only `Luna (Codex CLI)`, `Astra (Codex CLI)`, and `Grok (Cursor CLI)` resolve an id; before writing, ask for the id in half a sentence and write it inside the parenthetical. The pipeline blocks an unknown name |
+| Revision names an external CLI build or validate without a known default model id | Only `Luna (Codex CLI)`, `Astra (Codex CLI)`, and `Grok (Cursor CLI)` resolve an id; before writing, ask for the id in half a sentence and write it inside the parenthetical |
 | Revision puts a Fable build's effort at `low` | Allowed with no pushback only on a band-3 issue (`[C75]`+). Outside band 3, raise to the band effort or push back once, the scope `prd-to-issues` / `validate-issue` enforce |
 | Revision puts any Fable 5.1 stage at `xhigh` | Write it as stamped. The revision is the explicit ask that permits `xhigh` on Fable; the unstamped default stays `high` (the LLM Attribution Footer section of CLAUDE.md owns this rule) |
 | Revision names a validate model | Write `- **Validate model:** Fable 5.1`, `Opus 5.5`, or `<Name> (Codex CLI[, <model-id>])`; a stamped model overrides the band (`validate-issue` step 6). Reject a Cursor CLI validate and keep the prior stamp; say the pipeline runs a validate pass only in the Codex read-only file sandbox, and Cursor has no write boundary. Ask about any other Claude name in half a sentence |
 | Revision names a validate effort | Write the `Validate effort:` line. A Fable validate (stamped) runs every tier `low` to `xhigh` as stamped; a Codex CLI validate runs `low` to `max` as stamped. An Opus validate (stamped, or unstamped at any score) runs `medium`, `high`, and `xhigh` as stamped and raises `low` to `high`; say so, and offer a `Validate model:` stamp as the way to reach a Fable or Codex validate |
 | A stamped Build model or Effort diverges from the issue's current `[C..]` band default | Apply `validate-issue/issue-editing.md` (Edit the title): a stamp at or above the band default on a field (a heavier model, a Fable 5.1 build, a Codex CLI or Cursor CLI harness, a higher effort, `plan first: Yes`) is a deliberate override from any session. Keep it, and mark it in the table as stamped above band. Restamp a stamp below the band default up to the default and report it, unless the user names the lower stamp deliberate in this session, with the step 2 push-back. A run-time rescore keeps a harness or Fable 5.1 stamp and only adds `plan first: Yes` |
-| Revision flips `plan first:` `Yes` → `No` on a band-3 (`[C75]`+) issue | Write it and say the issue loses its plan stage. Build effort stays `high`, the same as band 2; band 1 builds at `medium` |
-| Revision names a plan effort | Write the `Plan effort:` line with `low`, `medium`, `high`, or `xhigh`. A revision to `high` removes the line, since high is the default |
-| Revision names a plan model | Write the `Plan model:` line with `Fable 5.1`. A revision to `Opus 5.5` removes the line, since Opus 5.5 is the default. A Plan model revision on a `plan first: No` issue is inert, the same as a Plan effort revision |
+| Revision flips `plan first:` `Yes` → `No` on a band-3 (`[C75]`+) issue | Write it and say the issue loses its plan stage. Build effort stays `high` |
+| Revision names a plan effort | Write the `Plan effort:` line with `low`, `medium`, `high`, or `xhigh`. A revision to `high` removes the line |
+| Revision names a plan model | Write the `Plan model:` line with `Fable 5.1`. A revision to `Opus 5.5` removes the line. A Plan model revision on a `plan first: No` issue is inert, the same as a Plan effort revision |

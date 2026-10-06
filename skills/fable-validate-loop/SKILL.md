@@ -53,11 +53,11 @@ Continue only when the editing procedure's "Verify the saved issue" read-back sh
 
 | Condition | Action |
 |---|---|
-| The `gh issue edit` call failed, the editing procedure stopped with a prepared correction (newer edits kept arriving), or the read-back does not show the corrected title, complexity line, and footer | **STOP.** Report the prepared correction and what the read-back showed. Do not plan or build; a restamped score routes nothing until the edit lands. |
+| The `gh issue edit` call failed, the editing procedure stopped with a prepared correction (newer edits kept arriving), or the read-back does not show the corrected title, complexity line, and footer | **STOP.** Report the prepared correction and what the read-back showed. Do not plan or build. |
 
 ### 4. Run fableplan, planning phase only
 
-**Score gate:** skip fableplan and go straight to step 5 only when the verdict signal is `plan: no` (validate-issue step 8 emits it only when the title score and the recomputed score are both **below 75**) and neither override below applies. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out:** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. **Stamped plan flag:** if the issue's `## Execution` block, read as the issue stands after step 3 (`gh issue view <N> -R <owner>/<repo> --json body`), stamps `plan first: Yes` (or the legacy `fableplan first: Yes`), run fableplan regardless of score, as the milestone pipeline does. For an unconditional plan use `fable-validate-fableplan-loop`.
+**Score gate:** skip fableplan and go straight to step 5 only when the verdict signal is `plan: no` (validate-issue step 8 emits it only when the title score and the recomputed score are both **below 75**) and neither override below applies. Never read the raw `Complexity:` value for this gate; the title score is the floor. **Safety carve-out:** if the validation flags money, data integrity, security, or an auto-protective mechanism anywhere in its findings, run fableplan regardless of score. **Stamped plan flag:** if the issue's `## Execution` block, read as the issue stands after step 3 (`gh issue view <N> -R <owner>/<repo> --json body`), stamps `plan first: Yes` (or the legacy `fableplan first: Yes`), run fableplan regardless of score. For an unconditional plan use `fable-validate-fableplan-loop`.
 
 **Top-band note:** the signal is `yes` for every score of 75 or higher, so band-3 issues always plan here. Implementation runs on the session model, so in this chain Fable 5.1 involvement ends with the validation and the posted plan.
 

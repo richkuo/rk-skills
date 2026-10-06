@@ -6,7 +6,7 @@ Reference for SKILL.md step 4.
 
 - **Read the whole body, beyond the cited line.** A name states intent; open the function and trace the conditional fully before agreeing.
 - **Prove negatives by reading the path.** "X is never validated / never freed / not awaited" — confirm the absence across *all* relevant paths; the behavior may be produced elsewhere.
-- **A suggested fix is its own claim.** Verify the remedy is correct for this codebase; derive the right fix from first principles when the suggested one is suboptimal, and never blind-apply one that touches money, data, security, or auto-protective logic. A remedy that ends with an **Unverified hypothesis:** clause was never executed by the reviewer: prove it against every **Must survive:** case per SKILL.md step 6 (proof (a) or (b)) before you adopt it; on a route barred from executing project code, follow step 6's form for that route, which adopts the remedy your reading supports and records each case without a test as unproven. When the proof fails, derive the correct remedy and disclose the failure with its output.
+- **A suggested fix is its own claim.** Verify the remedy is correct for this codebase; derive the right fix from first principles when the suggested one is suboptimal, and never blind-apply one that touches money, data, security, or auto-protective logic. A remedy that ends with an **Unverified hypothesis:** clause follows SKILL.md step 6: prove it against every **Must survive:** case before you adopt it, or use step 6's form for a route barred from executing project code. When the proof fails, derive the correct remedy and disclose the failure with its output.
 - **Safety carve-out** — money, data integrity, security, auto-protective mechanisms: fix or escalate even at low confidence; never drop as Refuted without code proof it is a non-issue.
 - **CI Failures**: read the failing step's actual error; the job name alone is no evidence. **Confirmed** when it traces to this PR's diff (reproduce the failing command locally where feasible). **Refuted** only with evidence — pre-existing on the base branch (CI history, or reproduce on base) or a one-off infra flake; never patch around it, and flag it to the user.
 - **`Requires Human Review`**: verify the **Recommended proposed solution:** like any remedy, implement the chosen solution, and document the decision plus rejected alternatives. Never pause, punt, or guess blindly.
@@ -24,6 +24,6 @@ Reference for SKILL.md step 4.
 
 ## Common mistakes
 
-- **Blind-implementing the review** — performative agreement ships regressions; validate first, every time.
+- **Blind-implementing the review**: validate first, every time.
 - **Delegating validation** — steps 3–4 always run inline; dispatch only steps 6–11, as one unit; one review never splits across several subagents.
 - **Addressing only the latest review when several landed** — every review newer than your last disposition and every unresolved thread gets addressed.

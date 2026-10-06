@@ -19,14 +19,14 @@ Run `gh pr view <N|--> --json number,headRefName,headRepositoryOwner,baseRefName
 
 - **Pending trigger present** (per Round counts, naming the selected bot): recover it; never post another. One naming the other bot: stop and report.
 - **Unaddressed feedback present** (a completed bot round newer than any disposition comment, or trusted feedback failing fix-pr-review step 1's bare-LGTM check): step 3, no trigger.
-- **Stale or failed trigger** (per Round counts, naming the selected bot: stale, or its round has no verdict and its answering review run finished without one; a queued or in-progress re-run keeps it pending): repost it. A round with a verdict never takes this case; a note from any other run never makes a trigger failed. After a disposition comment, repost the trigger's exact line, so the ladder holds and no heavy or Fable cycle reopens; else it was cycle 1: post the first-review trigger.
+- **Stale or failed trigger** (per Round counts, naming the selected bot: stale, or its round has no verdict and its answering review run finished without one; a queued or in-progress re-run keeps it pending): repost it. A round with a verdict never takes this case; a note from any other run never makes a trigger failed. After a disposition comment, repost the trigger's exact line; else it was cycle 1: post the first-review trigger.
 - **Nothing to act on yet** (fresh PR, only your own disposition or trigger comments, only untrusted feedback, or only a trusted bare `LGTM` or empty approval): post the first-review trigger as its own one-line comment, `gh pr comment <N> --body "<trigger>"`.
 
 Record each recovered or posted trigger comment's `id` and `created_at` as the pending trigger, then go to step 2.
 
 **First-review trigger.** `validate-issue` step 6 owns the table; this file states no boundary. Score, first hit: a stamped `PR review:` line in the linked issue's Execution block (overrides the band), the PR title's `[C<score>, …]` bracket, the closed issue's `[C<score>]` prefix. A missing score routes to the heaviest row, the one that takes no score. A Fable review runs only on a stamped trigger, at high unless the user asks for xhigh or stamps it.
 
-**Map a stamped model before posting it.** `claude.yml` resolves only `opus`, `sonnet`, `fable`. Stamped `sonnet`/`haiku`: `@claude sonnet review`; `opus` with no tier: the bare `@claude review`; `opus` with a tier: `@claude opus review effort:<tier>`; `fable`: `@claude fable review effort:high`, with a stamped `effort:<tier>` in place of `high`. A stamped bare `@claude review` names Opus 5.5: with no tier it posts the bare `@claude review`, and with `effort:<tier>` it posts `@claude opus review effort:<tier>`. A line that names the standard `@claude` trigger in prose selects nothing, and the band decides. Codex: `sonnet`/`haiku` post `@codex luna review`, `opus`/`fable` the bare `@codex review`; never carry a `@claude` shorthand to `@codex`. **A stamp outside these rows is ignored.** Admitted: a model word (`sonnet`, `haiku`, `opus`, `fable`) in `@claude <model> review`, a bare `@claude review`, or a line naming the standard `@claude` trigger, each with at most one `effort:<tier>` of `low`, `medium`, `high`, `xhigh`. Any other model word, a route word, extra trigger text, or another tier: post the band trigger and name the ignored stamp in the report. Blocking re-reviews: `skills/fix-pr-review/rereview-routing.md` owns the ladder (a heavier cycle-1 reviewer steps down to `@claude review` on the first blocking re-review and stays) and the Codex rule.
+**Map a stamped model before posting it.** Stamped `sonnet`/`haiku`: `@claude sonnet review`; `opus` with no tier: the bare `@claude review`; `opus` with a tier: `@claude opus review effort:<tier>`; `fable`: `@claude fable review effort:high`, with a stamped `effort:<tier>` in place of `high`. A stamped bare `@claude review` names Opus 5.5: with no tier it posts the bare `@claude review`, and with `effort:<tier>` it posts `@claude opus review effort:<tier>`. A line that names the standard `@claude` trigger in prose selects nothing, and the band decides. Codex: `sonnet`/`haiku` post `@codex luna review`, `opus`/`fable` the bare `@codex review`; never carry a `@claude` shorthand to `@codex`. **A stamp outside these rows is ignored.** Admitted: a model word (`sonnet`, `haiku`, `opus`, `fable`) in `@claude <model> review`, a bare `@claude review`, or a line naming the standard `@claude` trigger, each with at most one `effort:<tier>` of `low`, `medium`, `high`, `xhigh`. Any other model word, a route word, extra trigger text, or another tier: post the band trigger and name the ignored stamp in the report. Blocking re-reviews: `skills/fix-pr-review/rereview-routing.md` owns the ladder and the Codex rule.
 
 **Bot selection.** `@claude` by default. `@codex` only on explicit selection: the user, a caller's `reviewBot: codex`, or a run started from an `@codex` comment; a `codex.yml` alone selects nothing. Never switch bots mid-cycle.
 
@@ -34,7 +34,7 @@ Record each recovered or posted trigger comment's `id` and `created_at` as the p
 
 ### 2. Wait for the review to land
 
-Wait for an output from the **review-bot set** (`github-actions[bot]`, `claude[bot]`; owner `skills/fix-pr-review/fetch-recipes.md` Author trust), posted after the pending trigger's `created_at`, that passes Round counts' completed-verdict test. No other author ends the wait. The `@claude` route edits its placeholder in place (its `created_at` still follows the trigger), which ends the wait only once the verdict sits under the `**Claude finished …**` header. A Codex review is a `github-actions[bot]` comment with the verdict first.
+Wait for an output from the **review-bot set** (`github-actions[bot]`, `claude[bot]`; owner `skills/fix-pr-review/fetch-recipes.md` Author trust), posted after the pending trigger's `created_at`, that passes Round counts' completed-verdict test. No other author ends the wait.
 
 ```bash
 st='select(.user.type == "Bot" and (.user.login == "github-actions[bot]" or .user.login == "claude[bot]"))
@@ -64,7 +64,7 @@ until [ "$(result)" != waiting ]; do sleep 60; done
 result
 ```
 
-Use the filter as written; never read authors from `gh pr view`, which drops the `[bot]` suffix and account type (a user named `claude` exists). `<file>` is the preflight's answering workflow. Run one inline sanity check that prints `verdict` on an existing review, then the loop in the background (Monitor tool). Last line `verdict`: step 3. `failed`: stop and report the bot did not respond. Cap the wait at roughly 30 minutes, then report the same.
+Use the filter as written; never read authors from `gh pr view`. `<file>` is the preflight's answering workflow. Run one inline sanity check that prints `verdict` on an existing review, then the loop in the background (Monitor tool). Last line `verdict`: step 3. `failed`: stop and report the bot did not respond. Cap the wait at roughly 30 minutes, then report the same.
 
 ### 3. Check the review against the stop conditions
 
@@ -73,7 +73,7 @@ Recompute both counts per Round counts (the ended round counts once; a verificat
 0. **Merge conflict.** `gh pr view <N> --json mergeable,mergeStateStatus` shows `CONFLICTING`/`DIRTY`: never terminal; step 4, even on a bare LGTM.
 1. **Clean pass, stop.** `LGTM` and nothing to act on, at any `review_count`: step 5.
 2. **Past the cap, stop.** `review_count > 5`, `LGTM`, and not blocking, even with `Recommended Optional` or `Create Follow-up Issue` items: step 5.
-3. **Diverging, stop.** `pr_cycle_count >= 4`, `Needs Updates`, and every blocking finding sits in code an earlier cycle of this loop added: step 5, **Diverging** row. Such code is a line whose `git blame` at the PR head names a commit that is an ancestor of neither `<first-push-sha>` nor `origin/<baseRefName>`; a line a step 7 base merge brought in is base-branch work and never counts. An unattributable blocking finding (no `file:line`, or a path or line the head no longer has) defeats this rule. First-push findings never trigger it.
+3. **Diverging, stop.** `pr_cycle_count >= 4`, `Needs Updates`, and every blocking finding sits in code an earlier cycle of this loop added: step 5, **Diverging** row. Such code is a line whose `git blame` at the PR head names a commit that is an ancestor of neither `<first-push-sha>` nor `origin/<baseRefName>`; a line a step 7 base merge brought in is base-branch work and never counts. An unattributable blocking finding (no `file:line`, or a path or line the head no longer has) defeats this rule.
 4. **Otherwise, keep going.** Every other state, including `Needs Updates` at any count without rule 3, and trusted feedback with no bot verdict yet: step 4.
 
 ### 4. Resolve the review and loop
@@ -93,7 +93,7 @@ Only the step 1 stop and the merge rule's prose-only case report **Done**.
 
 ### 5. Report
 
-Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md; the unverified-source list sits outside the word cap.
+Report the terminal state; never claim blanket success. Always give the PR URL, cycles run, final verdict, and when escalating exactly what is left. **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100**; apply the Response Style rules in CLAUDE.md/AGENTS.md; the unverified-source list sits outside the word cap.
 
 | Terminal state | Report as |
 |---|---|

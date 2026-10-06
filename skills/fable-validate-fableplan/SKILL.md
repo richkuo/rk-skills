@@ -6,11 +6,11 @@ description: >-
 
 # fable-validate-fableplan
 
-Chain fable-validate → (conditional) update issue → fableplan into one autonomous run, and stop there: Fable 5.1 validates the issue, the main agent fixes the issue description if needed, and Fable 5.1 plans the implementation. The vetted plan is posted to the issue as a comment. **Nothing is built.**
+Chain fable-validate → (conditional) update issue → fableplan into one autonomous run, and stop there. The vetted plan is posted to the issue as a comment. **Nothing is built.**
 
-This is **fable-validate-fableplan-loop with the implementation stage removed** — the head of that chain is identical (same validation, same scope gate, same issue edits, same unconditional Fable plan), but the handoff to `work-on-issue-loop` is dropped. Reach for this when you want the issue fact-checked, corrected, and planned so a human (or a later run) can decide what to do with the plan. When the plan should be built and driven through review in the same run, use `fable-validate-fableplan-loop` instead.
+This is **fable-validate-fableplan-loop with the handoff to `work-on-issue-loop` dropped**. When the plan should be built and driven through review in the same run, use `fable-validate-fableplan-loop`.
 
-**Do not skip or reorder the chain.** Validation gates planning; a plan built on refuted claims is wrong. There is no sanctioned skip: every step runs, and only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
+**Do not skip or reorder the chain.** Validation gates planning. There is no sanctioned skip: every step runs, and only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
 ## Input
 
@@ -22,11 +22,11 @@ Follow **fable-validate-loop steps 1 through 4** with the changes below, then ru
 
 **Step 1 (fable-validate):** also keep the verdict block and the validation report in the scratchpad; step 4 passes them to the planner.
 
-**Step 2 (scope gate):** fable-validate-loop step 2's STOP table applies unchanged. Here a missed stop costs a wasted or wrong plan, and an incomplete validation is never approval to plan.
+**Step 2 (scope gate):** fable-validate-loop step 2's STOP table applies unchanged. An incomplete validation is never approval to plan.
 
 **Step 3 (update-issue edits):** apply them per fable-validate step 5 / validate-issue step 11; the stacked `Validated with LLM: …` attribution line uses the harness suffix `fable-validate-fableplan`.
 
-**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the scope gate, whatever the validated score. Producing the plan is this skill's product, so gating it away would leave the run with no output; this matches fable-validate-fableplan-loop and is the deliberate difference from fable-validate-loop and validate-fableplan-loop. Hand the planner the verdict block and validation report from step 1 — the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was Underspecified, 5c concerns). Instruct fableplan to use the harness suffix `fable-validate-fableplan` in the posted comment's attribution footer, so the comment records the actual entry point. fableplan stops at the posted plan, and so does this skill; there is no scratchpad pass-through to an implementation stage.
+**Step 4 (fableplan):** there is **no score gate** — fable-validate-loop's score gate, safety carve-out, and top-band note do not apply; fableplan runs for every issue that passed the scope gate, whatever the validated score. Hand the planner the verdict block and validation report from step 1; the plan must respect what validation established (verified/refuted claims, the Optimal-direction note when architecture was Underspecified, 5c concerns). Instruct fableplan to use the harness suffix `fable-validate-fableplan` in the posted comment's attribution footer. fableplan stops at the posted plan, and so does this skill.
 
 ### 5. Report
 
@@ -36,9 +36,9 @@ Report, in order: scope gate passed, issue updated or not, plan posted (comment 
 
 ## Red Flags — STOP
 
-fable-validate-loop's Red Flags rows for the scope gate, the step 2 human-decision rows (a) to (c), waiting on prompts, the bare issue number, the update-before-plan order, and a structurally wrong plan apply, with one substitution — this chain never invokes `work-on-issue-loop`, so the row may not name it as the owner of what happens next. In the structurally-wrong-plan row, read "post a broken plan" for "hand a broken plan to work-on-issue-loop". In addition:
+fable-validate-loop's Red Flags rows for the scope gate, the step 2 human-decision rows (a) to (c), waiting on prompts, the bare issue number, the update-before-plan order, and a structurally wrong plan apply, with one substitution: in the structurally-wrong-plan row, read "post a broken plan" for "hand a broken plan to work-on-issue-loop". In addition:
 
 | Situation | Action |
 |---|---|
-| Tempted to implement the plan, open a worktree, or open a PR | Out of scope — this skill ends at the posted plan; name `work-on-issue` / `work-on-issue-loop` / `fable-validate-fableplan-loop` as the follow-on instead of starting one |
-| Tempted to skip validation and go straight to planning | Never reorder — validate-then-plan is the point of this skill, and there is no sanctioned skip |
+| Tempted to implement the plan, open a worktree, or open a PR | Stop at the posted plan; name `work-on-issue` / `work-on-issue-loop` / `fable-validate-fableplan-loop` as the follow-on instead of starting one |
+| Tempted to skip validation and go straight to planning | Never reorder; there is no sanctioned skip |

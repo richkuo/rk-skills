@@ -5,7 +5,7 @@ description: Use when the user wants a task executed by the current session mode
 
 # fable-advisor
 
-The main agent (the **executor**) builds. A persistent **Fable 5.1 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.1 reviewer** gives the binding pre-commit verdict, so the plan's author never grades its own build. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
+The main agent (the **executor**) builds. A persistent **Fable 5.1 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.1 reviewer** gives the binding pre-commit verdict. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
 
 ## Input
 
@@ -32,7 +32,7 @@ Record the agent's name on the Agent path, or the `fable-dispatch` section 8 ses
 
 ### 3. Post the plan to the issue (only if one was resolved)
 
-Before building: `gh issue comment <N> --body-file <tmpfile>` (add `-R owner/repo` as needed). Heading `## Implementation plan (<model that served> advisor)`, the plan, the line `Issue read at: <step 1 issue read time>` for the `work-on-issue` step 0 untrusted-edit check, then the footer:
+Before building: `gh issue comment <N> --body-file <tmpfile>` (add `-R owner/repo` as needed). Heading `## Implementation plan (<model that served> advisor)`, the plan, the line `Issue read at: <step 1 issue read time>`, then the footer:
 
 ```
 ---
@@ -43,7 +43,7 @@ Fill the model and tier from step 2's record per `fable-dispatch` section 6. Giv
 
 ### 4. Build and ship
 
-**Issue path.** Load `work-on-issue` and execute its steps 1 to 6. Its step 0 gates ran in step 1 here. Before any code, run its step 0 untrusted-edit check with the step 1 issue read time and the posted plan's time as baselines; an untrusted body edit or title rename newer than the earlier of the two stops the build and is reported with its editor and time. its step 7 report is replaced by steps 8 and 9 here. Three injections: before writing any code, mirror the plan's steps into the task tracker per `work-on-issue` step 2 and route deviations through step 5 (no re-planning on your own); step 5 consults apply throughout its step 3; the step 6 binding review runs between its steps 4 and 5. `baseRefs` is never an input here; a `targetBranch` the user names passes through unchanged.
+**Issue path.** Load `work-on-issue` and execute its steps 1 to 6. Its step 0 gates ran in step 1 here. Before any code, run its step 0 untrusted-edit check with the step 1 issue read time and the posted plan's time as baselines; an untrusted body edit or title rename newer than the earlier of the two stops the build and is reported with its editor and time. Its step 7 report is replaced by steps 8 and 9 here. Three injections: before writing any code, mirror the plan's steps into the task tracker per `work-on-issue` step 2 and route deviations through step 5 (no re-planning on your own); step 5 consults apply throughout its step 3; the step 6 binding review runs between its steps 4 and 5. `baseRefs` is never an input here; a `targetBranch` the user names passes through unchanged.
 
 **Prose path.**
 
@@ -55,7 +55,7 @@ Fill the model and tier from step 2's record per `fable-dispatch` section 6. Giv
 
 ### 5. Consult the advisor at fixed checkpoints
 
-Consult the step 2 agent by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path (a fresh call loses its history), only when a checkpoint fires:
+Consult the step 2 agent by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path, only when a checkpoint fires:
 
 - **Hard-to-reverse decision**: architecture, schema, API contract, or data migration the plan did not settle.
 - **Stuck, by signal**: the same test still fails after two distinct fix attempts, or the same error message appeared verbatim twice.
@@ -71,7 +71,7 @@ The verdict is binding. On blocked, fix each finding or produce evidence it is w
 
 ### 7. Commit and PR markers
 
-On both paths the PR body carries an **Advisor log** (plan source, each consult with its disposition, overruled advisory findings, the verdict trail), `Closes #<N>` when an issue was resolved, and this footer with the executor model and effort the session observes (`unknown` for a value the harness does not expose, per `fable-dispatch` section 6), also on the commit:
+On both paths the PR body carries an **Advisor log** (plan source, each consult with its disposition, overruled advisory findings, the verdict trail), `Closes #<N>` when an issue was resolved, and this footer with the executor model and effort the session observes per `fable-dispatch` section 6, also on the commit:
 
 ```
 ---
