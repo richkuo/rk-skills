@@ -16,7 +16,7 @@ The PR adds one file, `skills/release-notes/SKILL.md`. Line numbers below are th
 
 ## Example 1: a `Needs Updates` review
 
-All four H3 sections appear only so the layout of each is visible; a real review omits empty sections. The `### Needs Fixing` item carries **Reachability:** because the ordinary path does not reach its defect, and its remedy ends with **Unverified hypothesis:** because the remedy depends on `gh` behavior the reviewer did not run.
+All four H3 sections appear only to show each layout; a real review omits empty sections.
 
 ```markdown
 Needs Updates
