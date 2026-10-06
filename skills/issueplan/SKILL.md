@@ -44,13 +44,13 @@ Read acceptance criteria, corrections from `work-on-issue` step 0 trusted author
 
 Follow the `fable-dispatch` section 7 snapshot diff and retry rules around the dispatch.
 
-**In-session mode.** Write the plan yourself to the plan rules. Never use the Agent tool, Task tool, workflow delegation, or any other subagent mechanism. Stay read-only: write no file in the working tree or repository, create no branch or worktree, and make no write to the repository or tracker before step 3. The snapshot files and the plan file, all outside the working tree, are the only files you write.
+**In-session mode.** Write the plan yourself to the plan rules. Never use the Agent tool, Task tool, workflow delegation, or any other subagent mechanism. Stay read-only during planning and during every step 3 revision: obey the read-only rule of `fable-dispatch` section 7 in full as the main agent (no file edits, commits, branch or tag creation, `git fetch`, `git pull`, `git remote update`, other writes to a ref of this checkout, pushes, `gh` writes to any repository, and MCP tool writes), and create no worktree. The only exceptions are the snapshot files and the plan file, all outside the working tree, and the step 3 posts.
 
 When the plan is ready, fix false assumptions yourself when the intent stays clear; ask only for a missing product decision or a scope change that needs the user. Check it against the code: existing paths and symbols are real, additions are labeled, verification commands match the project's tools. Each acceptance criterion needs a step and a check, or an explicit unresolved dependency. Never present a blocked plan as ready to build.
 
 Save it to a scratchpad file outside the working tree (the plan file) with the task or issue URL, inspected commit, target branch, issue read time (step 1 `updatedAt`; no revision or recheck changes it), saved time (step 3), and unresolved decisions.
 
-In in-session mode, after saving the plan file and before step 3, write the section 7 snapshot again from the planning root to a second scratch file outside the working tree and `diff` it against the step 1 file. Classify every difference by section 7's rules for added items and writes. On a write, post nothing: tell the user and ask whether to revert before continuing.
+In in-session mode, after saving the plan file and before step 3, write the section 7 snapshot again from the planning root to a second scratch file outside the working tree and `diff` it against the step 1 file. Classify every difference by section 7's rules for added items and writes. On a write, post nothing: tell the user and ask whether to revert. After a revert, write the snapshot again and diff it against the step 1 file; continue to step 3 only when no write remains. When the user explicitly says to keep the change and post, continue to step 3. Otherwise stop and keep the plan file.
 
 ## 3. Preserve and present the plan, then stop
 
