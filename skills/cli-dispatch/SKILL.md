@@ -20,7 +20,7 @@ Before writing any file, check only the stamped CLI: `command -v codex && codex 
 
 ## 3. The prompt file
 
-Write it outside the repository (session scratchpad, else `mktemp -d`). Append a line telling the CLI agent to read `work-on-issue` (fix pass: `fix-pr-review`) at the first existing of `~/.codex/skills/<skill>/SKILL.md`, `~/.cursor/skills/<skill>/SKILL.md`, `~/.claude/skills/<skill>/SKILL.md` (write the resolved absolute path yourself), then the section 7 attribution rules.
+Write it outside the repository (session scratchpad, else `mktemp -d`). Append a line telling the CLI agent to read `work-on-issue` (fix pass: `fix-pr-review`) at the first existing of `~/.codex/skills/<skill>/SKILL.md`, `~/.cursor/skills/<skill>/SKILL.md`, `~/.claude/skills/<skill>/SKILL.md` (write the resolved absolute path yourself), then the section 7 attribution rules, with its footer bullet copied in full: the footer line, its scope of every commit message, PR body, issue body, and comment, the `---` line on its own directly above the first footer line, and the fix-pass verbs.
 
 - **Build:** the task prompt verbatim plus a line: the driver handles every review trigger and cycle, so the CLI agent stops once the PR is open and verified.
 - **Fix pass:** names the PR and review comment, carries the caller's constraints verbatim, and says the CLI agent must not trigger, post, or wait for any re-review and stops after pushing the fixes and posting the disposition comment.
@@ -75,7 +75,7 @@ Compare the output's model with the requested id; compare a Cursor display name 
 
 - Branch prefix `codex/` or `cursor/` (CLAUDE.md Git Workflow).
 - PR title bracket `[C<score>, <Name>, <tier>]`, e.g. `[C33, Luna, max]`; append `, plan` when the caller says a plan stage drove the build (CLAUDE.md PR title convention), never for a failed plan stage.
-- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`; on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
+- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`, as the final lines of every commit message, PR body, issue body, and comment, with a `---` line on its own directly above the first footer line (the CLI agent does not load the global CLAUDE.md that defines this shape, and a repo check such as go-trader's `pr-metadata` fails a commit without the separator, which only a history rewrite can repair); on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
 
 ## 8. Dispatch hygiene, every caller
 
