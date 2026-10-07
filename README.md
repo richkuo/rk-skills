@@ -96,6 +96,7 @@ The `workflows/milestone-pipeline.js` dynamic workflow validates the dependency 
 |-------|--------------|
 | `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English), aiming for under 30 words and never over 55. |
 | `wans` | Answers "what are next steps?" in ASD-STE100 as a numbered list, each step marked `You:` or `Me:`. |
+| `expo-app-initialize` | Manual only (`/expo-app-initialize`): scaffolds an Expo tabs app with expo-router, MMKV, dev-client, and expo-iap using Bun, runs prebuild, and writes a project `claude.md`. Hidden from the model, so it adds no context. |
 
 ### Review bot prerequisite
 
