@@ -29,7 +29,7 @@ Run each step in order and wait for it to finish before the next. If a step fail
 3. Check the packages that Expo does not track, as the Versions section describes. Record the chosen version and the required peer dependencies of each package.
 4. Install the dependencies: `bunx expo install react-native-mmkv react-native-nitro-modules expo-dev-client expo-iap`, plus every required peer dependency that step 3 found. Write a package as `<package>@<version>` when step 3 chose a version older than the latest.
 5. Run `bunx expo install --check` and `bunx expo-doctor`, and fix every version mismatch they report.
-6. Run prebuild as the final setup step: `bunx expo prebuild`.
+6. Run prebuild as the final setup step: `bunx expo prebuild`. If the user asked for one platform only, run `bunx expo prebuild --platform <android|ios>`. On Windows, prebuild skips iOS with a warning; this is expected, so report it and continue.
 7. Write the commands section into `CLAUDE.md` in the project root. Never overwrite or remove template content, and never add a second `# Project Commands` section.
    - `CLAUDE.md` exists, as a file or as a symlink to `AGENTS.md`: append the commands section to it once.
    - `CLAUDE.md` is missing and `AGENTS.md` exists: create `CLAUDE.md` with `@AGENTS.md` as its first line, then the commands section. Do not change `AGENTS.md`.
@@ -44,7 +44,7 @@ Before reporting completion, confirm:
 - The tabs template exists: `app/(tabs)` and `app/_layout.tsx`.
 - `package.json` lists every required dependency and peer dependency.
 - `bunx expo install --check` and `bunx expo-doctor` report no problems.
-- Prebuild finished with no errors and the `android/` and `ios/` directories exist.
+- Prebuild finished with no errors, and the native directory of each platform that prebuild generated exists: `android/` and `ios/` by default, only `android/` on Windows, or only the platform the user asked for.
 - `CLAUDE.md` contains the commands section exactly once, and `AGENTS.md`, if the template created it, keeps all of its template content.
 
 ## Commands section
