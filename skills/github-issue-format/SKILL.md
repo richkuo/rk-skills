@@ -1,6 +1,6 @@
 ---
 name: github-issue-format
-description: Required format for creating or editing any GitHub issue — [C<score>] title convention, complexity rationale line, complete-body rule, mandatory Plain simple English section, attribution footer. Load BEFORE creating or editing a GitHub issue.
+description: Required format for creating or editing any GitHub issue — [C<score>] title convention, complexity rationale line, complete-body rule, mandatory Plain simple English section, attribution footer, milestone title rule. Load BEFORE creating or editing a GitHub issue or milestone.
 ---
 
 # GitHub issue format
@@ -9,6 +9,11 @@ description: Required format for creating or editing any GitHub issue — [C<sco
 
 - `[C<score>] <title>`: a plain-simple-English sentence in ASD-STE100, precise about component and behavior, e.g. `[C95] Orders can be filled twice when two fills arrive at the same moment`.
 - The **complexity score (0–100)** is a model and effort routing signal. `validate-issue` step 6 owns the formula, axes, and routing table; never restate or approximate them here.
+
+## Milestone
+
+- Every milestone title you create or rename is one hyphenated token with no spaces (`MCP-Read-foundations`, `Backtest-live-parity`). This holds for every path that creates one: a batch from `prd-to-issues`, a split of one issue into follow-ups, or a manual request.
+- Before you assign an issue to a milestone that has spaces in its title, rename that milestone to the hyphenated form (`gh api -X PATCH repos/<owner>/<repo>/milestones/<number> -f title=<new-title>`). The rename keeps every issue on the milestone. Quote a title that still has spaces in every `gh` call.
 
 ## Body
 
