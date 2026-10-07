@@ -1,0 +1,6 @@
+interface:
+  display_name: "Expo App Initialize"
+  short_description: "Scaffold an Expo tabs app with Bun"
+  default_prompt: "Use $expo-app-initialize to create a new Expo app named my-app."
+policy:
+  allow_implicit_invocation: false

@@ -96,6 +96,7 @@ The `workflows/milestone-pipeline.js` dynamic workflow validates the dependency 
 |-------|--------------|
 | `tldr` | Recaps the previous answer in ASD-STE100 (Simplified Technical English), aiming for under 30 words and never over 55. |
 | `wans` | Answers "what are next steps?" in ASD-STE100 as a numbered list, each step marked `You:` or `Me:`. |
+| `expo-app-initialize` | Manual only (`/expo-app-initialize <project-name>` in Claude Code, `$expo-app-initialize <project-name>` in Codex): scaffolds an Expo tabs app with expo-router, MMKV, dev-client, and expo-iap at their latest compatible versions using Bun, runs prebuild, and writes the project commands to `CLAUDE.md`. Claude Code (`disable-model-invocation`) and Codex (`agents/openai.yaml` implicit invocation off) keep it out of the model context until you invoke it. |
 
 ### Review bot prerequisite
 
