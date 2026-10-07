@@ -75,7 +75,7 @@ Compare the output's model with the requested id; compare a Cursor display name 
 
 - Branch prefix `codex/` or `cursor/` (CLAUDE.md Git Workflow).
 - PR title bracket `[C<score>, <Name>, <tier>]`, e.g. `[C33, Luna, max]`; append `, plan` when the caller says a plan stage drove the build (CLAUDE.md PR title convention), never for a failed plan stage.
-- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`; on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
+- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`, as the final lines of every commit message, PR body, issue body, and comment, with a `---` line on its own directly above the first footer line (the CLI agent does not load the global CLAUDE.md that defines this shape, and a repo check such as go-trader's `pr-metadata` fails a commit without the separator, which only a history rewrite can repair); on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
 
 ## 8. Dispatch hygiene, every caller
 
