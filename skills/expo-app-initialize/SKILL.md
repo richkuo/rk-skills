@@ -9,15 +9,15 @@ argument-hint: <project-name>
 
 Create a production-ready Expo React Native app from the tabs template and configure it with the standard dependencies. Use Bun for every command. Never use npm, yarn, or npx; use `bunx` for one-off tools.
 
-Project name: `$ARGUMENTS`. If it is empty, ask the user for a project name before running anything.
+Project name: `$ARGUMENTS`. If that value is empty or starts with a dollar sign (Codex does not replace the placeholder), take the name from the invocation message. If no name was passed, ask the user for a project name before running anything.
 
 ## Versions
 
 Use the latest version of every package that is compatible with the project. Never copy a version number from memory or from this skill.
 
 - Create the project with `create-expo@latest`, so the app starts on the newest stable Expo SDK.
-- Install every package with `bunx expo install <package>`. It selects the version that matches the project's Expo SDK for packages Expo tracks, and the latest version for others.
-- For each package that Expo does not track (`react-native-mmkv`, `react-native-nitro-modules`, `expo-iap`), check the latest published version, its required peer dependencies, and its documented minimum Expo SDK and React Native versions. Install every required peer dependency. If the latest version does not support the project's React Native version or architecture, use the newest version that does and tell the user why.
+- Before any install, read the project's Expo SDK and React Native versions from `package.json`. For each package that Expo does not track (`react-native-mmkv`, `react-native-nitro-modules`, `expo-iap`), check the latest published version, its required peer dependencies, and its documented minimum Expo SDK and React Native versions. Choose the newest version that supports the project's React Native version and architecture, and record it with every required peer dependency. If the chosen version is older than the latest, tell the user why.
+- Install every package with `bunx expo install <package>`. It selects the version that matches the project's Expo SDK for packages Expo tracks, and the latest version for others. Install the versions and peer dependencies that the check chose in the same command.
 - After installation, run `bunx expo install --check` and `bunx expo-doctor`. Fix every version mismatch they report before prebuild.
 
 ## Workflow
@@ -26,10 +26,14 @@ Run each step in order and wait for it to finish before the next. If a step fail
 
 1. Create the project: `bunx create-expo@latest <project-name> --template tabs --yes`, then work inside the new directory.
 2. Confirm `expo-router` is already in `package.json`. The tabs template includes it. Install it with `bunx expo install expo-router` only if it is missing.
-3. Install the dependencies: `bunx expo install react-native-mmkv react-native-nitro-modules expo-dev-client expo-iap`, plus any other peer dependency that the version checks found.
-4. Run the version checks from the Versions section.
-5. Run prebuild as the final setup step: `bunx expo prebuild`.
-6. Write the project commands to `CLAUDE.md` in the project root. If the template already created `CLAUDE.md` or `AGENTS.md`, keep its content and append the commands section. Never overwrite it.
+3. Check the packages that Expo does not track, as the Versions section describes. Record the chosen version and the required peer dependencies of each package.
+4. Install the dependencies: `bunx expo install react-native-mmkv react-native-nitro-modules expo-dev-client expo-iap`, plus every required peer dependency that step 3 found. Write a package as `<package>@<version>` when step 3 chose a version older than the latest.
+5. Run `bunx expo install --check` and `bunx expo-doctor`, and fix every version mismatch they report.
+6. Run prebuild as the final setup step: `bunx expo prebuild`.
+7. Write the commands section into `CLAUDE.md` in the project root. Never overwrite or remove template content, and never add a second `# Project Commands` section.
+   - `CLAUDE.md` exists, as a file or as a symlink to `AGENTS.md`: append the commands section to it once.
+   - `CLAUDE.md` is missing and `AGENTS.md` exists: create `CLAUDE.md` with `@AGENTS.md` as its first line, then the commands section. Do not change `AGENTS.md`.
+   - Neither file exists: create `CLAUDE.md` with the commands section.
 
 Ask the user only when they give a non-standard project location, when their requirements conflict with this setup, or when an error cannot be resolved automatically.
 
@@ -41,7 +45,7 @@ Before reporting completion, confirm:
 - `package.json` lists every required dependency and peer dependency.
 - `bunx expo install --check` and `bunx expo-doctor` report no problems.
 - Prebuild finished with no errors and the `android/` and `ios/` directories exist.
-- `CLAUDE.md` contains the commands section.
+- `CLAUDE.md` contains the commands section exactly once, and `AGENTS.md`, if the template created it, keeps all of its template content.
 
 ## Commands section
 
