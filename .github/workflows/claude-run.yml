@@ -470,7 +470,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@cab360f6565aa35a51d6ce9e43f1f4287c0a32ea
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -588,7 +588,7 @@ jobs:
 
       - name: Revise CLAUDE.md with session learnings
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
-        uses: anthropics/claude-code-action@cab360f6565aa35a51d6ce9e43f1f4287c0a32ea
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
