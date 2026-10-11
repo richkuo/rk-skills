@@ -73,7 +73,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 
 | Skill | What it does |
 |-------|--------------|
-| `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` that posts the plan, then `work-on-issue` on a background Opus 5.5 subagent at `high` that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It stops at the open PRs and triggers no review. |
+| `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` that posts the plan, then `work-on-issue` on a background Opus 5.5 subagent at `high` that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
 
 ### App pipeline skills
 
