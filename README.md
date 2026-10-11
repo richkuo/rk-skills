@@ -69,6 +69,12 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue. |
 | `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.1 on the current harness, with the fallback ladder and its reporting. Loaded before any Fable subagent is dispatched. |
 
+### Codex-driven skills
+
+| Skill | What it does |
+|-------|--------------|
+| `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` that posts the plan, then `work-on-issue` on a background Opus 5.5 subagent at `high` that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
+
 ### App pipeline skills
 
 The path from a raw app idea to a running multi-agent build, with a user checkpoint between stages:
