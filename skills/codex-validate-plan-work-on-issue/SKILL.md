@@ -67,11 +67,11 @@ For each issue run `bash "$SP/stage.sh" validate <N>`, then start `bash "$SP/wat
 
 ## 4. Plan stage
 
-Run `bash "$SP/stage.sh" plan <N>`, with the plan stage's settings in the same Bash command, and its watcher per the step 2 watcher rules. An `ENDED_EARLY` line sends that issue to step 5 at once. A `BLOCKED` line follows the step 2 rules, with `check-plan.sh`. The plan stage is a separate Codex run on the same read-only shim as the validate pass. The Codex agent is the in-session planner of `issueplan`, so it uses no subagent. The plan always runs, whatever the score. The prompt tells the agent to skip the snapshot files and the plan file, because the sandbox blocks writes, and the driver takes the snapshot diff.
+Run `bash "$SP/stage.sh" plan <N>`, with the plan stage's settings in the same Bash command, and its watcher per the step 2 watcher rules. An `ENDED_EARLY` line sends that issue to step 5 at once. A `BLOCKED` line follows the step 2 rules, with `check-plan.sh`. The plan stage is a separate Codex run on the same read-only shim as the validate pass. It starts only after the validate run has ended and its update has landed or been judged unneeded. It is a new `codex exec` process with a new Codex thread, so it shares no context with the validate run: never resume the validate thread (`codex exec resume`), and never put the validate output, verdict, or `result.md` text in the plan prompt. The plan agent reads the current issue body itself. The Codex agent is the in-session planner of `issueplan`, so it uses no subagent. The plan always runs, whatever the score. The prompt tells the agent to skip the snapshot files and the plan file, because the sandbox blocks writes, and the driver takes the snapshot diff.
 
 ## 5. When a plan run ends (that issue only)
 
-1. Run `bash "$SP/check-plan.sh" <N> "$SP/plan-<N>"`. It requires an unchanged issue state, title, and body, unchanged earlier comments, and exactly one new comment from the invoking user with a plan heading, an `Issue read at:` line, a `---` line, and the footer `Created with LLM: <Name> | <tier> | Harness: Codex`. It prints `PLAN_STATUS ready|blocked` and `PLAN_URL`, or `NO_PLAN` when the invoking user posted no new comment.
+1. Run `bash "$SP/check-plan.sh" <N> "$SP/plan-<N>"`. It requires an unchanged issue state, title, and body, unchanged earlier comments, and exactly one new comment from the invoking user with a plan heading, an `Issue read at:` line, a `---` line, and the footer `Created with LLM: <Name> | <tier> | Harness: Codex`. It also compares the Codex thread id of the plan run with that of the validate run: the same id is a `BLOCKER`, and a missing id is a `FLAG`. It prints `PLAN_STATUS ready|blocked` and `PLAN_URL`, or `NO_PLAN` when the invoking user posted no new comment.
 2. A `BLOCKER` ends the issue. Report it with the comment URL when one exists.
 3. A run that exited non-zero or hit a limit: run `check-plan.sh` first. One valid new plan comment is landed work and is never re-run. With `NO_PLAN` and no `BLOCKER`, rerun `stage.sh plan <N>` once. `NO_PLAN` after exit 0, or after a second failure, ends the issue.
 4. `PLAN_STATUS blocked` ends the issue. Report the blocker the plan names. No builder adopts a blocked plan.
@@ -109,6 +109,7 @@ When every issue has settled, report once: per issue, the PR URL and the posted 
 | A hand-back claims a PR | Verify with `gh pr view` first |
 | Tempted to post a second review trigger, wait for the review, fix findings, merge, or loop | Out of scope; one trigger per PR, then point at `fix-pr-review-loop` |
 | Tempted to post a trigger on a PR that failed the step 8 check, or before it opens | Never; report the blocker |
+| Tempted to resume the validate thread for the plan, or to pass the validate output into the plan prompt | Never; the plan is a fresh Codex run that reads the issue itself, and `check-plan.sh` blocks a reused thread |
 | A Codex run was killed at a limit | Count it as a non-zero exit; run the check script before any rerun |
 | A watcher notification arrives and the run has no `exit` or `limit` file | Start the next watcher slice; never check or rerun a live run |
 | The output names a different model than requested | Report the substitution (`cli-dispatch` section 6); never present it as the requested model |
