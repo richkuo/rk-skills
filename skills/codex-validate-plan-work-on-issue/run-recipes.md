@@ -22,7 +22,7 @@ Shell variables do not persist between Bash calls, so set these in the same Bash
 
 ## stage.sh
 
-Usage: `bash "$SP/stage.sh" validate|plan <N>`. It loads the settings (from `settings.json` when it exists, else from the environment, which it then saves), checks every setting against a fixed pattern, fetches `origin`, takes the issue read and the snapshot, writes the prompt and the launcher, launches the run in its own process group, and confirms the group id equals the pid. A failure before launch prints `BLOCKED <stage> <N> before launch` with the exit code, after the error itself. The shim is the `cli-dispatch` section 9 validate shim, unchanged, for both stages. The plan prompt posts exactly one comment and makes no other GitHub write.
+Usage: `bash "$SP/stage.sh" validate|plan <N>`. It loads the settings (from `settings.json` when it exists, else from the environment, which it then saves), checks every setting against a fixed pattern, fetches `origin`, takes the issue read and the snapshot, writes the prompt and the launcher, launches the run in its own process group, and confirms the group id equals the pid. A run that ends before the group check prints `ENDED_EARLY`; one that left no `exit` file gets `gone` in its `limit` file, a non-zero exit under `cli-dispatch` section 4. A failure before launch prints `BLOCKED <stage> <N> before launch` with the exit code, after the error itself. The shim is the `cli-dispatch` section 9 validate shim, unchanged, for both stages. The plan prompt posts exactly one comment and makes no other GitHub write.
 
 ```sh
 set -eu
@@ -134,12 +134,17 @@ rm -f "$RUN/launch.sh.bak"
 launched=1
 bash "$RUN/launch.sh"
 sleep 2
+PID=$(cat "$RUN/pid")
+PGID=$(ps -o pgid= -p "$PID" | tr -d ' ')
 if [ -f "$RUN/exit" ]; then
   echo "ENDED_EARLY $STAGE $N exit=$(cat "$RUN/exit")"
   exit 0
 fi
-PID=$(cat "$RUN/pid")
-PGID=$(ps -o pgid= -p "$PID" | tr -d ' ')
+if [ -z "$PGID" ]; then
+  echo gone > "$RUN/limit"
+  echo "ENDED_EARLY $STAGE $N exit= limit=gone"
+  exit 0
+fi
 if [ "$PGID" != "$PID" ]; then
   pkill -TERM -P "$PID" 2>/dev/null || true
   kill -TERM "$PID" 2>/dev/null || true
@@ -151,12 +156,12 @@ echo "STARTED $STAGE $N pid=$PID pgid=$PGID read=$(jq -r .updatedAt "$RUN/issue-
 
 ## watch.sh
 
-Usage: `bash "$SP/watch.sh" "$SP/<stage>-<N>" [cap-seconds]`, started with Bash `run_in_background` and `timeout: 600000`. The default cap is 7200 seconds, the validate and plan cap of `cli-dispatch` section 4. Each call is one bounded slice, so no host timeout can stop it before a limit check. It first evaluates the stall and cap limits, then checks for the `exit` file every 10 seconds for at most 300 seconds. A run that is still live at the end of the slice prints `RUNNING`, and the driver starts the next slice. All state is in the run directory, so a slice resumes where the last one stopped. On a limit it writes the reason to `limit`, sends `TERM` to the process group, and sends `KILL` 35 seconds later if the group is still alive. It prints one `ENDED` line when the run has an `exit` or `limit` file.
+Usage: `bash "$SP/watch.sh" "$SP/<stage>-<N>" [cap-seconds]`, started with Bash `run_in_background` and `timeout: 600000`. The default cap is 5400 seconds (90 minutes). This skill sets it below the 2-hour validate cap of `cli-dispatch` section 4. Each call is one bounded slice, so no host timeout can stop it before a limit check. It first evaluates the stall and cap limits, then checks for the `exit` file every 10 seconds for at most 300 seconds. A run that is still live at the end of the slice prints `RUNNING`, and the driver starts the next slice. All state is in the run directory, so a slice resumes where the last one stopped. On a limit it writes the reason to `limit`, sends `TERM` to the process group, and sends `KILL` 35 seconds later if the group is still alive. It prints one `ENDED` line when the run has an `exit` or `limit` file.
 
 ```sh
 set -u
 RUN=${1:?run directory}
-CAP=${2:-7200}
+CAP=${2:-5400}
 STALL=1800
 SLICE=300
 [ -f "$RUN/pid" ] || { echo "no pid file in $RUN" >&2; exit 2; }

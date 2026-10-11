@@ -50,9 +50,9 @@ Issues that each add a row to the same registration or index list will conflict 
 
 For each issue run `bash "$SP/stage.sh" validate <N>`, then start `bash "$SP/watch.sh" "$SP/validate-<N>"` with Bash `run_in_background` and `timeout: 600000`. One watcher per run at a time. Its completion notification wakes the session for that issue only.
 
-`STARTED` means the run is live. `ENDED_EARLY` means the run already ended; go to step 3 for that issue now. `BLOCKED ... before launch` means `stage.sh` stopped before Codex started: run the same `stage.sh` call once more, and a second one stops that issue with the printed error. `BLOCKED` with no process group of its own stops that issue with the printed reason.
+`STARTED` means the run is live. `ENDED_EARLY` means the run already ended, by itself or with `gone` in its `limit` file; go to step 3 for that issue now. `BLOCKED ... before launch` means `stage.sh` stopped before Codex started: run the same `stage.sh` call once more, and a second one stops that issue with the printed error. `BLOCKED` with no process group of its own: run that stage's check script first, then stop that issue with the printed reason, or with the check script's `BLOCKER` when it prints one (`cli-dispatch` section 9, Retry).
 
-**Watcher slices.** The run limits are the `cli-dispatch` section 4 limits: 30 minutes without output, 2 hours total. `watch.sh` enforces them in slices of at most 300 seconds of waiting, so no host timeout stops it before a limit check. A run has ended only when its run directory holds an `exit` or `limit` file, which the watcher reports with an `ENDED` line. After every watcher notification, check for those two files. With neither file (a `RUNNING` line, no line, or a watcher that the host stopped), start a new watcher for that run at once, and run no check script and no rerun. Apply the same rule to the plan stage.
+**Watcher slices.** The run limits are 30 minutes without output (`cli-dispatch` section 4) and 90 minutes total. The 90-minute cap is this skill's choice and is below the section 4 cap of 2 hours. `watch.sh` enforces them in slices of at most 300 seconds of waiting, so no host timeout stops it before a limit check. A run has ended only when its run directory holds an `exit` or `limit` file, which the watcher reports with an `ENDED` line. After every watcher notification, check for those two files. With neither file (a `RUNNING` line, no line, or a watcher that the host stopped), start a new watcher for that run at once, and run no check script and no rerun. Apply the same rule to the plan stage.
 
 ## 3. When a validate run ends (that issue only)
 
@@ -67,7 +67,7 @@ For each issue run `bash "$SP/stage.sh" validate <N>`, then start `bash "$SP/wat
 
 ## 4. Plan stage
 
-Run `bash "$SP/stage.sh" plan <N>`, with the plan stage's settings in the same Bash command, and its watcher per the step 2 watcher rules. An `ENDED_EARLY` line sends that issue to step 5 at once. The plan stage is a separate Codex run on the same read-only shim as the validate pass. The Codex agent is the in-session planner of `issueplan`, so it uses no subagent. The plan always runs, whatever the score. The prompt tells the agent to skip the snapshot files and the plan file, because the sandbox blocks writes, and the driver takes the snapshot diff.
+Run `bash "$SP/stage.sh" plan <N>`, with the plan stage's settings in the same Bash command, and its watcher per the step 2 watcher rules. An `ENDED_EARLY` line sends that issue to step 5 at once. A `BLOCKED` line follows the step 2 rules, with `check-plan.sh`. The plan stage is a separate Codex run on the same read-only shim as the validate pass. The Codex agent is the in-session planner of `issueplan`, so it uses no subagent. The plan always runs, whatever the score. The prompt tells the agent to skip the snapshot files and the plan file, because the sandbox blocks writes, and the driver takes the snapshot diff.
 
 ## 5. When a plan run ends (that issue only)
 
