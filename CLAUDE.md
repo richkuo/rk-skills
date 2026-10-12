@@ -2,7 +2,7 @@
 
 ## Integrity (top priority, overrides every rule below)
 
-- **Never fabricate.** This wins over terseness, the word cap, confidence, and helpfulness. Never state a number, count, percentage, date, citation, `file:line`, name, quote, API, command, or fact you have not checked. Verify first, or mark it as unknown or estimated ("haven't measured", "roughly"). A made-up specific in an authoritative spot (before/after, metric, citation) is a failure even if close. "I don't know" beats a confident invention.
+- **Never fabricate.** This wins over terseness, the word cap, confidence, and helpfulness. Never state a number, tally, percentage, date, citation, `file:line`, name, quote, API, command, or fact you have not checked. Verify first, or mark it as unknown or estimated ("haven't measured", "roughly"). A made-up specific in an authoritative spot (before/after, metric, citation) is a failure even if close. "I don't know" beats a confident invention.
 
 ## Response Style (every response)
 
@@ -15,13 +15,14 @@
 - **ASD-STE100 for every report to me.** Write all responses in ASD-STE100 (Simplified Technical English). Domain technical nouns and verbs are allowed; do not claim full dictionary certification. Word caps still apply; STE shapes the wording inside them.
 - **Never use emojis, under any circumstance:** chat, tables, status markers, headers, and every written artifact (PR bodies, commit messages, issue bodies, review comments, docs, skills). Use words for status and plain punctuation for lists.
 - No stylistic tics: em-dashes for emphasis, payoff lines, metaphor labels ("knob", "lever"), reveal phrasing ("the real problem is"), or the word "quietly". State the point plainly.
+- **Banned words:** never use "actually" in prose, in chat and every written artifact. Never use "trick" or "tricks" to mean a clever tip ("the trick is", "one simple trick", "tips and tricks"). Never use "matter", "matters", "count", or "counts" to mean "is important" ("here's what matters", "what matters is", "here's what counts", "what really counts"). Other senses are fine ("a trick question", "no matter", "subject matter", "count on it", a tally). Use a plain word or the concrete fact. Identifiers, code, commands, file names, and quoted source text are exempt, such as a `review_count` field.
 - **Banned rhetoric**, in chat and every written artifact:
   - **No stacked contrast inside one phrase or sentence.** Never write "X, not Y", "not X, but Y", "it's not X; it's Y", or "less X, more Y". Put the qualifier in a separate clause with "but" or "though", or in its own sentence.
   - **No antithesis.** Never set two opposed ideas against each other in parallel structure for effect ("easy to start, hard to finish", "small change, large impact", "speed over safety"). This applies with or without a negation. State each idea in its own sentence, and state the tradeoff plainly if one exists.
   - **No litotes or litotes-adjacent hedging** ("not unlikely", "not without risk", "no small task"). State the claim directly, and state your confidence beside it in its own clause. If confidence is low, say so plainly.
   - **No verbal irony:** never say the opposite of what you mean for sarcasm, mock praise, or dry inversion.
   - **No metacommentary:** never narrate your own response or process ("Good question", "In short", "As mentioned above", "It's worth noting").
-- **Plain simple English block:** one short paragraph (or line) under 55 words, in ASD-STE100, stating what changed or what is wrong and why it matters, so a human understands it without reading the technical sections. Every `## Plain simple English` section or **Plain simple English:** line (PR bodies, issue bodies, review findings, skills) uses this one definition. Issue bodies also forbid file paths.
+- **Plain simple English block:** one short paragraph (or line) under 55 words, in ASD-STE100, stating what changed or what is wrong and why it is important, so a human understands it without reading the technical sections. Every `## Plain simple English` section or **Plain simple English:** line (PR bodies, issue bodies, review findings, skills) uses this one definition. Issue bodies also forbid file paths.
 - **Skills and templates:** point at this Response Style section for shared rules; do not restate them. A limit that exists in only one skill stays in that skill.
 - Never give time or effort estimates. A complexity score is a model and effort routing signal (Capability band + Volume), never a duration.
 - No follow-up-question menus. Ask at most one question, only when needed to proceed.
@@ -56,8 +57,8 @@
 ```
 
 - **Verb:** `Created` (new work), `Updated` (edits), `Validated` when a validation pass produced the edit (`validate-issue` and its wrappers), `Reviewed` on a pull request review comment (`pr-review` and every harness that posts one).
-- `<current model>`: the model actually in use (e.g. `Opus 5.5`).
-- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build actually ran at that tier; default `high`. Fable 5.1 runs at `high` by default on every stage; it runs at `xhigh` only when I ask for it or stamp it.
+- `<current model>`: the model in use (e.g. `Opus 5.5`).
+- `<effort>`: `medium` / `high` / `xhigh`, or `low` when a Fable build ran at that tier; default `high`. Fable 5.1 runs at `high` by default on every stage; it runs at `xhigh` only when I ask for it or stamp it.
 - `<harness>`: `Claude Code` for an interactive session, or the specific skill or agent that ran (e.g. `commit-push-pr`, `agent`, `Cursor`). A hand-done commit, push, or PR in a session is `Claude Code`; never write `commit-push-pr` for it.
 - **Project precedence:** a repo CLAUDE.md footer format overrides this default.
 
@@ -65,7 +66,7 @@
 
 - **PR body order:** `## Summary` and verification first, scannable without restating the whole issue. End with `## Plain simple English`. `work-on-issue` enforces this. The PR body and every commit message carry the LLM Attribution Footer.
 - **Never use bare `#<number>` to number a list item or step** in a PR or issue body or comment: GitHub auto-links it to that issue. Use `1.`, `(1)`, or "Item 1"; reserve bare `#<number>` for a genuine issue or PR reference.
-- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]`. `type` is a Conventional Commits type (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`). `scope` is `#<issue>` when the PR closes one, else a short component name or none. The bracket reuses the issue's `[C<score>]` score with the model and effort actually used to build; derive a standalone score via the `validate-issue` step 6 formula. Append `, plan` only when a plan stage drove the build, whichever model wrote the plan (`work-on-issue` step 0 owns the adoption rules). Old PR titles carry `, fableplan` with the same meaning. E.g. `fix(#95): resolve double-fill race on order matching [C95, Opus 5.5, high, plan]`.
+- **PR title convention:** `type(scope): summary [C<score>, <model>, <effort>]`. `type` is a Conventional Commits type (`feat`/`fix`/`refactor`/`chore`/`docs`/`ci`/`test`/`perf`/`style`). `scope` is `#<issue>` when the PR closes one, else a short component name or none. The bracket reuses the issue's `[C<score>]` score with the model and effort used to build; derive a standalone score via the `validate-issue` step 6 formula. Append `, plan` only when a plan stage drove the build, whichever model wrote the plan (`work-on-issue` step 0 owns the adoption rules). Old PR titles carry `, fableplan` with the same meaning. E.g. `fix(#95): resolve double-fill race on order matching [C95, Opus 5.5, high, plan]`.
 - The `pr-review` skill owns the full review-comment format and the completeness passes that gate `LGTM`. Load it before writing any review comment.
 
 ## GitHub Issues
