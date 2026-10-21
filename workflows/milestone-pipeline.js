@@ -1551,13 +1551,14 @@ function invalidDependentReason(issue, validation, blocker) {
   return `unmet in-track hard prerequisite #${issue}: ${blocker}`
 }
 
-function trackOutcome(status, completed, skipped, head, unresolved, blocker) {
+function trackOutcome(status, completed, skipped, head, unresolved, blocker, mergePending) {
   return {
     status,
     completed: dedupeRecords(completed),
     skipped: dedupeRecords(skipped),
     head,
     unresolved,
+    mergePending,
     blocker,
   }
 }
@@ -1570,20 +1571,28 @@ async function executeTrack(trackIndex) {
   const inheritedCompleted = dedupeRecords(predecessorOutcomes.flatMap((outcome) => outcome.completed))
   const inheritedSkipped = dedupeRecords(predecessorOutcomes.flatMap((outcome) => outcome.skipped))
 
+  const blockingOutcomes = [
+    ...hardPredecessors.filter(({ outcome }) => outcome.status !== 'ready' || !outcome.head),
+    ...orderingPredecessors.filter(({ outcome }) => outcome.unresolved),
+  ].map(({ outcome }) => outcome)
+  const blockedUnresolved = blockingOutcomes.some((outcome) => outcome.unresolved)
+  const blockedMergePending = blockingOutcomes.length > 0 && blockingOutcomes.every((outcome) => outcome.mergePending)
+  const blockedStatus = blockedMergePending ? 'merge_pending' : 'dependency_blocked'
+
   const failedHard = hardPredecessors.find(({ outcome }) => outcome.status !== 'ready' || !outcome.head)
   if (failedHard) {
     const reason = `hard prerequisite track ${failedHard.index + 1} did not reach a stable code head: ${failedHard.outcome.blocker || failedHard.outcome.status}`
     const localSkipped = []
-    blockIssues(track, 0, reason, localSkipped)
-    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, false, reason)
+    blockIssues(track, 0, reason, localSkipped, blockedStatus)
+    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, blockedUnresolved, reason, blockedMergePending)
   }
 
   const unresolvedOrdering = orderingPredecessors.find(({ outcome }) => outcome.unresolved)
   if (unresolvedOrdering) {
     const reason = `ordering prerequisite track ${unresolvedOrdering.index + 1} has an unresolved pull request: ${unresolvedOrdering.outcome.blocker || unresolvedOrdering.outcome.status}`
     const localSkipped = []
-    blockIssues(track, 0, reason, localSkipped)
-    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, false, reason)
+    blockIssues(track, 0, reason, localSkipped, blockedStatus)
+    return trackOutcome('blocked', inheritedCompleted, [...inheritedSkipped, ...localSkipped], null, blockedUnresolved, reason, blockedMergePending)
   }
 
   const localCompleted = []
@@ -1593,6 +1602,7 @@ async function executeTrack(trackIndex) {
   let status = 'ready'
   let blocker = null
   let unresolved = false
+  let mergePending = false
 
   for (let issueIndex = 0; issueIndex < track.issues.length; issueIndex += 1) {
     const issue = track.issues[issueIndex]
@@ -1939,6 +1949,7 @@ async function executeTrack(trackIndex) {
         localSkipped.push({ issue, reason: blocker })
         status = 'blocked'
         unresolved = true
+        mergePending = true
         blockIssues(track, issueIndex + 1, `hard prerequisite #${issue}: ${blocker}`, localSkipped, 'merge_pending')
         break
       }
@@ -1963,6 +1974,7 @@ async function executeTrack(trackIndex) {
     head,
     unresolved,
     blocker,
+    mergePending,
   )
 }
 
@@ -1979,7 +1991,7 @@ function runTrack(trackIndex) {
         skipped.push({ issue, reason })
       }
       log(reason)
-      return trackOutcome('blocked', [], skipped, null, unresolved, reason)
+      return trackOutcome('blocked', [], skipped, null, unresolved, reason, false)
     })
   }
   return trackPromises[trackIndex]
