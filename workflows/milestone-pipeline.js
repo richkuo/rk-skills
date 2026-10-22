@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts, unless the operator\'s skipValidate run arg lists it and a read-only skip-check agent\'s evidence passes every skip rule (a refused skip validates normally) — model from a stamped Validate model line when present (a Codex CLI stamp runs the validate-issue pass through the read-only cli-dispatch shim under an Opus 5.5 driver), else derived from its [C..] score band; effort from a stamped Validate effort line when present, else the band default' },
-    { title: 'Plan', detail: 'a separate plan agent plans each issue flagged plan: Yes right after its validation (or its granted validation skip), on the stamped Plan model (Opus 5.5 by default, or Fable 5.1) at the stamped Plan effort when present, else the default: high on Fable 5.1, and on Opus 5.5 xhigh at C85 or higher (or with no score) and high below C85; plans posted to the issues' },
+    { title: 'Plan', detail: 'a separate plan agent plans each issue flagged plan: Yes right after its validation (or its granted validation skip), on the stamped Plan model (Opus 5.5 by default, or Fable 5.1) at high only on a Fable plan (any stamped tier runs at high), and on Opus 5.5 at the stamped Plan effort when present, else xhigh at C85 or higher (or with no score) and high below C85; plans posted to the issues' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
@@ -327,8 +327,7 @@ function hasScore(complexity) {
 
 const PLAN_XHIGH_MIN = 85
 
-function defaultPlanEffort(planModel, complexity) {
-  if (planModel === 'fable') return 'high'
+function defaultPlanEffort(complexity) {
   return !hasScore(complexity) || complexity >= PLAN_XHIGH_MIN ? 'xhigh' : 'high'
 }
 
@@ -1498,6 +1497,10 @@ const normalizedIssues = prep.issues.map((issue) => {
     log(`#${normalized.number}: normalized plan effort low → high for Opus 5.5 (low is a Fable-only tier)`)
     normalized.plan_effort = 'high'
   }
+  if (normalized.plan_model === 'fable' && normalized.plan_effort && normalized.plan_effort !== 'high') {
+    log(`#${normalized.number}: normalized plan effort ${normalized.plan_effort} → high for ${MODEL_NAMES.fable} (a Fable plan runs only at high)`)
+    normalized.plan_effort = 'high'
+  }
   return normalized
 })
 const EX = new Map(normalizedIssues.map((i) => [i.number, i]))
@@ -1784,7 +1787,7 @@ async function executeTrack(trackIndex) {
     const planComplexity = !skipGrant && !(KEEP_STAMPS && hasScore(ex.complexity)) && hasScore(rescored) && hasScore(effectiveComplexity) && rescored > effectiveComplexity
       ? rescored
       : effectiveComplexity
-    const planEffort = ex.plan_effort || defaultPlanEffort(planModel, planComplexity)
+    const planEffort = planModel === 'fable' ? 'high' : ex.plan_effort || defaultPlanEffort(planComplexity)
     if (ex.fableplan) {
       try {
         plan = await agent(planPrompt(issue, validation, planEffort, planModel), {
