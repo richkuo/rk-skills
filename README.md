@@ -20,7 +20,7 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `plan` is `yes` at score 75 or higher, and a plan is then posted before the build: Opus 5.5 by default, or Fable 5.1 on a `Plan model: Fable 5.1` stamp. "Fable" skills hand part of the work to a subagent on the Fable 5.1 model; it runs at `high` by default and at `xhigh` only when you ask for it.
+Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `plan` is `yes` at score 75 or higher, and a plan is then posted before the build: Opus 5.5 at `xhigh` by default, or Fable 5.1 on a `Plan model: Fable 5.1` stamp. "Fable" skills hand part of the work to a subagent on the Fable 5.1 model; it runs at `high` by default and at `xhigh` only when you ask for it.
 
 ### Issue skills
 

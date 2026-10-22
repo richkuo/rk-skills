@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Prep', detail: 'read every issue\'s [C..] score and Execution block' },
     { title: 'Validate', detail: 'each issue is validated against its exact dependency base right before it starts, unless the operator\'s skipValidate run arg lists it and a read-only skip-check agent\'s evidence passes every skip rule (a refused skip validates normally) — model from a stamped Validate model line when present (a Codex CLI stamp runs the validate-issue pass through the read-only cli-dispatch shim under an Opus 5.5 driver), else derived from its [C..] score band; effort from a stamped Validate effort line when present, else the band default' },
-    { title: 'Plan', detail: 'a separate plan agent plans each issue flagged plan: Yes right after its validation (or its granted validation skip), on the stamped Plan model (Opus 5.5 by default, or Fable 5.1) at the stamped Plan effort when present, else high; plans posted to the issues' },
+    { title: 'Plan', detail: 'a separate plan agent plans each issue flagged plan: Yes right after its validation (or its granted validation skip), on the stamped Plan model (Opus 5.5 by default, or Fable 5.1) at the stamped Plan effort when present, else xhigh; plans posted to the issues' },
     { title: 'Implement', detail: 'build each issue on its assigned model/effort in a worktree, open PR, and trigger the review bot only in github review mode; a Build model stamped on the Codex CLI or Cursor CLI runs through that CLI under an Opus driver agent, never on a substituted Claude model' },
     { title: 'Review Loop', detail: 'build-agent first cycle plus fresh two-cycle fix agents against the review bot Action (default github mode, @claude unless reviewBot names codex) or reviewer/fixer subagent cycles, per PR until LGTM; unrelated tracks stay concurrent while successors wait' },
     { title: 'Merge', detail: 'no merge agents — the orchestrator merges in-session; PRs recorded in args.merged count as merged and successors build from the updated base branch, while an LGTM PR without a record pauses the run as awaiting_merge' },
@@ -311,7 +311,7 @@ ${returnShape}`
 
 const BANDS = [
   { name: '0–24', min: 0, max: 24, fableplan: false, validate: { model: 'opus', effort: 'medium' }, build: { model: 'sonnet', effort: 'high' } },
-  { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'medium' } },
+  { name: '25–49', min: 25, max: 49, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
   { name: '50–74', min: 50, max: 74, fableplan: false, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
   { name: '75+', min: 75, max: Infinity, fableplan: true, validate: { model: 'opus', effort: 'high' }, build: { model: 'opus', effort: 'high' } },
 ]
@@ -440,12 +440,12 @@ const PREP_SCHEMA = {
           model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor'], description: 'From "Build model:" — Fable 5.1→fable, Opus 5.5→opus, etc.; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor' },
           build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
           cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
-          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; low is Fable-only, an Opus build runs at medium or above, a Sonnet or Haiku build at high or above, and max is Codex CLI-only — runtime normalizes low→high on Opus, low/medium→high on Sonnet and Haiku, and max→xhigh on Claude models and Cursor' },
+          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; a Claude build runs only at high and max is Codex CLI-only — runtime normalizes every non-high tier to high on Claude models, Fable included, and max→xhigh on Cursor' },
           validate_model: { type: 'string', enum: ['fable', 'opus', 'codex', 'cursor'], description: 'From an optional "Validate model:" line — Fable 5.1→fable, Opus 5.5→opus; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
           validate_model_name: { type: 'string', description: 'For a codex/cursor validate only: the display name before the parenthetical, e.g. "Astra" from "Astra (Codex CLI, gpt-6-astra)"; OMIT for Claude models' },
           validate_cli_model: { type: 'string', description: 'For a codex/cursor validate only: the explicit CLI model id after the comma inside the parenthetical; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
           validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low to high on a non-Fable Claude validate (low is a Fable-only tier), and max is a Codex CLI-only tier' },
-          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the high default. Preserve the tier verbatim. Ignored when fableplan is false' },
+          plan_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Raw tier from an optional "Plan effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the xhigh default. Preserve the tier verbatim. Ignored when fableplan is false' },
           plan_model: { type: 'string', enum: ['fable', 'opus'], description: 'From an optional "Plan model:" line — Fable 5.1→fable, Opus 5.5 (any Opus)→opus. OMIT when absent, because absence means the plan stage runs on its Opus 5.5 default. Ignored when fableplan is false' },
           fableplan: { type: 'boolean', description: 'True when "plan first:" (or the legacy "fableplan first:") starts with Yes' },
           first_review_model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'From the optional "PR review:" line — the model named in a `@claude <model> review …` first-review trigger; a bare `@claude review`, with or without an effort:<tier>, names opus, because the bare trigger runs Opus 5.5; OMIT this field when the line names the standard `@claude` trigger in prose, or is absent — the runtime derives the default from the [C..] band, and presence is how it tells a stamped trigger from an unstamped one' },
@@ -1395,8 +1395,8 @@ const prep = await agent(
 - title: the issue title EXACTLY as \`gh issue view --json title\` reports it, including any [C<score>] prefix. Never shorten, reword, or strip the prefix: the runtime reconciles the complexity you report against this title, so a trimmed title makes a scored issue look unscored and routes the whole run to the most expensive band
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
 - model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5.5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
-- effort: from "**Effort:**" — one of low/medium/high/xhigh/max; low is a Fable-only tier, an Opus build runs at medium or above, a Sonnet or Haiku build at high or above, and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
-- plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the plan stage runs at its high default. Preserve a stamped tier verbatim. Never read a model from this line
+- effort: from "**Effort:**" — one of low/medium/high/xhigh/max; a Claude build runs only at high and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
+- plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the plan stage runs at its xhigh default. Preserve a stamped tier verbatim. Never read a model from this line
 - plan_model: from an optional "**Plan model:**" line — map "Fable 5.1"→fable and "Opus 5.5" (any Opus)→opus. When the line is absent, OMIT the field — absence means the plan stage runs on its Opus 5.5 default. Never read a model from the "Plan effort:" line
 - validate_model: from an optional "**Validate model:**" line — map "Fable 5.1"→fable and "Opus 5.5" (any Opus)→opus. When the line carries a parenthetical naming an external harness — "Astra (Codex CLI, gpt-6-astra)", "Luna (Codex CLI)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set validate_model_name to the name before the parenthetical, and set validate_cli_model to the id after the comma inside the parenthetical when one is present; OMIT validate_cli_model when the parenthetical carries no id, and OMIT both fields for Claude models. When the line is absent, OMIT validate_model — absence means the runtime derives the validate model from the [C..] band. Never read a model from the "Validate effort:" line
 - validate_effort: from an optional "**Validate effort:**" line — one of low/medium/high/xhigh/max. When the line is absent, OMIT the field — absence means validation runs at the [C..] band default. Preserve a stamped tier verbatim so the runtime can raise it and log the change
@@ -1443,9 +1443,9 @@ const normalizedIssues = prep.issues.map((issue) => {
       normalized.cli_error = `Build model id ${JSON.stringify(String(normalized.cli_model))} on the ${harness.label} carries a character outside the allowed set (letters, digits, ".", "_", ":", "-"; it must start with a letter or digit) — that id would reach a shell command, so the issue is blocked; stamp it as "<Name> (${harness.label}, <model-id>)" with a plain id`
       log(`#${normalized.number}: ${normalized.cli_error}`)
     }
-  } else if (normalized.effort === 'max') {
-    log(`#${normalized.number}: normalized build effort max → xhigh for ${MODEL_NAMES[normalized.model] || normalized.model} (max is a Codex CLI-only tier)`)
-    normalized.effort = 'xhigh'
+  } else if (normalized.effort !== 'high') {
+    log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (a Claude build runs only at high)`)
+    normalized.effort = 'high'
   }
   if (isCliHarness(normalized.validate_model)) {
     const harness = CLI_HARNESSES[normalized.validate_model]
@@ -1474,10 +1474,6 @@ const normalizedIssues = prep.issues.map((issue) => {
   } else if (normalized.validate_effort === 'max') {
     log(`#${normalized.number}: normalized validate effort max → xhigh for ${MODEL_NAMES[normalized.validate_model || bandFor(normalized.complexity).validate.model]} (max is a Codex CLI-only tier)`)
     normalized.validate_effort = 'xhigh'
-  }
-  if ((normalized.effort === 'low' || (normalized.effort === 'medium' && normalized.model !== 'opus')) && normalized.model !== 'fable' && !isCliHarness(normalized.model)) {
-    log(`#${normalized.number}: normalized build effort ${normalized.effort} → high for ${MODEL_NAMES[normalized.model] || normalized.model} (an Opus build runs at medium or above, and a Sonnet or Haiku build at high or above)`)
-    normalized.effort = 'high'
   }
   if (normalized.first_review_ignored) {
     log(`#${normalized.number}: ignored PR review stamp ${JSON.stringify(String(normalized.first_review_ignored))} — it matches no admitted first-review row, so the band trigger applies`)
@@ -1777,7 +1773,7 @@ async function executeTrack(trackIndex) {
     const validatedOn = skipGrant ? null : validatedRoute.cli ? `${validateModelName(ex)} @ ${ex.validate_effort}` : `${MODEL_NAMES[validatedRoute.model]} @ ${validatedRoute.effort}`
 
     let plan = null
-    const planEffort = ex.plan_effort || 'high'
+    const planEffort = ex.plan_effort || 'xhigh'
     const planModel = ex.plan_model || 'opus'
     if (ex.fableplan) {
       try {
