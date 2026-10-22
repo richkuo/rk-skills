@@ -1784,9 +1784,11 @@ async function executeTrack(trackIndex) {
 
     let plan = null
     const planModel = ex.plan_model || 'opus'
-    const planComplexity = !skipGrant && !(KEEP_STAMPS && hasScore(ex.complexity)) && hasScore(rescored) && hasScore(effectiveComplexity) && rescored > effectiveComplexity
-      ? rescored
-      : effectiveComplexity
+    const planComplexity = !hasScore(ex.complexity)
+      ? undefined
+      : !skipGrant && !KEEP_STAMPS && hasScore(rescored) && rescored > effectiveComplexity
+        ? rescored
+        : effectiveComplexity
     const planEffort = planModel === 'fable' ? 'high' : ex.plan_effort || defaultPlanEffort(planComplexity)
     if (ex.fableplan) {
       try {
