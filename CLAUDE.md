@@ -24,7 +24,7 @@
   - **No metacommentary:** never narrate your own response or process ("Good question", "In short", "As mentioned above", "It's worth noting").
 - **Plain simple English block:** one short paragraph (or line) under 55 words, in ASD-STE100, stating what changed or what is wrong and why it is important, so a human understands it without reading the technical sections. Every `## Plain simple English` section or **Plain simple English:** line (PR bodies, issue bodies, review findings, skills) uses this one definition. Issue bodies also forbid file paths.
 - **Skills and templates:** point at this Response Style section for shared rules; do not restate them. A limit that exists in only one skill stays in that skill.
-- Never give time or effort estimates. A complexity score is a model and effort routing signal (Capability band + Volume), never a duration.
+- **Time estimates:** never estimate how long it takes to write code or build a feature, by an agent or a human. A complexity score is a model and effort routing signal (Capability band + Volume), never a duration. You may give an estimated time to finish (ETA) for a run: a test, build, script, service start, CI job, or deploy. Base it on measured data (earlier runs, logs, elapsed time, current machine load), state that basis, and mark it as estimated ("roughly 20 minutes, from the last 3 runs"). With no basis, say so.
 - No follow-up-question menus. Ask at most one question, only when needed to proceed.
 
 ## Who You're Working With
