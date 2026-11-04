@@ -92,6 +92,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           STRIPPED: ${{ steps.verify_invocation.outputs.stripped }}
           DOCS_RELEASE_ENABLED: ${{ vars.DOCS_RELEASE_ENABLED }}
+          PR_URL: ${{ github.event.issue.pull_request.url }}
         run: |
           MODEL_SHORT=$(printf '%s' "$STRIPPED" | grep -ioE '(^|(\r?\n))[[:space:]]*@claude[[:space:]]+[a-z]+[0-9]*' | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' || true)
 
@@ -101,7 +102,7 @@ jobs:
           echo "effort=$EFFORT_RAW" >> "$GITHUB_OUTPUT"
 
           FLOW=""
-          if [ "$EVENT_NAME" = "issue_comment" ] && [ "$DOCS_RELEASE_ENABLED" = "true" ]; then
+          if [ "$EVENT_NAME" = "issue_comment" ] && [ -z "$PR_URL" ] && [ "$DOCS_RELEASE_ENABLED" = "true" ]; then
             for cand in create-release sync-docs; do
               if printf '%s' "$STRIPPED" | grep -qiE "(^|(\r?\n))[[:space:]]*@claude([[:space:]]+(opus|opus5|sonnet|sonnet5|fable|fable5))?[[:space:]]+${cand}([[:space:]]|\$)"; then
                 FLOW="$cand"
@@ -144,7 +145,7 @@ jobs:
               MODE=implement
             else
               MODE=untrusted-issue
-              echo "::warning::Implement route refused: the issue or pull request author association is ${ISSUE_AUTHOR_ASSOC:-NONE}. Only an OWNER, MEMBER, or COLLABORATOR author, or the bot login, can start a write-capable run."
+              echo "::warning::Implement route refused: the issue author association is ${ISSUE_AUTHOR_ASSOC:-NONE}. Only an OWNER, MEMBER, or COLLABORATOR author, or the bot login, can start a write-capable run."
             fi
           else
             case "$EVENT_NAME" in
@@ -192,6 +193,7 @@ jobs:
     if: >
       needs.classify.outputs.invoked == 'true' &&
       needs.classify.outputs.mode == 'implement' &&
+      github.event.issue.pull_request == null &&
       (
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association) ||
         github.event.issue.user.login == 'claude[bot]'
@@ -242,12 +244,11 @@ jobs:
     timeout-minutes: 5
     permissions:
       issues: write
-      pull-requests: write
     steps:
       - name: Post the fixed refusal comment
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          COMMENT_BODY: This bot does not act on issues or pull requests opened by authors outside this repository, so it took no action here. A maintainer can file the request as a new issue under their own account and mention the bot on that new issue.
+          COMMENT_BODY: This bot does not act on issues opened by authors outside this repository, so it took no action here. A maintainer can file the request as a new issue under their own account and mention the bot on that new issue.
         run: |
           gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" --raw-field body="$COMMENT_BODY"

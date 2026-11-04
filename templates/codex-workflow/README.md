@@ -87,8 +87,12 @@ release workflow that parses the `docs-release/*` branch name.
 | `@codex review` | PR review (read-only, `LGTM` / `Needs Updates` format) | No |
 | `@codex <anything else>` on a PR | fix-pr: re-validate unaddressed feedback, fix what survives, fold in comment text as scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@codex <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes (trusted-author issues only; any other issue gets a fixed refusal comment and no agent run) |
-| `@codex sync-docs` / `@codex create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue or PR author only) |
-| `@codex sync-release` | docs/release flow, only after the candidate-list edit above | Scoped |
+| `@codex sync-docs` / `@codex create-release` (hyphenated only) on an issue | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue author only) |
+| `@codex sync-release` on an issue | docs/release flow, only after the candidate-list edit above | Scoped (trusted issue author only) |
+
+The docs/release flows start only from a comment on a plain issue. On a PR,
+`sync-docs`, `create-release`, and `sync-release` are ordinary comment text, so
+the comment routes to fix-pr or review by the PR rules above.
 
 `effort:low|medium|high|xhigh` is parsed from the comment; the default is
 `high`. Review events (formal reviews, inline comments) always stay read-only.
@@ -123,11 +127,17 @@ this table, as `claude-run.yml` does for Claude.
 - **Two independent trust gates on the write path.** `classify` runs with
   `permissions: {}` and checks the commenter and the issue or PR author; the
   `implement` and `fix-pr` jobs re-assert author trust from the event payload,
-  so a classify bug cannot grant push over an untrusted-author issue or PR. An
-  issue or docs/release flow whose author fails that check routes to the
-  `untrusted-issue` job, which has only `issues: write` and
-  `pull-requests: write`, runs no agent and no checkout, and posts one fixed
+  so a classify bug cannot grant push over an untrusted-author issue or PR.
+  The `implement` job also refuses a PR comment. An issue or docs/release flow
+  whose author fails that check routes to the `untrusted-issue` job, which has
+  only `issues: write`, runs no agent and no checkout, and posts one fixed
   comment that interpolates no event field.
+- **Flows run only on issues:** `codex.yml` detects a docs/release flow only
+  on a comment on a plain issue. The first step of `codex-run.yml` also fails
+  the job, before the App token mint and any checkout, when a flow or the
+  `implement` route arrives on a pull request event. That step protects a
+  `codex.yml` copy that is not up to date, because `codex-run.yml` is fetched
+  from `@main` at run time.
 - **No-execution ban:** the agent never runs the project's code; CI owns checks.
 - **Fail-closed routing:** ambiguity classifies as read-only review; untrusted
   issue or PR authors never reach a push-capable route; an unset
