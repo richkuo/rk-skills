@@ -9,7 +9,7 @@ the Codex twin and documents only what differs from this file.
 
 | Path | Purpose |
 |------|---------|
-| `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`. |
+| `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`, and an `untrusted-issue` job that posts a fixed refusal comment. |
 | `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Resolves the model id and effort, and fetches the prompts and scripts below from rk-skills at run time, so an rk-skills update reaches every consumer on its next run. |
 | `prompts/*.md` | One prompt per route, fetched at run time. Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
 | `scripts/` | Comment patch/compose helpers. |
@@ -45,13 +45,13 @@ secret and the App, then remove `ANTHROPIC_API_KEY` when nothing else uses it.
 
 ## Customization inputs
 
-`claude.yml` ships with `classify` on `runs-on: self-hosted` and
-`runs_on: self-hosted` on all three routes (`review`/`implement`/`fix-pr`).
-The four settings are independent: `classify`'s `runs-on:` is a plain job
-field, and each route's `runs_on:` is a `with:` input that defaults to
-`ubuntu-latest` inside `claude-run.yml` when omitted. Grep for `runs-on` and
-`runs_on` and keep all four in agreement, or the routes fall back to hosted
-runners while `classify` keeps working.
+`claude.yml` ships with `classify` and `untrusted-issue` on
+`runs-on: self-hosted` and `runs_on: self-hosted` on all three routes
+(`review`/`implement`/`fix-pr`). The five settings are independent: each
+`runs-on:` is a plain job field, and each route's `runs_on:` is a `with:` input
+that defaults to `ubuntu-latest` inside `claude-run.yml` when omitted. Grep for
+`runs-on` and `runs_on` and keep all five in agreement, or the routes fall back
+to hosted runners while `classify` keeps working.
 
 | Input | Default | Purpose |
 |-------|---------|---------|
@@ -75,8 +75,8 @@ branch name.
 |---------|-------|-------|
 | `@claude review` | PR review (read-only, `LGTM` / `Needs Updates` format) | No |
 | `@claude <anything else>` on a PR | fix-pr: re-validate unaddressed feedback, fix what survives, fold in comment text as scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
-| `@claude <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes |
-| `@claude sync-docs` / `@claude create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@claude <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes (trusted-author issues only; any other issue gets a fixed refusal comment and no agent run) |
+| `@claude sync-docs` / `@claude create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue or PR author only) |
 | `@claude sync-release` | docs/release flow, only after the candidate-list edit above | Scoped |
 
 Model shorthand (`opus`, `sonnet`, `fable`, each also with a `5` suffix, e.g.
@@ -93,11 +93,19 @@ own model until you copy the template again.
 - **Least-privilege split:** the review route runs with `contents: read` on the
   job token, so a prompt-injected diff can never push or merge; only
   trusted-author routes get `contents: write` + `id-token: write`.
+- **Two trust gates on every write route:** `classify` checks the commenter and
+  the issue or PR author, and the `implement` and `fix-pr` jobs re-assert
+  author trust (`OWNER`, `MEMBER`, `COLLABORATOR`, or `claude[bot]`) from the
+  event payload, so a `classify` bug cannot grant push. An issue or
+  docs/release flow whose author fails that check routes to the
+  `untrusted-issue` job, which has only `issues: write` and
+  `pull-requests: write`, runs no agent and no checkout, and posts one fixed
+  comment that interpolates no event field.
 - **No-execution ban:** the agent never runs the project's code in any mode
   (no test suites, builds, type checks, or scripts). Allowlists carry no
   interpreters; CI owns checks.
 - **Fail-closed routing:** anything ambiguous classifies as read-only review;
-  untrusted PR authors never reach a push-capable route.
+  untrusted issue or PR authors never reach a push-capable route.
 - **No job token on disk during review:** the review route keeps the job token
   out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
