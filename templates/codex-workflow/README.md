@@ -15,7 +15,7 @@ is named (see **Skills default to Claude**).
 
 | Path | Purpose |
 |------|---------|
-| `workflows/codex.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`. |
+| `workflows/codex.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`, and an `untrusted-issue` job that posts a fixed refusal comment. |
 | `../../.github/workflows/codex-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/codex-run.yml@main`. Fetches the prompts, the shared comment-patch scripts, and the `skills/` tree at run time. |
 | `prompts/*.md` | One prompt per route, fetched at run time. `pr-review-format.md` is byte-identical to the Claude copy; the others differ only where the harness does. |
 
@@ -58,10 +58,11 @@ Only `codex.yml` is copied; everything else is fetched at run time. Then:
 
 ## Customization inputs
 
-`codex.yml` ships with `classify` on `runs-on: self-hosted` and
-`runs_on: self-hosted` on all three routes. The four settings are independent
-(`runs_on` defaults to `ubuntu-latest` inside `codex-run.yml` when omitted);
-grep for `runs-on` and `runs_on` and keep all four in agreement.
+`codex.yml` ships with `classify` and `untrusted-issue` on
+`runs-on: self-hosted` and `runs_on: self-hosted` on all three routes. The five
+settings are independent (`runs_on` defaults to `ubuntu-latest` inside
+`codex-run.yml` when omitted); grep for `runs-on` and `runs_on` and keep all
+five in agreement.
 
 | Input | Default | Purpose |
 |-------|---------|---------|
@@ -85,8 +86,8 @@ release workflow that parses the `docs-release/*` branch name.
 |---------|-------|-------|
 | `@codex review` | PR review (read-only, `LGTM` / `Needs Updates` format) | No |
 | `@codex <anything else>` on a PR | fix-pr: re-validate unaddressed feedback, fix what survives, fold in comment text as scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
-| `@codex <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes |
-| `@codex sync-docs` / `@codex create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped |
+| `@codex <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes (trusted-author issues only; any other issue gets a fixed refusal comment and no agent run) |
+| `@codex sync-docs` / `@codex create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue or PR author only) |
 | `@codex sync-release` | docs/release flow, only after the candidate-list edit above | Scoped |
 
 `effort:low|medium|high|xhigh` is parsed from the comment; the default is
@@ -120,12 +121,17 @@ this table, as `claude-run.yml` does for Claude.
 - **`GITHUB_TOKEN` never pushes, on any route.** Every job stays
   `contents: read`; only the App installation token can write.
 - **Two independent trust gates on the write path.** `classify` runs with
-  `permissions: {}`; the `fix-pr` job re-asserts PR-author trust from the event
-  payload, so a classify bug cannot grant push over an untrusted-author PR.
+  `permissions: {}` and checks the commenter and the issue or PR author; the
+  `implement` and `fix-pr` jobs re-assert author trust from the event payload,
+  so a classify bug cannot grant push over an untrusted-author issue or PR. An
+  issue or docs/release flow whose author fails that check routes to the
+  `untrusted-issue` job, which has only `issues: write` and
+  `pull-requests: write`, runs no agent and no checkout, and posts one fixed
+  comment that interpolates no event field.
 - **No-execution ban:** the agent never runs the project's code; CI owns checks.
 - **Fail-closed routing:** ambiguity classifies as read-only review; untrusted
-  PR authors never reach a push-capable route; an unset `CODEX_BOT_LOGIN`
-  removes bot trust.
+  issue or PR authors never reach a push-capable route; an unset
+  `CODEX_BOT_LOGIN` removes bot trust.
 - **Loop prevention:** a comment by the configured Codex bot invokes only when
   its stripped body is exactly a one-line `@codex [model] review [effort:…]`
   trigger.
