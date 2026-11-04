@@ -70,6 +70,26 @@ jobs:
       CLAUDE_HARNESS: anthropics/claude-code-action@v1
       BOT_LOGIN: ${{ inputs.mode == 'review' && 'github-actions[bot]' || 'claude[bot]' }}
     steps:
+      - name: Refuse a docs, release, or implement run on a pull request
+        env:
+          MODE: ${{ inputs.mode }}
+          FLOW: ${{ inputs.flow }}
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          ON_PR=false
+          if [ -n "$ISSUE_PR_URL" ] || [ -n "$PR_NUMBER" ]; then
+            ON_PR=true
+          fi
+          case "$EVENT_NAME" in
+            pull_request|pull_request_target|pull_request_review|pull_request_review_comment) ON_PR=true ;;
+          esac
+          if [ "$ON_PR" = "true" ] && { [ -n "$FLOW" ] || [ "$MODE" = "implement" ]; }; then
+            echo "::error::Run refused: a docs or release flow, or the implement route, cannot run on a pull request event. Start a docs or release flow from a comment on a plain issue. Update the caller workflow from the current template."
+            exit 1
+          fi
+
       - name: Resolve the review subprocess scrub for this runner
         if: inputs.mode == 'review'
         env:

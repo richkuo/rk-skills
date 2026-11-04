@@ -76,8 +76,12 @@ branch name.
 | `@claude review` | PR review (read-only, `LGTM` / `Needs Updates` format) | No |
 | `@claude <anything else>` on a PR | fix-pr: re-validate unaddressed feedback, fix what survives, fold in comment text as scope, disposition comment, re-review trigger | Yes (trusted-author PRs only) |
 | `@claude <anything>` on an issue | implement: validate, implement, PR via the issue-workflow prompt | Yes (trusted-author issues only; any other issue gets a fixed refusal comment and no agent run) |
-| `@claude sync-docs` / `@claude create-release` (hyphenated only) | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue or PR author only) |
-| `@claude sync-release` | docs/release flow, only after the candidate-list edit above | Scoped |
+| `@claude sync-docs` / `@claude create-release` (hyphenated only) on an issue | docs/release flows (needs `DOCS_RELEASE_ENABLED=true`) | Scoped (trusted issue author only) |
+| `@claude sync-release` on an issue | docs/release flow, only after the candidate-list edit above | Scoped (trusted issue author only) |
+
+The docs/release flows start only from a comment on a plain issue. On a PR,
+`sync-docs`, `create-release`, and `sync-release` are ordinary comment text, so
+the comment routes to fix-pr or review by the PR rules above.
 
 Model shorthand (`opus`, `sonnet`, `fable`, each also with a `5` suffix, e.g.
 `@claude opus5 review`) and `effort:low|medium|high|xhigh` are parsed from the
@@ -96,11 +100,16 @@ own model until you copy the template again.
 - **Two trust gates on every write route:** `classify` checks the commenter and
   the issue or PR author, and the `implement` and `fix-pr` jobs re-assert
   author trust (`OWNER`, `MEMBER`, `COLLABORATOR`, or `claude[bot]`) from the
-  event payload, so a `classify` bug cannot grant push. An issue or
-  docs/release flow whose author fails that check routes to the
-  `untrusted-issue` job, which has only `issues: write` and
-  `pull-requests: write`, runs no agent and no checkout, and posts one fixed
-  comment that interpolates no event field.
+  event payload, so a `classify` bug cannot grant push. The `implement` job
+  also refuses a PR comment. An issue or docs/release flow whose author fails
+  that check routes to the `untrusted-issue` job, which has only
+  `issues: write`, runs no agent and no checkout, and posts one fixed comment
+  that interpolates no event field.
+- **Flows run only on issues:** `claude.yml` detects a docs/release flow only
+  on a comment on a plain issue. The first step of `claude-run.yml` also fails
+  the job, before any checkout, when a flow or the `implement` route arrives on
+  a pull request event. That step protects a `claude.yml` copy that is not up
+  to date, because `claude-run.yml` is fetched from `@main` at run time.
 - **No-execution ban:** the agent never runs the project's code in any mode
   (no test suites, builds, type checks, or scripts). Allowlists carry no
   interpreters; CI owns checks.
