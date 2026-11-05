@@ -119,14 +119,14 @@ jobs:
 
           scrub_off() {
             if [ "$AUTHOR_TRUSTED" != "true" ]; then
-              echo "::error::Review refused: $1, so tool subprocesses could see the Claude credential, and the pull request author association is ${AUTHOR_ASSOC:-NONE}. A review of a pull request from an author outside OWNER, MEMBER, or COLLABORATOR runs only where the scrub is on. $2 Update the caller workflow from the current template."
+              echo "::error::Review refused: $1, so tool subprocesses could see the Claude credential, and the pull request author association is ${AUTHOR_ASSOC:-NONE}. A review of a pull request from an author outside OWNER, MEMBER, COLLABORATOR, or claude[bot] runs only where the scrub is on. $2 Update the caller workflow from the current template."
               exit 1
             fi
             echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
           }
 
           if [ "$SCRUB" != "true" ]; then
-            scrub_off "review_subprocess_scrub is false" "Remove review_subprocess_scrub: false from the review job (the default is true), or run this review on a GitHub-hosted or other ephemeral runner where the scrub works."
+            scrub_off "review_subprocess_scrub is false" "Remove review_subprocess_scrub: false from the review job (the default is true). This input turns the scrub off on every runner, so a GitHub-hosted runner gets the same refusal."
             echo "Review subprocess scrub off: review_subprocess_scrub is false."
           elif [ "$RUNNER_ENVIRONMENT" != "self-hosted" ]; then
             echo "Review subprocess scrub on: runner environment '${RUNNER_ENVIRONMENT:-unknown}'."
