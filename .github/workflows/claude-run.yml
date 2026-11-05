@@ -95,9 +95,38 @@ jobs:
         env:
           SCRUB: ${{ inputs.review_subprocess_scrub }}
           SCRUB_SELF_HOSTED: ${{ inputs.review_subprocess_scrub_self_hosted }}
+          ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          ISSUE_AUTHOR_ASSOC: ${{ github.event.issue.author_association }}
+          ISSUE_AUTHOR_LOGIN: ${{ github.event.issue.user.login }}
+          PR_AUTHOR_ASSOC: ${{ github.event.pull_request.author_association }}
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
         run: |
-          if [ "$SCRUB" != "true" ]; then
+          if [ -n "$ISSUE_PR_URL" ]; then
+            AUTHOR_ASSOC="$ISSUE_AUTHOR_ASSOC"
+            AUTHOR_LOGIN="$ISSUE_AUTHOR_LOGIN"
+          else
+            AUTHOR_ASSOC="$PR_AUTHOR_ASSOC"
+            AUTHOR_LOGIN="$PR_AUTHOR_LOGIN"
+          fi
+          AUTHOR_TRUSTED=false
+          case "$AUTHOR_ASSOC" in
+            OWNER|MEMBER|COLLABORATOR) AUTHOR_TRUSTED=true ;;
+          esac
+          if [ "$AUTHOR_LOGIN" = "claude[bot]" ]; then
+            AUTHOR_TRUSTED=true
+          fi
+          echo "Review pull request author association: ${AUTHOR_ASSOC:-NONE}, trusted: $AUTHOR_TRUSTED."
+
+          scrub_off() {
+            if [ "$AUTHOR_TRUSTED" != "true" ]; then
+              echo "::error::Review refused: $1, so tool subprocesses could see the Claude credential, and the pull request author association is ${AUTHOR_ASSOC:-NONE}. A review of a pull request from an author outside OWNER, MEMBER, or COLLABORATOR runs only where the scrub is on. $2 Update the caller workflow from the current template."
+              exit 1
+            fi
             echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
+          }
+
+          if [ "$SCRUB" != "true" ]; then
+            scrub_off "review_subprocess_scrub is false" "Remove review_subprocess_scrub: false from the review job (the default is true), or run this review on a GitHub-hosted or other ephemeral runner where the scrub works."
             echo "Review subprocess scrub off: review_subprocess_scrub is false."
           elif [ "$RUNNER_ENVIRONMENT" != "self-hosted" ]; then
             echo "Review subprocess scrub on: runner environment '${RUNNER_ENVIRONMENT:-unknown}'."
@@ -134,7 +163,7 @@ jobs:
               done
             fi
             if [ -n "$REASON" ]; then
-              echo "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0" >> "$GITHUB_ENV"
+              scrub_off "$REASON" "Run reviews of untrusted-author pull requests on a GitHub-hosted or other ephemeral runner, or set review_subprocess_scrub_self_hosted: true where the scrub works on this runner."
               echo "::warning::Review subprocess scrub off: $REASON, so the scrub sandbox would fail every Bash call. Tool subprocesses can see the Claude credential. Set review_subprocess_scrub_self_hosted: true to keep the scrub on."
             else
               echo "Review subprocess scrub on: this self-hosted runner has no layout known to break the scrub sandbox."
