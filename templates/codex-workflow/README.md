@@ -62,7 +62,9 @@ Only `codex.yml` is copied; everything else is fetched at run time. Then:
 `runs-on: self-hosted` and `runs_on: self-hosted` on all three routes. The five
 settings are independent (`runs_on` defaults to `ubuntu-latest` inside
 `codex-run.yml` when omitted); grep for `runs-on` and `runs_on` and keep all
-five in agreement.
+five in agreement. The Claude bundle sends reviews of untrusted-author PRs to
+`ubuntu-latest`. The Codex `review` route stays on `self-hosted` for every PR
+author, because Codex reviews in a read-only sandbox with no network.
 
 | Input | Default | Purpose |
 |-------|---------|---------|
