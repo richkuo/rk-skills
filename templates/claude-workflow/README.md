@@ -157,7 +157,14 @@ own model until you copy the template again.
   that is not up to date, because `claude-run.yml` is fetched from `@main`. To
   review such a PR, run the review on a GitHub-hosted or other ephemeral
   runner, or set `review_subprocess_scrub_self_hosted: true` where the scrub
-  works on that runner.
+  works on that runner. The check reads only the PR author. A review of a
+  trusted-author PR still reads text that other people write: comments, formal
+  reviews, and inline review comments, which any GitHub user can post on a
+  public repository, and commits from other people that the author includes.
+  Where the scrub is off, that text can carry a prompt injection while tool
+  subprocesses can see the Claude credential. To close that channel, keep the
+  scrub on, or run reviews on a GitHub-hosted or other ephemeral runner. #457
+  tracks a guard for it.
 - **Host changes on self-hosted Linux runners:** every review on a
   self-hosted Linux runner that keeps the scrub runs
   `sudo apt-get install bubblewrap socat` and
