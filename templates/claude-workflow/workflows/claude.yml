@@ -200,7 +200,7 @@ jobs:
       flow: ''
       model: ${{ needs.classify.outputs.model }}
       effort: ${{ needs.classify.outputs.effort }}
-      runs_on: ubuntu-latest
+      runs_on: ${{ needs.classify.outputs.pr_author_trusted == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
