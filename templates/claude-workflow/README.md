@@ -139,6 +139,8 @@ own model until you copy the template again.
   cause. GitHub-hosted runners and every other self-hosted layout keep the
   scrub. Pass `review_subprocess_scrub_self_hosted: true` to `claude-run.yml`
   in the `review` job to keep the scrub in those layouts anyway.
+  `claude-run.yml` still accepts `review_subprocess_scrub_off_accepted` so an
+  older caller that sets it keeps running, but it ignores the value.
 - **Host changes on self-hosted Linux runners:** every review on a
   self-hosted Linux runner that keeps the scrub runs
   `sudo apt-get install bubblewrap socat` and

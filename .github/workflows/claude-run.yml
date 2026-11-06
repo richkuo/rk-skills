@@ -57,6 +57,11 @@ on:
         required: false
         type: boolean
         default: false
+      review_subprocess_scrub_off_accepted:
+        description: 'Ignored. Kept only so a caller that sets it still runs. Every route ignores the value, and the scrub follows review_subprocess_scrub and review_subprocess_scrub_self_hosted alone.'
+        required: false
+        type: boolean
+        default: false
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         description: 'Claude Code OAuth token for agent authentication'
