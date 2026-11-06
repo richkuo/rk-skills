@@ -46,21 +46,12 @@ secret and the App, then remove `ANTHROPIC_API_KEY` when nothing else uses it.
 ## Customization inputs
 
 `claude.yml` ships with `classify` and `untrusted-issue` on
-`runs-on: self-hosted`, and with `runs_on: self-hosted` on the `implement` and
-`fix-pr` routes. The `review` route passes an expression: it selects
-`self-hosted` when the PR author is `OWNER`, `MEMBER`, `COLLABORATOR`, or
-`claude[bot]`, and `ubuntu-latest` for every other PR author. A GitHub-hosted
-runner is a fresh machine for each job and keeps the secret scrub (see Security
-model). The five settings are independent: each `runs-on:` is a plain job
-field, and each route's `runs_on:` is a `with:` input that defaults to
-`ubuntu-latest` inside `claude-run.yml` when omitted. Grep for `runs-on` and
-`runs_on` and keep all five `self-hosted` labels in agreement, including the
-one inside the `review` expression, or the routes fall back to hosted runners
-while `classify` keeps working. Replace the `ubuntu-latest` branch of the
-`review` expression only with the label of an isolated ephemeral runner: a
-fresh machine for each job that shares no host with the write routes. A
-repository with GitHub-hosted runners turned off must make that replacement;
-otherwise reviews of untrusted-author PRs stay queued and do not run.
+`runs-on: self-hosted` and `runs_on: self-hosted` on all three routes
+(`review`/`implement`/`fix-pr`). The five settings are independent: each
+`runs-on:` is a plain job field, and each route's `runs_on:` is a `with:` input
+that defaults to `ubuntu-latest` inside `claude-run.yml` when omitted. Grep for
+`runs-on` and `runs_on` and keep all five in agreement, or the routes fall back
+to hosted runners while `classify` keeps working.
 
 | Input | Default | Purpose |
 |-------|---------|---------|
@@ -123,8 +114,7 @@ own model until you copy the template again.
   (no test suites, builds, type checks, or scripts). Allowlists carry no
   interpreters; CI owns checks.
 - **Fail-closed routing:** anything ambiguous classifies as read-only review;
-  untrusted issue or PR authors never reach a push-capable route, and reviews
-  of their PRs run on `ubuntu-latest` instead of the self-hosted runner.
+  untrusted issue or PR authors never reach a push-capable route.
 - **No job token on disk during review:** the review route keeps the job token
   out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
@@ -148,28 +138,11 @@ own model until you copy the template again.
   can see the Claude credential, and the step emits a warning naming the
   cause. GitHub-hosted runners and every other self-hosted layout keep the
   scrub. Pass `review_subprocess_scrub_self_hosted: true` to `claude-run.yml`
-  in the `review` job to keep the scrub in those layouts anyway. The default
-  scrub-off applies only to PRs from a trusted author (`OWNER`, `MEMBER`,
-  `COLLABORATOR`, or `claude[bot]`, read from the event payload; an empty
-  association is untrusted). For any other PR author, `claude-run.yml` fails
-  the review with an `::error::` before any checkout and does not turn the
-  scrub off. That check protects every caller, including a `claude.yml` copy
-  that is not up to date, because `claude-run.yml` is fetched from `@main`. To
-  review such a PR, run the review on a GitHub-hosted or other ephemeral
-  runner, or set `review_subprocess_scrub_self_hosted: true` where the scrub
-  works on that runner. The check reads only the PR author. A review of a
-  trusted-author PR still reads text that other people write: comments, formal
-  reviews, and inline review comments, which any GitHub user can post on a
-  public repository, and commits from other people that the author includes.
-  Where the scrub is off, that text can carry a prompt injection while tool
-  subprocesses can see the Claude credential. To close that channel, keep the
-  scrub on, or run reviews on a GitHub-hosted or other ephemeral runner. #457
-  tracks a guard for it.
+  in the `review` job to keep the scrub in those layouts anyway.
 - **Host changes on self-hosted Linux runners:** every review on a
   self-hosted Linux runner that keeps the scrub runs
   `sudo apt-get install bubblewrap socat` and
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
   setting stays until the machine restarts. Pass
   `review_subprocess_scrub: false` in the `review` job to skip both; this also
-  turns off the scrub on every runner, so every review of an untrusted-author
-  PR then fails.
+  turns off the scrub on every runner.

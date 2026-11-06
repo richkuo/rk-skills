@@ -129,7 +129,7 @@ mkdir -p .github/workflows && \
   -o .github/workflows/claude.yml
 ```
 
-Then add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App. The workflow uses `self-hosted` runners; change `runs-on` and `runs_on` when you have none. A review of a PR whose author is not an `OWNER`, `MEMBER`, `COLLABORATOR`, or `claude[bot]` runs on `ubuntu-latest`. See the bundle [Install](./templates/claude-workflow/README.md#install) and [Customization inputs](./templates/claude-workflow/README.md#customization-inputs) sections.
+Then add the `CLAUDE_CODE_OAUTH_TOKEN` secret and install the Claude GitHub App. The workflow uses `self-hosted` runners; change `runs-on` and `runs_on` when you have none. See the bundle [Install](./templates/claude-workflow/README.md#install) and [Customization inputs](./templates/claude-workflow/README.md#customization-inputs) sections.
 
 Also included:
 
