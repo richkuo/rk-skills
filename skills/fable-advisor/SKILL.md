@@ -1,11 +1,11 @@
 ---
 name: fable-advisor
-description: Use when the user wants a task executed by the current session model with a persistent Fable 5.1 advisor overseeing it. A read-only Fable 5.1 subagent writes the plan and answers checkpoint consults; a separate fresh Fable 5.1 reviewer issues a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
+description: Use when the user wants a task executed by the current session model with a persistent Fable 5.2 advisor overseeing it. A read-only Fable 5.2 subagent writes the plan and answers checkpoint consults; a separate fresh Fable 5.2 reviewer issues a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
 ---
 
 # fable-advisor
 
-The main agent (the **executor**) builds. A persistent **Fable 5.1 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.1 reviewer** gives the binding pre-commit verdict. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
+The main agent (the **executor**) builds. A persistent **Fable 5.2 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.2 reviewer** gives the binding pre-commit verdict. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
 
 ## Input
 
@@ -13,7 +13,7 @@ An issue reference (URL, `#<N>`, `<N>`, `owner/repo#N`), a prose task, or both (
 
 ## Model check
 
-If the main agent already runs on Fable 5.1, say the advisor is redundant and ask whether to proceed, run the task directly, or switch to Sonnet first (`/model sonnet`).
+If the main agent already runs on Fable 5.2, say the advisor is redundant and ask whether to proceed, run the task directly, or switch to Sonnet first (`/model sonnet`).
 
 ## Steps
 
@@ -65,7 +65,7 @@ Each consult carries the question, the current diff or excerpt, and what was tri
 
 ### 6. Binding pre-commit review (fresh reviewer, never the advisor)
 
-Spawn a new one-shot Fable 5.1 reviewer (`subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at the step 2 tier, with the empty `--allowedTools` list on the shim path; record the model that served, the tier, and whether it was honored, per section 6) with the task, the final plan including deviations and overruled findings, the full diff, and the verification results. It reviews for correctness, safety, and plan conformance and returns **approve**, or **blocked** with numbered findings (file:line and a failure scenario), non-blocking suggestions kept separate.
+Spawn a new one-shot Fable 5.2 reviewer (`subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at the step 2 tier, with the empty `--allowedTools` list on the shim path; record the model that served, the tier, and whether it was honored, per section 6) with the task, the final plan including deviations and overruled findings, the full diff, and the verification results. It reviews for correctness, safety, and plan conformance and returns **approve**, or **blocked** with numbered findings (file:line and a failure scenario), non-blocking suggestions kept separate.
 
 The verdict is binding. On blocked, fix each finding or produce evidence it is wrong, then re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, or a `--resume` re-submit has failed twice, apply the step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user; the replacement reviewer is a new spawn. **Deadlock cap**: when the reviewer rejects the same finding's resolution twice, stop and let the user rule. Never drop a blocking finding. If the initial spawn of a reviewer, or of its replacement, fails twice, tell the user and ask whether to commit unreviewed.
 

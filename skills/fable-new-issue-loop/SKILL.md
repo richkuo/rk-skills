@@ -1,17 +1,17 @@
 ---
 name: fable-new-issue-loop
-description: Use when the user asks to have a Fable 5.1 subagent draft and file a GitHub issue, then autonomously drive it all the way to a reviewed PR in one shot — "fable-new-issue-loop", "fable create the issue and run it to completion". Runs fable-new-issue to create a fully-specified issue (drafted by a Fable 5.1 subagent), then hands the new issue's `owner/repo#N` reference to validate-issue-loop (validate → update → work-on-issue-loop) — stopping instead when a duplicate is found or the discussion hasn't converged on one issue.
+description: Use when the user asks to have a Fable 5.2 subagent draft and file a GitHub issue, then autonomously drive it all the way to a reviewed PR in one shot — "fable-new-issue-loop", "fable create the issue and run it to completion". Runs fable-new-issue to create a fully-specified issue (drafted by a Fable 5.2 subagent), then hands the new issue's `owner/repo#N` reference to validate-issue-loop (validate → update → work-on-issue-loop) — stopping instead when a duplicate is found or the discussion hasn't converged on one issue.
 ---
 
 # fable-new-issue-loop
 
-Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5.1 subagent drafts the issue, the main agent files it, and the loop drives it to a reviewed PR without a human in between.
+Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5.2 subagent drafts the issue, the main agent files it, and the loop drives it to a reviewed PR without a human in between.
 
 **This skill is `new-issue-loop` with a different front of the chain.** Follow the `new-issue-loop` skill for the full procedure: the complete-issue rule, the input contract, the stop gate, the handoff to validate-issue-loop (always the explicit `owner/repo#N` reference), the ownership of the `plan: yes` signal, the report format, and the Red Flags. Apply only the deltas below.
 
 ## Deltas from new-issue-loop
 
-- **Step 1, front of the chain.** Invoke the `fable-new-issue` skill (Skill tool, `skill: fable-new-issue`) in place of `new-issue`. Let it run its full process (Fable 5.1 subagent draft, duplicate gate, spot-check, filing) and capture the created issue from its report as `owner/repo#N` per new-issue-loop step 1.
+- **Step 1, front of the chain.** Invoke the `fable-new-issue` skill (Skill tool, `skill: fable-new-issue`) in place of `new-issue`. Let it run its full process (Fable 5.2 subagent draft, duplicate gate, spot-check, filing) and capture the created issue from its report as `owner/repo#N` per new-issue-loop step 1.
 - **Step 2, stop gate.** new-issue-loop's stop gate applies with one extra row for the Fable draft; the effective table:
 
 | Condition | Action |
@@ -22,5 +22,5 @@ Chain fable-new-issue → validate-issue-loop into one autonomous run: a Fable 5
 | The draft was structurally wrong and fable-new-issue paused for a human decision | **STOP.** Relay what is off. Do not file or re-dispatch on your own. |
 | The drafting dispatch failed a second time on the Agent path (`fable-dispatch` section 7) | **STOP.** Relay the failure report. Do not re-dispatch, and do not draft or file the issue yourself. |
 | The section 7 snapshot diff shows that the drafting subagent wrote | **STOP.** Relay the changed paths. Do not revert them, file, or continue on that tree; the user decides. |
-- **Step 4, report.** Mark the issue line as drafted by the model that served, as `fable-new-issue` recorded it (Fable 5.1 when Fable served). **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
+- **Step 4, report.** Mark the issue line as drafted by the model that served, as `fable-new-issue` recorded it (Fable 5.2 when Fable served). **Cap the whole report at 55 words and 5 sentences, plain simple English in ASD-STE100** — apply the Response Style rules in CLAUDE.md/AGENTS.md.
 - **One extra Red Flag.** Tempted to skip the Fable subagent and draft or file the issue yourself to go faster: never.
