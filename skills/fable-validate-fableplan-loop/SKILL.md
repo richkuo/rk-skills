@@ -45,4 +45,4 @@ fable-validate-loop's Red Flags table applies. Read its "only sanctioned skip is
 | Situation | Action |
 |---|---|
 | On Claude Code, about to build in the session, or to invoke `work-on-issue-loop` whole so that it builds | Dispatch the step 5 Opus 5.5 subagent, then enter the loop at its **PR opened** branch |
-| About to build a score below 50 at `high`, or a score of 50 or higher at `medium`, with no user request for that tier | Use the step 5 tier |
+| On Claude Code, about to build a score below 50 at `high`, or a score of 50 or higher at `medium`, with no user request for that tier | Use the step 5 tier |
