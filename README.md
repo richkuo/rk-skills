@@ -60,7 +60,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | `fable-new-issue-loop` | Runs `fable-new-issue`, then drives the issue to a reviewed PR. |
 | `fable-validate` | `validate-issue` run on a Fable 5.2 subagent; your session presents the verdict and acts on it. |
 | `fable-validate-loop` | Runs `fable-validate`, applies fixes, gets a Fable plan when score is 75 or higher, the code is safety-critical, or the issue stamps `plan first: Yes`, then drives to a reviewed PR. |
-| `fable-validate-fableplan-loop` | Same, with an unconditional Fable plan. |
+| `fable-validate-fableplan-loop` | Same, with an unconditional Fable plan. On Claude Code, an Opus 5.5 subagent builds at `medium` effort below score 50 and `high` from 50; other harnesses use the session build. |
 | `fable-validate-fableplan` | Fable validates, fixes are applied, a Fable plan is posted, and it stops there. |
 | `validate-fableplan-loop` | Validates on the session's own model, brings in Fable for planning at score 75 or higher, when safety-flagged, or when the issue stamps `plan first: Yes`, then drives to a reviewed PR. |
 | `fableplan-work-on-issue` | Fable plans, `work-on-issue` builds and opens the PR. No validation, no review loop. |
