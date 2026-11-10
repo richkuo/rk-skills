@@ -1,11 +1,11 @@
 ---
 name: fable-new-issue
-description: Use when the user wants a GitHub issue created by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a fully-composed issue draft, which the main agent spot-checks and files. Trigger on "/fable-new-issue", "fable new issue <description>", or "create this issue with fable".
+description: Use when the user wants a GitHub issue created by a Fable 5.2 subagent. Spins up a read-only subagent running on Fable 5.2 that executes the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a fully-composed issue draft, which the main agent spot-checks and files. Trigger on "/fable-new-issue", "fable new issue <description>", or "create this issue with fable".
 ---
 
 # fable-new-issue
 
-Delegate issue drafting to a **Fable 5.1** subagent, then file it from the main agent. The subagent only researches and composes. It never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
+Delegate issue drafting to a **Fable 5.2** subagent, then file it from the main agent. The subagent only researches and composes. It never files, edits files, or posts to GitHub; the main agent handles filing and all follow-on actions.
 
 ## Input
 
@@ -28,7 +28,7 @@ Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the input is conversation-derived, write the scratchpad summary now (see Input). Do NOT pre-research or pre-draft the issue yourself; the subagent owns steps 1–6 of the procedure up to (but not including) the `gh issue create` call.
 
-### 2. Dispatch the Fable 5.1 drafting subagent
+### 2. Dispatch the Fable 5.2 drafting subagent
 
 **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 

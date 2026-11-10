@@ -1,14 +1,14 @@
 ---
 name: validate-fableplan-loop
 description: >-
-  Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.1 implementation plan (skipped only when the verdict's title-floored signal reads `plan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid, or when the issue edit does not land. The non-Fable-validation counterpart to fable-validate-loop.
+  Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.2 implementation plan (skipped only when the verdict's title-floored signal reads `plan: no`, which means the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp in the issue's Execution block), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid, or when the issue edit does not land. The non-Fable-validation counterpart to fable-validate-loop.
 ---
 
 # validate-fableplan-loop
 
 Chain validate-issue → (conditional) update issue → (conditional) fableplan → work-on-issue-loop into one autonomous run.
 
-This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.1 subagent.
+This is **fable-validate-loop with validation run through the plain `validate-issue` skill** on your session model instead of a Fable 5.2 subagent.
 
 **Do not skip or reorder the chain.** Validation gates planning, and the plan gates implementation. The only sanctioned skip is fable-validate-loop step 4's score gate, which step 4 below applies unchanged. Every other step of each skill still runs; only the "wait for the user's reply" moments are replaced by the decision rules in the cited steps.
 
@@ -26,7 +26,7 @@ Follow **fable-validate-loop steps 1 through 6** with these changes:
 
 **Step 3 (update-issue edits):** apply validate-issue's step 11 (this chain has no fable-validate step), from the current checkout (no worktree for issue edits, per validate-issue step 0), with fable-validate-loop step 3's read-back and STOP row unchanged. The stacked attribution line is `Validated with LLM: <session model> | <session tier> | Harness: <harness> | validate-fableplan-loop`, naming the session model and tier that ran the validation.
 
-**Step 4 (fableplan):** fable-validate-loop step 4's score gate, safety carve-out, stamped plan flag, and top-band note apply, except that here the posted plan is the only Fable 5.1 stage: validation runs on the session model. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
+**Step 4 (fableplan):** fable-validate-loop step 4's score gate, safety carve-out, stamped plan flag, and top-band note apply, except that here the posted plan is the only Fable 5.2 stage: validation runs on the session model. When fableplan runs, give the planning subagent the validation findings (the verdict block and validate-issue's report) alongside the issue, and instruct fableplan to use the harness suffix `validate-fableplan-loop` in the posted comment's attribution footer.
 
 **Step 5 (handoff)** applies unchanged — including that deviations follow `work-on-issue` step 2's plan-deviation policy and must each be named in the PR body.
 
