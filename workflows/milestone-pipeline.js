@@ -1147,9 +1147,7 @@ function planPrompt(issue, validation, planEffort, planModel) {
   const constraints = (validation.implementation_constraints || []).length
     ? `\nHard constraints from validation:\n${validation.implementation_constraints.map((c) => `- ${c}`).join('\n')}\n`
     : ''
-  const issueplanRules = planModel === 'opus'
-    ? ` Write the plan to the \`issueplan\` skill's plan rules (its step 2), sized to the task: trace the behavior through code, callers, and tests read-only, and keep existing mechanisms apart from proposed additions; tie behavior and scope to each acceptance criterion; name the affected files, approach, dependencies, and material correctness or safety risks; and list regression cases and required project checks, with proposed checks kept apart from checks already run, and any verification blocker. Before you post, check the plan against the code: every existing path and symbol is real, every addition is labeled, and every verification command matches the project's tools.`
-    : ''
+  const issueplanRules = ` Write the plan to the \`issueplan\` skill's plan rules (its step 2), sized to the task: trace the behavior through code, callers, and tests read-only, and keep existing mechanisms apart from proposed additions; tie behavior and scope to each acceptance criterion; name the affected files, approach, dependencies, and material correctness or safety risks; and list regression cases and required project checks, with proposed checks kept apart from checks already run, and any verification blocker. Before you post, check the plan against the code: every existing path and symbol is real, every addition is labeled, and every verification command matches the project's tools.`
   return `You are a read-only planning agent on ${planModelName} in this repo. GitHub issue #${issue} is flagged "plan first" — the design is the hard part and a separate builder will implement your plan.
 
 Validation summary: ${validation.skipped ? `${SKIPPED_VALIDATION_STATEMENT} ${validation.summary}` : validation.summary}
