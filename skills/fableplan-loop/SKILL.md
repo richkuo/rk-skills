@@ -1,12 +1,12 @@
 ---
 name: fableplan-loop
 description: >-
-  Use when the user wants a GitHub issue planned by Fable 5.1 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5.1 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
+  Use when the user wants a GitHub issue planned by Fable 5.2 and then autonomously driven to a reviewed PR in one shot, without validation — "fableplan-loop", "fableplan #N and loop until approved", "plan #N with fable then drive it to a reviewed PR". Runs the fableplan planning phase (Fable 5.2 produces and posts an implementation plan to the issue), then hands off to work-on-issue-loop, which implements the plan in an isolated worktree, opens a PR, triggers @claude review, and fix-pr-review cycles until convergence. The review-loop counterpart of fableplan-work-on-issue, and validate-fableplan-loop with the validation stage removed.
 ---
 
 # fableplan-loop
 
-Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5.1 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
+Chain fableplan → work-on-issue-loop into one autonomous run: Fable 5.2 plans the implementation for a GitHub issue (plan posted to the issue), then work-on-issue-loop implements that plan in an isolated worktree, opens a PR that closes the issue, and drives the PR through `@claude` review to convergence.
 
 It has no `validate-issue` step, no update-issue edits, and no score gate: fableplan always runs.
 

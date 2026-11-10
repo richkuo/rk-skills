@@ -1,11 +1,11 @@
 ---
 name: fable-validate
-description: Use when the user wants a GitHub issue validated by a Fable 5.1 subagent. Spins up a read-only subagent running on Fable 5.1 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
+description: Use when the user wants a GitHub issue validated by a Fable 5.2 subagent. Spins up a read-only subagent running on Fable 5.2 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
 ---
 
 # fable-validate
 
-Delegate issue validation to a **Fable 5.1** subagent, then act on its verdict in the main agent. The subagent only validates — it never edits files or the issue; the main agent handles all follow-on actions.
+Delegate issue validation to a **Fable 5.2** subagent, then act on its verdict in the main agent. The subagent only validates — it never edits files or the issue; the main agent handles all follow-on actions.
 
 ## Input
 
@@ -29,7 +29,7 @@ Record the absolute path. If none of these resolves, stop and tell the user.
 
 If the user referenced an issue, note the number and repository, but do NOT read or pre-validate the issue text yourself; the subagent owns steps 0 to 8 of the procedure, including the issue read. If no issue was referenced, resolve it from this session per validate-issue's input rule before dispatch; with none, stop and ask. The subagent never picks an issue itself. Then, before dispatch, on every path, in this order: when `REPO` (per `fable-dispatch` section 3) is the checkout's `origin`, run the `fable-dispatch` section 3 caller-run fetch; then run the `fable-dispatch` section 7 snapshot; then run validate-issue step 1's timeline query yourself (`gh api --paginate "repos/<owner>/<repo>/issues/<N>/timeline"` with that step's `--jq` filter). Embed its output in the prompt inside the section 7 untrusted-data block, with one line telling the subagent to take it as step 1's timeline result and never to run `gh api`; `fable-dispatch` section 3 keeps `gh api` off every allowlist. A failed timeline query is embedded as that failure, which step 1 reports under Concerns.
 
-### 2. Dispatch the Fable 5.1 validation subagent
+### 2. Dispatch the Fable 5.2 validation subagent
 
 **Load the `fable-dispatch` skill before dispatching**: it owns the dispatch path and the dispatch-hygiene rules in its section 7 (read-only prompt, snapshot/diff, retry once then report). Dispatch per its ladder; on the Agent-tool path, call the Agent tool with:
 
@@ -45,11 +45,11 @@ If the user referenced an issue, note the number and repository, but do NOT read
 
 On every path, when `REPO` is the checkout's `origin`, step 1 has already run the `fable-dispatch` section 3 caller-run fetch before the snapshot. Tell the subagent it is done: it executes steps 0 through 8 exactly except that fetch, which it skips, and it never runs `git fetch`. On the shim, the `--allowedTools` list is the `fable-validate` example in `fable-dispatch` section 3, and `--add-dir` names the directories that section gives for the recorded SKILL.md path; the prompt lists each allowed `gh` command verbatim, as that section states. When `REPO` is another repository, add the cross-repository clone entries and directory from that section.
 
-When the result arrives, run the section 7 snapshot diff, then record the result's `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue steps 11 and 13 use. Also **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6: the model is `Fable 5.1` on the Agent path unless the ladder substituted another, and on the shim path the model section 5 finds dominant in `.modelUsage`; the tier is the one passed per section 2 (`--effort` on the shim). Never guess another tier. Step 5's footer and every chain footer use these recorded values. Save the verdict verbatim to a scratchpad file immediately.
+When the result arrives, run the section 7 snapshot diff, then record the result's `Issue updatedAt` as this session's validation read time, which `work-on-issue` step 0 and validate-issue steps 11 and 13 use. Also **record the model that served, the tier, and whether the tier was honored**, per `fable-dispatch` section 6: the model is `Fable 5.2` on the Agent path unless the ladder substituted another, and on the shim path the model section 5 finds dominant in `.modelUsage`; the tier is the one passed per section 2 (`--effort` on the shim). Never guess another tier. Step 5's footer and every chain footer use these recorded values. Save the verdict verbatim to a scratchpad file immediately.
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims, and every Evidence citation of a `Close issue?` verdict, resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.1 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims, and every Evidence citation of a `Close issue?` verdict, resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.2 or proceed.
 
 ### 4. Relay the verdict to the user
 
@@ -67,6 +67,6 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 
 ## Notes
 
-- The dispatch requests Fable 5.1 with `model: fable`, whatever the main agent's model. A harness can map `fable` to another model with no error, so `fable-dispatch` sections 1 and 5 detect a substitution, and the footer names the model that served.
+- The dispatch requests Fable 5.2 with `model: fable`, whatever the main agent's model. A harness can map `fable` to another model with no error, so `fable-dispatch` sections 1 and 5 detect a substitution, and the footer names the model that served.
 - One subagent, one verdict: don't fan out or re-run for a second opinion unless the user asks.
 - If the user's reference turns out not to be fetchable (wrong number, no auth), the subagent will report that per the procedure — relay it; never validate against a paraphrase.

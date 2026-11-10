@@ -171,7 +171,7 @@ if (SKIP_VALIDATE_INPUT === true) {
 }
 
 const MODEL_IDS = { 'fable': 'fable', 'opus': 'opus', 'sonnet': 'sonnet', 'haiku': 'haiku' }
-const MODEL_NAMES = { fable: 'Fable 5.1', opus: 'Opus 5.5', sonnet: 'Sonnet 5.5', haiku: 'Haiku 4.5' }
+const MODEL_NAMES = { fable: 'Fable 5.2', opus: 'Opus 5.5', sonnet: 'Sonnet 5.5', haiku: 'Haiku 4.5' }
 
 const CLI_HARNESSES = {
   codex: {
@@ -443,11 +443,11 @@ const PREP_SCHEMA = {
           number: { type: 'integer' },
           title: { type: 'string', description: 'The issue title EXACTLY as gh issue view --json title reports it, including any [C<score>] prefix — the runtime reconciles the reported complexity against this prefix, so a shortened or reworded title makes a scored issue look unscored' },
           complexity: { type: 'integer', minimum: 0, description: 'The integer from the [C<score>] title prefix — a literal [C0] is a real score of 0; OMIT this field entirely when the title carries no [C..] prefix, because absence is how the runtime tells an unscored issue from a genuinely zero-scored one' },
-          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor'], description: 'From "Build model:" — Fable 5.1→fable, Opus 5.5→opus, etc.; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor' },
+          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku', 'codex', 'cursor'], description: 'From "Build model:" — Fable 5.2 (any Fable version)→fable, Opus 5.5→opus, etc.; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor' },
           build_model_name: { type: 'string', description: 'For codex/cursor only: the display name before the parenthetical, e.g. "Luna" from "Luna (Codex CLI)"; OMIT for Claude models' },
           cli_model: { type: 'string', description: 'For codex/cursor only: the explicit CLI model id after the comma inside the parenthetical, e.g. "gpt-5.6-luna" from "Luna (Codex CLI, gpt-5.6-luna)"; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from "Effort:"; a Claude build runs only at high and max is Codex CLI-only — runtime normalizes every non-high tier to high on Claude models, Fable included, and max→xhigh on Cursor' },
-          validate_model: { type: 'string', enum: ['fable', 'opus', 'codex', 'cursor'], description: 'From an optional "Validate model:" line — Fable 5.1→fable, Opus 5.5→opus; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
+          validate_model: { type: 'string', enum: ['fable', 'opus', 'codex', 'cursor'], description: 'From an optional "Validate model:" line — Fable 5.2 (any Fable version)→fable, Opus 5.5→opus; a parenthetical "(Codex CLI…)"→codex, "(Cursor CLI…)"→cursor. OMIT when absent, because absence is how the runtime tells a stamped model from the [C..] band default' },
           validate_model_name: { type: 'string', description: 'For a codex/cursor validate only: the display name before the parenthetical, e.g. "Astra" from "Astra (Codex CLI, gpt-6-astra)"; OMIT for Claude models' },
           validate_cli_model: { type: 'string', description: 'For a codex/cursor validate only: the explicit CLI model id after the comma inside the parenthetical; OMIT when the parenthetical carries no id — the runtime resolves a default only for names it knows' },
           validate_effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'Raw tier from an optional "Validate effort:" line — OMIT when absent, because absence is how the runtime tells a stamped tier from the [C..] band default. Preserve the tier verbatim; the runtime raises low to high on a non-Fable Claude validate (low is a Fable-only tier), and max is a Codex CLI-only tier' },
@@ -1400,7 +1400,7 @@ const prep = await agent(
   `You are a read-only prep agent in this repo. For each GitHub issue number in this list: ${ALL_ISSUES.join(', ')} — run \`gh issue view <n> --json title,body\` and extract:
 - title: the issue title EXACTLY as \`gh issue view --json title\` reports it, including any [C<score>] prefix. Never shorten, reword, or strip the prefix: the runtime reconciles the complexity you report against this title, so a trimmed title makes a scored issue look unscored and routes the whole run to the most expensive band
 - complexity: the integer from the [C<score>] title prefix. A literal [C0] is a real score of 0. When the title carries NO [C..] prefix at all, OMIT the field rather than sending 0 — the runtime treats absence as "unknown complexity" and routes it to the top band, and a filled-in 0 would claim the issue is the smallest possible change
-- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.1"→fable, "Opus 5.5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
+- model: from the "## Execution" block's "**Build model:**" line — map "Fable 5.2" (any Fable version, such as an older "Fable 5.1" stamp)→fable, "Opus 5.5" (any Opus)→opus, Sonnet→sonnet, Haiku→haiku. When the line carries a parenthetical naming an external harness — "Luna (Codex CLI)", "Grok (Cursor CLI, cursor-grok-4.6-high)" — map "(Codex CLI…)"→codex and "(Cursor CLI…)"→cursor, set build_model_name to the name before the parenthetical (e.g. "Luna"), and set cli_model to the id after the comma inside the parenthetical when one is present; OMIT cli_model when the parenthetical carries no id, and OMIT both fields for Claude models
 - effort: from "**Effort:**" — one of low/medium/high/xhigh/max; a Claude build runs only at high and max is a Codex CLI-only tier, preserve them verbatim (including on another model) so the runtime can identify and normalize stale combinations
 - plan_effort: from an optional "**Plan effort:**" line — one of low/medium/high/xhigh. When the line is absent, OMIT the field — absence means the plan stage runs at its default tier. Preserve a stamped tier verbatim, xhigh included, so the runtime can normalize it and log the change. Never read a model from this line
 - plan_model: from an optional "**Plan model:**" line — map "Fable 5.1"→fable and "Opus 5.5" (any Opus)→opus. When the line is absent, OMIT the field — absence means the plan stage runs on its score-based default model. Never read a model from the "Plan effort:" line
@@ -1456,7 +1456,7 @@ const normalizedIssues = prep.issues.map((issue) => {
   if (isCliHarness(normalized.validate_model)) {
     const harness = CLI_HARNESSES[normalized.validate_model]
     if (!CLI_VALIDATE_HARNESSES.has(normalized.validate_model)) {
-      normalized.validate_cli_error = `Validate model "${normalized.validate_model_name || normalized.validate_model}" on the ${harness.label} is not supported — a validate pass runs only on the Codex CLI, whose read-only file sandbox blocks every file write while gh keeps network access, and Cursor has no write boundary; stamp "Validate model:" as Fable 5.1, Opus 5.5, or "<Name> (Codex CLI, <model-id>)"`
+      normalized.validate_cli_error = `Validate model "${normalized.validate_model_name || normalized.validate_model}" on the ${harness.label} is not supported — a validate pass runs only on the Codex CLI, whose read-only file sandbox blocks every file write while gh keeps network access, and Cursor has no write boundary; stamp "Validate model:" as Fable 5.2, Opus 5.5, or "<Name> (Codex CLI, <model-id>)"`
       log(`#${normalized.number}: ${normalized.validate_cli_error}`)
     }
     if (!normalized.validate_effort) normalized.validate_effort = 'high'

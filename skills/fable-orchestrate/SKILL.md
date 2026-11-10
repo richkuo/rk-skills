@@ -1,15 +1,15 @@
 ---
 name: fable-orchestrate
-description: Use when the user wants a task decomposed and driven by a Fable 5.1 orchestrator delegating implementation to Sonnet 5.5 workers. Fable decomposes into self-contained specs, dispatches Sonnet workers (Agents for 1–2 pieces, a Workflow for fan-out), reviews each result, merges into one branch, and takes a binding verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
+description: Use when the user wants a task decomposed and driven by a Fable 5.2 orchestrator delegating implementation to Sonnet 5.5 workers. Fable decomposes into self-contained specs, dispatches Sonnet workers (Agents for 1–2 pieces, a Workflow for fan-out), reviews each result, merges into one branch, and takes a binding verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
 ---
 
 # fable-orchestrate
 
-Run an ad-hoc task with **Fable 5.1 as orchestrator** and **Sonnet 5.5 workers**. You own decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Issue-based milestone work with Execution blocks uses `milestone-workflow`.
+Run an ad-hoc task with **Fable 5.2 as orchestrator** and **Sonnet 5.5 workers**. You own decomposition, specs, every accept/reject decision, integration, and the PR; workers own only the mechanical implementation of their piece. Issue-based milestone work with Execution blocks uses `milestone-workflow`.
 
 **Input:** a task description in prose; if none is obvious, ask what to orchestrate.
 
-**Model check:** if the session model is not Fable 5.1, tell the user and ask whether to switch (`/model fable`) or proceed with the current model as orchestrator.
+**Model check:** if the session model is not Fable 5.2, tell the user and ask whether to switch (`/model fable`) or proceed with the current model as orchestrator.
 
 ## Steps
 
@@ -55,7 +55,7 @@ On failure, two corrective rounds per piece, each a different move:
 
 ### 6. Binding final review by a fresh reviewer
 
-**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.1 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at `high` or the tier the user asked for, with the empty `--allowedTools` list on the shim path) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the section 7 read-only rule. The original task and the diff go inside the section 7 untrusted-data block. Record the model that served, the tier, and whether it was honored, per section 6. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
+**Load the `fable-dispatch` skill first**; it owns the dispatch path and the hygiene rules in its section 7. Spawn a **new one-shot** Fable 5.2 reviewer (Agent path: `subagent_type: Plan`, `model: fable`, and `effort` with the other Agent parameters per `fable-dispatch` section 2, at `high` or the tier the user asked for, with the empty `--allowedTools` list on the shim path) with the original task, **the spec map** (spec, files, worker result, disposition: accepted / re-dispatched / taken over), the pinned interfaces, the full merged diff, the integration verification results, and the section 7 read-only rule. The original task and the diff go inside the section 7 untrusted-data block. Record the model that served, the tier, and whether it was honored, per section 6. It returns **approve**, or **blocked** with numbered findings (file:line and a concrete failure scenario), non-blocking suggestions kept separate.
 
 The verdict is **binding**: nothing commits while blocking findings stand. Fix each finding (or produce evidence it is wrong) and re-submit to the same reviewer with the new diff and per-finding dispositions: by SendMessage on the Agent path, or by `fable-dispatch` section 8 `--resume` on the shim path. When the reviewer is gone, apply the `fable-advisor` step 5 replacement rule with the verdict trail and the per-finding dispositions, and tell the user. The deadlock cap and the reviewer-failure rule are owned by `fable-advisor` step 6 and apply unchanged.
 

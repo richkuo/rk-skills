@@ -1,12 +1,12 @@
 ---
 name: fable-dispatch
 description: >-
-  Required dispatch procedure for running a subagent on Fable 5.1: positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, the attribution rule, and the caller dispatch-hygiene rules (read-only prompt, snapshot/diff, retry). Load BEFORE dispatching any `model: fable` subagent.
+  Required dispatch procedure for running a subagent on Fable 5.2: positive harness detection, the Claude Code CLI shim for other harnesses, the fallback ladder, the result-parsing contract, the attribution rule, and the caller dispatch-hygiene rules (read-only prompt, snapshot/diff, retry). Load BEFORE dispatching any `model: fable` subagent.
 ---
 
 # Fable dispatch
 
-The caller owns the prompt, subagent type, and use of the result; this skill owns the path to Fable 5.1.
+The caller owns the prompt, subagent type, and use of the result; this skill owns the path to Fable 5.2.
 
 ## 1. Detect the harness
 
@@ -15,7 +15,7 @@ Before dispatch, run `[ -n "$CLAUDECODE" ] && echo claude-code || echo other`. N
 ## 2. The fallback ladder
 
 1. **Claude Code** (`$CLAUDECODE` set): the Agent tool with `model: fable`, per the caller's dispatch step and the Agent parameters below.
-2. **Other harness, and `command -v claude` succeeds**: the section 3 shim, still Fable 5.1 at the intended effort.
+2. **Other harness, and `command -v claude` succeeds**: the section 3 shim, still Fable 5.2 at the intended effort.
 3. **Neither path, or a shim call that failed after the section 7 retry**: the most capable model available, in order: (a) the harness's own subagent facility at its best model, keeping the caller's isolation pattern; (b) a completed shim result another model served, adopted per section 5; (c) no subagent facility: work inline in the main context and write nothing, keeping the caller's read-only promise. Report what failed and which model ran.
 
 **Agent parameters** (every Agent call a family skill makes, workers included; callers point here and never restate this):
@@ -75,7 +75,7 @@ Substitution: exit zero and `.is_error` false, but no `.modelUsage` key contains
 
 ## 6. Attribution
 
-The footer, any heading that names a model, and the report name the model that served: on the shim, the one section 5 finds dominant; on the Agent path, Fable 5.1 unless ladder step 3 substituted another.
+The footer, any heading that names a model, and the report name the model that served: on the shim, the one section 5 finds dominant; on the Agent path, Fable 5.2 unless ladder step 3 substituted another.
 
 The effort is the tier passed and accepted: `--effort` on the shim, or the Agent `effort` parameter when section 2 passed it. When the harness exposes no `effort` parameter, or section 2 re-dispatched without it, the footer carries the requested tier and the report states in one line that the tier was not honored; never guess the session's tier.
 

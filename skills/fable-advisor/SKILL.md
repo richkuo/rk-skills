@@ -1,11 +1,11 @@
 ---
 name: fable-advisor
-description: Use when the user wants a task executed by the current session model with a persistent Fable 5.1 advisor overseeing it. A read-only Fable 5.1 subagent writes the plan and answers checkpoint consults; a separate fresh Fable 5.1 reviewer issues a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
+description: Use when the user wants a task executed by the current session model with a persistent Fable 5.2 advisor overseeing it. A read-only Fable 5.2 subagent writes the plan and answers checkpoint consults; a separate fresh Fable 5.2 reviewer issues a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
 ---
 
 # fable-advisor
 
-The main agent (the **executor**) builds. A persistent **Fable 5.1 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.1 reviewer** gives the binding pre-commit verdict. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
+The main agent (the **executor**) builds. A persistent **Fable 5.2 advisor** subagent writes the plan and answers checkpoint consults. A **separate fresh Fable 5.2 reviewer** gives the binding pre-commit verdict. Never merge the two roles. An issue task runs `work-on-issue`'s pipeline; a prose task takes a lighter path.
 
 ## Input
 
@@ -13,7 +13,7 @@ An issue reference (URL, `#<N>`, `<N>`, `owner/repo#N`), a prose task, or both (
 
 ## Model check
 
-If the main agent already runs on Fable 5.1, say the advisor is redundant and ask whether to proceed, run the task directly, or switch to Sonnet first (`/model sonnet`).
+If the main agent already runs on Fable 5.2, say the advisor is redundant and ask whether to proceed, run the task directly, or switch to Sonnet first (`/model sonnet`).
 
 ## Steps
 
