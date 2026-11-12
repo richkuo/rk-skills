@@ -10,7 +10,7 @@ the Codex twin and documents only what differs from this file.
 | Path | Purpose |
 |------|---------|
 | `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`, and an `untrusted-issue` job that posts a fixed refusal comment. |
-| `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body, called via `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@main`. Resolves the model id and effort, and fetches the prompts and scripts below from rk-skills at run time, so an rk-skills update reaches every consumer on its next run. |
+| `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body. Call it with `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@<40-character commit>`. That commit supplies the prompts, the scripts, and the `rk-skills` plugin. The plugin commit in the pinned revisions section supplies `code-review` and `claude-md-management`. A caller that still uses `@main` runs the moving branch tip. |
 | `prompts/*.md` | One prompt per route, fetched at run time. Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
 | `scripts/` | Comment patch/compose helpers. |
 
@@ -22,7 +22,8 @@ mkdir -p .github/workflows
 cp /tmp/rk-skills/templates/claude-workflow/workflows/claude.yml .github/workflows/
 ```
 
-Only `claude.yml` is copied; everything else is fetched at run time. Then:
+Only `claude.yml` is copied. The run fetches the rest from the pinned commits
+in the pinned revisions section. Then:
 
 1. Add the `CLAUDE_CODE_OAUTH_TOKEN` secret. Write-capable routes authenticate
    as the Claude GitHub App (`claude[bot]`), so install the app on the repo.
@@ -88,9 +89,10 @@ Model shorthand (`opus`, `sonnet`, `fable`, each also with a `5` suffix, e.g.
 comment. `opus`/`opus5` and no shorthand both select Opus 5.5; no effort keeps
 `high`. Review events (formal reviews, inline comments) always stay read-only.
 `claude.yml` passes the shorthand and effort on as written, and `claude-run.yml`
-maps them to a model id, so a model change in rk-skills reaches every consumer
-on its next run. An older `claude.yml` that still passes `model_id` keeps its
-own model until you copy the template again.
+maps them to a model id. A caller pinned to a commit keeps that commit's model
+map until the pin moves. A caller on `@main` receives a model-map change on its
+next run. An older `claude.yml` that still passes `model_id` keeps its own
+model until you copy the template again.
 
 ## Security model
 
@@ -108,8 +110,8 @@ own model until you copy the template again.
 - **Flows run only on issues:** `claude.yml` detects a docs/release flow only
   on a comment on a plain issue. The first step of `claude-run.yml` also fails
   the job, before any checkout, when a flow or the `implement` route arrives on
-  a pull request event. That step protects a `claude.yml` copy that is not up
-  to date, because `claude-run.yml` is fetched from `@main` at run time.
+  a pull request event. A caller pinned to a commit has the refusal in that
+  commit. A caller on `@main` has the refusal on the branch tip.
 - **No-execution ban:** the agent never runs the project's code in any mode
   (no test suites, builds, type checks, or scripts). Allowlists carry no
   interpreters; CI owns checks.
@@ -148,3 +150,60 @@ own model until you copy the template again.
   setting stays until the machine restarts. Pass
   `review_subprocess_scrub: false` in the `review` job to skip both; this also
   turns off the scrub on every runner.
+
+## Pinned revisions
+
+The maintainer of `richkuo/rk-skills` owns these pins. The run checks out this
+repository at `job.workflow_sha`, which is the full commit of the called
+workflow file. That commit supplies the prompts, the scripts, and the
+`rk-skills` plugin. The workflow file cannot store its own commit id. A caller
+pin selects it. The run checks out `anthropics/claude-plugins-official` at the
+commit in the table below and copies `code-review` and `claude-md-management`
+from that tree into a local marketplace named `rk-pinned-claude-plugins`. Both
+agent passes install `code-review` from that marketplace. The documentation
+pass also installs `claude-md-management` from it. The primary pass installs
+`rk-skills` from the called workflow commit.
+
+A missing commit id, a failed checkout, a checkout whose commit does not match,
+or a required plugin source that is not a relative path inside its pinned tree
+stops the job. The run does not substitute a branch or a tag.
+
+Claude Code refuses a local marketplace whose name is `claude-plugins-official`.
+The `code-review` entry in `anthropics/claude-code` is a git subdirectory of
+`anthropics/claude-plugins-official` at `ref: main` with no commit id. The run
+does not add either of those marketplace URLs.
+
+`templates/claude-workflow/workflows/claude.yml` and
+`.github/workflows/claude.yml` in this repository still call `@main`. Copy the
+template, then replace `@main` with the full commit you reviewed. An `@main`
+caller runs the moving branch tip, so the workflow file and the same-repository
+assets move together and are not frozen.
+
+This repository is public. A public caller may use this public reusable
+workflow. Do not move the workflow to a private repository to satisfy a pin.
+If this repository becomes private, fix access before the next caller change.
+Do not point a caller at a branch to keep a private workflow reachable.
+
+| Source | Version | Commit |
+|--------|---------|--------|
+| Prompts, scripts, and the `rk-skills` plugin | The commit the caller pins | `job.workflow_sha` for that run |
+| `anthropics/claude-plugins-official` (`code-review`, `claude-md-management`) | No release tag. Snapshot of `main` on 2026-11-12. | `e0ab6e51219eef74e417a0e1d89e5d53e5e763d4` |
+
+Record a new mapping in this table. Do not add the version as a comment in the
+workflow file.
+
+### Update procedure
+
+1. Read the upstream change. For the plugin pin, open the commit and confirm
+   that `code-review` and `claude-md-management` each have a relative source
+   path and that those directories are present.
+2. Confirm this repository is still public, and that a public caller can still
+   use the reusable workflow.
+3. Put the new plugin commit in `.github/workflows/claude-run.yml` and in the
+   table above. Move the two together.
+4. Confirm a bad commit id, a failed checkout, and a non-local plugin source
+   each stop the job, and that no step assigns a branch or a tag as a fallback.
+5. Run the review, implement, and fix-pr routes on a controlled change. Confirm
+   the inputs, the permissions, and the author gates are unchanged.
+6. To roll back, restore the previous plugin commit in the workflow and in the
+   table, then move each caller pin back to the previous workflow commit.
