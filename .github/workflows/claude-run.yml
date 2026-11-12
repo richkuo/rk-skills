@@ -162,22 +162,199 @@ jobs:
           git config --worktree "credential.${GITHUB_SERVER_URL}.helper" ""
           git config --worktree --add "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
 
+      - name: Resolve immutable runtime revisions
+        id: runtime_sources
+        env:
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          PLUGINS_OFFICIAL_SHA: e0ab6e51219eef74e417a0e1d89e5d53e5e763d4
+        run: |
+          set -euo pipefail
+          require_sha() {
+            name="$1"
+            value="$2"
+            if ! printf '%s' "$value" | grep -qxE '[0-9a-f]{40}'; then
+              echo "::error::${name} is not a full commit identifier. The run stops. There is no branch or tag fallback."
+              exit 1
+            fi
+          }
+          require_sha "Called workflow revision" "$WORKFLOW_SHA"
+          require_sha "Pinned Claude plugin marketplace" "$PLUGINS_OFFICIAL_SHA"
+          {
+            printf 'workflow_sha=%s\n' "$WORKFLOW_SHA"
+            printf 'plugins_official_sha=%s\n' "$PLUGINS_OFFICIAL_SHA"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Checkout rk-skills (shared prompts and scripts)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: richkuo/rk-skills
-          ref: main
+          ref: ${{ steps.runtime_sources.outputs.workflow_sha }}
           path: .rk-skills-shared
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout pinned Claude plugin sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: anthropics/claude-plugins-official
+          ref: ${{ steps.runtime_sources.outputs.plugins_official_sha }}
+          path: .rk-plugin-official
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Stage shared assets outside the workspace
+        env:
+          WORKFLOW_SHA: ${{ steps.runtime_sources.outputs.workflow_sha }}
+          PLUGINS_OFFICIAL_SHA: ${{ steps.runtime_sources.outputs.plugins_official_sha }}
         run: |
-          rm -rf "$RUNNER_TEMP/rk-shared"
-          mkdir -p "$RUNNER_TEMP/rk-shared"
+          set -euo pipefail
+          require_sha() {
+            name="$1"
+            value="$2"
+            if ! printf '%s' "$value" | grep -qxE '[0-9a-f]{40}'; then
+              echo "::error::${name} is not a full commit identifier. The run stops. There is no branch or tag fallback."
+              exit 1
+            fi
+          }
+          require_sha "Called workflow revision" "$WORKFLOW_SHA"
+          require_sha "Pinned Claude plugin marketplace" "$PLUGINS_OFFICIAL_SHA"
+
+          got_workflow="$(git -C .rk-skills-shared rev-parse HEAD)"
+          if [ "$got_workflow" != "$WORKFLOW_SHA" ]; then
+            echo "::error::Shared checkout ${got_workflow} does not match the called workflow commit ${WORKFLOW_SHA}."
+            exit 1
+          fi
+          got_plugins="$(git -C .rk-plugin-official rev-parse HEAD)"
+          if [ "$got_plugins" != "$PLUGINS_OFFICIAL_SHA" ]; then
+            echo "::error::Plugin checkout ${got_plugins} does not match the pinned commit ${PLUGINS_OFFICIAL_SHA}."
+            exit 1
+          fi
+
+          plugin_source() {
+            file="$1"
+            plugin="$2"
+            if command -v jq >/dev/null 2>&1; then
+              jq -er --arg name "$plugin" '
+                (.plugins // []) | map(select(.name == $name)) as $matches
+                | if ($matches | length) != 1 then
+                    error("count")
+                  else
+                    $matches[0].source
+                  end
+                | if type != "string" then
+                    error("type")
+                  else
+                    .
+                  end
+              ' "$file"
+              return
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "::error::jq or python3 is required to validate pinned plugin sources." >&2
+              return 1
+            fi
+            python3 - "$file" "$plugin" << 'PY'
+          import json, sys
+          path, name = sys.argv[1], sys.argv[2]
+          with open(path) as handle:
+              data = json.load(handle)
+          matches = [item for item in data.get("plugins", []) if item.get("name") == name]
+          if len(matches) != 1:
+              sys.exit(1)
+          source = matches[0].get("source")
+          if not isinstance(source, str):
+              sys.exit(1)
+          print(source)
+          PY
+          }
+
+          read_source() {
+            file="$1"
+            plugin="$2"
+            if ! value="$(plugin_source "$file" "$plugin")"; then
+              echo "::error::Could not read one string source for ${plugin}. The run stops. There is no branch or tag fallback." >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          require_plugin_dir() {
+            plugin="$1"
+            source="$2"
+            root="$3"
+            if ! printf '%s' "$source" | grep -qxE '\./[A-Za-z0-9._/-]+'; then
+              echo "::error::${plugin} source is not a relative path inside the pinned checkout. The run stops. There is no branch or tag fallback." >&2
+              exit 1
+            fi
+            case "$source" in
+              *..*)
+                echo "::error::${plugin} source leaves the pinned checkout." >&2
+                exit 1
+                ;;
+            esac
+            rel="${source#./}"
+            if [ ! -d "${root}/${rel}" ]; then
+              echo "::error::Pinned checkout is missing ${plugin} at ${rel}." >&2
+              exit 1
+            fi
+            printf '%s' "$rel"
+          }
+
+          skills_source="$(read_source ".rk-skills-shared/.claude-plugin/marketplace.json" rk-skills)"
+          if [ "$skills_source" != "./" ]; then
+            echo "::error::rk-skills plugin source is not the repository root. The run stops. There is no branch or tag fallback."
+            exit 1
+          fi
+
+          code_review_source="$(read_source ".rk-plugin-official/.claude-plugin/marketplace.json" code-review)"
+          md_source="$(read_source ".rk-plugin-official/.claude-plugin/marketplace.json" claude-md-management)"
+          code_review_rel="$(require_plugin_dir code-review "$code_review_source" .rk-plugin-official)"
+          md_rel="$(require_plugin_dir claude-md-management "$md_source" .rk-plugin-official)"
+
+          rm -rf "$RUNNER_TEMP/rk-shared" "$RUNNER_TEMP/rk-plugin-sources"
+          mkdir -p "$RUNNER_TEMP/rk-shared" "$RUNNER_TEMP/rk-plugin-sources"
           cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
           cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
-          rm -rf .rk-skills-shared
+          cp -R .rk-skills-shared "$RUNNER_TEMP/rk-plugin-sources/rk-skills"
+          rm -rf "$RUNNER_TEMP/rk-plugin-sources/rk-skills/.git"
+
+          pinned="$RUNNER_TEMP/rk-plugin-sources/rk-pinned-claude-plugins"
+          mkdir -p "$pinned/.claude-plugin" "$(dirname "$pinned/$code_review_rel")" "$(dirname "$pinned/$md_rel")"
+          cp -R ".rk-plugin-official/$code_review_rel" "$pinned/$code_review_rel"
+          cp -R ".rk-plugin-official/$md_rel" "$pinned/$md_rel"
+          if command -v python3 >/dev/null 2>&1; then
+            python3 - "$pinned/.claude-plugin/marketplace.json" "$code_review_source" "$md_source" << 'PY'
+          import json, sys
+          dest, code_review, md = sys.argv[1:]
+          body = {
+              "name": "rk-pinned-claude-plugins",
+              "description": "Local copies of the required Claude plugins from one reviewed commit.",
+              "owner": {"name": "rk-skills maintainers"},
+              "plugins": [
+                  {"name": "code-review", "source": code_review},
+                  {"name": "claude-md-management", "source": md},
+              ],
+          }
+          with open(dest, "w") as handle:
+              json.dump(body, handle, indent=2)
+              handle.write("\n")
+          PY
+          else
+            jq -n --arg code_review "$code_review_source" --arg md "$md_source" \
+              '{name: "rk-pinned-claude-plugins", description: "Local copies of the required Claude plugins from one reviewed commit.", owner: {name: "rk-skills maintainers"}, plugins: [{name: "code-review", source: $code_review}, {name: "claude-md-management", source: $md}]}' \
+              > "$pinned/.claude-plugin/marketplace.json"
+          fi
+
+          rm -rf .rk-skills-shared .rk-plugin-official
+          test -d "$RUNNER_TEMP/rk-shared/prompts"
+          test -d "$RUNNER_TEMP/rk-shared/scripts"
+          test -f "$RUNNER_TEMP/rk-plugin-sources/rk-skills/.claude-plugin/marketplace.json"
+          test ! -e "$RUNNER_TEMP/rk-plugin-sources/rk-skills/.git"
+          test -f "$pinned/.claude-plugin/marketplace.json"
+          test -d "$pinned/$code_review_rel"
+          test -d "$pinned/$md_rel"
+          test ! -e .rk-skills-shared
+          test ! -e .rk-plugin-official
 
       - name: Resolve model and effort
         id: resolve
@@ -508,10 +685,10 @@ jobs:
           show_full_output: true
 
           plugin_marketplaces: |
-            https://github.com/anthropics/claude-code.git
-            https://github.com/richkuo/rk-skills.git
+            ${{ runner.temp }}/rk-plugin-sources/rk-pinned-claude-plugins
+            ${{ runner.temp }}/rk-plugin-sources/rk-skills
           plugins: |
-            code-review@claude-code-plugins
+            code-review@rk-pinned-claude-plugins
             rk-skills@rk-skills
 
           claude_args: ${{ steps.compose_prompt.outputs.claude_args }}
@@ -618,11 +795,10 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
           plugin_marketplaces: |
-            https://github.com/anthropics/claude-code.git
-            https://github.com/anthropics/claude-plugins-official.git
+            ${{ runner.temp }}/rk-plugin-sources/rk-pinned-claude-plugins
           plugins: |
-            code-review@claude-code-plugins
-            claude-md-management@claude-plugins-official
+            code-review@rk-pinned-claude-plugins
+            claude-md-management@rk-pinned-claude-plugins
           claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
 
       - name: Append LLM footer to Claude comment
