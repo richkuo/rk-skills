@@ -70,7 +70,7 @@ CLAUDE_HOME="$OPT/claude-home"
 mkdir -p "$CLAUDE_HOME"
 INSTALLED=0
 for attempt in 1 2 3; do
-  if HOME="$CLAUDE_HOME" bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $CC_VERSION" >> "$OUT/install.log" 2>&1; then
+  if HOME="$CLAUDE_HOME" CLAUDE_INSTALL_ALLOW_SUDO=1 bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $CC_VERSION" >> "$OUT/install.log" 2>&1; then
     INSTALLED=1
     break
   fi
