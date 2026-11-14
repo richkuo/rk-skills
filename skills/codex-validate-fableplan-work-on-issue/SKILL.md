@@ -78,7 +78,7 @@ For an issue with no plan, the base skill's no-plan bullet applies: "No plan sta
 
 ### 7. Attributing snapshot diffs
 
-Base skill step 7 applies to the Fable plan snapshot too, with one more case. The `fable-dispatch` section 7 snapshot also records the newest issue or PR number, and a sibling build that opens its PR raises that number under the invoking user's login. Attribute an added number to a sibling build only when `gh pr view <n> --repo "$NWO" --json headRefName,closingIssuesReferences` shows a `cc/`-prefixed head branch that carries a sibling issue number from this run, and a closing reference to that sibling issue. Every other added item follows `fable-dispatch` section 7. A removed worktree is always flagged.
+Base skill step 7 applies to the Fable plan snapshot too, with one more case. The `fable-dispatch` section 7 snapshot also records the newest issue or PR number, and a sibling build that opens its PR raises that number under the invoking user's login. Attribute an added number to a sibling build only when `gh pr view <n> --repo "$NWO" --json headRefName,baseRefName,body,closingIssuesReferences` shows all of these: a `cc/`-prefixed head branch that carries a sibling issue number from this run, and a `baseRefName` equal to the expected base of base skill step 8. Then, on the default branch, the sibling issue must be in `closingIssuesReferences`. On any other base, GitHub records no closing reference, so the body must instead hold a case-insensitive `Closes #<sibling>` line, as base skill step 8 requires. Every other added item follows `fable-dispatch` section 7. A removed worktree is always flagged.
 
 ### 8 and 9. Hand-back, review trigger, final report
 
