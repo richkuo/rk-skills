@@ -132,9 +132,9 @@ as_user() {
   local user="$1"
   shift
   if [ "$user" = root ]; then
-    (cd / && "$@")
+    (cd "${AS_USER_DIR:-/}" && "$@")
   else
-    (cd / && runuser -u "$user" -- "$@")
+    (cd "${AS_USER_DIR:-/}" && runuser -u "$user" -- "$@")
   fi
 }
 
@@ -331,8 +331,7 @@ run_claude() {
   chmod 666 "$run/hook.log"
   touch "$run/stamp"
   (
-    cd "$ws" || exit 1
-    as_user "$user" env -i "PATH=$SYS_PATH" "HOME=$agent" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "GH_TOKEN=$SYNTH_TOKEN" "GITHUB_TOKEN=$SYNTH_TOKEN" "ANTHROPIC_API_KEY=$SYNTH_KEY" "ANTHROPIC_BASE_URL=http://127.0.0.1:$port" "$scrub_env" DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 "RK_HOOK_LOG=$run/hook.log" \
+    AS_USER_DIR="$ws" as_user "$user" env -i "PATH=$SYS_PATH" "HOME=$agent" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "GH_TOKEN=$SYNTH_TOKEN" "GITHUB_TOKEN=$SYNTH_TOKEN" "ANTHROPIC_API_KEY=$SYNTH_KEY" "ANTHROPIC_BASE_URL=http://127.0.0.1:$port" "$scrub_env" DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 "RK_HOOK_LOG=$run/hook.log" \
       timeout 300 "$CLAUDE" -p "run the probe" --output-format stream-json --verbose --model claude-sonnet-5-5 --allowedTools Bash "${settings_args[@]}"
   ) > "$run/claude.jsonl" 2> "$run/claude.err" &
   claude_pid=$!
