@@ -20,7 +20,7 @@ flowchart LR
     C -- LGTM --> E([issue complete])
 ```
 
-Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `plan` is `yes` at score 75 or higher, and a plan is then posted before the build. Below score 90 the plan runs on Opus 5.5 at `high`. At score 90 or higher, or with no score, it runs on Fable 5.2 at `medium`. A `Plan model:` stamp picks the model, and a Fable plan below score 90 runs at `high`. A pipeline plan stage never runs at `xhigh`. "Fable" skills hand part of the work to a subagent on the Fable 5.2 model; it runs at `high` by default, at `medium` for a plan on an issue scored 90 or higher, and at `xhigh` only when you ask for it.
+Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: yes|no` signal on the first line. The score routes the validate model, the build model and effort, and the first reviewer; `validate-issue` step 6 owns the band table, and an Execution block stamp overrides the validate model or effort. `plan` is `yes` at score 75 or higher, and a plan is then posted before the build. Below score 90 the plan runs on Opus 5.5 at `high`. At score 90 or higher, or with no score, it runs on Fable 5.2 at `high`. A `Plan model:` stamp picks the model, and a Fable plan below score 90 runs at `medium`. A pipeline plan stage never runs at `xhigh`. "Fable" skills hand part of the work to a subagent on the Fable 5.2 model; it runs at `high` by default, at `medium` for a plan on an issue scored below 90, and at `xhigh` only when you ask for it.
 
 ### Issue skills
 
@@ -67,14 +67,15 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
 | `fable-advisor` | Your session builds; a persistent Fable 5.2 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.2 reviewer issues a binding pre-commit verdict. |
 | `fable-orchestrate` | Runs on Fable 5.2: splits the task into worker specs, dispatches Sonnet 5.5 workers, reviews each result, integrates one branch, and gets a binding verdict from a fresh Fable 5.2 reviewer before opening the PR. |
-| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue, and by the `codex-validate-plan-work-on-issue` session for its Codex validate pass. |
+| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue, and by the `codex-validate-plan-work-on-issue` and `codex-validate-fableplan-work-on-issue` sessions for their Codex validate pass. |
 | `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.2 on the current harness, with the fallback ladder and its reporting. Loaded before any Fable subagent is dispatched. |
 
 ### Codex-driven skills
 
 | Skill | What it does |
 |-------|--------------|
-| `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` that posts the plan, then `work-on-issue` on a background Opus 5.5 subagent at `high` that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
+| `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` at `high` that posts the plan (score 75 or higher, or a safety flag from the validation), then `work-on-issue` on a background Opus 5.5 subagent (`high` at score 50 or higher, `medium` below 50) that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
+| `codex-validate-fableplan-work-on-issue` | The same parallel run with a Fable 5.2 plan in place of the Codex plan: `validate-issue` in update mode on the Codex CLI, a background Fable 5.2 Plan subagent that the session checks and posts (`high` at score 90 or higher, `medium` at 75 to 89, no plan below 75 unless the validation flags a safety risk), then `work-on-issue` on a background Opus 5.5 subagent (`high` at score 50 or higher, `medium` below 50). It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
 
 ### App pipeline skills
 
