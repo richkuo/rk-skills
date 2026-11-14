@@ -266,7 +266,8 @@ jobs:
           if printf '%s\n' "$CONFIG" | grep -qiE '^http\..*\.extraheader='; then
             block "git config sets an http extraheader entry"
           fi
-          if printf '%s\n' "$CONFIG" | grep -qiE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@'; then
+          CREDENTIAL_URLS=$(printf '%s\n' "$CONFIG" | grep -iE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@' | grep -viE '^remote\.[^=]*\.(push)?url=https://x-access-token@[^/@:]+/' || true)
+          if [ -n "$CREDENTIAL_URLS" ]; then
             block "a git remote URL holds a credential"
           fi
           if printf '%s\n' "$CONFIG" | grep -qF 'x-access-token:'; then
