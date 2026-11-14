@@ -170,6 +170,11 @@ test_contract_linux() {
   RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/runner-alias/_work/repo/repo" "$out"
   expect_output "$out" needs_temp_home true "contract linux: a symlinked path into the home-based layout selects a temporary home"
 
+  mkdir -p "$root/real-runner/_work/repo/repo" "$root/home-b"
+  ln -s "$root/real-runner" "$root/home-b/actions-runner"
+  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/home-b" "$root/real-runner/_work/repo/repo" "$out"
+  expect_output "$out" needs_temp_home true "contract linux: a workspace under the target of a symlinked home actions-runner path selects a temporary home"
+
   ws="$root/plain/_work/repo/repo"
   mkdir -p "$ws"
   RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"

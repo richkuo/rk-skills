@@ -169,14 +169,24 @@ jobs:
             HOME_RESOLVED=$(cd -P "$HOME" 2>/dev/null && pwd -P) || fail "the job home $HOME cannot be resolved."
             WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" 2>/dev/null && pwd -P) || fail "the workspace $GITHUB_WORKSPACE cannot be resolved."
             UID_NOW=$(id -u) || fail "the user ID cannot be read."
+            DENIED_ROOTS=()
             for h in "$HOME" "$HOME_RESOLVED"; do
               h="${h%/}"
               [ -n "$h" ] || continue
+              for name in actions-runner runners; do
+                DENIED_ROOTS+=("$h/$name")
+                if [ -e "$h/$name" ]; then
+                  ROOT_RESOLVED=$(cd -P "$h/$name" 2>/dev/null && pwd -P) || fail "the runner path $h/$name exists but cannot be resolved."
+                  DENIED_ROOTS+=("$ROOT_RESOLVED")
+                fi
+              done
+            done
+            for d in "${DENIED_ROOTS[@]}"; do
               for w in "$GITHUB_WORKSPACE" "$WS_RESOLVED"; do
                 case "$w" in
-                  "$h"/actions-runner/*|"$h"/runners/*)
+                  "$d"/*)
                     if [ "$NEEDS_TEMP_HOME" != "true" ]; then
-                      echo "The workspace $w is inside a denied runner path under $h (anthropics/claude-code#97730), so the action step runs with a temporary HOME."
+                      echo "The workspace $w is inside the denied runner path $d under the job home (anthropics/claude-code#97730), so the action step runs with a temporary HOME."
                     fi
                     NEEDS_TEMP_HOME=true
                     ;;

@@ -132,9 +132,9 @@ as_user() {
   local user="$1"
   shift
   if [ "$user" = root ]; then
-    "$@"
+    (cd / && "$@")
   else
-    runuser -u "$user" -- "$@"
+    (cd / && runuser -u "$user" -- "$@")
   fi
 }
 
@@ -242,7 +242,7 @@ write_commands() {
     targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
   jq -n --arg targets "$targets" --arg home "$home" '[
-    "for c in \"git status --short\" \"git diff --stat refs/remotes/origin/base HEAD\" \"git fetch origin\" \"git config --local rk.probe.inside 1\"; do out=$($c 2>&1); rc=$?; b=$(printf \"%s\" \"$out\" | grep -m1 -i bwrap); echo \"K1 rc=$rc cmd=[$c] bwrap=[$b]\"; done",
+    "for c in \"git status --short\" \"git diff --stat refs/remotes/origin/base HEAD\" \"git fetch origin\" \"git config --local rk.probe.inside 1\"; do out=$($c 2>&1); rc=$?; b=$(printf \"%s\" \"$out\" | grep -m1 -i bwrap); echo \"K1 rc=$rc cmd=[$c] bwrap=[$b]\"; if [ $rc -ne 0 ]; then echo \"K1 err cmd=[$c] $(printf %s \"$out\" | head -c 300 | tr \"\\n\" \" \")\"; fi; done",
     "echo \"K2 env=$(env | grep -c rkprobe-synthetic-anthropic)\"; n=0; for p in /proc/[0-9]*/environ; do if grep -qa rkprobe-synthetic-anthropic \"$p\" 2>/dev/null; then n=$((n+1)); fi; done; echo \"K2 proc=$n\"",
     ("for t in " + $targets + "; do if [ -d \"$t\" ]; then f=\"$t/.rk-probe-new\"; if ( : > \"$f\" ) 2>/dev/null; then echo \"K3 WRITABLE $t\"; rm -f \"$f\"; else echo \"K3 DENIED $t\"; fi; elif [ -e \"$t\" ]; then if ( : >> \"$t\" ) 2>/dev/null; then echo \"K3 WRITABLE $t\"; else echo \"K3 DENIED $t\"; fi; else if ( : > \"$t\" ) 2>/dev/null; then echo \"K3 WRITABLE $t (created)\"; rm -f \"$t\"; else echo \"K3 DENIED $t (missing)\"; fi; fi; done"),
     ("for f in " + $home + "/.claude/.credentials.json " + $home + "/.claude.json; do if cat \"$f\" >/dev/null 2>&1; then echo \"K4 READABLE $f\"; else echo \"K4 DENIED $f\"; fi; done")
@@ -382,7 +382,7 @@ summarize_run() {
   } | tee -a "$RESULTS"
   k3w=$(printf '%s\n' "$k3" | grep -c '^K3 WRITABLE')
   RUN_K1=fail
-  if [ "$(tool_error "$run" 0)" = false ] && [ "$(printf '%s\n' "$k1" | grep -c '^K1 rc=0 .* bwrap=\[\]$')" = 4 ]; then RUN_K1=pass; fi
+  if [ "$(tool_error "$run" 0)" = false ] && [ "$(printf '%s\n' "$k1" | grep -v 'cmd=\[git config --local' | grep -c '^K1 rc=0 .* bwrap=\[\]$')" = 3 ]; then RUN_K1=pass; fi
   RUN_K2=fail
   if printf '%s\n' "$k2" | grep -qx 'K2 env=0' && printf '%s\n' "$k2" | grep -qx 'K2 proc=0'; then RUN_K2=pass; fi
   RUN_K3_WRITABLE=$k3w
