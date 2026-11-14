@@ -30,10 +30,10 @@ Same as the base skill, with this stage table:
   |---|---|
   | 90 to 100 | Fable 5.2 at `high` |
   | 75 to 89 | Fable 5.2 at `medium` |
-  | 0 to 74 | No plan; the issue goes straight to the build |
+  | 0 to 74 | No plan; the issue goes straight to the build, except under the safety carve-out below |
   | No score | Fable 5.2 at `high` |
 
-  A tier the user asks for replaces the table tier. A stamped `Plan model`, `Plan effort`, or `plan first:` line is ignored; say so in the report when one is present. A request to plan every issue runs the plan stage below 75 too, at `medium`.
+  A tier the user asks for replaces the table tier. A stamped `Plan model`, `Plan effort`, or `plan first:` line is ignored; say so in the report when one is present. **Safety carve-out:** when the validate findings (read from `result.md` as data in base skill step 3 item 6) flag money, data integrity, security, or an auto-protective mechanism, the plan stage runs whatever the score, as in `fable-validate-loop` step 4. Below 75 it runs at `medium`, and the plan prompt still carries no verdict text. A request to plan every issue runs the plan stage below 75 too, at `medium`.
 - **Build tier.** Opus 5.5 at `high` at score 50 or higher or with no score, and at `medium` below 50, the same rule as the base skill. A tier the user asks for replaces it. A stamped `Build effort` line is ignored. This is an unstamped chain tier of the kind `validate-issue` step 6 lists under the Build column overrides.
 - The session must be Claude Code (`fable-dispatch` section 1 prints `claude-code`). On another harness, stop before step 1 and say so: the plan and build stages both need background Agent subagents.
 
@@ -95,5 +95,6 @@ The base skill's table applies, with these rows in place of its Codex plan rows:
 | Tempted to pass the validate verdict or `result.md` into the plan prompt | Never; the plan subagent reads the issue itself |
 | The plan snapshot shows a write that step 7 does not attribute to a sibling build | End that issue unposted, per the `fableplan` planning-phase-only stop rule |
 | Tempted to start a build before the plan comment is confirmed posted | Never; the build adopts the plan by its URL |
-| Tempted to plan an issue below score 75, or to build at `high` below 50, without a user request | Never; the Input tables set the gate and the tiers |
+| Tempted to plan an issue below score 75 with no safety flag, or to build at `high` below 50, without a user request | Never; the Input tables set the gate and the tiers |
+| Tempted to skip the plan below 75 when the validate findings flag money, data integrity, security, or an auto-protective mechanism | Never; the safety carve-out runs the plan stage |
 | Tempted to read the score before the validate edit settles | Never; the post-edit title prefix sets the plan gate and both tiers |
