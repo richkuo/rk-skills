@@ -63,7 +63,8 @@ to hosted runners while `classify` keeps working.
 
 Self-hosted runners should provide `git`, `gh`, and `jq`. The stage step needs
 `jq` or `python3` to read the pinned plugin sources and to write the local
-marketplace, so a runner with neither stops every route at that step. A runner
+marketplace, so a runner with neither stops every route at that step and posts
+a plain failure note on the issue or pull request. A runner
 with `python3` but no `jq` continues, and only the post-run Claude error check
 is skipped with a warning.
 

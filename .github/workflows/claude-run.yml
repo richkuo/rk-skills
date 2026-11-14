@@ -193,6 +193,27 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Stage shared prompts and scripts outside the workspace
+        env:
+          WORKFLOW_SHA: ${{ steps.runtime_sources.outputs.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$WORKFLOW_SHA" | grep -qxE '[0-9a-f]{40}'; then
+            echo "::error::Called workflow revision is not a full commit identifier. The run stops. There is no branch or tag fallback."
+            exit 1
+          fi
+          got_workflow="$(git -C .rk-skills-shared rev-parse HEAD)"
+          if [ "$got_workflow" != "$WORKFLOW_SHA" ]; then
+            echo "::error::Shared checkout ${got_workflow} does not match the called workflow commit ${WORKFLOW_SHA}."
+            exit 1
+          fi
+          rm -rf "$RUNNER_TEMP/rk-shared"
+          mkdir -p "$RUNNER_TEMP/rk-shared"
+          cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
+          cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
+          test -d "$RUNNER_TEMP/rk-shared/prompts"
+          test -f "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
+
       - name: Checkout pinned Claude plugin sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -202,7 +223,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Stage shared assets outside the workspace
+      - name: Stage pinned plugin sources outside the workspace
         env:
           WORKFLOW_SHA: ${{ steps.runtime_sources.outputs.workflow_sha }}
           PLUGINS_OFFICIAL_SHA: ${{ steps.runtime_sources.outputs.plugins_official_sha }}
@@ -311,10 +332,8 @@ jobs:
           code_review_rel="$(require_plugin_dir code-review "$code_review_source" .rk-plugin-official)"
           md_rel="$(require_plugin_dir claude-md-management "$md_source" .rk-plugin-official)"
 
-          rm -rf "$RUNNER_TEMP/rk-shared" "$RUNNER_TEMP/rk-plugin-sources"
-          mkdir -p "$RUNNER_TEMP/rk-shared" "$RUNNER_TEMP/rk-plugin-sources"
-          cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
-          cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
+          rm -rf "$RUNNER_TEMP/rk-plugin-sources"
+          mkdir -p "$RUNNER_TEMP/rk-plugin-sources"
           cp -R .rk-skills-shared "$RUNNER_TEMP/rk-plugin-sources/rk-skills"
           rm -rf "$RUNNER_TEMP/rk-plugin-sources/rk-skills/.git"
 
@@ -838,17 +857,23 @@ jobs:
           ON_MISS: post
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ ! -f "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh" ]; then
-            echo "::notice::Shared scripts unavailable — cannot patch the Claude comment."
-            exit 0
-          fi
-
           if [ "${IS_CANCELLED:-}" = "true" ]; then
             STATUS_NOTE="**Workflow cancelled before completion.** See [run log]($RUN_URL)."
           else
             STATUS_NOTE="**Workflow failed before completion.** See [run log]($RUN_URL)."
           fi
           export STATUS_NOTE
+
+          if ! command -v jq >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+            BODY=$(printf '%s\n\nThis runner lacks jq or python3, which the comment scripts need, so this note is a plain new comment.\n\n---\nLLM: %s | %s | Harness: %s' "$STATUS_NOTE" "${MODEL_ID:-(model not resolved)}" "${EFFORT:-unknown}" "${CLAUDE_HARNESS:-unknown}")
+            gh api "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --method POST --raw-field body="$BODY"
+            exit 0
+          fi
+
+          if [ ! -f "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh" ]; then
+            echo "::notice::Shared scripts unavailable — cannot patch the Claude comment."
+            exit 0
+          fi
 
           bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
 
