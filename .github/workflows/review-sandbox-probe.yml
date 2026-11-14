@@ -1,0 +1,28 @@
+name: Review sandbox probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/claude-run.yml
+      - .github/workflows/review-sandbox-probe.yml
+      - docs/review-sandbox-probe/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Run the review sandbox probe as root
+        run: sudo env "PATH=$PATH" "RK_PROBE_OUT=$RUNNER_TEMP/review-sandbox-probe" bash docs/review-sandbox-probe/probe.sh

@@ -60,6 +60,9 @@ to hosted runners while `classify` keeps working.
 | `timeout_minutes` | `45` | Job timeout; raise for long implement runs. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
 | `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts. |
+| `review_subprocess_scrub` | `true` | Review route only. `false` turns the secret scrub off on every runner; the review then runs only for a trusted pull request author and only with `review_subprocess_scrub_off_accepted: true`. See the security model. |
+| `review_subprocess_scrub_off_accepted` | `false` | Review route only. Accepts the credential exposure of `review_subprocess_scrub: false` for a trusted author. It never admits an untrusted author. |
+| `review_subprocess_scrub_self_hosted` | `false` | Ignored. Kept so an older caller that passes it still runs. It skips no layout detection, preparation, protection check, or author gate. |
 
 Self-hosted runners should provide `git`, `gh`, `jq`, and `python3`. A run that
 ends green needs both `jq` and `python3`, because the post-run comment steps use
@@ -130,35 +133,63 @@ model until you copy the template again.
   out of git config and `$RUNNER_TEMP`. `claude-run.yml` sets the action's
   `allowed_non_write_users` input to a value that no GitHub login can equal, so
   the action uses a token-free credential helper and scrubs secrets from
-  subprocess environments, except where the scrub is off by default on a
-  self-hosted runner (see below). The action's write-permission check still applies
+  subprocess environments, except when the caller turns the scrub off (see
+  below). The action's write-permission check still applies
   to every actor. Git offers the token only to the GitHub server. A
   `PreToolUse` hook blocks every tool call if the token reaches git config,
-  `$RUNNER_TEMP`, or a git credential store, or if the guard script changed.
+  `$RUNNER_TEMP`, or a git credential store under the job home or the agent
+  home, if git does not open the workspace, if the job token is missing from
+  the environment, or if the guard script changed.
   `/proc` reads, `git --output`, and file-reading flags such as
   `git diff --no-index` are denied. The token stays in the agent process
   environment for `gh pr comment`; this is an accepted residual risk because
   the token has only this job's permissions and expires when the job ends.
-- **Secret scrub on self-hosted runners:** the scrub's bubblewrap sandbox
-  fails every Bash call in two self-hosted Linux layouts, and the reviewer then
-  cannot run `git diff`: the literal or resolved workspace is inside
-  `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730), or
-  the review runs as root and a workspace ancestor owned by another uid lacks
-  `.claude` or `.mcp.json` (anthropics/claude-code#97731). In those layouts
-  the review route turns the scrub off by default, so tool subprocesses there
-  can see the Claude credential, and the step emits a warning naming the
-  cause. GitHub-hosted runners and every other self-hosted layout keep the
-  scrub. Pass `review_subprocess_scrub_self_hosted: true` to `claude-run.yml`
-  in the `review` job to keep the scrub in those layouts anyway.
-  `claude-run.yml` still accepts `review_subprocess_scrub_off_accepted` so an
-  older caller that sets it keeps running, but it ignores the value.
+- **Secret scrub on self-hosted runners:** every review keeps the scrub on by
+  default, on every runner. The scrub's bubblewrap sandbox fails every Bash
+  call in two self-hosted Linux layouts, so `claude-run.yml` prepares those
+  runs before checkout:
+  - The literal or resolved workspace is inside the literal or resolved
+    `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730).
+    Only the Claude action step runs with a temporary `HOME`, a new mode-0700
+    directory `/tmp/rk-claude-home.*`. Its Claude Code settings and memory
+    start empty. The settings file then denies sandboxed writes to that home,
+    to `$RUNNER_TEMP`, to the job home's startup, ssh, git, and Claude files,
+    and to the runner installation files. An always-run step empties the
+    temporary home after the action. The empty directory stays on the host,
+    one per affected review, because the action adds its program
+    directories to `PATH` for the rest of the job; a failed cleanup skips every
+    later step that would run a program from `PATH`.
+  - The review runs as root and a workspace ancestor is owned by another user
+    ID (anthropics/claude-code#97731). A step creates a root-owned `.claude`
+    directory (mode 0755) and `.mcp.json` file (mode 0644, `{"mcpServers":{}}`)
+    in each such ancestor that lacks them. It keeps valid existing entries,
+    refuses symlinks and wrong types, never overwrites, and never follows a
+    replaced path. The stubs stay on the host for later jobs.
+  If the preparation fails, the review stops before Claude starts. No path
+  turns the scrub off for a layout. The guard, the checks before and after the
+  action, and the settings cover both the job home and the temporary home.
+  A manual remedy that needs no preparation is to move the runner out of
+  `$HOME` and give the workspace ancestors to root. The sandbox behavior
+  belongs to the Claude Code version the pinned action installs, so a change
+  of the action pin reruns `docs/review-sandbox-probe/probe.sh` (the
+  `Review sandbox probe` workflow does this on a pull request).
+- **Scrub-off exception:** `review_subprocess_scrub: false` turns the scrub off
+  on every runner, so tool subprocesses can see the Claude credential. The
+  review then runs only when the pull request author has the `OWNER`,
+  `MEMBER`, or `COLLABORATOR` association (or is `claude[bot]`) and the
+  review job also sets `review_subprocess_scrub_off_accepted: true`; the step
+  then emits a warning that names the exposure. Any other author is refused
+  before checkout whatever the acceptance input is. This route uses the job
+  home and runs no stub or temporary-home step.
+  `review_subprocess_scrub_self_hosted` is ignored.
 - **Host changes on self-hosted Linux runners:** every review on a
   self-hosted Linux runner that keeps the scrub runs
   `sudo apt-get install bubblewrap socat` and
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
-  setting stays until the machine restarts. Pass
-  `review_subprocess_scrub: false` in the `review` job to skip both; this also
-  turns off the scrub on every runner.
+  setting stays until the machine restarts. In the two layouts above, a review
+  also leaves the ancestor stubs and one empty temporary home directory.
+  `review_subprocess_scrub: false` skips the host changes and the scrub, under
+  the scrub-off exception above.
 
 ## Pinned revisions
 
