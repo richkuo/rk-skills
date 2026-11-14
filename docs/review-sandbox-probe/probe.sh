@@ -68,7 +68,19 @@ CC_VERSION=$(printf '%s\n' "$RUN_TS" | sed -nE 's/^[[:space:]]*const claudeCodeV
 
 CLAUDE_HOME="$OPT/claude-home"
 mkdir -p "$CLAUDE_HOME"
-HOME="$CLAUDE_HOME" bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $CC_VERSION" > "$OUT/install.log" 2>&1 || die "cannot install Claude Code $CC_VERSION (see $OUT/install.log)"
+INSTALLED=0
+for attempt in 1 2 3; do
+  if HOME="$CLAUDE_HOME" bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $CC_VERSION" >> "$OUT/install.log" 2>&1; then
+    INSTALLED=1
+    break
+  fi
+  echo "install attempt $attempt failed" >> "$OUT/install.log"
+  sleep 5
+done
+if [ "$INSTALLED" != 1 ]; then
+  tail -n 40 "$OUT/install.log" >&2
+  die "cannot install Claude Code $CC_VERSION"
+fi
 CLAUDE="$CLAUDE_HOME/.local/bin/claude"
 chmod -R a+rX "$OPT"
 GOT_VERSION=$("$CLAUDE" --version 2>/dev/null | awk '{print $1}')
