@@ -152,9 +152,10 @@ model until you copy the template again.
     `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730).
     Only the Claude action step runs with a temporary `HOME`, a new mode-0700
     directory `/tmp/rk-claude-home.*`. Its Claude Code settings and memory
-    start empty. The settings file then denies sandboxed writes to that home,
-    to `$RUNNER_TEMP`, to the job home's startup, ssh, git, and Claude files,
-    and to the runner installation files. An always-run step empties the
+    start empty. The scrub sandbox itself denies writes to that home's
+    startup, git, Bun, npm, Claude, ssh, and program-path files; the settings
+    file adds `$RUNNER_TEMP`, the job home's startup, ssh, git, and Claude
+    files, and the runner installation files. An always-run step empties the
     temporary home after the action. The empty directory stays on the host,
     one per affected review, because the action adds its program
     directories to `PATH` for the rest of the job; a failed cleanup skips every

@@ -860,7 +860,6 @@ jobs:
               fi
             }
             require_deny "$RUNNER_TEMP"
-            require_deny "$TEMP_AGENT_HOME"
             for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
               optional_deny "${REAL_HOME%/}/$p"
             done

@@ -279,7 +279,7 @@ test_settings() {
   make_settings "$dir" "$agent"
   expect_status 0 "settings: temporary-home run writes the settings"
   deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings: RUNNER_TEMP is protected"
-  deny_has "$dir/settings.json" "$agent" "settings: the whole temporary agent home is protected"
+  if jq -e --arg p "$agent" '.sandbox.filesystem.denyWrite | index($p) | not' "$dir/settings.json" >/dev/null; then ok "settings: the temporary home root stays writable for the sandbox's own placeholders"; else bad "settings: the temporary home root is denied"; fi
   deny_has "$dir/settings.json" "$dir/real-home/.bashrc" "settings: a real-home startup file is protected"
   deny_has "$dir/settings.json" "$dir/real-home/.ssh" "settings: the real-home ssh directory is protected"
   deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: the runner credential file is protected"
@@ -287,7 +287,7 @@ test_settings() {
   if jq -e '(.claudeMdExcludes | length) == 10 and (.hooks.PreToolUse | length) == 1' "$dir/settings.json" >/dev/null; then ok "settings: temporary-home run keeps the exclusions and the hook"; else bad "settings: temporary-home run lost the exclusions or the hook"; fi
   if jq -e --arg w "$dir/runner/_work/repo/repo" '[.sandbox.filesystem.denyWrite[] | select(($w + "/") | startswith(. + "/"))] | length == 0' "$dir/settings.json" >/dev/null; then ok "settings: no protected path contains the workspace"; else bad "settings: a protected path contains the workspace"; fi
 
-  make_settings "$dir" "$SCRATCH/settings/missing-agent-home"
+  RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent"
   expect_status 1 "settings: a missing required target stops the run"
 
   RUNNER_TEMP_IN="$dir/runner/_work" make_settings "$dir" "$agent"

@@ -239,7 +239,7 @@ write_commands() {
   fi
   targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin"
   if [ "$agent" != "$home" ]; then
-    targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
+    targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_login $agent/.bunfig.toml $agent/.npmrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
   jq -n --arg targets "$targets" --arg home "$home" '[
     "for c in \"git status --short\" \"git diff --stat refs/remotes/origin/base HEAD\" \"git fetch origin\" \"git config --local rk.probe.inside 1\"; do out=$($c 2>&1); rc=$?; b=$(printf \"%s\" \"$out\" | grep -m1 -i bwrap); echo \"K1 rc=$rc cmd=[$c] bwrap=[$b]\"; if [ $rc -ne 0 ]; then echo \"K1 err cmd=[$c] $(printf %s \"$out\" | head -c 300 | tr \"\\n\" \" \")\"; fi; done",
@@ -379,7 +379,8 @@ summarize_run() {
       printf '  step 0 output: %s\n' "$(printf '%s' "$k1" | head -c 600 | tr '\n' ' ')"
     fi
   } | tee -a "$RESULTS"
-  k3w=$(printf '%s\n' "$k3" | grep -c '^K3 WRITABLE')
+  load_env "$run/run.env"
+  k3w=$(printf '%s\n' "$k3" | grep '^K3 WRITABLE' | grep -vxF "K3 WRITABLE $L_AGENT" | grep -c '^K3 WRITABLE')
   RUN_K1=fail
   if [ "$(tool_error "$run" 0)" = false ] && [ "$(printf '%s\n' "$k1" | grep -v 'cmd=\[git config --local' | grep -c '^K1 rc=0 .* bwrap=\[\]$')" = 3 ]; then RUN_K1=pass; fi
   RUN_K2=fail
