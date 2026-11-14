@@ -1,7 +1,7 @@
 ---
 name: codex-validate-fableplan-work-on-issue
 description: >-
-  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a Fable 5.2 plan, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", and "do the next 3 issues the same way with a fable plan". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.1 at high), then, at score 75 or higher, the fableplan planning phase on a background Fable 5.2 Plan subagent (high at 90 or higher, medium at 75 to 89) that the session checks and posts, then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing. The Fable-plan counterpart to codex-validate-plan-work-on-issue.
+  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a Fable 5.2 plan, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", and "do the next 3 issues the same way with a fable plan". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.1 at high), then, at score 75 or higher, the fableplan planning phase on a background Fable 5.2 Plan subagent (high at 90 or higher, medium at 75 to 89) that the session checks and posts, then work-on-issue on a background Opus 5.5 subagent (high at score 60 or higher, medium below 60) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing. The Fable-plan counterpart to codex-validate-plan-work-on-issue.
 ---
 
 # codex-validate-fableplan-work-on-issue
@@ -34,7 +34,7 @@ Same as the base skill, with this stage table:
   | No score | Fable 5.2 at `high` |
 
   A tier the user asks for replaces the table tier. A stamped `Plan model`, `Plan effort`, or `plan first:` line is ignored; say so in the report when one is present. A request to plan every issue runs the plan stage below 75 too, at `medium`.
-- **Build tier.** Opus 5.5 at `high` at score 50 or higher or with no score, and at `medium` below 50. This rule differs from the base skill's build tier. A tier the user asks for replaces it. A stamped `Build effort` line is ignored. This is an unstamped chain tier of the kind `validate-issue` step 6 lists under the Build column overrides.
+- **Build tier.** Opus 5.5 at `high` at score 60 or higher or with no score, and at `medium` below 60, the same rule as the base skill. A tier the user asks for replaces it. A stamped `Build effort` line is ignored. This is an unstamped chain tier of the kind `validate-issue` step 6 lists under the Build column overrides.
 - The session must be Claude Code (`fable-dispatch` section 1 prints `claude-code`). On another harness, stop before step 1 and say so: the plan and build stages both need background Agent subagents.
 
 ## Steps
@@ -95,5 +95,5 @@ The base skill's table applies, with these rows in place of its Codex plan rows:
 | Tempted to pass the validate verdict or `result.md` into the plan prompt | Never; the plan subagent reads the issue itself |
 | The plan snapshot shows a write that step 7 does not attribute to a sibling build | End that issue unposted, per the `fableplan` planning-phase-only stop rule |
 | Tempted to start a build before the plan comment is confirmed posted | Never; the build adopts the plan by its URL |
-| Tempted to plan an issue below score 75, or to build at `high` below 50, without a user request | Never; the Input tables set the gate and the tiers |
+| Tempted to plan an issue below score 75, or to build at `high` below 60, without a user request | Never; the Input tables set the gate and the tiers |
 | Tempted to read the score before the validate edit settles | Never; the post-edit title prefix sets the plan gate and both tiers |
