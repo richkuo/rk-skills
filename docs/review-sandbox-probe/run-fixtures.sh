@@ -448,6 +448,7 @@ test_stubs() {
   expect_status 1 "stubs: a symlinked .mcp.json is refused"
   rm -f "$foreign/.mcp.json"
 
+  rm -rf "$foreign/.claude" "$foreign/.mcp.json"
   mkdir -p "$root/other/_work/repo/repo"
   chown "$RK_PROBE_USER" "$root/other"
   mv "$foreign" "$root/runner-real"

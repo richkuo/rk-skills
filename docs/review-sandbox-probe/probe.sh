@@ -327,6 +327,8 @@ run_claude() {
     settings_args=()
   fi
   date +%s > "$run/start"
+  : > "$run/hook.log"
+  chmod 666 "$run/hook.log"
   touch "$run/stamp"
   (
     cd "$ws" || exit 1
