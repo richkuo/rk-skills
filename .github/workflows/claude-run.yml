@@ -266,7 +266,8 @@ jobs:
           if printf '%s\n' "$CONFIG" | grep -qiE '^http\..*\.extraheader='; then
             block "git config sets an http extraheader entry"
           fi
-          if printf '%s\n' "$CONFIG" | grep -qiE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@'; then
+          CREDENTIAL_URLS=$(printf '%s\n' "$CONFIG" | grep -iE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@' | grep -viE '^remote\.[^=]*\.(push)?url=https://x-access-token@[^/@:]+/' || true)
+          if [ -n "$CREDENTIAL_URLS" ]; then
             block "a git remote URL holds a credential"
           fi
           if printf '%s\n' "$CONFIG" | grep -qF 'x-access-token:'; then
@@ -495,7 +496,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -613,7 +614,7 @@ jobs:
 
       - name: Revise CLAUDE.md with session learnings
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
@@ -623,7 +624,7 @@ jobs:
           plugins: |
             code-review@claude-code-plugins
             claude-md-management@claude-plugins-official
-          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
+          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
 
       - name: Append LLM footer to Claude comment
         env:

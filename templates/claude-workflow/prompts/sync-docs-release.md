@@ -3,6 +3,7 @@ A repository maintainer comment invoked you. The final sentence appended to this
 Rules for every mode:
 - Inspect real repository state with git and gh. Never rely on memory for tags, versions, or the last sync point.
 - The checkout may be shallow and may lack tags, which hides commits and tags and can make a baseline or version bump wrong. Before any git log range or tag inspection, run git fetch --tags --force, and if the clone is shallow, git fetch --unshallow (a report that there is nothing to do is success). Only then trust baseline..HEAD ranges and tag listings.
+- Run git add, git commit, and git push as plain git commands, as this prompt writes them. Do not use the git-add.sh, git-commit.sh, git-push.sh, or git-rm.sh wrapper scripts that the action instructions name: the push wrapper pushes only to the branch the action set up, so it refuses a docs-sync or docs-release branch.
 - Keep every comment concise and direct, as instructions an agent can act on.
 - Obey the conventions and invariants in CLAUDE.md. Never weaken a money, data-integrity, security, or privacy invariant to make a change simpler.
 - Red-flag stops: a working tree dirty with unrelated changes, a tag that already exists, or a genuinely ambiguous version bump. Stop and post a short comment explaining the block.
