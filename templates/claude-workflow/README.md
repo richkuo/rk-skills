@@ -61,12 +61,17 @@ to hosted runners while `classify` keeps working.
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
 | `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts. |
 
-Self-hosted runners should provide `git`, `gh`, and `jq`. The stage step needs
-`jq` or `python3` to read the pinned plugin sources and to write the local
-marketplace, so a runner with neither stops every route at that step and posts
-a plain failure note on the issue or pull request. A runner
-with `python3` but no `jq` continues, and only the post-run Claude error check
-is skipped with a warning.
+Self-hosted runners should provide `git`, `gh`, `jq`, and `python3`. A run that
+ends green needs both `jq` and `python3`, because the post-run comment steps use
+both tools.
+
+- Neither tool: the stage step stops every route, and the failure-note step
+  posts a plain failure note on the issue or pull request.
+- Only one tool: the stage step passes, because it can read the pinned plugin
+  sources and write the local marketplace with either tool. Claude runs and
+  replies. A post-run comment step then fails, and the failure-note step posts
+  a plain failure note.
+- No `jq`: the post-run Claude error check is also skipped with a warning.
 
 `flow` also accepts `sync-release` (docs sync plus a `docs-release/v<version>`
 PR whose merge triggers the repo's own release workflow). `claude.yml` does not
