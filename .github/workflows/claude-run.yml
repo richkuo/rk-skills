@@ -253,7 +253,7 @@ jobs:
               echo "::error::jq or python3 is required to validate pinned plugin sources." >&2
               return 1
             fi
-            python3 - "$file" "$plugin" << 'PY'
+            python3 -I - "$file" "$plugin" << 'PY'
           import json, sys
           path, name = sys.argv[1], sys.argv[2]
           with open(path) as handle:
@@ -323,7 +323,7 @@ jobs:
           cp -R ".rk-plugin-official/$code_review_rel" "$pinned/$code_review_rel"
           cp -R ".rk-plugin-official/$md_rel" "$pinned/$md_rel"
           if command -v python3 >/dev/null 2>&1; then
-            python3 - ".rk-plugin-official/.claude-plugin/marketplace.json" "$pinned/.claude-plugin/marketplace.json" "$code_review_source" "$md_source" << 'PY'
+            python3 -I - ".rk-plugin-official/.claude-plugin/marketplace.json" "$pinned/.claude-plugin/marketplace.json" "$code_review_source" "$md_source" << 'PY'
           import json, sys
           upstream, dest, code_review, md = sys.argv[1:]
           with open(upstream) as handle:
