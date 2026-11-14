@@ -323,16 +323,25 @@ jobs:
           cp -R ".rk-plugin-official/$code_review_rel" "$pinned/$code_review_rel"
           cp -R ".rk-plugin-official/$md_rel" "$pinned/$md_rel"
           if command -v python3 >/dev/null 2>&1; then
-            python3 - "$pinned/.claude-plugin/marketplace.json" "$code_review_source" "$md_source" << 'PY'
+            python3 - ".rk-plugin-official/.claude-plugin/marketplace.json" "$pinned/.claude-plugin/marketplace.json" "$code_review_source" "$md_source" << 'PY'
           import json, sys
-          dest, code_review, md = sys.argv[1:]
+          upstream, dest, code_review, md = sys.argv[1:]
+          with open(upstream) as handle:
+              data = json.load(handle)
+          def entry(name, source):
+              matches = [item for item in data.get("plugins", []) if isinstance(item, dict) and item.get("name") == name]
+              if len(matches) != 1:
+                  sys.exit(1)
+              item = dict(matches[0])
+              item["source"] = source
+              return item
           body = {
               "name": "rk-pinned-claude-plugins",
               "description": "Local copies of the required Claude plugins from one reviewed commit.",
               "owner": {"name": "rk-skills maintainers"},
               "plugins": [
-                  {"name": "code-review", "source": code_review},
-                  {"name": "claude-md-management", "source": md},
+                  entry("code-review", code_review),
+                  entry("claude-md-management", md),
               ],
           }
           with open(dest, "w") as handle:
@@ -340,9 +349,9 @@ jobs:
               handle.write("\n")
           PY
           else
-            jq -n --arg code_review "$code_review_source" --arg md "$md_source" \
-              '{name: "rk-pinned-claude-plugins", description: "Local copies of the required Claude plugins from one reviewed commit.", owner: {name: "rk-skills maintainers"}, plugins: [{name: "code-review", source: $code_review}, {name: "claude-md-management", source: $md}]}' \
-              > "$pinned/.claude-plugin/marketplace.json"
+            jq -e --arg code_review "$code_review_source" --arg md "$md_source" \
+              'def entry($name; $source): [.plugins[] | select(type == "object" and .name == $name)] | if length == 1 then .[0] | .source = $source else error("count") end; {name: "rk-pinned-claude-plugins", description: "Local copies of the required Claude plugins from one reviewed commit.", owner: {name: "rk-skills maintainers"}, plugins: [entry("code-review"; $code_review), entry("claude-md-management"; $md)]}' \
+              .rk-plugin-official/.claude-plugin/marketplace.json > "$pinned/.claude-plugin/marketplace.json"
           fi
 
           rm -rf .rk-skills-shared .rk-plugin-official

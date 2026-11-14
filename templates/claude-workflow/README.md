@@ -61,8 +61,11 @@ to hosted runners while `classify` keeps working.
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
 | `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts. |
 
-Self-hosted runners should provide `git`, `gh`, and `jq`; without `jq` the
-post-run Claude error check is skipped with a warning.
+Self-hosted runners should provide `git`, `gh`, and `jq`. The stage step needs
+`jq` or `python3` to read the pinned plugin sources and to write the local
+marketplace, so a runner with neither stops every route at that step. A runner
+with `python3` but no `jq` continues, and only the post-run Claude error check
+is skipped with a warning.
 
 `flow` also accepts `sync-release` (docs sync plus a `docs-release/v<version>`
 PR whose merge triggers the repo's own release workflow). `claude.yml` does not
@@ -165,8 +168,13 @@ pass also installs `claude-md-management` from it. The primary pass installs
 `rk-skills` from the called workflow commit.
 
 A missing commit id, a failed checkout, a checkout whose commit does not match,
-or a required plugin source that is not a relative path inside its pinned tree
-stops the job. The run does not substitute a branch or a tag.
+a required plugin source that is not a relative path inside its pinned tree, or
+a runner with neither `jq` nor `python3` stops the job. The run does not
+substitute a branch or a tag.
+
+Each entry in `rk-pinned-claude-plugins` is a copy of the pinned upstream
+entry, with every field kept, such as `strict`, `version`, and component
+lists. Only `source` is set, to the validated relative path.
 
 Claude Code refuses a local marketplace whose name is `claude-plugins-official`.
 The `code-review` entry in `anthropics/claude-code` is a git subdirectory of
@@ -196,7 +204,9 @@ workflow file.
 
 1. Read the upstream change. For the plugin pin, open the commit and confirm
    that `code-review` and `claude-md-management` each have a relative source
-   path and that those directories are present.
+   path and that those directories are present. Read each full entry too. The
+   run copies every field of the entry, so a new field such as `strict: false`
+   or a component list changes what gets installed.
 2. Confirm this repository is still public, and that a public caller can still
    use the reusable workflow.
 3. Put the new plugin commit in `.github/workflows/claude-run.yml` and in the
