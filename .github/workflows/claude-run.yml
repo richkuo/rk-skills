@@ -624,7 +624,7 @@ jobs:
           plugins: |
             code-review@claude-code-plugins
             claude-md-management@claude-plugins-official
-          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
+          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
 
       - name: Append LLM footer to Claude comment
         env:
