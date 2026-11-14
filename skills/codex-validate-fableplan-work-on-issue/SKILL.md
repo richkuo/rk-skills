@@ -24,7 +24,7 @@ Same as the base skill, with this stage table:
 
 - Only the validate stage is a Codex stage. The base skill's catalog check applies to it alone.
 - **The score** is the issue's `[C<score>]` title prefix, read after the validate edit lands or is judged unneeded.
-- **Plan gate and tier.** This skill's own rule, in place of the `fableplan` step 1 tier rule and the `validate-issue` step 6 plan column:
+- **Plan gate and tier.** The `fableplan` step 1 tier rule, with this skill's plan gate at score 75:
 
   | Score | Plan |
   |---|---|
