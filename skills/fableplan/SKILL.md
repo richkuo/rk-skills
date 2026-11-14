@@ -53,7 +53,7 @@ Present the checked plan. Say in one line if step 2 could not honor the requeste
 
 ## Planning-phase-only invocation
 
-Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`) invoke this skill for its plan. Every invocation stops after step 5, and the caller owns implementation:
+Wrapper skills (the validate chains, `fableplan-loop`, `fableplan-work-on-issue`, `codex-validate-fableplan-work-on-issue`) invoke this skill for its plan. Every invocation stops after step 5, and the caller owns implementation:
 
 - Use the caller's harness suffix in place of `fableplan` in step 4's footer.
 - Keep the scratchpad file for the caller's implementation or report stage.

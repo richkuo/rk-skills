@@ -67,7 +67,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | `fableplan-loop` | Fable plans, then `work-on-issue-loop` builds and drives review to approval. No validation. |
 | `fable-advisor` | Your session builds; a persistent Fable 5.2 advisor writes the plan and answers mid-build consults, and a fresh Fable 5.2 reviewer issues a binding pre-commit verdict. |
 | `fable-orchestrate` | Runs on Fable 5.2: splits the task into worker specs, dispatches Sonnet 5.5 workers, reviews each result, integrates one branch, and gets a binding verdict from a fresh Fable 5.2 reviewer before opening the PR. |
-| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue, and by the `codex-validate-plan-work-on-issue` session for its Codex validate pass. |
+| `cli-dispatch` | Reference skill: how a build stamped on the Codex CLI or Cursor CLI reaches that CLI. Loaded by the Opus driver that `milestone-pipeline` dispatches for such an issue, and by the `codex-validate-plan-work-on-issue` and `codex-validate-fableplan-work-on-issue` sessions for their Codex validate pass. |
 | `fable-dispatch` | Reference skill: how every Fable skill reaches Fable 5.2 on the current harness, with the fallback ladder and its reporting. Loaded before any Fable subagent is dispatched. |
 
 ### Codex-driven skills
@@ -75,6 +75,7 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 | Skill | What it does |
 |-------|--------------|
 | `codex-validate-plan-work-on-issue` | Runs one or more issues in parallel through three stages: `validate-issue` in update mode on the Codex CLI (default Sol 6.1 at `high`), a separate Codex CLI run of `issueplan` that posts the plan, then `work-on-issue` on a background Opus 5.5 subagent at `high` that opens the PR. Each issue advances as soon as its own previous stage ends. It can pick the next N independent issues first. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
+| `codex-validate-fableplan-work-on-issue` | The same parallel run with a Fable 5.2 plan in place of the Codex plan: `validate-issue` in update mode on the Codex CLI, a background Fable 5.2 Plan subagent that the session checks and posts (`medium` at score 90 or higher, else `high`), then `work-on-issue` on a background Opus 5.5 subagent at `high`. It posts one band-derived `@claude` review trigger on each open PR and runs no review loop. |
 
 ### App pipeline skills
 
