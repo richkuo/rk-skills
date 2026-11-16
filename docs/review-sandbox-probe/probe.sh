@@ -548,7 +548,7 @@ for layout in "${LAYOUTS[@]}"; do
       if [ "$RUN_K3_WRITABLE" = 0 ]; then gate pass "$layout case d: K3 protected targets"; else gate fail "$layout case d: K3 protected targets ($RUN_K3_WRITABLE writable)"; fi
       if [ "$layout" = L2h ]; then
         say "  L2h stub: $(stat -c '%n %F %U %a' "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" 2>&1 | tr '\n' ' ')"
-        if [ "$(stat -c '%u %a' "$PROBE_HOME/.claude" 2>/dev/null)" = "$PROBE_UID 755" ] && runuser -u "$PROBE_USER" -- sh -c "printf '{}\n' > '$PROBE_HOME/.claude/settings.json'"; then gate pass "L2h case d: the home .claude stub belongs to $PROBE_USER"; else gate fail "L2h case d: the home .claude stub belongs to $PROBE_USER"; fi
+        if grep -qF "::warning::$PROBE_HOME/.claude is a root-owned directory in the home directory of $PROBE_USER" "$run/stubs.log"; then gate pass "L2h case d: the root-owned .claude in a user's home is named in a warning"; else gate fail "L2h case d: the root-owned .claude in a user's home is named in a warning"; fi
       fi
       say "  P7 $layout: hook token $RUN_HOOK"
       second="$OUT/$layout-d2"
@@ -631,7 +631,8 @@ for layout in L1 L1r L1s L1t L4 L2 L3; do
   say "  case a K1 on $layout: ${CASE_A[$layout]:-not run}"
 done
 say "  P1: home-based layouts need the temporary home if any of L1, L1r, L1s, L1t, or L4 fails case a."
-say "  P2: the stub step is needed if L2 fails case a."
+  say "  case a K1 on L2h: ${CASE_A[L2h]:-not run}"
+  say "  P2: the stub step is needed if L2 or L2h fails case a."
 say "  P3 to P10: read the case c and case d blocks, the K3 writable lines, the hook token lines, the K6 lines, and the K8 lines above."
 
 say ""

@@ -292,7 +292,15 @@ jobs:
                   return entry
               return None
 
-          def ensure_claude_dir(fd, path, owner_entry):
+          def warn_home_stub(fd, path, owner_entry):
+              if not owner_entry:
+                  return
+              st = entry_state(fd, ".claude")
+              if st is None or st.st_uid != 0:
+                  return
+              print(f"::warning::{path}/.claude is a root-owned directory in the home directory of {owner_entry.pw_name}. The scrub sandbox of a root review needs it there (anthropics/claude-code#97731), so it stays. Claude Code run by {owner_entry.pw_name} cannot write its settings in it. To give the directory back, move the runner out of that home, then run: sudo rm -r {path}/.claude")
+
+          def ensure_claude_dir(fd, path):
               name = ".claude"
               st = entry_state(fd, name)
               if st is not None:
@@ -308,16 +316,13 @@ jobs:
                       return
                   check_dir_entry(fd, path, name, st, False)
                   return
-              expected_uid = owner_entry.pw_uid if owner_entry else 0
               new_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
               try:
-                  if owner_entry:
-                      os.fchown(new_fd, owner_entry.pw_uid, owner_entry.pw_gid)
                   os.fchmod(new_fd, 0o755)
                   st = os.fstat(new_fd)
               finally:
                   os.close(new_fd)
-              if st.st_uid != expected_uid or stat.S_IMODE(st.st_mode) != 0o755:
+              if st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o755:
                   report("rejected", f"{path}/{name}", "created with the wrong owner or mode")
                   rejected.append(f"{path}/{name}")
                   return
@@ -375,8 +380,9 @@ jobs:
                       print(f"ancestor owned by uid {owner} is the home of {owner_entry.pw_name}: {path}")
                   else:
                       print(f"ancestor owned by uid {owner}: {path}")
-                  ensure_claude_dir(fd, path, owner_entry)
+                  ensure_claude_dir(fd, path)
                   ensure_mcp_file(fd, path)
+                  warn_home_stub(fd, path, owner_entry)
               except OSError as error:
                   report("rejected", path, f"stub preparation failed: {errno.errorcode.get(error.errno, error.errno)}")
                   rejected.append(path)

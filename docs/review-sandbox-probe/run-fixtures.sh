@@ -525,13 +525,22 @@ test_stubs() {
   mkdir -p "$uhome/rk-fixture-runner/_work/repo/repo"
   stub_run "$uhome/rk-fixture-runner/_work/repo/repo"
   expect_status 0 "stubs: a workspace under a user's home runs"
-  if [ "$(stat -c '%F %u %a' "$uhome/.claude")" = "directory $uid 755" ]; then ok "stubs: a new .claude in a user's home is owned by that user"; else bad "stubs: a new .claude in a user's home has the wrong type, owner, or mode"; fi
-  if [ "$(stat -c '%F %u %a' "$uhome/.mcp.json")" = "regular file 0 644" ]; then ok "stubs: .mcp.json in a user's home stays root-owned"; else bad "stubs: .mcp.json in a user's home has the wrong type, owner, or mode"; fi
-  if runuser -u "$RK_PROBE_USER" -- sh -c "printf '{}\n' > '$uhome/.claude/settings.json'"; then ok "stubs: the user can write settings in the new .claude"; else bad "stubs: the user cannot write settings in the new .claude"; fi
+  if [ "$(stat -c '%F %u %a' "$uhome/.claude")" = "directory 0 755" ]; then ok "stubs: a new .claude in a user's home is a root-owned 0755 directory"; else bad "stubs: a new .claude in a user's home has the wrong type, owner, or mode"; fi
+  if [ "$(stat -c '%F %u %a' "$uhome/.mcp.json")" = "regular file 0 644" ]; then ok "stubs: .mcp.json in a user's home is root-owned"; else bad "stubs: .mcp.json in a user's home has the wrong type, owner, or mode"; fi
+  expect_log "::warning::$uhome/.claude is a root-owned directory in the home directory of $RK_PROBE_USER" "stubs: a root-owned .claude in a user's home is named in a warning"
+  expect_log "sudo rm -r $uhome/.claude" "stubs: the warning gives the removal command"
   stub_run "$uhome/rk-fixture-runner/_work/repo/repo"
   expect_status 0 "stubs: a second apply under a user's home runs"
-  expect_log "kept: $uhome/.claude" "stubs: a second apply keeps the user's .claude"
-  if [ "$(stat -c '%u %a' "$uhome/.claude")" = "$uid 755" ] && [ -f "$uhome/.claude/settings.json" ]; then ok "stubs: the user's .claude is unchanged by a second apply"; else bad "stubs: a second apply changed the user's .claude"; fi
+  expect_log "kept: $uhome/.claude" "stubs: a second apply keeps the .claude in a user's home"
+  expect_log "::warning::$uhome/.claude is a root-owned directory" "stubs: a second apply warns again"
+  rm -rf "$uhome/.claude" "$uhome/.mcp.json"
+  mkdir "$uhome/.claude"
+  chown "$RK_PROBE_USER" "$uhome/.claude"
+  stub_run "$uhome/rk-fixture-runner/_work/repo/repo"
+  expect_status 0 "stubs: a user-owned .claude in the user's home runs"
+  expect_log "kept: $uhome/.claude" "stubs: a user-owned .claude in the user's home is kept"
+  if grep -qF "::warning::$uhome/.claude" "$LAST_LOG"; then bad "stubs: a user-owned .claude got the root-owned warning"; else ok "stubs: a user-owned .claude gets no warning"; fi
+  if [ "$(stat -c '%u' "$uhome/.claude")" = "$uid" ]; then ok "stubs: the user-owned .claude is unchanged"; else bad "stubs: the user-owned .claude changed owner"; fi
   rm -rf "$uhome/.claude" "$uhome/.mcp.json" "$uhome/rk-fixture-runner"
 }
 

@@ -69,7 +69,7 @@ already has a `.claude` or `.mcp.json`.
 | L1t | Literal workspace inside `actions-runner`, resolved path outside the home |
 | L2 | Root, runner directory owned by another user ID outside the denied names (97731) |
 | L2e | As L2, and that directory already holds a `.claude` owned by that user |
-| L2h | Root, workspace under the probe user's home directory, which is the only ancestor owned by another user ID |
+| L2h | Root, workspace under the probe user's home directory (with its skeleton dotfiles), which is the only ancestor owned by another user ID (97731) |
 | L3 | Combined: root, the home's `actions-runner` owned by another user ID |
 | L4 | Non-root user, workspace under that user's own `actions-runner` |
 

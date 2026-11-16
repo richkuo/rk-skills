@@ -165,9 +165,11 @@ model until you copy the template again.
     ID (anthropics/claude-code#97731). A step creates a `.claude` directory
     (mode 0755) and a root-owned `.mcp.json` file (mode 0644,
     `{"mcpServers":{}}`) in each such ancestor that lacks them. The new
-    `.claude` is owned by root, or by that user when the ancestor is the
-    user's home directory, so the user's own Claude Code can still write its
-    settings there. It keeps valid existing entries,
+    `.claude` is owned by root, because the root sandbox cannot create its
+    placeholders in a directory owned by another user. When the ancestor is
+    that user's home directory, the step emits a warning: that user's own
+    Claude Code cannot write its settings there until the runner moves out of
+    the home and someone runs `sudo rm -r <home>/.claude`. It keeps valid existing entries,
     refuses symlinks and wrong types, never overwrites, and never follows a
     replaced path. The stubs stay on the host for later jobs.
   Every review on a self-hosted Linux runner with the scrub on also denies
