@@ -161,7 +161,12 @@ build_layout() {
     L1s) runner="$home/actions-runner" ;;
     L1t) runner="$dir/real-runner" ;;
     L2|L2e) runner="$dir/runner-other-uid" ;;
-    L2h) runner="$PROBE_HOME/rk-probe-runner-L2h"; rm -rf "$runner" ;;
+    L2h)
+      runner="$PROBE_HOME/rk-probe-runner-L2h"
+      rm -rf "$runner"
+      PROBE_HOME_MODE=$(stat -c %a "$PROBE_HOME")
+      chmod 755 "$PROBE_HOME"
+      ;;
     L3) runner="$home/actions-runner" ;;
     L4) runner="$home/actions-runner"; owner_user="$PROBE_USER" ;;
   esac
@@ -585,6 +590,7 @@ for layout in "${LAYOUTS[@]}"; do
   fi
   if [ "$layout" = L2h ]; then
     rm -rf "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" "$PROBE_HOME/rk-probe-runner-L2h"
+    [ -n "${PROBE_HOME_MODE:-}" ] && chmod "$PROBE_HOME_MODE" "$PROBE_HOME"
   fi
 done
 

@@ -397,7 +397,7 @@ jobs:
           set -euo pipefail
           umask 077
           PARENT=""
-          if [ "$HOME_PARENT_DENY" = "true" ]; then
+          if [ "${HOME_PARENT_DENY:-}" = "true" ]; then
             PARENT="/tmp/rk-claude-homes.$(id -u)"
             mkdir "$PARENT" 2>/dev/null || true
             if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ "$(stat -c %a "$PARENT")" != "700" ]; then
