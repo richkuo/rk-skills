@@ -919,20 +919,18 @@ jobs:
                 done
               fi
             fi
-            if [ -n "$TEMP_AGENT_HOME" ]; then
-              require_deny "$RUNNER_TEMP"
-              for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
-                optional_deny "${REAL_HOME%/}/$p"
+            require_deny "$RUNNER_TEMP"
+            for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
+              optional_deny "${REAL_HOME%/}/$p"
+            done
+            WORK_DIR=$(dirname "$RUNNER_TEMP")
+            RUNNER_ROOT=$(dirname "$WORK_DIR")
+            if [ -f "$RUNNER_ROOT/.runner" ]; then
+              for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
+                optional_deny "$RUNNER_ROOT/$p"
               done
-              WORK_DIR=$(dirname "$RUNNER_TEMP")
-              RUNNER_ROOT=$(dirname "$WORK_DIR")
-              if [ -f "$RUNNER_ROOT/.runner" ]; then
-                for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
-                  optional_deny "$RUNNER_ROOT/$p"
-                done
-              else
-                echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."
-              fi
+            else
+              echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."
             fi
             echo "Sandboxed commands cannot write to:"
             cat "$DENY_LIST"

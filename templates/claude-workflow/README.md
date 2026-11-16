@@ -154,9 +154,7 @@ model until you copy the template again.
     directory `/tmp/rk-claude-homes.<uid>/home.*`. Its Claude Code settings
     and memory start empty. The step creates the home's startup, git, Bun,
     npm, Claude, ssh, and program-path entries before the run, so the
-    sandbox needs to create nothing in it. The settings file denies
-    sandboxed writes to `$RUNNER_TEMP`, the job home's startup, ssh, git, and
-    Claude files, and the runner installation files. An always-run step empties the
+    sandbox needs to create nothing in it. An always-run step empties the
     temporary home after the action. The empty directory stays on the host,
     one per affected review, because the action adds its program
     directories to `PATH` for the rest of the job; a failed cleanup skips every
@@ -172,12 +170,15 @@ model until you copy the template again.
     the home and someone runs `sudo rm -r <home>/.claude`. It keeps valid existing entries,
     refuses symlinks and wrong types, never overwrites, and never follows a
     replaced path. The stubs stay on the host for later jobs.
-  Every review on a self-hosted Linux runner with the scrub on also denies
-  sandboxed writes to `/tmp/rk-claude-homes.<uid>`, the mode-0700 directory
-  of this user that holds every temporary home (and, as root, to every
-  existing `/tmp/rk-claude-homes.*`). The scrub sandbox can write the rest
-  of `/tmp`, so without this entry a review could change the home of
-  another review that runs as the same user at the same time.
+  Every review on a self-hosted Linux runner with the scrub on adds
+  sandboxed write denials to its settings file: `/tmp/rk-claude-homes.<uid>`,
+  the mode-0700 directory of this user that holds every temporary home (and,
+  as root, every existing `/tmp/rk-claude-homes.*`); `$RUNNER_TEMP`; the job
+  home's startup, ssh, git, and Claude files; and the runner installation
+  files. The scrub sandbox can write the rest of `/tmp`, so without the first
+  entry a review could change the home of another review that runs as the
+  same user at the same time. The sandbox's own runner protection did not
+  cover a root runner inside another user's home on the probe.
   If the preparation fails, the review stops before Claude starts. No path
   turns the scrub off for a layout. The guard, the checks before and after the
   action, and the settings cover both the job home and the temporary home.

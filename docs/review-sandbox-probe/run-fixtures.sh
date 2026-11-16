@@ -281,7 +281,10 @@ test_settings() {
 
   make_settings "$dir" "" "$parent"
   expect_status 0 "settings: real-home run on self-hosted Linux writes the settings"
-  if jq -e --arg p "$parent" '.sandbox.filesystem.denyWrite == [$p]' "$dir/settings.json" >/dev/null; then ok "settings: real-home run on self-hosted Linux protects only the temporary home parent"; else bad "settings: real-home run on self-hosted Linux has the wrong protected paths"; fi
+  deny_has "$dir/settings.json" "$parent" "settings: real-home run on self-hosted Linux protects the temporary home parent"
+  deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings: real-home run on self-hosted Linux protects RUNNER_TEMP"
+  deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: real-home run on self-hosted Linux protects the runner credential file"
+  deny_has "$dir/settings.json" "$dir/real-home/.bashrc" "settings: real-home run on self-hosted Linux protects a job home startup file"
 
   make_settings "$dir" "" "$dir/missing-parent"
   expect_status 1 "settings: a missing temporary home parent stops the run"
