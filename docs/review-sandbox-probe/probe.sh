@@ -487,6 +487,7 @@ say ""
 say "== fixtures"
 if bash "$HERE/run-fixtures.sh" > "$OUT/fixtures.txt" 2>&1; then
   gate pass "fixture suites ($(tail -n 1 "$OUT/fixtures.txt"))"
+  grep -E '^(SKIP|PASS stubs)' "$OUT/fixtures.txt" | sed 's/^/  /' | tee -a "$RESULTS"
 else
   grep -E '^(FAIL|fixtures:)' "$OUT/fixtures.txt" | tee -a "$RESULTS"
   gate fail "fixture suites"
@@ -537,7 +538,7 @@ for layout in "${LAYOUTS[@]}"; do
     write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
     run_claude "$run" scrub "$run/commands.json"
     summarize_run "$run" "$layout case $case_id (HOME=$L_AGENT)"
-    [ -f "$run/stubs.log" ] && sed 's/^/  stubs: /' "$run/stubs.log" | tee -a "$RESULTS" >/dev/null
+    [ -f "$run/stubs.log" ] && sed 's/^/  stubs: /' "$run/stubs.log" | tee -a "$RESULTS"
     placeholders_check "$run" "$layout case $case_id"
     if [ "$case_id" = a ]; then
       CASE_A[$layout]="$RUN_K1"
@@ -546,6 +547,9 @@ for layout in "${LAYOUTS[@]}"; do
       if [ "$RUN_K1" = pass ]; then gate pass "$layout case d: K1 git commands"; else gate fail "$layout case d: K1 git commands"; fi
       if [ "$RUN_K2" = pass ]; then gate pass "$layout case d: K2 Claude credential hidden"; else gate fail "$layout case d: K2 Claude credential hidden"; fi
       if [ "$RUN_K3_WRITABLE" = 0 ]; then gate pass "$layout case d: K3 protected targets"; else gate fail "$layout case d: K3 protected targets ($RUN_K3_WRITABLE writable)"; fi
+      if [ "$layout" = L2 ] || [ "$layout" = L2e ]; then
+        say "  $layout stub: $(stat -c '%n %F %U %a' "$L_RUNNER/.claude" "$L_RUNNER/.mcp.json" 2>&1 | tr '\n' ' ')"
+      fi
       if [ "$layout" = L2h ]; then
         say "  L2h stub: $(stat -c '%n %F %U %a' "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" 2>&1 | tr '\n' ' ')"
         if grep -qF "::warning::$PROBE_HOME/.claude is a root-owned directory in the home directory of $PROBE_USER" "$run/stubs.log"; then gate pass "L2h case d: the root-owned .claude in a user's home is named in a warning"; else gate fail "L2h case d: the root-owned .claude in a user's home is named in a warning"; fi
