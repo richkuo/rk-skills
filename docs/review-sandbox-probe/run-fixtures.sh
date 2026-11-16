@@ -96,6 +96,7 @@ test_contract() {
   expect_output "$a" scrub 1 "contract: hosted default keeps the scrub on"
   expect_output "$a" needs_temp_home false "contract: hosted default uses the real home"
   expect_output "$a" stub_scan false "contract: hosted default makes no stubs"
+  expect_output "$a" home_parent_deny false "contract: hosted default protects no home parent"
   expect_output "$a" real_home "$home" "contract: records the job home"
 
   b="$SCRATCH/contract-b.out"
@@ -160,6 +161,7 @@ test_contract_linux() {
   expect_output "$out" scrub 1 "contract linux: home-based layout keeps the scrub on"
   expect_output "$out" needs_temp_home true "contract linux: home-based actions-runner layout selects a temporary home"
   expect_output "$out" stub_scan "$([ "$(id -u)" = 0 ] && echo true || echo false)" "contract linux: stub scan follows the user ID"
+  expect_output "$out" home_parent_deny true "contract linux: a self-hosted Linux review protects the temporary home parent"
 
   ws="$home/runners/r1/_work/repo/repo"
   mkdir -p "$ws"
@@ -180,6 +182,7 @@ test_contract_linux() {
   RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
   expect_output "$out" needs_temp_home false "contract linux: a layout outside the home uses the real home"
   expect_output "$out" scrub 1 "contract linux: a layout outside the home keeps the scrub on"
+  expect_output "$out" home_parent_deny true "contract linux: a layout outside the home still protects the temporary home parent"
 
   SCRUB_SELF_HOSTED=true RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1b.out"
   RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1a.out"
@@ -255,10 +258,10 @@ test_guard() {
 }
 
 make_settings() {
-  local dir="$1" temp_home="$2" script
+  local dir="$1" temp_home="$2" parent="${3:-}" script
   script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
   rm -f "$dir/settings.json"
-  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "GITHUB_OUTPUT=$dir/settings.out"
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "GITHUB_OUTPUT=$dir/settings.out"
 }
 
 deny_has() {
@@ -267,7 +270,7 @@ deny_has() {
 
 test_settings() {
   echo "== settings"
-  local dir="$SCRATCH/settings" agent="$SCRATCH/settings/agent" hook_cmd
+  local dir="$SCRATCH/settings" parent="$SCRATCH/settings/homes" agent="$SCRATCH/settings/homes/agent" hook_cmd
   rm -rf "$dir"
   mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun" "$agent/.config/git"
   touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$agent/.gitconfig" "$dir/guard.sh"
@@ -276,10 +279,17 @@ test_settings() {
   expect_status 0 "settings: real-home run writes the settings"
   if jq -e '(.sandbox == null) and (.claudeMdExcludes | length) == 10 and (.hooks.PreToolUse | length) == 1' "$dir/settings.json" >/dev/null; then ok "settings: real-home run keeps the baseline settings"; else bad "settings: real-home run changed the baseline settings"; fi
 
-  make_settings "$dir" "$agent"
+  make_settings "$dir" "" "$parent"
+  expect_status 0 "settings: real-home run on self-hosted Linux writes the settings"
+  if jq -e --arg p "$parent" '.sandbox.filesystem.denyWrite == [$p]' "$dir/settings.json" >/dev/null; then ok "settings: real-home run on self-hosted Linux protects only the temporary home parent"; else bad "settings: real-home run on self-hosted Linux has the wrong protected paths"; fi
+
+  make_settings "$dir" "" "$dir/missing-parent"
+  expect_status 1 "settings: a missing temporary home parent stops the run"
+
+  make_settings "$dir" "$agent" "$parent"
   expect_status 0 "settings: temporary-home run writes the settings"
   deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings: RUNNER_TEMP is protected"
-  if jq -e --arg p "$agent" '.sandbox.filesystem.denyWrite | index($p) | not' "$dir/settings.json" >/dev/null; then ok "settings: the temporary home root stays writable for the sandbox's own placeholders"; else bad "settings: the temporary home root is denied"; fi
+  deny_has "$dir/settings.json" "$parent" "settings: the parent of every temporary home is protected"
   deny_has "$dir/settings.json" "$dir/real-home/.bashrc" "settings: a real-home startup file is protected"
   deny_has "$dir/settings.json" "$dir/real-home/.ssh" "settings: the real-home ssh directory is protected"
   deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: the runner credential file is protected"
@@ -287,10 +297,10 @@ test_settings() {
   if jq -e '(.claudeMdExcludes | length) == 10 and (.hooks.PreToolUse | length) == 1' "$dir/settings.json" >/dev/null; then ok "settings: temporary-home run keeps the exclusions and the hook"; else bad "settings: temporary-home run lost the exclusions or the hook"; fi
   if jq -e --arg w "$dir/runner/_work/repo/repo" '[.sandbox.filesystem.denyWrite[] | select(($w + "/") | startswith(. + "/"))] | length == 0' "$dir/settings.json" >/dev/null; then ok "settings: no protected path contains the workspace"; else bad "settings: a protected path contains the workspace"; fi
 
-  RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent"
+  RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a missing required target stops the run"
 
-  RUNNER_TEMP_IN="$dir/runner/_work" make_settings "$dir" "$agent"
+  RUNNER_TEMP_IN="$dir/runner/_work" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a protected path that contains the workspace stops the run"
 
   make_settings "$dir" ""
@@ -304,12 +314,15 @@ test_settings() {
 
 test_cleanup() {
   echo "== cleanup"
-  local script t target
+  local script t target parent
   script=$(step_script "Empty the temporary agent home")
+  parent="/tmp/rk-claude-homes.$(id -u)"
+  mkdir -p "$parent"
+  chmod 700 "$parent"
   target="$SCRATCH/outside-target"
   printf 'keep\n' > "$target"
 
-  t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+  t=$(mktemp -d "$parent/home.XXXXXXXXXX")
   mkdir -p "$t/.local/bin" "$t/.bun/bin" "$t/deep/a/b" "$t/locked"
   printf 'x\n' > "$t/.local/bin/claude"
   printf 'x\n' > "$t/deep/a/b/file"
@@ -324,7 +337,7 @@ test_cleanup() {
   if [ "$(cat "$target")" = keep ] && [ -d "$SCRATCH" ]; then ok "cleanup: symlink targets are untouched"; else bad "cleanup: a symlink target changed"; fi
   rmdir "$t"
 
-  t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+  t=$(mktemp -d "$parent/home.XXXXXXXXXX")
   rmdir "$t"
   mkdir -p "$SCRATCH/link-target"
   printf 'keep\n' > "$SCRATCH/link-target/file"
@@ -334,7 +347,7 @@ test_cleanup() {
   if [ -f "$SCRATCH/link-target/file" ]; then ok "cleanup: the symlink target is untouched"; else bad "cleanup: the symlink target changed"; fi
   rm -f "$t"
 
-  t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+  t=$(mktemp -d "$parent/home.XXXXXXXXXX")
   rmdir "$t"
   printf 'x\n' > "$t"
   run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
@@ -345,8 +358,13 @@ test_cleanup() {
   run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$SCRATCH/not-a-home"
   expect_status 1 "cleanup: a path with another name is refused"
 
+  t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  expect_status 1 "cleanup: a home outside this user's parent directory is refused"
+  rmdir "$t"
+
   if [ "$(id -u)" = 0 ] && [ -n "${RK_PROBE_USER:-}" ]; then
-    t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+    t=$(mktemp -d "$parent/home.XXXXXXXXXX")
     printf 'x\n' > "$t/file"
     chown -R "$RK_PROBE_USER" "$t"
     run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
@@ -364,7 +382,7 @@ test_agent_home() {
     echo "SKIP agent home: it needs Linux"
     return
   fi
-  local script out ws="$SCRATCH/ah-ws" t
+  local script out ws="$SCRATCH/ah-ws" t parent
   mkdir -p "$ws"
   script=$(step_script "Select the agent home")
   out="$SCRATCH/ah.out"
@@ -374,17 +392,45 @@ test_agent_home() {
   expect_output "$out" path "$SCRATCH" "agent home: real-home selection keeps HOME"
   expect_output "$out" temp "" "agent home: real-home selection has no temporary home"
 
+  expect_output "$out" parent "" "agent home: real-home selection off self-hosted Linux has no home parent"
+
+  parent="/tmp/rk-claude-homes.$(id -u)"
+  if [ ! -e "$parent" ] && [ ! -L "$parent" ]; then
+    mkdir -p "$SCRATCH/parent-target"
+    ln -s "$SCRATCH/parent-target" "$parent"
+    : > "$out"
+    run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
+    expect_status 1 "agent home: a symlink in place of the home parent is refused"
+    if [ -z "$(ls -A "$SCRATCH/parent-target")" ]; then ok "agent home: the symlink target is untouched"; else bad "agent home: a home was created through the symlink"; fi
+    rm -f "$parent"
+  else
+    echo "SKIP agent home symlinked parent case: $parent already exists"
+  fi
+
   : > "$out"
-  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true"
+  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=false" "HOME_PARENT_DENY=true"
+  expect_status 0 "agent home: real-home selection on self-hosted Linux runs"
+  expect_output "$out" path "$SCRATCH" "agent home: real-home selection on self-hosted Linux keeps HOME"
+  expect_output "$out" parent "$parent" "agent home: real-home selection on self-hosted Linux names the home parent"
+  if [ -d "$parent" ] && [ ! -L "$parent" ] && [ "$(stat -c '%a %u' "$parent")" = "700 $(id -u)" ]; then ok "agent home: the home parent is a mode-0700 directory owned by this user"; else bad "agent home: wrong type, mode, or owner on $parent"; fi
+
+  : > "$out"
+  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=false"
+  expect_status 1 "agent home: a temporary home without a protected parent is refused"
+
+  : > "$out"
+  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
   expect_status 0 "agent home: temporary-home selection runs"
   t=$(grep '^temp=' "$out" | cut -d= -f2-)
   case "$t" in
-    /tmp/rk-claude-home.??????????) ok "agent home: the temporary home has the expected name" ;;
+    "$parent"/home.??????????) ok "agent home: the temporary home is in the protected parent" ;;
     *) bad "agent home: unexpected temporary home '$t'" ;;
   esac
   expect_output "$out" path "$t" "agent home: HOME is the temporary home"
+  expect_output "$out" parent "$parent" "agent home: the output names the home parent"
   if [ -d "$t" ] && [ "$(stat -c '%a %u' "$t")" = "700 $(id -u)" ]; then ok "agent home: the temporary home is mode 0700 and owned by this user"; else bad "agent home: wrong mode or owner on $t"; fi
   if git config --file "$t/.gitconfig" --get-all safe.directory | grep -qxF "$ws"; then ok "agent home: safe.directory names the workspace"; else bad "agent home: safe.directory lacks the workspace"; fi
+  if [ -f "$t/.bash_login" ] && [ -f "$t/.npmrc" ] && [ -d "$t/.local/bin" ] && [ -d "$t/.config/gh" ] && [ "$(cat "$t/.claude.json")" = '{}' ]; then ok "agent home: the sandbox's own home entries exist before the run"; else bad "agent home: a sandbox home entry is missing"; fi
   rm -rf "$t"
 }
 
@@ -468,6 +514,25 @@ test_stubs() {
   stub_run "$root/plain/_work/repo/repo"
   expect_status 0 "stubs: a root-owned layout runs"
   if [ -z "$(find "$root/plain" -name .claude -o -name .mcp.json)" ]; then ok "stubs: a root-owned layout gets no stubs"; else bad "stubs: a root-owned layout got stubs"; fi
+
+  local uhome uid
+  uhome=$(getent passwd "$RK_PROBE_USER" | cut -d: -f6)
+  uid=$(id -u "$RK_PROBE_USER")
+  if [ -z "$uhome" ] || [ ! -d "$uhome" ] || [ "$(stat -c %u "$uhome")" != "$uid" ] || [ -e "$uhome/.claude" ] || [ -e "$uhome/.mcp.json" ] || [ -e "$uhome/rk-fixture-runner" ]; then
+    echo "SKIP stubs home case: $RK_PROBE_USER needs an own home with no .claude, .mcp.json, or rk-fixture-runner"
+    return
+  fi
+  mkdir -p "$uhome/rk-fixture-runner/_work/repo/repo"
+  stub_run "$uhome/rk-fixture-runner/_work/repo/repo"
+  expect_status 0 "stubs: a workspace under a user's home runs"
+  if [ "$(stat -c '%F %u %a' "$uhome/.claude")" = "directory $uid 755" ]; then ok "stubs: a new .claude in a user's home is owned by that user"; else bad "stubs: a new .claude in a user's home has the wrong type, owner, or mode"; fi
+  if [ "$(stat -c '%F %u %a' "$uhome/.mcp.json")" = "regular file 0 644" ]; then ok "stubs: .mcp.json in a user's home stays root-owned"; else bad "stubs: .mcp.json in a user's home has the wrong type, owner, or mode"; fi
+  if runuser -u "$RK_PROBE_USER" -- sh -c "printf '{}\n' > '$uhome/.claude/settings.json'"; then ok "stubs: the user can write settings in the new .claude"; else bad "stubs: the user cannot write settings in the new .claude"; fi
+  stub_run "$uhome/rk-fixture-runner/_work/repo/repo"
+  expect_status 0 "stubs: a second apply under a user's home runs"
+  expect_log "kept: $uhome/.claude" "stubs: a second apply keeps the user's .claude"
+  if [ "$(stat -c '%u %a' "$uhome/.claude")" = "$uid 755" ] && [ -f "$uhome/.claude/settings.json" ]; then ok "stubs: the user's .claude is unchanged by a second apply"; else bad "stubs: a second apply changed the user's .claude"; fi
+  rm -rf "$uhome/.claude" "$uhome/.mcp.json" "$uhome/rk-fixture-runner"
 }
 
 for tool in bun git jq; do

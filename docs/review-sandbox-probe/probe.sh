@@ -58,6 +58,7 @@ if ! id "$PROBE_USER" >/dev/null 2>&1; then
   useradd -m -s /bin/bash "$PROBE_USER" || die "cannot create $PROBE_USER"
 fi
 PROBE_UID=$(id -u "$PROBE_USER")
+PROBE_HOME=$(getent passwd "$PROBE_USER" | cut -d: -f6)
 export RK_PROBE_USER="$PROBE_USER"
 
 ACTION_SHA=$(grep -oE 'anthropics/claude-code-action@[0-9a-f]{40}' "$WORKFLOW" | head -n 1 | cut -d@ -f2)
@@ -160,6 +161,7 @@ build_layout() {
     L1s) runner="$home/actions-runner" ;;
     L1t) runner="$dir/real-runner" ;;
     L2|L2e) runner="$dir/runner-other-uid" ;;
+    L2h) runner="$PROBE_HOME/rk-probe-runner-L2h"; rm -rf "$runner" ;;
     L3) runner="$home/actions-runner" ;;
     L4) runner="$home/actions-runner"; owner_user="$PROBE_USER" ;;
   esac
@@ -225,7 +227,7 @@ build_layout() {
 }
 
 layout_has_foreign_ancestor() {
-  case "$1" in L2|L2e|L3) return 0 ;; esac
+  case "$1" in L2|L2e|L2h|L3) return 0 ;; esac
   return 1
 }
 
@@ -264,7 +266,7 @@ write_commands() {
 }
 
 prepare_run() {
-  local layout="$1" case_id="$2" run="$3" dir="$BASE/$1" user home ws rt real_home agent temp_home needs stub_scan
+  local layout="$1" case_id="$2" run="$3" dir="$BASE/$1" user home ws rt real_home agent temp_home needs stub_scan parent_deny
   load_env "$dir/layout.env"
   user="$L_USER"; home="$L_HOME_DIR"; ws="$L_WS"; rt="$L_RT"
   mkdir -p "$run"
@@ -274,10 +276,11 @@ prepare_run() {
   temp_home=""
   needs=false
   stub_scan=false
+  parent_deny=false
   case "$case_id" in
     a) ;;
     b) stub_scan=true ;;
-    c) needs=true; layout_has_foreign_ancestor "$layout" && stub_scan=true ;;
+    c) needs=true; parent_deny=true; layout_has_foreign_ancestor "$layout" && stub_scan=true ;;
     d)
       : > "$run/contract.out"
       chmod 666 "$run/contract.out"
@@ -287,6 +290,7 @@ prepare_run() {
       fi
       needs=$(out_value "$run/contract.out" needs_temp_home)
       stub_scan=$(out_value "$run/contract.out" stub_scan)
+      parent_deny=$(out_value "$run/contract.out" home_parent_deny)
       ;;
   esac
   if [ "$stub_scan" = true ]; then
@@ -297,62 +301,44 @@ prepare_run() {
   fi
   : > "$run/agent_home.out"
   chmod 666 "$run/agent_home.out"
-  if ! run_step "$user" agent_home.sh "$run/agent_home.log" "HOME=$home" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$run/agent_home.out" "NEEDS_TEMP_HOME=$needs"; then
+  if ! run_step "$user" agent_home.sh "$run/agent_home.log" "HOME=$home" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$run/agent_home.out" "NEEDS_TEMP_HOME=$needs" "HOME_PARENT_DENY=$parent_deny"; then
     echo "agent home step failed" > "$run/prepare.err"
     return 1
   fi
   agent=$(out_value "$run/agent_home.out" path)
   temp_home=$(out_value "$run/agent_home.out" temp)
-  local exp_parent="" sib_parent sibling entry
-  if [ -n "${PROBE_EXP:-}" ]; then
-    exp_parent=$(mktemp -d /tmp/rk-probe-homes.XXXXXX)
-    chown "$user" "$exp_parent"
-    chmod 700 "$exp_parent"
-    agent=$(as_user "$user" mktemp -d "$exp_parent/home.XXXXXXXXXX")
-    as_user "$user" git config --file "$agent/.gitconfig" --add safe.directory "$ws"
-    if [ "$PROBE_EXP" = e2 ]; then
-      for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .claude.json .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc; do
-        as_user "$user" touch "$agent/$entry"
-      done
-      for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh runners actions-runner; do
-        as_user "$user" mkdir -p "$agent/$entry"
-      done
-    fi
-    temp_home="$agent"
-  fi
-  sib_parent=/tmp
-  [ -n "$temp_home" ] && sib_parent=$(dirname "$temp_home")
-  if [ -n "$exp_parent" ]; then
-    sibling=$(mktemp -d "$exp_parent/home.XXXXXXXXXX")
+  local sibling home_parent
+  home_parent=$(out_value "$run/agent_home.out" parent)
+  if [ -n "$home_parent" ]; then
+    sibling=$(mktemp -d "$home_parent/home.XXXXXXXXXX")
   else
-    sibling=$(mktemp -d "$sib_parent/rk-claude-home.XXXXXXXXXX")
+    sibling=$(mktemp -d /tmp/rk-probe-sibling.XXXXXXXXXX)
   fi
   mkdir -p "$sibling/.local/bin" "$sibling/.claude"
   printf '[user]\n\tname = sibling\n' > "$sibling/.gitconfig"
   chown -R "$user" "$sibling"
   chmod 700 "$sibling"
-  local settings_temp=""
-  [ "$case_id" = d ] && settings_temp="$temp_home"
+  local settings_temp="" settings_parent=""
+  if [ "$case_id" = d ]; then
+    settings_temp="$temp_home"
+    settings_parent="$home_parent"
+  fi
   : > "$run/guard.out"
   chmod 666 "$run/guard.out"
   if ! run_step "$user" guard.sh "$run/guard.log" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "SETTINGS_FILE=$rt/claude-review-settings.json" "REAL_HOME=$real_home" "AGENT_HOME=$agent" "GITHUB_OUTPUT=$run/guard.out"; then
     echo "guard generation failed" > "$run/prepare.err"
     return 1
   fi
-  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "GITHUB_OUTPUT=$run/settings.out"; then
+  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "HOME_PARENT=$settings_parent" "GITHUB_OUTPUT=$run/settings.out"; then
     echo "settings generation failed" > "$run/prepare.err"
     return 1
   fi
   cp "$rt/claude-review-settings.json" "$run/settings.shipped.json"
   jq --arg hook "$OPT/hook.sh" '.hooks.PreToolUse[0].hooks += [{"type": "command", "command": $hook}]' "$run/settings.shipped.json" > "$run/settings.probe.json"
-  if [ -n "$exp_parent" ]; then
-    jq --arg p "$exp_parent" --arg h "$agent" --arg mode "$PROBE_EXP" '.sandbox.filesystem.denyWrite = ((.sandbox.filesystem.denyWrite // []) + [$p]) | if $mode == "e1" then .sandbox.filesystem.allowWriteWithinDeny = [$h] else . end' "$run/settings.probe.json" > "$run/settings.exp.json"
-    mv "$run/settings.exp.json" "$run/settings.probe.json"
-  fi
   chmod 644 "$run/settings.probe.json"
   {
     printf 'USER=%s\nWS=%s\nRT=%s\nREAL_HOME=%s\nAGENT=%s\nTEMP_HOME=%s\nRUNNER=%s\n' "$user" "$ws" "$rt" "$real_home" "$agent" "$temp_home" "$L_RUNNER"
-    printf 'SIBLING=%s\nSIB_RUNNER=%s\nEXP_PARENT=%s\n' "$sibling" "$L_SIB_RUNNER" "$exp_parent"
+    printf 'SIBLING=%s\nSIB_RUNNER=%s\n' "$sibling" "$L_SIB_RUNNER"
   } > "$run/run.env"
 }
 
@@ -502,6 +488,11 @@ else
 fi
 
 LAYOUTS=(L0 L1 L1r L1s L1t L2 L2e L3 L4)
+if [ -n "$PROBE_HOME" ] && [ -d "$PROBE_HOME" ] && [ "$(stat -c %u "$PROBE_HOME")" = "$PROBE_UID" ] && [ ! -e "$PROBE_HOME/.claude" ] && [ ! -e "$PROBE_HOME/.mcp.json" ]; then
+  LAYOUTS=(L0 L1 L1r L1s L1t L2 L2e L2h L3 L4)
+else
+  say "layout L2h skipped: $PROBE_USER needs an own home with no .claude or .mcp.json"
+fi
 declare -A CASE_A
 for layout in "${LAYOUTS[@]}"; do
   build_layout "$layout"
@@ -550,6 +541,10 @@ for layout in "${LAYOUTS[@]}"; do
       if [ "$RUN_K1" = pass ]; then gate pass "$layout case d: K1 git commands"; else gate fail "$layout case d: K1 git commands"; fi
       if [ "$RUN_K2" = pass ]; then gate pass "$layout case d: K2 Claude credential hidden"; else gate fail "$layout case d: K2 Claude credential hidden"; fi
       if [ "$RUN_K3_WRITABLE" = 0 ]; then gate pass "$layout case d: K3 protected targets"; else gate fail "$layout case d: K3 protected targets ($RUN_K3_WRITABLE writable)"; fi
+      if [ "$layout" = L2h ]; then
+        say "  L2h stub: $(stat -c '%n %F %U %a' "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" 2>&1 | tr '\n' ' ')"
+        if [ "$(stat -c '%u %a' "$PROBE_HOME/.claude" 2>/dev/null)" = "$PROBE_UID 755" ] && runuser -u "$PROBE_USER" -- sh -c "printf '{}\n' > '$PROBE_HOME/.claude/settings.json'"; then gate pass "L2h case d: the home .claude stub belongs to $PROBE_USER"; else gate fail "L2h case d: the home .claude stub belongs to $PROBE_USER"; fi
+      fi
       say "  P7 $layout: hook token $RUN_HOOK"
       second="$OUT/$layout-d2"
       if prepare_run "$layout" d "$second"; then
@@ -588,23 +583,9 @@ for layout in "${LAYOUTS[@]}"; do
       fi
     fi
   fi
-done
-
-say ""
-say "== K11 candidate homes under a denied parent"
-for layout in L1 L4; do
-  for exp in e1 e2; do
-    run="$OUT/$layout-k11-$exp"
-    if ! PROBE_EXP=$exp prepare_run "$layout" d "$run"; then
-      say "-- $layout K11 $exp: preparation failed: $(cat "$run/prepare.err" 2>/dev/null)"
-      continue
-    fi
-    load_env "$run/run.env"
-    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
-    run_claude "$run" scrub "$run/commands.json"
-    summarize_run "$run" "$layout K11 $exp (HOME=$L_AGENT, parent $L_EXP_PARENT)"
-    tool_text "$run" 2 | grep '^K3 DENIED' | grep -F "$L_AGENT" | sed 's/^/  /' | tee -a "$RESULTS" >/dev/null
-  done
+  if [ "$layout" = L2h ]; then
+    rm -rf "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" "$PROBE_HOME/rk-probe-runner-L2h"
+  fi
 done
 
 say ""

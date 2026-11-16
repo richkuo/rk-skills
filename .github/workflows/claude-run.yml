@@ -131,6 +131,7 @@ jobs:
           SCRUB_VALUE=1
           NEEDS_TEMP_HOME=false
           STUB_SCAN=false
+          HOME_PARENT_DENY=false
           if [ "$SCRUB" != "true" ]; then
             if [ -n "$ISSUE_PR_URL" ]; then
               AUTHOR_ASSOC="$ISSUE_AUTHOR_ASSOC"
@@ -169,6 +170,7 @@ jobs:
             HOME_RESOLVED=$(cd -P "$HOME" 2>/dev/null && pwd -P) || fail "the job home $HOME cannot be resolved."
             WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" 2>/dev/null && pwd -P) || fail "the workspace $GITHUB_WORKSPACE cannot be resolved."
             UID_NOW=$(id -u) || fail "the user ID cannot be read."
+            HOME_PARENT_DENY=true
             DENIED_ROOTS=()
             for h in "$HOME" "$HOME_RESOLVED"; do
               h="${h%/}"
@@ -204,6 +206,7 @@ jobs:
             printf 'real_home=%s\n' "$REAL_HOME"
             printf 'needs_temp_home=%s\n' "$NEEDS_TEMP_HOME"
             printf 'stub_scan=%s\n' "$STUB_SCAN"
+            printf 'home_parent_deny=%s\n' "$HOME_PARENT_DENY"
           } >> "$GITHUB_OUTPUT"
 
       - name: Prepare workspace ancestor stubs for the scrub sandbox
@@ -218,6 +221,7 @@ jobs:
           python3 -I - "$GITHUB_WORKSPACE" << 'PY'
           import errno
           import os
+          import pwd
           import secrets
           import stat
           import sys
@@ -279,7 +283,16 @@ jobs:
                   return
               report("created" if created else "kept", target)
 
-          def ensure_claude_dir(fd, path):
+          def home_owner(path, owner):
+              try:
+                  entry = pwd.getpwuid(owner)
+              except KeyError:
+                  return None
+              if entry.pw_dir and os.path.realpath(entry.pw_dir) == path:
+                  return entry
+              return None
+
+          def ensure_claude_dir(fd, path, owner_entry):
               name = ".claude"
               st = entry_state(fd, name)
               if st is not None:
@@ -295,13 +308,16 @@ jobs:
                       return
                   check_dir_entry(fd, path, name, st, False)
                   return
+              expected_uid = owner_entry.pw_uid if owner_entry else 0
               new_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
               try:
+                  if owner_entry:
+                      os.fchown(new_fd, owner_entry.pw_uid, owner_entry.pw_gid)
                   os.fchmod(new_fd, 0o755)
                   st = os.fstat(new_fd)
               finally:
                   os.close(new_fd)
-              if st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o755:
+              if st.st_uid != expected_uid or stat.S_IMODE(st.st_mode) != 0o755:
                   report("rejected", f"{path}/{name}", "created with the wrong owner or mode")
                   rejected.append(f"{path}/{name}")
                   return
@@ -354,8 +370,12 @@ jobs:
                   owner = os.fstat(fd).st_uid
                   if owner == 0:
                       continue
-                  print(f"ancestor owned by uid {owner}: {path}")
-                  ensure_claude_dir(fd, path)
+                  owner_entry = home_owner(path, owner)
+                  if owner_entry:
+                      print(f"ancestor owned by uid {owner} is the home of {owner_entry.pw_name}: {path}")
+                  else:
+                      print(f"ancestor owned by uid {owner}: {path}")
+                  ensure_claude_dir(fd, path, owner_entry)
                   ensure_mcp_file(fd, path)
               except OSError as error:
                   report("rejected", path, f"stub preparation failed: {errno.errorcode.get(error.errno, error.errno)}")
@@ -372,17 +392,32 @@ jobs:
         id: agent_home
         env:
           NEEDS_TEMP_HOME: ${{ steps.review_contract.outputs.needs_temp_home }}
+          HOME_PARENT_DENY: ${{ steps.review_contract.outputs.home_parent_deny }}
         run: |
           set -euo pipefail
+          umask 077
+          PARENT=""
+          if [ "$HOME_PARENT_DENY" = "true" ]; then
+            PARENT="/tmp/rk-claude-homes.$(id -u)"
+            mkdir "$PARENT" 2>/dev/null || true
+            if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ "$(stat -c %a "$PARENT")" != "700" ]; then
+              echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a mode-0700 directory owned by this user. Remove it when no review runs on this host."
+              exit 1
+            fi
+          fi
           if [ "$NEEDS_TEMP_HOME" != "true" ]; then
             {
               printf 'path=%s\n' "$HOME"
               printf 'temp=\n'
+              printf 'parent=%s\n' "$PARENT"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          umask 077
-          AGENT_HOME=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
+          if [ -z "$PARENT" ]; then
+            echo "::error::Review refused: a temporary agent home is needed, but the run contract gives no protected directory to hold it."
+            exit 1
+          fi
+          AGENT_HOME=$(mktemp -d "$PARENT/home.XXXXXXXXXX")
           if [ -L "$AGENT_HOME" ] || [ ! -d "$AGENT_HOME" ] || [ ! -O "$AGENT_HOME" ] || [ "$(stat -c %a "$AGENT_HOME")" != "700" ]; then
             echo "::error::Review refused: the temporary agent home $AGENT_HOME is not a mode-0700 directory owned by this user."
             exit 1
@@ -394,6 +429,13 @@ jobs:
             exit 1
           fi
           rm -f "$AGENT_HOME/.rk-exec-check"
+          for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc; do
+            : > "$AGENT_HOME/$entry"
+          done
+          printf '{}\n' > "$AGENT_HOME/.claude.json"
+          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh runners actions-runner; do
+            mkdir -p "$AGENT_HOME/$entry"
+          done
           WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P)
           git config --file "$AGENT_HOME/.gitconfig" --add safe.directory "$GITHUB_WORKSPACE"
           if [ "$WS_RESOLVED" != "$GITHUB_WORKSPACE" ]; then
@@ -403,6 +445,7 @@ jobs:
           {
             printf 'path=%s\n' "$AGENT_HOME"
             printf 'temp=%s\n' "$AGENT_HOME"
+            printf 'parent=%s\n' "$PARENT"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
@@ -702,6 +745,7 @@ jobs:
           REAL_HOME: ${{ steps.review_contract.outputs.real_home }}
           AGENT_HOME: ${{ steps.agent_home.outputs.path }}
           TEMP_AGENT_HOME: ${{ steps.agent_home.outputs.temp }}
+          HOME_PARENT: ${{ steps.agent_home.outputs.parent }}
         run: |
           if [ -z "$REAL_HOME" ] || [ -z "$AGENT_HOME" ]; then
             echo "::error::The run contract has no job home or agent home, so the credential guard cannot cover them."
@@ -830,7 +874,7 @@ jobs:
             }
           }
           EOF
-          if [ -n "$TEMP_AGENT_HOME" ]; then
+          if [ -n "$TEMP_AGENT_HOME" ] || [ -n "$HOME_PARENT" ]; then
             WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P) || { echo "::error::The workspace cannot be resolved."; exit 1; }
             DENY_LIST=$(mktemp)
             add_deny() {
@@ -859,18 +903,30 @@ jobs:
                 add_deny "$1"
               fi
             }
-            require_deny "$RUNNER_TEMP"
-            for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
-              optional_deny "${REAL_HOME%/}/$p"
-            done
-            WORK_DIR=$(dirname "$RUNNER_TEMP")
-            RUNNER_ROOT=$(dirname "$WORK_DIR")
-            if [ -f "$RUNNER_ROOT/.runner" ]; then
-              for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
-                optional_deny "$RUNNER_ROOT/$p"
+            if [ -n "$HOME_PARENT" ]; then
+              require_deny "$HOME_PARENT"
+              if [ "$(id -u)" = "0" ]; then
+                for p in /tmp/rk-claude-homes.*; do
+                  if [ "$p" != "$HOME_PARENT" ] && [ -d "$p" ] && [ ! -L "$p" ]; then
+                    add_deny "$p"
+                  fi
+                done
+              fi
+            fi
+            if [ -n "$TEMP_AGENT_HOME" ]; then
+              require_deny "$RUNNER_TEMP"
+              for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
+                optional_deny "${REAL_HOME%/}/$p"
               done
-            else
-              echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."
+              WORK_DIR=$(dirname "$RUNNER_TEMP")
+              RUNNER_ROOT=$(dirname "$WORK_DIR")
+              if [ -f "$RUNNER_ROOT/.runner" ]; then
+                for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
+                  optional_deny "$RUNNER_ROOT/$p"
+                done
+              else
+                echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."
+              fi
             fi
             echo "Sandboxed commands cannot write to:"
             cat "$DENY_LIST"
@@ -1151,8 +1207,9 @@ jobs:
           PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           export PATH
           T="$TEMP_AGENT_HOME"
+          PARENT="/tmp/rk-claude-homes.$(id -u)"
           case "$T" in
-            /tmp/rk-claude-home.??????????) ;;
+            "$PARENT"/home.??????????) ;;
             *)
               echo "::error::The temporary agent home $T does not match the name this workflow creates, so it is not touched."
               exit 1

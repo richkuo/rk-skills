@@ -14,7 +14,8 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   `/srv/rk-review-sandbox-probe`, and writes `results.txt` under
   `/var/tmp/rk-review-sandbox-probe` (or `RK_PROBE_OUT`). It uses only
   synthetic credentials and disposable fixtures. It never touches the
-  operator's home or a live runner directory.
+  operator's home or a live runner directory. It changes the host; see
+  "Host changes" below.
 - `mock_messages_api.py`: a standard-library mock of the Messages API. It
   answers each Claude Code request with the next scripted Bash call and logs
   each tool result.
@@ -36,6 +37,27 @@ sudo env "PATH=$PATH" bash docs/review-sandbox-probe/probe.sh
 The `Review sandbox probe` workflow runs the same command on a GitHub-hosted
 runner for every pull request that changes `claude-run.yml` or this directory.
 
+## Host changes
+
+The probe leaves these changes on the host after it ends:
+
+| Change | How to undo it |
+|--------|----------------|
+| Installs the `bubblewrap` and `socat` packages when they are missing (apt only) | `sudo apt-get remove bubblewrap socat` |
+| Sets `kernel.apparmor_restrict_unprivileged_userns=0` when the setting exists; it stays until the next restart | `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1`, or restart |
+| Creates the user `rkprobe` (or `RK_PROBE_USER`) with a home directory when that user does not exist | `sudo userdel -r rkprobe` |
+| Installs Claude Code and the extracted step scripts under `/opt/rk-review-sandbox-probe` | `sudo rm -rf /opt/rk-review-sandbox-probe` |
+| Builds the layouts under `/srv/rk-review-sandbox-probe` (or `RK_PROBE_BASE`) | `sudo rm -rf /srv/rk-review-sandbox-probe` |
+| Writes the results and run files under `/var/tmp/rk-review-sandbox-probe` (or `RK_PROBE_OUT`) | `sudo rm -rf /var/tmp/rk-review-sandbox-probe` |
+| Leaves empty temporary homes and probe sibling homes in `/tmp/rk-claude-homes.<uid>` for root and the probe user, and probe sibling homes directly in `/tmp` for cases (a) and (b) | Restart, or, only while no review runs on the host, `sudo rm -rf /tmp/rk-claude-homes.0 /tmp/rk-claude-homes.$(id -u rkprobe) /tmp/rk-probe-sibling.*` |
+
+Each run deletes and creates again the three directories under `/opt`, `/srv`,
+and `/var/tmp`. It reuses an existing probe user and does not change the
+package or sysctl state when that is already in place. Layout L2h and the stub
+fixture suite create a `.claude`, a `.mcp.json`, and a runner directory in the
+probe user's home, and delete them when they end; they skip when that home
+already has a `.claude` or `.mcp.json`.
+
 ## Layouts and cases
 
 | Layout | Shape |
@@ -47,6 +69,7 @@ runner for every pull request that changes `claude-run.yml` or this directory.
 | L1t | Literal workspace inside `actions-runner`, resolved path outside the home |
 | L2 | Root, runner directory owned by another user ID outside the denied names (97731) |
 | L2e | As L2, and that directory already holds a `.claude` owned by that user |
+| L2h | Root, workspace under the probe user's home directory, which is the only ancestor owned by another user ID |
 | L3 | Combined: root, the home's `actions-runner` owned by another user ID |
 | L4 | Non-root user, workspace under that user's own `actions-runner` |
 
@@ -57,7 +80,7 @@ file names the reason for each inapplicable case.
 Checks: K1 git status, diff, fetch, and a local config write in the sandbox;
 K2 the synthetic Anthropic credential is absent from the tool environment and
 from every readable `/proc/*/environ`; K3 write attempts on the runner,
-`$RUNNER_TEMP`, job home, and agent home targets; K4 reads of the job home's
+`$RUNNER_TEMP`, job home, agent home, and sibling home targets (a second home of the same user, as a concurrent review would have), and ungated K3X write attempts on `/tmp`, `/var/tmp`, `/dev/shm`, and a sibling runner under `~/runners`; K4 reads of the job home's
 Claude credential files; K5 the shipped guard blocks a tool call when a
 synthetic job token sits in a credential store; K6 zero-byte placeholders, a
 host git config write, and a repeated run; K8 a write-route run with and

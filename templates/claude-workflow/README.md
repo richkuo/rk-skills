@@ -151,21 +151,31 @@ model until you copy the template again.
   - The literal or resolved workspace is inside the literal or resolved
     `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730).
     Only the Claude action step runs with a temporary `HOME`, a new mode-0700
-    directory `/tmp/rk-claude-home.*`. Its Claude Code settings and memory
-    start empty. The scrub sandbox itself denies writes to that home's
-    startup, git, Bun, npm, Claude, ssh, and program-path files; the settings
-    file adds `$RUNNER_TEMP`, the job home's startup, ssh, git, and Claude
-    files, and the runner installation files. An always-run step empties the
+    directory `/tmp/rk-claude-homes.<uid>/home.*`. Its Claude Code settings
+    and memory start empty. The step creates the home's startup, git, Bun,
+    npm, Claude, ssh, and program-path entries before the run, so the
+    sandbox needs to create nothing in it. The settings file denies
+    sandboxed writes to `$RUNNER_TEMP`, the job home's startup, ssh, git, and
+    Claude files, and the runner installation files. An always-run step empties the
     temporary home after the action. The empty directory stays on the host,
     one per affected review, because the action adds its program
     directories to `PATH` for the rest of the job; a failed cleanup skips every
     later step that would run a program from `PATH`.
   - The review runs as root and a workspace ancestor is owned by another user
-    ID (anthropics/claude-code#97731). A step creates a root-owned `.claude`
-    directory (mode 0755) and `.mcp.json` file (mode 0644, `{"mcpServers":{}}`)
-    in each such ancestor that lacks them. It keeps valid existing entries,
+    ID (anthropics/claude-code#97731). A step creates a `.claude` directory
+    (mode 0755) and a root-owned `.mcp.json` file (mode 0644,
+    `{"mcpServers":{}}`) in each such ancestor that lacks them. The new
+    `.claude` is owned by root, or by that user when the ancestor is the
+    user's home directory, so the user's own Claude Code can still write its
+    settings there. It keeps valid existing entries,
     refuses symlinks and wrong types, never overwrites, and never follows a
     replaced path. The stubs stay on the host for later jobs.
+  Every review on a self-hosted Linux runner with the scrub on also denies
+  sandboxed writes to `/tmp/rk-claude-homes.<uid>`, the mode-0700 directory
+  of this user that holds every temporary home (and, as root, to every
+  existing `/tmp/rk-claude-homes.*`). The scrub sandbox can write the rest
+  of `/tmp`, so without this entry a review could change the home of
+  another review that runs as the same user at the same time.
   If the preparation fails, the review stops before Claude starts. No path
   turns the scrub off for a layout. The guard, the checks before and after the
   action, and the settings cover both the job home and the temporary home.
@@ -188,7 +198,8 @@ model until you copy the template again.
   `sudo apt-get install bubblewrap socat` and
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
   setting stays until the machine restarts. In the two layouts above, a review
-  also leaves the ancestor stubs and one empty temporary home directory.
+  also leaves the ancestor stubs and one empty temporary home directory, and
+  every such review leaves the directory `/tmp/rk-claude-homes.<uid>`.
   `review_subprocess_scrub: false` skips the host changes and the scrub, under
   the scrub-off exception above.
 
