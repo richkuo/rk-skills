@@ -149,7 +149,7 @@ out_value() {
 }
 
 build_layout() {
-  local name="$1" dir="$BASE/$1" home runner ws literal owner_user=root
+  local name="$1" dir="$BASE/$1" home runner ws literal owner_user=root sib_runner
   mkdir -p "$dir"
   chmod 755 "$dir"
   home="$dir/home"
@@ -180,6 +180,12 @@ build_layout() {
   printf 'x\n' > "$runner/_work/_temp/_runner_file_commands/set_env_x"
   if [ "$name" = L1t ]; then
     ln -s "$runner" "$home/actions-runner"
+  fi
+  sib_runner=""
+  if [ "$name" = L1r ]; then
+    sib_runner="$home/runners/r2"
+    mkdir -p "$sib_runner/bin" "$sib_runner/_work/_temp"
+    printf '{"agentName":"rkprobe-r2"}\n' > "$sib_runner/.runner"
   fi
   ws="$runner/_work/repo/repo"
   git init -q --bare "$dir/origin.git"
@@ -214,6 +220,7 @@ build_layout() {
     printf 'WS=%s\n' "$literal"
     printf 'RT=%s\n' "$runner/_work/_temp"
     printf 'ORIGIN=%s\n' "$dir/origin.git"
+    printf 'SIB_RUNNER=%s\n' "$sib_runner"
   } > "$dir/layout.env"
 }
 
@@ -228,7 +235,7 @@ layout_is_home_based() {
 }
 
 write_commands() {
-  local file="$1" kind="$2" home="$3" agent="$4" runner="$5" rt="$6" targets
+  local file="$1" kind="$2" home="$3" agent="$4" runner="$5" rt="$6" sibling="${7:-}" sib_runner="${8:-}" targets info
   if [ "$kind" = marker ]; then
     jq -n '["touch .rk-k5-marker; echo K5 ran"]' > "$file"
     return
@@ -241,11 +248,17 @@ write_commands() {
   if [ "$agent" != "$home" ]; then
     targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_login $agent/.bunfig.toml $agent/.npmrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
-  jq -n --arg targets "$targets" --arg home "$home" '[
+  if [ -n "$sibling" ]; then
+    targets="$targets $sibling $sibling/.gitconfig $sibling/.local/bin $sibling/.claude"
+  fi
+  info="/tmp /var/tmp /dev/shm"
+  [ -n "$sib_runner" ] && info="$info $sib_runner $sib_runner/bin $sib_runner/_work/_temp"
+  jq -n --arg targets "$targets" --arg home "$home" --arg info "$info" '[
     "for c in \"git status --short\" \"git diff --stat refs/remotes/origin/base HEAD\" \"git fetch origin\" \"git config --local rk.probe.inside 1\"; do out=$($c 2>&1); rc=$?; b=$(printf \"%s\" \"$out\" | grep -m1 -i bwrap); echo \"K1 rc=$rc cmd=[$c] bwrap=[$b]\"; if [ $rc -ne 0 ]; then echo \"K1 err cmd=[$c] $(printf %s \"$out\" | head -c 300 | tr \"\\n\" \" \")\"; fi; done",
     "echo \"K2 env=$(env | grep -c rkprobe-synthetic-anthropic)\"; n=0; for p in /proc/[0-9]*/environ; do if grep -qa rkprobe-synthetic-anthropic \"$p\" 2>/dev/null; then n=$((n+1)); fi; done; echo \"K2 proc=$n\"",
     ("for t in " + $targets + "; do if [ -d \"$t\" ]; then f=\"$t/.rk-probe-new\"; if ( : > \"$f\" ) 2>/dev/null; then echo \"K3 WRITABLE $t\"; rm -f \"$f\"; else echo \"K3 DENIED $t\"; fi; elif [ -e \"$t\" ]; then if ( : >> \"$t\" ) 2>/dev/null; then echo \"K3 WRITABLE $t\"; else echo \"K3 DENIED $t\"; fi; else if ( : > \"$t\" ) 2>/dev/null; then echo \"K3 WRITABLE $t (created)\"; rm -f \"$t\"; else echo \"K3 DENIED $t (missing)\"; fi; fi; done"),
-    ("for f in " + $home + "/.claude/.credentials.json " + $home + "/.claude.json; do if cat \"$f\" >/dev/null 2>&1; then echo \"K4 READABLE $f\"; else echo \"K4 DENIED $f\"; fi; done")
+    ("for f in " + $home + "/.claude/.credentials.json " + $home + "/.claude.json; do if cat \"$f\" >/dev/null 2>&1; then echo \"K4 READABLE $f\"; else echo \"K4 DENIED $f\"; fi; done"),
+    ("for t in " + $info + "; do f=\"$t/.rk-probe-new\"; if ( : > \"$f\" ) 2>/dev/null; then echo \"K3X WRITABLE $t\"; rm -f \"$f\"; else echo \"K3X DENIED $t\"; fi; done")
   ]' > "$file"
   if [ "$(id -u)" = 0 ]; then chmod 644 "$file"; fi
 }
@@ -290,6 +303,34 @@ prepare_run() {
   fi
   agent=$(out_value "$run/agent_home.out" path)
   temp_home=$(out_value "$run/agent_home.out" temp)
+  local exp_parent="" sib_parent sibling entry
+  if [ -n "${PROBE_EXP:-}" ]; then
+    exp_parent=$(mktemp -d /tmp/rk-probe-homes.XXXXXX)
+    chown "$user" "$exp_parent"
+    chmod 700 "$exp_parent"
+    agent=$(as_user "$user" mktemp -d "$exp_parent/home.XXXXXXXXXX")
+    as_user "$user" git config --file "$agent/.gitconfig" --add safe.directory "$ws"
+    if [ "$PROBE_EXP" = e2 ]; then
+      for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .claude.json .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc; do
+        as_user "$user" touch "$agent/$entry"
+      done
+      for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh runners actions-runner; do
+        as_user "$user" mkdir -p "$agent/$entry"
+      done
+    fi
+    temp_home="$agent"
+  fi
+  sib_parent=/tmp
+  [ -n "$temp_home" ] && sib_parent=$(dirname "$temp_home")
+  if [ -n "$exp_parent" ]; then
+    sibling=$(mktemp -d "$exp_parent/home.XXXXXXXXXX")
+  else
+    sibling=$(mktemp -d "$sib_parent/rk-claude-home.XXXXXXXXXX")
+  fi
+  mkdir -p "$sibling/.local/bin" "$sibling/.claude"
+  printf '[user]\n\tname = sibling\n' > "$sibling/.gitconfig"
+  chown -R "$user" "$sibling"
+  chmod 700 "$sibling"
   local settings_temp=""
   [ "$case_id" = d ] && settings_temp="$temp_home"
   : > "$run/guard.out"
@@ -304,9 +345,14 @@ prepare_run() {
   fi
   cp "$rt/claude-review-settings.json" "$run/settings.shipped.json"
   jq --arg hook "$OPT/hook.sh" '.hooks.PreToolUse[0].hooks += [{"type": "command", "command": $hook}]' "$run/settings.shipped.json" > "$run/settings.probe.json"
+  if [ -n "$exp_parent" ]; then
+    jq --arg p "$exp_parent" --arg h "$agent" --arg mode "$PROBE_EXP" '.sandbox.filesystem.denyWrite = ((.sandbox.filesystem.denyWrite // []) + [$p]) | if $mode == "e1" then .sandbox.filesystem.allowWriteWithinDeny = [$h] else . end' "$run/settings.probe.json" > "$run/settings.exp.json"
+    mv "$run/settings.exp.json" "$run/settings.probe.json"
+  fi
   chmod 644 "$run/settings.probe.json"
   {
     printf 'USER=%s\nWS=%s\nRT=%s\nREAL_HOME=%s\nAGENT=%s\nTEMP_HOME=%s\nRUNNER=%s\n' "$user" "$ws" "$rt" "$real_home" "$agent" "$temp_home" "$L_RUNNER"
+    printf 'SIBLING=%s\nSIB_RUNNER=%s\nEXP_PARENT=%s\n' "$sibling" "$L_SIB_RUNNER" "$exp_parent"
   } > "$run/run.env"
 }
 
@@ -373,6 +419,7 @@ summarize_run() {
     printf '%s\n' "$k2" | grep '^K2' | sed 's/^/  /'
     printf '%s\n' "$k3" | grep '^K3 WRITABLE' | sed 's/^/  /'
     printf '%s\n' "$(tool_text "$run" 3)" | grep '^K4' | sed 's/^/  /'
+    printf '%s\n' "$(tool_text "$run" 4)" | grep '^K3X' | sed 's/^/  /'
     echo "  hook: ${hook:-none}"
     [ -n "$bw" ] && printf '  bwrap output: %s\n' "$bw"
     if [ "$(tool_error "$run" 0)" = true ]; then
@@ -481,7 +528,7 @@ for layout in "${LAYOUTS[@]}"; do
       mkdir -p "$OUT/$layout-k8-before"
       if prepare_run "$layout" a "$OUT/$layout-k8-before"; then
         load_env "$OUT/$layout-k8-before/run.env"
-        write_commands "$OUT/$layout-k8-before/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT"
+        write_commands "$OUT/$layout-k8-before/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
         run_claude "$OUT/$layout-k8-before" write-route "$OUT/$layout-k8-before/commands.json"
       fi
     fi
@@ -491,7 +538,7 @@ for layout in "${LAYOUTS[@]}"; do
       continue
     fi
     load_env "$run/run.env"
-    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT"
+    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
     run_claude "$run" scrub "$run/commands.json"
     summarize_run "$run" "$layout case $case_id (HOME=$L_AGENT)"
     [ -f "$run/stubs.log" ] && sed 's/^/  stubs: /' "$run/stubs.log" | tee -a "$RESULTS" >/dev/null
@@ -507,7 +554,7 @@ for layout in "${LAYOUTS[@]}"; do
       second="$OUT/$layout-d2"
       if prepare_run "$layout" d "$second"; then
         load_env "$second/run.env"
-        write_commands "$second/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT"
+        write_commands "$second/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
         run_claude "$second" scrub "$second/commands.json"
         summarize_run "$second" "$layout case d, second run"
         if [ "$RUN_K1" = pass ]; then gate pass "$layout case d: K6 a repeated review succeeds"; else gate fail "$layout case d: K6 a repeated review succeeds"; fi
@@ -526,7 +573,7 @@ for layout in "${LAYOUTS[@]}"; do
     after="$OUT/$layout-k8-after"
     if prepare_run "$layout" a "$after"; then
       load_env "$after/run.env"
-      write_commands "$after/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT"
+      write_commands "$after/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
       run_claude "$after" write-route "$after/commands.json"
       before_init=$(jq -c 'select(.type == "system" and .subtype == "init") | {mcp_servers, tools: (.tools | length)}' "$OUT/$layout-k8-before/claude.jsonl" 2>/dev/null | head -n 1)
       after_init=$(jq -c 'select(.type == "system" and .subtype == "init") | {mcp_servers, tools: (.tools | length)}' "$after/claude.jsonl" 2>/dev/null | head -n 1)
@@ -544,6 +591,23 @@ for layout in "${LAYOUTS[@]}"; do
 done
 
 say ""
+say "== K11 candidate homes under a denied parent"
+for layout in L1 L4; do
+  for exp in e1 e2; do
+    run="$OUT/$layout-k11-$exp"
+    if ! PROBE_EXP=$exp prepare_run "$layout" d "$run"; then
+      say "-- $layout K11 $exp: preparation failed: $(cat "$run/prepare.err" 2>/dev/null)"
+      continue
+    fi
+    load_env "$run/run.env"
+    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+    run_claude "$run" scrub "$run/commands.json"
+    summarize_run "$run" "$layout K11 $exp (HOME=$L_AGENT, parent $L_EXP_PARENT)"
+    tool_text "$run" 2 | grep '^K3 DENIED' | grep -F "$L_AGENT" | sed 's/^/  /' | tee -a "$RESULTS" >/dev/null
+  done
+done
+
+say ""
 say "== K5 credential guard blocks"
 for store in real real-xdg agent; do
   block_check L3 "$store" "$OUT/L3-k5-$store"
@@ -557,7 +621,7 @@ say "== K9 cleanup after failure and kill"
 fail_run="$OUT/L1-k9-fail"
 if prepare_run L1 d "$fail_run"; then
   load_env "$fail_run/run.env"
-  write_commands "$fail_run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT"
+  write_commands "$fail_run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
   run_claude "$fail_run" scrub "$fail_run/commands.json" --fail
   say "  forced API failure: claude exit $(cat "$fail_run/claude.status")"
   cleanup_check "$fail_run" "forced-failure"
