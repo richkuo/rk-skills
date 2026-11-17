@@ -528,7 +528,7 @@ say ""
 say "== fixtures"
 if bash "$HERE/run-fixtures.sh" > "$OUT/fixtures.txt" 2>&1; then
   gate pass "fixture suites ($(tail -n 1 "$OUT/fixtures.txt"))"
-  grep -E '^(SKIP|PASS stubs)' "$OUT/fixtures.txt" | sed 's/^/  /' | tee -a "$RESULTS"
+  grep -E '^(SKIP|PASS stubs|PASS agent home)' "$OUT/fixtures.txt" | sed 's/^/  /' | tee -a "$RESULTS"
 else
   grep -E '^(FAIL|fixtures:)' "$OUT/fixtures.txt" | tee -a "$RESULTS"
   gate fail "fixture suites"
