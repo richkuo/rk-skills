@@ -623,23 +623,18 @@ for layout in "${LAYOUTS[@]}"; do
     fi
   fi
   case "$layout" in
-    L1|L4|L4h)
-      for variant in eA eB; do
+    L4h)
+      for variant in eB eC; do
         run="$OUT/$layout-k11-$variant"
-        if [ "$variant" = eA ]; then
-          prep_case=a
-        else
-          prep_case=d
-        fi
-        if ! prepare_run "$layout" "$prep_case" "$run"; then
+        if ! prepare_run "$layout" d "$run"; then
           say "-- $layout K11 $variant: preparation failed: $(cat "$run/prepare.err" 2>/dev/null)"
           continue
         fi
         load_env "$run/run.env"
         ws_res=$(cd -P "$L_WS" && pwd -P)
         home_res=$(cd -P "$L_REAL_HOME" && pwd -P)
-        if [ "$variant" = eA ]; then
-          jq --arg w "$L_WS" --arg r "$ws_res" '.sandbox.filesystem.allowWriteWithinDeny = ([$w, $r] | unique)' "$run/settings.probe.json" > "$run/settings.exp.json"
+        if [ "$variant" = eC ]; then
+          jq --arg w "$L_WS" --arg r "$ws_res" --arg h "$L_REAL_HOME" --arg hr "$home_res" --arg p "$L_PARENT" '.sandbox.filesystem.denyWrite = (((.sandbox.filesystem.denyWrite // []) - [$p]) + ([$h, $hr] | unique)) | .sandbox.filesystem.allowWriteWithinDeny = ([$w, $r] | unique)' "$run/settings.probe.json" > "$run/settings.exp.json"
         else
           jq --arg w "$L_WS" --arg r "$ws_res" --arg h "$L_REAL_HOME" --arg hr "$home_res" '.sandbox.filesystem.denyWrite = ((.sandbox.filesystem.denyWrite // []) + ([$h, $hr] | unique)) | .sandbox.filesystem.allowWriteWithinDeny = ([$w, $r] | unique)' "$run/settings.probe.json" > "$run/settings.exp.json"
         fi
