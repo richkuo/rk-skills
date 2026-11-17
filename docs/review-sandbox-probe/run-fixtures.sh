@@ -440,6 +440,7 @@ test_agent_home() {
   expect_status 0 "agent home: real-home selection on self-hosted Linux runs"
   expect_output "$out" path "$SCRATCH" "agent home: real-home selection on self-hosted Linux keeps HOME"
   expect_output "$out" parent "$parent" "agent home: real-home selection on self-hosted Linux names the home parent"
+  if grep -qF '. "$HOME/.profile"' "$SCRATCH/.bash_profile" 2>/dev/null; then ok "agent home: real-home selection on self-hosted Linux creates a .bash_profile that loads .profile"; else bad "agent home: real-home selection on self-hosted Linux did not create the .bash_profile loader"; fi
   if [ -d "$parent" ] && [ ! -L "$parent" ] && [ "$(stat -c '%a %u' "$parent")" = "700 $(id -u)" ]; then ok "agent home: the home parent is a mode-0700 directory owned by this user"; else bad "agent home: wrong type, mode, or owner on $parent"; fi
   case "$parent" in
     /tmp/*) bad "agent home: the home parent is in /tmp, where another user ID can create it first" ;;

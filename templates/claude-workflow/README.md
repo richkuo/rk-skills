@@ -158,11 +158,9 @@ model until you copy the template again.
     sandbox needs to create nothing in it. With `HOME` moved, the sandbox no
     longer protects the job home by itself, so the step also creates the same
     entries in the job home when they are missing (empty files, `{}` for
-    `.claude.json`, mode-0700 directories), and the settings deny them. A
-    created `.bash_profile` loads `.bash_login` or `.profile` in the order
-    that bash uses, so a bash login shell still reads the user's settings.
-    The empty zsh files stop the zsh first-run setup menu for a user with no
-    zsh files. These entries stay on the host; the step log lists them, and
+    `.claude.json`, mode-0700 directories), and the settings deny them. The
+    empty zsh files stop the zsh first-run setup menu for a user with no zsh
+    files. These entries stay on the host; the step log lists them, and
     deleting them removes them. An always-run step empties the
     temporary home after the action. The empty directory stays on the host
     because the action adds its program directories to `PATH` for the rest of
@@ -218,7 +216,13 @@ model until you copy the template again.
   removed by a later review after one day), and every such review leaves the
   directory `<passwd home>/.rk-claude-homes`. A review with a temporary home
   also leaves the missing protected entries that it creates in the job home
-  (listed in its step log).
+  (listed in its step log). When the job home has no `.bash_profile`, every
+  such review creates one that loads a `.bash_login` with content, or else
+  `.profile`, as a bash login shell does without it. The scrub sandbox
+  otherwise leaves an empty `~/.bash_profile` in a real `HOME` (probe layout
+  L4), and a bash login shell then skips `.profile`. An empty
+  `.bash_profile` that an earlier review left stays; delete it to restore
+  the login order.
   `review_subprocess_scrub: false` skips the host changes and the scrub, under
   the scrub-off exception above.
 

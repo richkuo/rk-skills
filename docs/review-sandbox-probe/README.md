@@ -56,7 +56,8 @@ and `/var/tmp`. It reuses an existing probe user and does not change the
 package or sysctl state when that is already in place. Layout L4h creates an
 `actions-runner` directory in the probe user's home and deletes it when it ends;
 it skips when that directory already exists. It adds a marker `PATH` entry to
-that home's `.profile` and restores the file when it ends. Its runs also leave
+that home's `.profile`, moves any `.bash_profile` aside, and restores both files when it ends. Before case (d) of every layout, the probe removes the job home
+`.bash_profile` that cases (a) to (c) leave, so case (d) starts without one. Its runs also leave
 the protected entries that the review creates in that home (`.bash_profile`,
 `.npmrc`, `.ssh`, and the like); `sudo userdel -r rkprobe` removes them. Layout L2h and the stub
 fixture suite create a `.claude`, a `.mcp.json`, and a runner directory in the
