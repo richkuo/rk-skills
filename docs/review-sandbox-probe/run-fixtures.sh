@@ -275,8 +275,11 @@ test_settings() {
   echo "== settings"
   local dir="$SCRATCH/settings" parent="$SCRATCH/settings/homes" agent="$SCRATCH/settings/homes/agent" hook_cmd
   rm -rf "$dir"
-  mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun" "$agent/.config/git"
-  touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$dir/real-home/.bash_profile" "$dir/real-home/.npmrc" "$agent/.gitconfig" "$dir/guard.sh"
+  mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun/bin" "$agent/.config/git" "$agent/.config/pip" "$agent/.config/gh" "$agent/.pip" "$agent/.ssh" "$agent/.claude"
+  touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$dir/real-home/.bash_profile" "$dir/real-home/.npmrc" "$dir/guard.sh"
+  for f in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .claude.json; do
+    touch "$agent/$f"
+  done
 
   make_settings "$dir" ""
   expect_status 0 "settings: real-home run writes the settings"
@@ -308,11 +311,21 @@ test_settings() {
   deny_has "$dir/settings.json" "$dir/real-home/.ssh" "settings: the real-home ssh directory is protected"
   deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: the runner credential file is protected"
   deny_has "$dir/settings.json" "$dir/runner/bin" "settings: the runner binaries are protected"
+  deny_has "$dir/settings.json" "$agent/.local/bin" "settings: the temporary home program directory that the action adds to PATH is protected"
+  deny_has "$dir/settings.json" "$agent/.bun" "settings: the temporary home Bun directory that the action adds to PATH is protected"
+  deny_has "$dir/settings.json" "$agent/.gitconfig" "settings: the temporary home git config is protected"
+  deny_has "$dir/settings.json" "$agent/.config/git" "settings: the temporary home git config directory is protected"
+  deny_has "$dir/settings.json" "$agent/.ssh" "settings: the temporary home ssh directory is protected"
   if jq -e '(.claudeMdExcludes | length) == 10 and (.hooks.PreToolUse | length) == 1' "$dir/settings.json" >/dev/null; then ok "settings: temporary-home run keeps the exclusions and the hook"; else bad "settings: temporary-home run lost the exclusions or the hook"; fi
   if jq -e --arg w "$dir/runner/_work/repo/repo" '[.sandbox.filesystem.denyWrite[] | select(($w + "/") | startswith(. + "/"))] | length == 0' "$dir/settings.json" >/dev/null; then ok "settings: no protected path contains the workspace"; else bad "settings: a protected path contains the workspace"; fi
 
   RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a missing required target stops the run"
+
+  mv "$agent/.local/bin" "$agent/.local/bin.away"
+  make_settings "$dir" "$agent" "$parent"
+  expect_status 1 "settings: a missing temporary home entry stops the run"
+  mv "$agent/.local/bin.away" "$agent/.local/bin"
 
   RUNNER_TEMP_IN="$dir/runner/_work" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a protected path that contains the workspace stops the run"
@@ -420,6 +433,7 @@ test_agent_home() {
   expect_output "$out" temp "" "agent home: real-home selection has no temporary home"
 
   expect_output "$out" parent "" "agent home: real-home selection off self-hosted Linux has no home parent"
+  if [ ! -e "$SCRATCH/.bun" ]; then ok "agent home: real-home selection off self-hosted Linux creates no program directory"; else bad "agent home: real-home selection off self-hosted Linux created $SCRATCH/.bun"; fi
 
   pw_home=$(getent passwd "$(id -u)" | cut -d: -f6)
   parent="$(cd -P "$pw_home" && pwd -P)/.rk-claude-homes"
@@ -441,6 +455,7 @@ test_agent_home() {
   expect_output "$out" path "$SCRATCH" "agent home: real-home selection on self-hosted Linux keeps HOME"
   expect_output "$out" parent "$parent" "agent home: real-home selection on self-hosted Linux names the home parent"
   if grep -qF '. "$HOME/.profile"' "$SCRATCH/.bash_profile" 2>/dev/null; then ok "agent home: real-home selection on self-hosted Linux creates a .bash_profile that loads .profile"; else bad "agent home: real-home selection on self-hosted Linux did not create the .bash_profile loader"; fi
+  if [ -d "$SCRATCH/.local/bin" ] && [ -d "$SCRATCH/.bun/bin" ]; then ok "agent home: real-home selection on self-hosted Linux creates the program directories that the action adds to PATH"; else bad "agent home: real-home selection on self-hosted Linux did not create .local/bin and .bun/bin"; fi
   if [ -d "$parent" ] && [ ! -L "$parent" ] && [ "$(stat -c '%a %u' "$parent")" = "700 $(id -u)" ]; then ok "agent home: the home parent is a mode-0700 directory owned by this user"; else bad "agent home: wrong type, mode, or owner on $parent"; fi
   case "$parent" in
     /tmp/*) bad "agent home: the home parent is in /tmp, where another user ID can create it first" ;;
@@ -472,6 +487,7 @@ test_agent_home() {
   expect_status 0 "agent home: temporary-home selection runs"
   if [ "$(cat "$SCRATCH/ah-home/.bashrc")" = keep ] && [ "$(cat "$SCRATCH/ah-home/.config/keep")" = keep ]; then ok "agent home: existing job home entries are unchanged"; else bad "agent home: an existing job home entry changed"; fi
   if [ -f "$SCRATCH/ah-home/.bash_profile" ] && grep -qF '. "$HOME/.profile"' "$SCRATCH/ah-home/.bash_profile" && [ -f "$SCRATCH/ah-home/.bash_login" ] && [ -f "$SCRATCH/ah-home/.git-credentials" ] && [ -f "$SCRATCH/ah-home/.npmrc" ] && [ -d "$SCRATCH/ah-home/.ssh" ] && [ -d "$SCRATCH/ah-home/.local/bin" ] && [ -d "$SCRATCH/ah-home/.config/gh" ] && [ "$(cat "$SCRATCH/ah-home/.claude.json")" = '{}' ]; then ok "agent home: missing protected job home entries are created"; else bad "agent home: a missing protected job home entry was not created"; fi
+  if [ -d "$SCRATCH/ah-home/.bun/bin" ]; then ok "agent home: a missing job home Bun directory is created"; else bad "agent home: the job home Bun directory was not created"; fi
   if [ "$(stat -c '%a' "$SCRATCH/ah-home/.git-credentials") $(stat -c '%a' "$SCRATCH/ah-home/.ssh")" = "600 700" ]; then ok "agent home: created job home entries have no group or other permissions"; else bad "agent home: a created job home entry is open to group or others"; fi
   printf 'export RK_LATE=late\n' > "$SCRATCH/ah-home/.bash_login"
   login_env=$(env -i "HOME=$SCRATCH/ah-home" PATH=/usr/bin:/bin bash -l -c 'printf %s "${RK_LATE:-}"' 2>/dev/null)
@@ -501,6 +517,7 @@ test_agent_home() {
   if [ -d "$t" ] && [ "$(stat -c '%a %u' "$t")" = "700 $(id -u)" ]; then ok "agent home: the temporary home is mode 0700 and owned by this user"; else bad "agent home: wrong mode or owner on $t"; fi
   if git config --file "$t/.gitconfig" --get-all safe.directory | grep -qxF "$ws"; then ok "agent home: safe.directory names the workspace"; else bad "agent home: safe.directory lacks the workspace"; fi
   if [ -f "$t/.bash_login" ] && [ -f "$t/.npmrc" ] && [ -d "$t/.local/bin" ] && [ -d "$t/.config/gh" ] && [ "$(cat "$t/.claude.json")" = '{}' ]; then ok "agent home: the sandbox's own home entries exist before the run"; else bad "agent home: a sandbox home entry is missing"; fi
+  if [ -d "$t/.bun/bin" ]; then ok "agent home: the temporary home Bun directory exists before the run"; else bad "agent home: the temporary home Bun directory is missing"; fi
   rm -rf "$t"
 }
 

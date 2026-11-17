@@ -154,8 +154,11 @@ model until you copy the template again.
     directory `<passwd home>/.rk-claude-homes/home.*`, where `<passwd home>`
     is the home directory of the runner user ID in the passwd database. Its Claude Code settings
     and memory start empty. The step creates the home's startup, git, Bun,
-    npm, Claude, ssh, and program-path entries before the run, so the
-    sandbox needs to create nothing in it. With `HOME` moved, the sandbox no
+    npm, Claude, ssh, and program-path entries before the run (`.local/bin`
+    and `.bun/bin`, which the action adds to `PATH`), and the settings deny
+    sandboxed writes to each of them. The credential hook and the action's
+    own `git` calls run outside the sandbox with that `PATH`, so a program
+    that a sandboxed command put there would run with the job token. With `HOME` moved, the sandbox no
     longer protects the job home by itself, so the step also creates the same
     entries in the job home when they are missing (empty files, `{}` for
     `.claude.json`, mode-0700 directories), and the settings deny them. The
@@ -181,8 +184,11 @@ model until you copy the template again.
   Every review on a self-hosted Linux runner with the scrub on adds
   sandboxed write denials to its settings file: `<passwd home>/.rk-claude-homes`,
   the mode-0700 directory of this user that holds every temporary home;
-  `$RUNNER_TEMP`; the job home's startup, ssh, git, and Claude files; and the
-  runner installation files. Without the first entry, a review could change
+  `$RUNNER_TEMP`; the job home's startup, ssh, git, and Claude files and its
+  program directories `.local/bin` and `.bun` (a review with the real `HOME`
+  creates `.local/bin` and `.bun/bin` when they are missing, because the
+  action installs programs there and adds them to `PATH`); the protected
+  entries of the temporary home; and the runner installation files. Without the first entry, a review could change
   the home of another review that runs as the same user at the same time.
   The directory is in the user's own home, so another user ID cannot create
   it first and stop that user's reviews; in shared `/tmp` it could. A review

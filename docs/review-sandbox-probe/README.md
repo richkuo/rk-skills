@@ -87,7 +87,7 @@ file names the reason for each inapplicable case.
 Checks: K1 git status, diff, fetch, and a local config write in the sandbox;
 K2 the synthetic Anthropic credential is absent from the tool environment and
 from every readable `/proc/*/environ`; K3 write attempts on the runner,
-`$RUNNER_TEMP`, job home (including `.bash_profile` and `.bash_login`), agent home, sibling home (a second home of the same user, as a concurrent review would have), and other-user home targets (the probe user's home for a root review, root's home for the probe user, so a review cannot create the temporary home directory of another user ID), and ungated K3X write attempts on `/tmp`, `/var/tmp`, `/dev/shm`, and a sibling runner under `~/runners`; K4 reads of the job home's
+`$RUNNER_TEMP`, job home (including `.bash_profile`, `.bash_login`, `.local/bin`, and `.bun`), agent home (every entry that the agent home step creates, including `.local/bin` and `.bun/bin`, which the action adds to `PATH` before the credential hook and its own `git` calls run outside the sandbox), sibling home (a second home of the same user, as a concurrent review would have), and other-user home targets (the probe user's home for a root review, root's home for the probe user, so a review cannot create the temporary home directory of another user ID), and ungated K3X write attempts on `/tmp`, `/var/tmp`, `/dev/shm`, and a sibling runner under `~/runners`; K4 reads of the job home's
 Claude credential files; K5 the shipped guard blocks a tool call when a
 synthetic job token sits in a credential store; K6 zero-byte placeholders, a
 host git config write, and a repeated run; K8 a write-route run with and

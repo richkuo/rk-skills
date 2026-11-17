@@ -435,6 +435,17 @@ jobs:
             fi
           fi
           if [ "$NEEDS_TEMP_HOME" != "true" ]; then
+            if [ "${HOME_PARENT_DENY:-}" = "true" ]; then
+              for entry in .local/bin .bun/bin; do
+                if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
+                  if ! mkdir -p "$HOME/$entry"; then
+                    echo "::error::Review refused: $HOME/$entry, where the action installs a program and which it adds to PATH, cannot be created, so the settings cannot deny sandboxed writes to it."
+                    exit 1
+                  fi
+                  echo "Created $HOME/$entry, where the action installs a program and which it adds to PATH, so the settings can deny sandboxed writes to it. The action fills it; it stays on the host."
+                fi
+              done
+            fi
             {
               printf 'path=%s\n' "$HOME"
               printf 'temp=\n'
@@ -462,7 +473,7 @@ jobs:
             : > "$AGENT_HOME/$entry"
           done
           printf '{}\n' > "$AGENT_HOME/.claude.json"
-          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh runners actions-runner; do
+          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .bun/bin .ssh runners actions-runner; do
             mkdir -p "$AGENT_HOME/$entry"
           done
           JOB_HOME_CREATED=()
@@ -478,7 +489,7 @@ jobs:
               JOB_HOME_CREATED+=("$entry")
             fi
           done
-          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh; do
+          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .bun/bin .ssh; do
             if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
               if ! mkdir -p "$HOME/$entry"; then
                 echo "::error::Review refused: the job home entry $HOME/$entry cannot be created, so the scrub sandbox cannot protect it."
@@ -962,9 +973,14 @@ jobs:
               require_deny "$HOME_PARENT"
             fi
             require_deny "$RUNNER_TEMP"
-            for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .config .pip .local/bin .ssh .claude .claude.json; do
+            for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .config .pip .local/bin .bun .ssh .claude .claude.json; do
               optional_deny "${REAL_HOME%/}/$p"
             done
+            if [ -n "$TEMP_AGENT_HOME" ]; then
+              for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .config/git .config/pip .config/gh .pip .local/bin .bun .ssh .claude .claude.json; do
+                require_deny "${TEMP_AGENT_HOME%/}/$p"
+              done
+            fi
             WORK_DIR=$(dirname "$RUNNER_TEMP")
             RUNNER_ROOT=$(dirname "$WORK_DIR")
             if [ -f "$RUNNER_ROOT/.runner" ]; then

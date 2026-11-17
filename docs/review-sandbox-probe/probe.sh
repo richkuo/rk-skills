@@ -283,9 +283,9 @@ write_commands() {
     jq -n '["echo K9 sleeping; sleep 120"]' > "$file"
     return
   fi
-  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.bash_profile $home/.bash_login $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin"
+  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.bash_profile $home/.bash_login $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin $home/.bun $home/.bun/bin"
   if [ "$agent" != "$home" ]; then
-    targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_login $agent/.bunfig.toml $agent/.npmrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
+    targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_profile $agent/.bash_login $agent/.bash_logout $agent/.profile $agent/.zshrc $agent/.zshenv $agent/.zprofile $agent/.zlogin $agent/.zlogout $agent/.bunfig.toml $agent/.npmrc $agent/.yarnrc $agent/.yarnrc.yml $agent/.netrc $agent/.config/git $agent/.config/pip $agent/.config/gh $agent/.pip $agent/.local/bin $agent/.bun $agent/.bun/bin $agent/.ssh $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
   if [ -n "$sibling" ]; then
     targets="$targets $sibling $sibling/.gitconfig $sibling/.local/bin $sibling/.claude"
