@@ -608,6 +608,13 @@ for layout in "${LAYOUTS[@]}"; do
       fi
       say "  $layout job home .bash_profile: $(stat -c '%U %a %s bytes' "$L_REAL_HOME/.bash_profile" 2>&1), content: $(head -c 200 "$L_REAL_HOME/.bash_profile" 2>&1 | tr '\n' ' ')"
       printf '%s\n' "$(tool_text "$run" 2)" | grep -E "^K3 [A-Z]+ $L_REAL_HOME/\.bash_(profile|login)( |$)" | sed "s/^/  $layout /" | tee -a "$RESULTS"
+      path_targets="$L_REAL_HOME/.local/bin $L_REAL_HOME/.bun $L_REAL_HOME/.bun/bin"
+      if [ "$L_AGENT" != "$L_REAL_HOME" ]; then
+        path_targets="$path_targets $L_AGENT/.local/bin $L_AGENT/.bun $L_AGENT/.bun/bin $L_AGENT/.ssh $L_AGENT/.config/git $L_AGENT/.config/gh"
+      fi
+      for t in $path_targets; do
+        printf '%s\n' "$(tool_text "$run" 2)" | awk -v t="$t" '$1 == "K3" && $3 == t' | sed "s/^/  $layout /" | tee -a "$RESULTS"
+      done
       if [ "$layout" = L4h ]; then
         login_out=$(runuser -u "$PROBE_USER" -- env -i "HOME=$PROBE_HOME" PATH=/usr/bin:/bin /bin/bash -l -c 'printf %s "$PATH"' 2>&1)
         login_want=/rk-probe-profile-marker
