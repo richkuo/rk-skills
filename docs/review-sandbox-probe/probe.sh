@@ -275,6 +275,7 @@ write_commands() {
   if [ -n "$foreign" ]; then
     targets="$targets $foreign"
   fi
+  targets="$targets ${EXTRA_TARGETS:-}"
   info="/tmp /var/tmp /dev/shm"
   [ -n "$sib_runner" ] && info="$info $sib_runner $sib_runner/bin $sib_runner/_work/_temp"
   jq -n --arg targets "$targets" --arg home "$home" --arg info "$info" '[
@@ -621,6 +622,37 @@ for layout in "${LAYOUTS[@]}"; do
       fi
     fi
   fi
+  case "$layout" in
+    L1|L4|L4h)
+      for variant in eA eB; do
+        run="$OUT/$layout-k11-$variant"
+        if [ "$variant" = eA ]; then
+          prep_case=a
+        else
+          prep_case=d
+        fi
+        if ! prepare_run "$layout" "$prep_case" "$run"; then
+          say "-- $layout K11 $variant: preparation failed: $(cat "$run/prepare.err" 2>/dev/null)"
+          continue
+        fi
+        load_env "$run/run.env"
+        ws_res=$(cd -P "$L_WS" && pwd -P)
+        home_res=$(cd -P "$L_REAL_HOME" && pwd -P)
+        if [ "$variant" = eA ]; then
+          jq --arg w "$L_WS" --arg r "$ws_res" '.sandbox.filesystem.allowWriteWithinDeny = ([$w, $r] | unique)' "$run/settings.probe.json" > "$run/settings.exp.json"
+        else
+          jq --arg w "$L_WS" --arg r "$ws_res" --arg h "$L_REAL_HOME" --arg hr "$home_res" '.sandbox.filesystem.denyWrite = ((.sandbox.filesystem.denyWrite // []) + ([$h, $hr] | unique)) | .sandbox.filesystem.allowWriteWithinDeny = ([$w, $r] | unique)' "$run/settings.probe.json" > "$run/settings.exp.json"
+        fi
+        mv "$run/settings.exp.json" "$run/settings.probe.json"
+        chmod 644 "$run/settings.probe.json"
+        say "  K11 $layout $variant sandbox settings: $(jq -c '.sandbox' "$run/settings.probe.json")"
+        EXTRA_TARGETS="$L_REAL_HOME/.bash_profile $L_REAL_HOME/.npmrc $L_REAL_HOME/.rk-probe-newdir" write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
+        run_claude "$run" scrub "$run/commands.json"
+        summarize_run "$run" "$layout K11 $variant (HOME=$L_AGENT)"
+        cleanup_check "$run" "k11-$variant" >/dev/null
+      done
+      ;;
+  esac
   if [ "$layout" = L2h ]; then
     rm -rf "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" "$PROBE_HOME/rk-probe-runner-L2h"
     [ -n "${PROBE_HOME_MODE:-}" ] && chmod "$PROBE_HOME_MODE" "$PROBE_HOME"
