@@ -1,7 +1,7 @@
 ---
 name: codex-validate-fableplan-work-on-issue
 description: >-
-  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a Fable 5.2 plan, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", and "do the next 3 issues the same way with a fable plan". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.1 at high), then, at score 75 or higher or on a safety flag from the validation, the fableplan planning phase on a background Fable 5.2 Plan subagent (high at 90 or higher, medium at 75 to 89) that the session checks and posts, then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing. The Fable-plan counterpart to codex-validate-plan-work-on-issue.
+  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a Fable 5.2 plan, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", and "do the next 3 issues the same way with a fable plan". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.2 at high), then, at score 75 or higher or on a safety flag from the validation, the fableplan planning phase on a background Fable 5.2 Plan subagent (high at 90 or higher, medium at 75 to 89) that the session checks and posts, then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing. The Fable-plan counterpart to codex-validate-plan-work-on-issue.
 ---
 
 # codex-validate-fableplan-work-on-issue
@@ -18,7 +18,7 @@ Same as the base skill, with this stage table:
 
 | Stage | Default | Runs through |
 |---|---|---|
-| Validate | `Sol 6.1 (Codex CLI, gpt-6.1-sol)` at `high` | base skill steps 2 and 3 |
+| Validate | `Sol 6.2 (Codex CLI, gpt-6.2-sol)` at `high` | base skill steps 2 and 3 |
 | Plan | Fable 5.2, a background Plan subagent, at the score tier below; none below score 75 | `fableplan` steps 1 to 4, planning-phase-only, with the step 4 deltas below |
 | Build | Opus 5.5, a background subagent, at the score tier below | base skill step 6, with the step 6 deltas below |
 

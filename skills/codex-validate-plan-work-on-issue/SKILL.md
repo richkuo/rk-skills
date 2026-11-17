@@ -1,7 +1,7 @@
 ---
 name: codex-validate-plan-work-on-issue
 description: >-
-  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a separate Codex CLI plan pass, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-plan-work-on-issue", "validate with codex, plan with codex, then work on #A #B #C", and "do the next 3 issues in parallel the same way". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.1 at high), then, at score 75 or higher or on a safety flag from the validation, issueplan in in-session mode on a separate Codex CLI run at high that posts the plan, then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing.
+  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a separate Codex CLI plan pass, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-plan-work-on-issue", "validate with codex, plan with codex, then work on #A #B #C", and "do the next 3 issues in parallel the same way". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.2 at high), then, at score 75 or higher or on a safety flag from the validation, issueplan in in-session mode on a separate Codex CLI run at high that posts the plan, then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. Each issue advances as soon as its own previous stage ends. After each PR opens and passes its check, the session posts one band-derived @claude review trigger on it; it runs no review loop and merges nothing.
 ---
 
 # codex-validate-plan-work-on-issue
@@ -19,8 +19,8 @@ The scripts, the prompt templates, and the check scripts are in [run-recipes.md]
 
 | Stage | Default | Runs through |
 |---|---|---|
-| Validate | `Sol 6.1 (Codex CLI, gpt-6.1-sol)` at `high` | `cli-dispatch` section 9 validate pass, update mode |
-| Plan | `Sol 6.1 (Codex CLI, gpt-6.1-sol)` at `high`, a separate Codex run; none below score 75 | `issueplan` in-session mode, on the same read-only shim |
+| Validate | `Sol 6.2 (Codex CLI, gpt-6.2-sol)` at `high` | `cli-dispatch` section 9 validate pass, update mode |
+| Plan | `Sol 6.2 (Codex CLI, gpt-6.2-sol)` at `high`, a separate Codex run; none below score 75 | `issueplan` in-session mode, on the same read-only shim |
 | Build | Opus 5.5, a background subagent, at the score tier below | `work-on-issue` |
 
 - A Codex stage takes a display name plus an explicit model id. `cli-dispatch` section 2 owns the id rules and blocks a name with no id. Before the first launch, check each Codex stage's id and tier against the catalog the Codex CLI reports: `codex debug models | jq -e --arg id "$MODEL_ID" --arg tier "$TIER" 'any(.models[]; .slug == $id and any(.supported_reasoning_levels[]?; .effort == $tier))'`. Any output other than `true`, or a failed command, blocks the run.

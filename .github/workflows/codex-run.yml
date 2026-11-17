@@ -158,11 +158,11 @@ jobs:
             MODEL_ID="$MODEL_ID_IN"
           else
             case "$(printf '%s' "$MODEL_SHORT" | tr '[:upper:]' '[:lower:]')" in
-              sol)         MODEL_ID="gpt-5.6-sol" ;;
+              sol)         MODEL_ID="gpt-6.2-sol" ;;
               terra)       MODEL_ID="gpt-5.6-terra" ;;
               luna|mini)   MODEL_ID="gpt-5.6-luna" ;;
               codex|spark) MODEL_ID="gpt-5.3-codex-spark" ;;
-              *)           MODEL_ID="gpt-5.6-sol" ;;
+              *)           MODEL_ID="gpt-6.2-sol" ;;
             esac
           fi
           ID_RE='^[A-Za-z0-9][A-Za-z0-9._:@/-]*(\[[A-Za-z0-9]+\])?$'

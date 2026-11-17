@@ -43,7 +43,7 @@ jobs:
           if printf '%s\n' "$TRIGGER_LINE" | grep -qiw 'luna'; then
             echo "model=gpt-5.6-luna" >> "$GITHUB_OUTPUT"
           else
-            echo "model=gpt-5.6-sol" >> "$GITHUB_OUTPUT"
+            echo "model=gpt-6.2-sol" >> "$GITHUB_OUTPUT"
           fi
 
           GIT_AUTH="credential.${GITHUB_SERVER_URL}.helper=!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"

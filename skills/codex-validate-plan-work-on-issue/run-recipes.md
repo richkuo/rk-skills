@@ -11,9 +11,9 @@ Shell variables do not persist between Bash calls, so set these in the same Bash
 | `REPO` | Absolute path of the checkout. The Codex run uses it as its working root. |
 | `NWO` | The issue's `owner/repo`. |
 | `SP` | The run directory in the session scratchpad. Holds `snapshot.sh`, the scripts, and one directory per stage run: `validate-<N>` and `plan-<N>`. |
-| `NAME` | Display name of the Codex model, for example `Sol 6.1`. Appears in the footer lines. |
+| `NAME` | Display name of the Codex model, for example `Sol 6.2`. Appears in the footer lines. |
 | `TIER` | Effort: `low`, `medium`, `high`, `xhigh`, or `max`. |
-| `MODEL_ID` | Codex model id, for example `gpt-6.1-sol`. Shell data under the `cli-dispatch` section 2 pattern. |
+| `MODEL_ID` | Codex model id, for example `gpt-6.2-sol`. Shell data under the `cli-dispatch` section 2 pattern. |
 | `TARGET_BRANCH` | Optional. Replaces the default branch as the traced ref. |
 
 ## Files in a stage run directory
