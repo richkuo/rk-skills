@@ -258,10 +258,13 @@ test_guard() {
 }
 
 make_settings() {
-  local dir="$1" temp_home="$2" parent="${3:-}" script
+  local dir="$1" temp_home="$2" parent="${3:-}" parent_deny="${4:-}" script
+  if [ -z "$parent_deny" ]; then
+    if [ -n "$parent" ]; then parent_deny=true; else parent_deny=false; fi
+  fi
   script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
   rm -f "$dir/settings.json"
-  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "GITHUB_OUTPUT=$dir/settings.out"
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "GITHUB_OUTPUT=$dir/settings.out"
 }
 
 deny_has() {
@@ -288,6 +291,12 @@ test_settings() {
 
   make_settings "$dir" "" "$dir/missing-parent"
   expect_status 1 "settings: a missing temporary home parent stops the run"
+
+  make_settings "$dir" "" "" true
+  expect_status 0 "settings: a self-hosted Linux run with no usable home parent writes the settings"
+  deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings: a self-hosted Linux run with no usable home parent still protects RUNNER_TEMP"
+  deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: a self-hosted Linux run with no usable home parent still protects the runner credential file"
+  if jq -e --arg p "$parent" '.sandbox.filesystem.denyWrite | index($p) | not' "$dir/settings.json" >/dev/null 2>&1; then ok "settings: a self-hosted Linux run with no usable home parent adds no parent entry"; else bad "settings: a self-hosted Linux run with no usable home parent added a parent entry"; fi
 
   make_settings "$dir" "$agent" "$parent"
   expect_status 0 "settings: temporary-home run writes the settings"
@@ -319,7 +328,7 @@ test_cleanup() {
   echo "== cleanup"
   local script t target parent
   script=$(step_script "Empty the temporary agent home")
-  parent="/tmp/rk-claude-homes.$(id -u)"
+  parent="$SCRATCH/cleanup-home/.rk-claude-homes"
   mkdir -p "$parent"
   chmod 700 "$parent"
   target="$SCRATCH/outside-target"
@@ -333,7 +342,7 @@ test_cleanup() {
   ln -s "$SCRATCH" "$t/link-to-dir"
   printf 'x\n' > "$t/locked/file"
   chmod 000 "$t/locked"
-  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$parent"
   expect_status 0 "cleanup: a populated home is emptied"
   if [ -d "$t" ] && [ -z "$(ls -A "$t")" ]; then ok "cleanup: the home is empty and still exists"; else bad "cleanup: the home is missing or not empty"; fi
   if [ "$(find "$t" -maxdepth 0 -perm 700 -print)" = "$t" ]; then ok "cleanup: the home is mode 0700"; else bad "cleanup: the home is not mode 0700"; fi
@@ -345,7 +354,7 @@ test_cleanup() {
   mkdir -p "$SCRATCH/link-target"
   printf 'keep\n' > "$SCRATCH/link-target/file"
   ln -s "$SCRATCH/link-target" "$t"
-  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$parent"
   expect_status 1 "cleanup: a symlink in place of the home is refused"
   if [ -f "$SCRATCH/link-target/file" ]; then ok "cleanup: the symlink target is untouched"; else bad "cleanup: the symlink target changed"; fi
   rm -f "$t"
@@ -353,24 +362,37 @@ test_cleanup() {
   t=$(mktemp -d "$parent/home.XXXXXXXXXX")
   rmdir "$t"
   printf 'x\n' > "$t"
-  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$parent"
   expect_status 1 "cleanup: a file in place of the home is refused"
   rm -f "$t"
 
   mkdir -p "$SCRATCH/not-a-home"
-  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$SCRATCH/not-a-home"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$SCRATCH/not-a-home" "HOME_PARENT=$parent"
   expect_status 1 "cleanup: a path with another name is refused"
 
   t=$(mktemp -d /tmp/rk-claude-home.XXXXXXXXXX)
-  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$parent"
   expect_status 1 "cleanup: a home outside this user's parent directory is refused"
   rmdir "$t"
+
+  t=$(mktemp -d "$parent/home.XXXXXXXXXX")
+  printf 'x\n' > "$t/file"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+  expect_status 1 "cleanup: a home with no parent directory output is refused"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$SCRATCH/cleanup-home"
+  expect_status 1 "cleanup: a parent directory with another name is refused"
+  mkdir -p "$SCRATCH/cleanup-alias"
+  ln -s "$parent" "$SCRATCH/cleanup-alias/.rk-claude-homes"
+  run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$SCRATCH/cleanup-alias/.rk-claude-homes/$(basename "$t")" "HOME_PARENT=$SCRATCH/cleanup-alias/.rk-claude-homes"
+  expect_status 1 "cleanup: a symlinked parent directory is refused"
+  if [ -f "$t/file" ]; then ok "cleanup: a refused home is untouched"; else bad "cleanup: a refused home changed"; fi
+  rm -rf "$t"
 
   if [ "$(id -u)" = 0 ] && [ -n "${RK_PROBE_USER:-}" ]; then
     t=$(mktemp -d "$parent/home.XXXXXXXXXX")
     printf 'x\n' > "$t/file"
     chown -R "$RK_PROBE_USER" "$t"
-    run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t"
+    run_script "$script" -i "PATH=$PATH" "TEMP_AGENT_HOME=$t" "HOME_PARENT=$parent"
     expect_status 1 "cleanup: a home owned by another user is refused"
     if [ -f "$t/file" ]; then ok "cleanup: the other user's home is untouched"; else bad "cleanup: the other user's home changed"; fi
     rm -rf "$t"
@@ -385,7 +407,7 @@ test_agent_home() {
     echo "SKIP agent home: it needs Linux"
     return
   fi
-  local script out ws="$SCRATCH/ah-ws" t parent
+  local script out ws="$SCRATCH/ah-ws" t parent pw_home old_empty old_full fresh_empty
   mkdir -p "$ws"
   script=$(step_script "Select the agent home")
   out="$SCRATCH/ah.out"
@@ -397,7 +419,8 @@ test_agent_home() {
 
   expect_output "$out" parent "" "agent home: real-home selection off self-hosted Linux has no home parent"
 
-  parent="/tmp/rk-claude-homes.$(id -u)"
+  pw_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+  parent="$(cd -P "$pw_home" && pwd -P)/.rk-claude-homes"
   if [ ! -e "$parent" ] && [ ! -L "$parent" ]; then
     mkdir -p "$SCRATCH/parent-target"
     ln -s "$SCRATCH/parent-target" "$parent"
@@ -416,6 +439,23 @@ test_agent_home() {
   expect_output "$out" path "$SCRATCH" "agent home: real-home selection on self-hosted Linux keeps HOME"
   expect_output "$out" parent "$parent" "agent home: real-home selection on self-hosted Linux names the home parent"
   if [ -d "$parent" ] && [ ! -L "$parent" ] && [ "$(stat -c '%a %u' "$parent")" = "700 $(id -u)" ]; then ok "agent home: the home parent is a mode-0700 directory owned by this user"; else bad "agent home: wrong type, mode, or owner on $parent"; fi
+  case "$parent" in
+    /tmp/*) bad "agent home: the home parent is in /tmp, where another user ID can create it first" ;;
+    *) ok "agent home: the home parent is in the passwd home directory of this user" ;;
+  esac
+
+  old_empty=$(mktemp -d "$parent/home.XXXXXXXXXX")
+  old_full=$(mktemp -d "$parent/home.XXXXXXXXXX")
+  fresh_empty=$(mktemp -d "$parent/home.XXXXXXXXXX")
+  printf 'x\n' > "$old_full/.bashrc"
+  touch -d '2 days ago' "$old_empty" "$old_full"
+  : > "$out"
+  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=false" "HOME_PARENT_DENY=true"
+  expect_status 0 "agent home: a run with old homes in the parent runs"
+  if [ ! -e "$old_empty" ]; then ok "agent home: an empty home older than one day is removed"; else bad "agent home: an empty home older than one day stays"; fi
+  if [ -f "$old_full/.bashrc" ]; then ok "agent home: an old home that is not empty is kept"; else bad "agent home: an old home that is not empty was removed"; fi
+  if [ -d "$fresh_empty" ]; then ok "agent home: a new empty home is kept"; else bad "agent home: a new empty home was removed"; fi
+  rm -rf "$old_full" "$fresh_empty"
 
   : > "$out"
   run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=false"

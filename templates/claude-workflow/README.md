@@ -151,14 +151,16 @@ model until you copy the template again.
   - The literal or resolved workspace is inside the literal or resolved
     `$HOME/actions-runner` or `$HOME/runners` (anthropics/claude-code#97730).
     Only the Claude action step runs with a temporary `HOME`, a new mode-0700
-    directory `/tmp/rk-claude-homes.<uid>/home.*`. Its Claude Code settings
+    directory `<passwd home>/.rk-claude-homes/home.*`, where `<passwd home>`
+    is the home directory of the runner user ID in the passwd database. Its Claude Code settings
     and memory start empty. The step creates the home's startup, git, Bun,
     npm, Claude, ssh, and program-path entries before the run, so the
     sandbox needs to create nothing in it. An always-run step empties the
-    temporary home after the action. The empty directory stays on the host,
-    one per affected review, because the action adds its program
-    directories to `PATH` for the rest of the job; a failed cleanup skips every
-    later step that would run a program from `PATH`.
+    temporary home after the action. The empty directory stays on the host
+    because the action adds its program directories to `PATH` for the rest of
+    the job; a failed cleanup skips every later step that would run a program
+    from `PATH`. A later review of the same user removes empty homes older than
+    one day.
   - The review runs as root and a workspace ancestor is owned by another user
     ID (anthropics/claude-code#97731). A step creates a `.claude` directory
     (mode 0755) and a root-owned `.mcp.json` file (mode 0644,
@@ -171,14 +173,17 @@ model until you copy the template again.
     refuses symlinks and wrong types, never overwrites, and never follows a
     replaced path. The stubs stay on the host for later jobs.
   Every review on a self-hosted Linux runner with the scrub on adds
-  sandboxed write denials to its settings file: `/tmp/rk-claude-homes.<uid>`,
-  the mode-0700 directory of this user that holds every temporary home (and,
-  as root, every existing `/tmp/rk-claude-homes.*`); `$RUNNER_TEMP`; the job
-  home's startup, ssh, git, and Claude files; and the runner installation
-  files. The scrub sandbox can write the rest of `/tmp`, so without the first
-  entry a review could change the home of another review that runs as the
-  same user at the same time. The sandbox's own runner protection did not
-  cover a root runner inside another user's home on the probe.
+  sandboxed write denials to its settings file: `<passwd home>/.rk-claude-homes`,
+  the mode-0700 directory of this user that holds every temporary home;
+  `$RUNNER_TEMP`; the job home's startup, ssh, git, and Claude files; and the
+  runner installation files. Without the first entry, a review could change
+  the home of another review that runs as the same user at the same time.
+  The directory is in the user's own home, so another user ID cannot create
+  it first and stop that user's reviews; in shared `/tmp` it could. A review
+  refuses the passwd home when it is missing, `/`, not owned by the user, or
+  writable by group or others; a review that needs a temporary home then
+  stops. The sandbox's own runner protection did not cover a root runner
+  inside another user's home on the probe.
   If the preparation fails, the review stops before Claude starts. No path
   turns the scrub off for a layout. The guard, the checks before and after the
   action, and the settings cover both the job home and the temporary home.
@@ -201,8 +206,9 @@ model until you copy the template again.
   `sudo apt-get install bubblewrap socat` and
   `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. The sysctl
   setting stays until the machine restarts. In the two layouts above, a review
-  also leaves the ancestor stubs and one empty temporary home directory, and
-  every such review leaves the directory `/tmp/rk-claude-homes.<uid>`.
+  also leaves the ancestor stubs and empty temporary home directories (each
+  removed by a later review after one day), and every such review leaves the
+  directory `<passwd home>/.rk-claude-homes`.
   `review_subprocess_scrub: false` skips the host changes and the scrub, under
   the scrub-off exception above.
 

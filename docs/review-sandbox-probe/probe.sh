@@ -169,15 +169,24 @@ build_layout() {
       ;;
     L3) runner="$home/actions-runner" ;;
     L4) runner="$home/actions-runner"; owner_user="$PROBE_USER" ;;
+    L4h)
+      home="$PROBE_HOME"
+      runner="$PROBE_HOME/actions-runner"
+      owner_user="$PROBE_USER"
+      rm -rf "$runner"
+      ;;
   esac
-  mkdir -p "$home/.ssh" "$home/.config/git" "$home/.local/bin" "$home/.claude" "$runner/bin" "$runner/externals/node/bin" "$runner/_work/_temp/rk-shared/scripts" "$runner/_work/_temp/rk-plugin-sources/rk-skills" "$runner/_work/_temp/_runner_file_commands" "$runner/_work/repo"
-  printf 'export RK=1\n' > "$home/.bashrc"
-  printf 'export RK=1\n' > "$home/.profile"
-  printf 'ssh-ed25519 AAAA rkprobe\n' > "$home/.ssh/authorized_keys"
-  printf '[user]\n\tname = rkprobe\n' > "$home/.gitconfig"
-  printf '{}\n' > "$home/.claude/settings.json"
-  printf '{"claudeAiOauth":{"accessToken":"rkprobe-synthetic-real-home-credential"}}\n' > "$home/.claude/.credentials.json"
-  printf '{}\n' > "$home/.claude.json"
+  mkdir -p "$runner/bin" "$runner/externals/node/bin" "$runner/_work/_temp/rk-shared/scripts" "$runner/_work/_temp/rk-plugin-sources/rk-skills" "$runner/_work/_temp/_runner_file_commands" "$runner/_work/repo"
+  if [ "$name" != L4h ]; then
+    mkdir -p "$home/.ssh" "$home/.config/git" "$home/.local/bin" "$home/.claude"
+    printf 'export RK=1\n' > "$home/.bashrc"
+    printf 'export RK=1\n' > "$home/.profile"
+    printf 'ssh-ed25519 AAAA rkprobe\n' > "$home/.ssh/authorized_keys"
+    printf '[user]\n\tname = rkprobe\n' > "$home/.gitconfig"
+    printf '{}\n' > "$home/.claude/settings.json"
+    printf '{"claudeAiOauth":{"accessToken":"rkprobe-synthetic-real-home-credential"}}\n' > "$home/.claude/.credentials.json"
+    printf '{}\n' > "$home/.claude.json"
+  fi
   printf '{"agentName":"rkprobe"}\n' > "$runner/.runner"
   for f in .credentials .credentials_rsaparams .env .path config.sh run.sh; do printf 'x\n' > "$runner/$f"; done
   printf '#!/bin/sh\nexit 0\n' > "$runner/bin/Runner.Worker"
@@ -207,9 +216,13 @@ build_layout() {
   git -C "$ws" remote add origin "$dir/origin.git"
   git -C "$ws" push -q origin HEAD:refs/heads/main base-ref:refs/heads/base
   git -C "$ws" checkout -q --detach HEAD
-  chmod 700 "$home"
-  if [ "$owner_user" != root ]; then
-    chown -R "$PROBE_USER" "$dir"
+  if [ "$name" = L4h ]; then
+    chown -R "$PROBE_USER" "$dir" "$runner"
+  else
+    chmod 700 "$home"
+    if [ "$owner_user" != root ]; then
+      chown -R "$PROBE_USER" "$dir"
+    fi
   fi
   case "$name" in
     L2|L3) chown "$PROBE_USER" "$runner" ;;
@@ -237,12 +250,12 @@ layout_has_foreign_ancestor() {
 }
 
 layout_is_home_based() {
-  case "$1" in L1|L1r|L1s|L1t|L3|L4) return 0 ;; esac
+  case "$1" in L1|L1r|L1s|L1t|L3|L4|L4h) return 0 ;; esac
   return 1
 }
 
 write_commands() {
-  local file="$1" kind="$2" home="$3" agent="$4" runner="$5" rt="$6" sibling="${7:-}" sib_runner="${8:-}" targets info
+  local file="$1" kind="$2" home="$3" agent="$4" runner="$5" rt="$6" sibling="${7:-}" sib_runner="${8:-}" foreign="${9:-}" targets info
   if [ "$kind" = marker ]; then
     jq -n '["touch .rk-k5-marker; echo K5 ran"]' > "$file"
     return
@@ -257,6 +270,9 @@ write_commands() {
   fi
   if [ -n "$sibling" ]; then
     targets="$targets $sibling $sibling/.gitconfig $sibling/.local/bin $sibling/.claude"
+  fi
+  if [ -n "$foreign" ]; then
+    targets="$targets $foreign"
   fi
   info="/tmp /var/tmp /dev/shm"
   [ -n "$sib_runner" ] && info="$info $sib_runner $sib_runner/bin $sib_runner/_work/_temp"
@@ -323,10 +339,16 @@ prepare_run() {
   printf '[user]\n\tname = sibling\n' > "$sibling/.gitconfig"
   chown -R "$user" "$sibling"
   chmod 700 "$sibling"
-  local settings_temp="" settings_parent=""
+  local settings_temp="" settings_parent="" settings_parent_deny=false foreign
   if [ "$case_id" = d ]; then
     settings_temp="$temp_home"
     settings_parent="$home_parent"
+    settings_parent_deny="$parent_deny"
+  fi
+  if [ "$user" = root ]; then
+    foreign="$PROBE_HOME"
+  else
+    foreign=$(getent passwd 0 | cut -d: -f6)
   fi
   : > "$run/guard.out"
   chmod 666 "$run/guard.out"
@@ -334,7 +356,7 @@ prepare_run() {
     echo "guard generation failed" > "$run/prepare.err"
     return 1
   fi
-  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "HOME_PARENT=$settings_parent" "GITHUB_OUTPUT=$run/settings.out"; then
+  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "HOME_PARENT=$settings_parent" "HOME_PARENT_DENY=$settings_parent_deny" "GITHUB_OUTPUT=$run/settings.out"; then
     echo "settings generation failed" > "$run/prepare.err"
     return 1
   fi
@@ -343,7 +365,7 @@ prepare_run() {
   chmod 644 "$run/settings.probe.json"
   {
     printf 'USER=%s\nWS=%s\nRT=%s\nREAL_HOME=%s\nAGENT=%s\nTEMP_HOME=%s\nRUNNER=%s\n' "$user" "$ws" "$rt" "$real_home" "$agent" "$temp_home" "$L_RUNNER"
-    printf 'SIBLING=%s\nSIB_RUNNER=%s\n' "$sibling" "$L_SIB_RUNNER"
+    printf 'SIBLING=%s\nSIB_RUNNER=%s\nFOREIGN=%s\nPARENT=%s\n' "$sibling" "$L_SIB_RUNNER" "$foreign" "$home_parent"
   } > "$run/run.env"
 }
 
@@ -451,7 +473,7 @@ cleanup_check() {
     say "  K9 $label: no temporary home"
     return
   fi
-  if run_step "$L_USER" cleanup.sh "$run/cleanup-$label.log" "TEMP_AGENT_HOME=$temp" && [ -d "$temp" ] && [ -z "$(ls -A "$temp")" ] && [ "$(stat -c '%a' "$temp")" = 700 ]; then
+  if run_step "$L_USER" cleanup.sh "$run/cleanup-$label.log" "TEMP_AGENT_HOME=$temp" "HOME_PARENT=$L_PARENT" && [ -d "$temp" ] && [ -z "$(ls -A "$temp")" ] && [ "$(stat -c '%a' "$temp")" = 700 ]; then
     say "  K9 $label: cleanup left $temp empty, mode 0700, owner $(stat -c %U "$temp")"
     K9_OK=pass
   else
@@ -493,11 +515,17 @@ else
   gate fail "fixture suites"
 fi
 
-LAYOUTS=(L0 L1 L1r L1s L1t L2 L2e L3 L4)
+LAYOUTS=(L0 L1 L1r L1s L1t L2 L2e)
 if [ -n "$PROBE_HOME" ] && [ -d "$PROBE_HOME" ] && [ "$(stat -c %u "$PROBE_HOME")" = "$PROBE_UID" ] && [ ! -e "$PROBE_HOME/.claude" ] && [ ! -e "$PROBE_HOME/.mcp.json" ]; then
-  LAYOUTS=(L0 L1 L1r L1s L1t L2 L2e L2h L3 L4)
+  LAYOUTS+=(L2h)
 else
   say "layout L2h skipped: $PROBE_USER needs an own home with no .claude or .mcp.json"
+fi
+LAYOUTS+=(L3 L4)
+if [ -n "$PROBE_HOME" ] && [ -d "$PROBE_HOME" ] && [ "$(stat -c %u "$PROBE_HOME")" = "$PROBE_UID" ] && [ ! -e "$PROBE_HOME/actions-runner" ] && [ ! -L "$PROBE_HOME/actions-runner" ]; then
+  LAYOUTS+=(L4h)
+else
+  say "layout L4h skipped: $PROBE_USER needs an own home with no actions-runner"
 fi
 declare -A CASE_A
 for layout in "${LAYOUTS[@]}"; do
@@ -525,7 +553,7 @@ for layout in "${LAYOUTS[@]}"; do
       mkdir -p "$OUT/$layout-k8-before"
       if prepare_run "$layout" a "$OUT/$layout-k8-before"; then
         load_env "$OUT/$layout-k8-before/run.env"
-        write_commands "$OUT/$layout-k8-before/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+        write_commands "$OUT/$layout-k8-before/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
         run_claude "$OUT/$layout-k8-before" write-route "$OUT/$layout-k8-before/commands.json"
       fi
     fi
@@ -535,7 +563,7 @@ for layout in "${LAYOUTS[@]}"; do
       continue
     fi
     load_env "$run/run.env"
-    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+    write_commands "$run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
     run_claude "$run" scrub "$run/commands.json"
     summarize_run "$run" "$layout case $case_id (HOME=$L_AGENT)"
     [ -f "$run/stubs.log" ] && sed 's/^/  stubs: /' "$run/stubs.log" | tee -a "$RESULTS"
@@ -558,7 +586,7 @@ for layout in "${LAYOUTS[@]}"; do
       second="$OUT/$layout-d2"
       if prepare_run "$layout" d "$second"; then
         load_env "$second/run.env"
-        write_commands "$second/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+        write_commands "$second/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
         run_claude "$second" scrub "$second/commands.json"
         summarize_run "$second" "$layout case d, second run"
         if [ "$RUN_K1" = pass ]; then gate pass "$layout case d: K6 a repeated review succeeds"; else gate fail "$layout case d: K6 a repeated review succeeds"; fi
@@ -577,7 +605,7 @@ for layout in "${LAYOUTS[@]}"; do
     after="$OUT/$layout-k8-after"
     if prepare_run "$layout" a "$after"; then
       load_env "$after/run.env"
-      write_commands "$after/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+      write_commands "$after/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
       run_claude "$after" write-route "$after/commands.json"
       before_init=$(jq -c 'select(.type == "system" and .subtype == "init") | {mcp_servers, tools: (.tools | length)}' "$OUT/$layout-k8-before/claude.jsonl" 2>/dev/null | head -n 1)
       after_init=$(jq -c 'select(.type == "system" and .subtype == "init") | {mcp_servers, tools: (.tools | length)}' "$after/claude.jsonl" 2>/dev/null | head -n 1)
@@ -596,6 +624,9 @@ for layout in "${LAYOUTS[@]}"; do
     rm -rf "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" "$PROBE_HOME/rk-probe-runner-L2h"
     [ -n "${PROBE_HOME_MODE:-}" ] && chmod "$PROBE_HOME_MODE" "$PROBE_HOME"
   fi
+  if [ "$layout" = L4h ]; then
+    rm -rf "$PROBE_HOME/actions-runner"
+  fi
 done
 
 say ""
@@ -612,7 +643,7 @@ say "== K9 cleanup after failure and kill"
 fail_run="$OUT/L1-k9-fail"
 if prepare_run L1 d "$fail_run"; then
   load_env "$fail_run/run.env"
-  write_commands "$fail_run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER"
+  write_commands "$fail_run/commands.json" probe "$L_REAL_HOME" "$L_AGENT" "$L_RUNNER" "$L_RT" "$L_SIBLING" "$L_SIB_RUNNER" "$L_FOREIGN"
   run_claude "$fail_run" scrub "$fail_run/commands.json" --fail
   say "  forced API failure: claude exit $(cat "$fail_run/claude.status")"
   cleanup_check "$fail_run" "forced-failure"
@@ -631,10 +662,10 @@ fi
 
 say ""
 say "== decision inputs"
-for layout in L1 L1r L1s L1t L4 L2 L3; do
+for layout in L1 L1r L1s L1t L4 L4h L2 L3; do
   say "  case a K1 on $layout: ${CASE_A[$layout]:-not run}"
 done
-say "  P1: home-based layouts need the temporary home if any of L1, L1r, L1s, L1t, or L4 fails case a."
+say "  P1: home-based layouts need the temporary home if any of L1, L1r, L1s, L1t, L4, or L4h fails case a."
   say "  case a K1 on L2h: ${CASE_A[L2h]:-not run}"
   say "  P2: the stub step is needed if L2 or L2h fails case a."
 say "  P3 to P10: read the case c and case d blocks, the K3 writable lines, the hook token lines, the K6 lines, and the K8 lines above."

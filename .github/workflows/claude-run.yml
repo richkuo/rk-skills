@@ -403,12 +403,25 @@ jobs:
           set -euo pipefail
           umask 077
           PARENT=""
+          NO_PARENT_REASON=""
           if [ "${HOME_PARENT_DENY:-}" = "true" ]; then
-            PARENT="/tmp/rk-claude-homes.$(id -u)"
-            mkdir "$PARENT" 2>/dev/null || true
-            if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ "$(stat -c %a "$PARENT")" != "700" ]; then
-              echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a mode-0700 directory owned by this user. Remove it when no review runs on this host."
-              exit 1
+            UID_NOW=$(id -u)
+            PW_HOME=$(getent passwd "$UID_NOW" 2>/dev/null | cut -d: -f6) || PW_HOME=""
+            PW_RESOLVED=""
+            if [ -n "$PW_HOME" ]; then
+              PW_RESOLVED=$(cd -P "$PW_HOME" 2>/dev/null && pwd -P) || PW_RESOLVED=""
+            fi
+            if [ -n "$PW_RESOLVED" ] && [ "$PW_RESOLVED" != "/" ] && [ -d "$PW_RESOLVED" ] && [ -O "$PW_RESOLVED" ] && [ -z "$(find "$PW_RESOLVED" -maxdepth 0 -perm /022 -print)" ]; then
+              PARENT="$PW_RESOLVED/.rk-claude-homes"
+              mkdir "$PARENT" 2>/dev/null || true
+              if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ "$(stat -c %a "$PARENT")" != "700" ]; then
+                echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a mode-0700 directory owned by this user. Remove it when no review runs on this host."
+                exit 1
+              fi
+              find "$PARENT" -mindepth 1 -maxdepth 1 -name 'home.??????????' -type d -empty -mmin +1440 -delete 2>/dev/null || true
+            else
+              NO_PARENT_REASON="the home directory of user ID $UID_NOW in the passwd database (${PW_HOME:-none}) is missing, is /, is not owned by this user, or is writable by group or others"
+              echo "No directory for temporary agent homes: $NO_PARENT_REASON."
             fi
           fi
           if [ "$NEEDS_TEMP_HOME" != "true" ]; then
@@ -420,7 +433,7 @@ jobs:
             exit 0
           fi
           if [ -z "$PARENT" ]; then
-            echo "::error::Review refused: a temporary agent home is needed, but the run contract gives no protected directory to hold it."
+            echo "::error::Review refused: a temporary agent home is needed, but there is no protected directory to hold it: ${NO_PARENT_REASON:-the run contract does not protect one}."
             exit 1
           fi
           AGENT_HOME=$(mktemp -d "$PARENT/home.XXXXXXXXXX")
@@ -752,6 +765,7 @@ jobs:
           AGENT_HOME: ${{ steps.agent_home.outputs.path }}
           TEMP_AGENT_HOME: ${{ steps.agent_home.outputs.temp }}
           HOME_PARENT: ${{ steps.agent_home.outputs.parent }}
+          HOME_PARENT_DENY: ${{ steps.review_contract.outputs.home_parent_deny }}
         run: |
           if [ -z "$REAL_HOME" ] || [ -z "$AGENT_HOME" ]; then
             echo "::error::The run contract has no job home or agent home, so the credential guard cannot cover them."
@@ -880,7 +894,7 @@ jobs:
             }
           }
           EOF
-          if [ -n "$TEMP_AGENT_HOME" ] || [ -n "$HOME_PARENT" ]; then
+          if [ -n "$TEMP_AGENT_HOME" ] || [ "${HOME_PARENT_DENY:-}" = "true" ]; then
             WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P) || { echo "::error::The workspace cannot be resolved."; exit 1; }
             DENY_LIST=$(mktemp)
             add_deny() {
@@ -911,13 +925,6 @@ jobs:
             }
             if [ -n "$HOME_PARENT" ]; then
               require_deny "$HOME_PARENT"
-              if [ "$(id -u)" = "0" ]; then
-                for p in /tmp/rk-claude-homes.*; do
-                  if [ "$p" != "$HOME_PARENT" ] && [ -d "$p" ] && [ ! -L "$p" ]; then
-                    add_deny "$p"
-                  fi
-                done
-              fi
             fi
             require_deny "$RUNNER_TEMP"
             for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
@@ -1207,11 +1214,23 @@ jobs:
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         env:
           TEMP_AGENT_HOME: ${{ steps.agent_home.outputs.temp }}
+          HOME_PARENT: ${{ steps.agent_home.outputs.parent }}
         run: |
           PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           export PATH
           T="$TEMP_AGENT_HOME"
-          PARENT="/tmp/rk-claude-homes.$(id -u)"
+          PARENT="${HOME_PARENT:-}"
+          case "$PARENT" in
+            /*/.rk-claude-homes) ;;
+            *)
+              echo "::error::The directory $PARENT that should hold the temporary agent home does not match the name this workflow creates, so $T is not touched."
+              exit 1
+              ;;
+          esac
+          if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ]; then
+            echo "::error::The directory $PARENT that holds the temporary agent home is a symlink, not a directory, or not owned by this user, so $T is not touched."
+            exit 1
+          fi
           case "$T" in
             "$PARENT"/home.??????????) ;;
             *)
