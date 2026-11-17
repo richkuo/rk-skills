@@ -99,7 +99,7 @@ the comment routes to fix-pr or review by the PR rules above.
 
 | Shorthand | Model | Notes |
 |-----------|-------|-------|
-| (none) / `sol` | `gpt-5.6-sol` | Flagship default. |
+| (none) / `sol` | `gpt-6.2-sol` | Flagship default. |
 | `terra` | `gpt-5.6-terra` | Balanced everyday model. |
 | `luna` / `mini` | `gpt-5.6-luna` | Fast and affordable; the counterpart to `@claude sonnet review` for the C0–C24 band and the cheap non-blocking re-review. |
 | `codex` / `spark` | `gpt-5.3-codex-spark` | Text-only fast coding preview. |

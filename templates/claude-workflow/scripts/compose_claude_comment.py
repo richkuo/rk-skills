@@ -26,7 +26,7 @@ MODEL_DISPLAY_NAMES = {
     "claude-sonnet-5-5": "Claude Sonnet 5.5",
     "claude-fable-5-1": "Claude Fable 5.1",
     "claude-fable-5-2": "Claude Fable 5.2",
-    "gpt-5.6-sol": "GPT-5.6 Sol",
+    "gpt-6.2-sol": "GPT-6.2 Sol",
     "gpt-5.6-terra": "GPT-5.6 Terra",
     "gpt-5.6-luna": "GPT-5.6 Luna",
     "gpt-5.3-codex-spark": "GPT-5.3 Codex Spark",
