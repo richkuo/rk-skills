@@ -470,9 +470,27 @@ test_agent_home() {
   run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH/ah-home" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
   expect_status 0 "agent home: temporary-home selection runs"
   if [ "$(cat "$SCRATCH/ah-home/.bashrc")" = keep ] && [ "$(cat "$SCRATCH/ah-home/.config/keep")" = keep ]; then ok "agent home: existing job home entries are unchanged"; else bad "agent home: an existing job home entry changed"; fi
-  if [ -f "$SCRATCH/ah-home/.bash_profile" ] && [ ! -s "$SCRATCH/ah-home/.bash_profile" ] && [ -f "$SCRATCH/ah-home/.git-credentials" ] && [ -f "$SCRATCH/ah-home/.npmrc" ] && [ -d "$SCRATCH/ah-home/.ssh" ] && [ -d "$SCRATCH/ah-home/.local/bin" ] && [ -d "$SCRATCH/ah-home/.config/gh" ] && [ "$(cat "$SCRATCH/ah-home/.claude.json")" = '{}' ]; then ok "agent home: missing protected job home entries are created"; else bad "agent home: a missing protected job home entry was not created"; fi
+  if [ -f "$SCRATCH/ah-home/.bash_profile" ] && grep -qF '. "$HOME/.profile"' "$SCRATCH/ah-home/.bash_profile" && [ -f "$SCRATCH/ah-home/.bash_login" ] && [ -f "$SCRATCH/ah-home/.git-credentials" ] && [ -f "$SCRATCH/ah-home/.npmrc" ] && [ -d "$SCRATCH/ah-home/.ssh" ] && [ -d "$SCRATCH/ah-home/.local/bin" ] && [ -d "$SCRATCH/ah-home/.config/gh" ] && [ "$(cat "$SCRATCH/ah-home/.claude.json")" = '{}' ]; then ok "agent home: missing protected job home entries are created"; else bad "agent home: a missing protected job home entry was not created"; fi
   if [ "$(stat -c '%a' "$SCRATCH/ah-home/.git-credentials") $(stat -c '%a' "$SCRATCH/ah-home/.ssh")" = "600 700" ]; then ok "agent home: created job home entries have no group or other permissions"; else bad "agent home: a created job home entry is open to group or others"; fi
+  printf 'export RK_LATE=late\n' > "$SCRATCH/ah-home/.bash_login"
+  login_env=$(env -i "HOME=$SCRATCH/ah-home" PATH=/usr/bin:/bin bash -l -c 'printf %s "${RK_LATE:-}"' 2>/dev/null)
+  if [ "$login_env" = late ]; then ok "agent home: a bash login shell reads content written later to the created .bash_login"; else bad "agent home: a bash login shell skips content written later to the created .bash_login ('$login_env')"; fi
   t=$(grep '^temp=' "$out" | cut -d= -f2-)
+  for variant in profile login; do
+    vhome="$SCRATCH/ah-$variant"
+    mkdir -p "$vhome"
+    printf 'export RK_PROFILE_MARK=profile\n' > "$vhome/.profile"
+    if [ "$variant" = login ]; then printf 'export RK_LOGIN_MARK=login\n' > "$vhome/.bash_login"; fi
+    vout="$SCRATCH/ah-$variant.out"
+    : > "$vout"
+    run_script "$script" -i "PATH=$PATH" "HOME=$vhome" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$vout" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
+    expect_status 0 "agent home: temporary-home selection with a job home .$variant runs"
+    login_env=$(env -i "HOME=$vhome" PATH=/usr/bin:/bin bash -l -c 'printf "%s-%s" "${RK_LOGIN_MARK:-}" "${RK_PROFILE_MARK:-}"' 2>/dev/null)
+    if [ "$variant" = profile ]; then want="-profile"; else want="login-"; fi
+    if [ -f "$vhome/.bash_profile" ] && [ "$login_env" = "$want" ]; then ok "agent home: with a job home .$variant and no .bash_profile, a bash login shell reads the same file as before"; else bad "agent home: with a job home .$variant, a bash login shell gave '$login_env', expected '$want'"; fi
+    vt=$(grep '^temp=' "$vout" | cut -d= -f2-)
+    case "$vt" in "$parent"/home.??????????) rm -rf "$vt" ;; esac
+  done
   case "$t" in
     "$parent"/home.??????????) ok "agent home: the temporary home is in the protected parent" ;;
     *) bad "agent home: unexpected temporary home '$t'" ;;

@@ -459,6 +459,11 @@ jobs:
             mkdir -p "$AGENT_HOME/$entry"
           done
           JOB_HOME_CREATED=()
+          if [ -e "$HOME/.bash_login" ] || [ -L "$HOME/.bash_login" ]; then
+            BASH_PROFILE_LOADER='if [ -f "$HOME/.bash_login" ]; then . "$HOME/.bash_login"; elif [ -f "$HOME/.profile" ]; then . "$HOME/.profile"; fi'
+          else
+            BASH_PROFILE_LOADER='if [ -s "$HOME/.bash_login" ]; then . "$HOME/.bash_login"; elif [ -f "$HOME/.profile" ]; then . "$HOME/.profile"; fi'
+          fi
           for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .claude.json; do
             if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
               if ! : > "$HOME/$entry"; then
@@ -467,6 +472,9 @@ jobs:
               fi
               if [ "$entry" = .claude.json ]; then
                 printf '{}\n' > "$HOME/$entry"
+              fi
+              if [ "$entry" = .bash_profile ]; then
+                printf '%s\n' "$BASH_PROFILE_LOADER" > "$HOME/$entry"
               fi
               JOB_HOME_CREATED+=("$entry")
             fi
@@ -481,7 +489,7 @@ jobs:
             fi
           done
           if [ "${#JOB_HOME_CREATED[@]}" -gt 0 ]; then
-            echo "The action step runs with a temporary HOME, so the sandbox no longer protects the job home $HOME by itself. Created the missing protected entries there, which the settings deny and which stay on the host, as the sandbox's own placeholders do for a real HOME: ${JOB_HOME_CREATED[*]}."
+            echo "The action step runs with a temporary HOME, so the sandbox no longer protects the job home $HOME by itself. Created the missing protected entries there, which the settings deny and which stay on the host: ${JOB_HOME_CREATED[*]}. A created .bash_profile loads .bash_login or .profile in the order that bash uses, so a bash login shell starts as before. Delete the listed entries to remove them."
           fi
           WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P)
           git config --file "$AGENT_HOME/.gitconfig" --add safe.directory "$GITHUB_WORKSPACE"

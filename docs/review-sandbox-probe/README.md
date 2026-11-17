@@ -55,10 +55,10 @@ Each run deletes and creates again the three directories under `/opt`, `/srv`,
 and `/var/tmp`. It reuses an existing probe user and does not change the
 package or sysctl state when that is already in place. Layout L4h creates an
 `actions-runner` directory in the probe user's home and deletes it when it ends;
-it skips when that directory already exists. Its runs also leave the empty
-protected entries that the review and the sandbox create in that home
-(`.bash_profile`, `.npmrc`, `.ssh`, and the like); `sudo userdel -r rkprobe`
-removes them. Layout L2h and the stub
+it skips when that directory already exists. It adds a marker `PATH` entry to
+that home's `.profile` and restores the file when it ends. Its runs also leave
+the protected entries that the review creates in that home (`.bash_profile`,
+`.npmrc`, `.ssh`, and the like); `sudo userdel -r rkprobe` removes them. Layout L2h and the stub
 fixture suite create a `.claude`, a `.mcp.json`, and a runner directory in the
 probe user's home, and delete them when they end (L2h also sets that home to mode 0755 while it runs, so a root sandbox can enter it, and restores the mode after); they skip when that home
 already has a `.claude` or `.mcp.json`.
@@ -76,7 +76,7 @@ already has a `.claude` or `.mcp.json`.
 | L2e | As L2, and that directory already holds a `.claude` owned by that user |
 | L2h | Root, workspace under the probe user's home directory (with its skeleton dotfiles), which is the only ancestor owned by another user ID (97731) |
 | L3 | Combined: root, the home's `actions-runner` owned by another user ID |
-| L4 | Non-root user, workspace under that user's own `actions-runner` |
+| L4 | Non-root user, workspace under that user's own `actions-runner`, with no shell startup files in its home |
 | L4h | Non-root probe user, workspace under `actions-runner` in that user's passwd home, with `HOME` set to that home, so the temporary home is inside the job home (97730) |
 
 Cases: (a) no workaround, (b) stubs only, (c) temporary home plus the required
@@ -86,7 +86,7 @@ file names the reason for each inapplicable case.
 Checks: K1 git status, diff, fetch, and a local config write in the sandbox;
 K2 the synthetic Anthropic credential is absent from the tool environment and
 from every readable `/proc/*/environ`; K3 write attempts on the runner,
-`$RUNNER_TEMP`, job home, agent home, sibling home (a second home of the same user, as a concurrent review would have), and other-user home targets (the probe user's home for a root review, root's home for the probe user, so a review cannot create the temporary home directory of another user ID), and ungated K3X write attempts on `/tmp`, `/var/tmp`, `/dev/shm`, and a sibling runner under `~/runners`; K4 reads of the job home's
+`$RUNNER_TEMP`, job home (including `.bash_profile` and `.bash_login`), agent home, sibling home (a second home of the same user, as a concurrent review would have), and other-user home targets (the probe user's home for a root review, root's home for the probe user, so a review cannot create the temporary home directory of another user ID), and ungated K3X write attempts on `/tmp`, `/var/tmp`, `/dev/shm`, and a sibling runner under `~/runners`; K4 reads of the job home's
 Claude credential files; K5 the shipped guard blocks a tool call when a
 synthetic job token sits in a credential store; K6 zero-byte placeholders, a
 host git config write, and a repeated run; K8 a write-route run with and

@@ -178,10 +178,26 @@ build_layout() {
       ;;
   esac
   mkdir -p "$runner/bin" "$runner/externals/node/bin" "$runner/_work/_temp/rk-shared/scripts" "$runner/_work/_temp/rk-plugin-sources/rk-skills" "$runner/_work/_temp/_runner_file_commands" "$runner/_work/repo"
-  if [ "$name" != L4h ]; then
+  if [ "$name" = L4h ]; then
+    L4H_PROFILE_STATE=missing
+    rm -f "$dir/profile.orig"
+    if [ -e "$PROBE_HOME/.bash_profile" ] || [ -L "$PROBE_HOME/.bash_profile" ]; then
+      L4H_PROFILE_STATE=has-bash-profile
+    else
+      if [ -f "$PROBE_HOME/.profile" ]; then
+        cp -p "$PROBE_HOME/.profile" "$dir/profile.orig"
+        L4H_PROFILE_STATE=saved
+      fi
+      printf '\nPATH="$PATH:/rk-probe-profile-marker"\n' >> "$PROBE_HOME/.profile"
+      chown "$PROBE_USER" "$PROBE_HOME/.profile"
+    fi
+    say "  L4h start: .bash_profile state $L4H_PROFILE_STATE, home entries: $(ls -A "$PROBE_HOME" | tr '\n' ' ')"
+  else
     mkdir -p "$home/.ssh" "$home/.config/git" "$home/.local/bin" "$home/.claude"
-    printf 'export RK=1\n' > "$home/.bashrc"
-    printf 'export RK=1\n' > "$home/.profile"
+    if [ "$name" != L4 ]; then
+      printf 'export RK=1\n' > "$home/.bashrc"
+      printf 'export RK=1\n' > "$home/.profile"
+    fi
     printf 'ssh-ed25519 AAAA rkprobe\n' > "$home/.ssh/authorized_keys"
     printf '[user]\n\tname = rkprobe\n' > "$home/.gitconfig"
     printf '{}\n' > "$home/.claude/settings.json"
@@ -265,7 +281,7 @@ write_commands() {
     jq -n '["echo K9 sleeping; sleep 120"]' > "$file"
     return
   fi
-  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin"
+  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.bash_profile $home/.bash_login $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin"
   if [ "$agent" != "$home" ]; then
     targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_login $agent/.bunfig.toml $agent/.npmrc $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
@@ -583,6 +599,22 @@ for layout in "${LAYOUTS[@]}"; do
         say "  L2h stub: $(stat -c '%n %F %U %a' "$PROBE_HOME/.claude" "$PROBE_HOME/.mcp.json" 2>&1 | tr '\n' ' ')"
         if grep -qF "::warning::$PROBE_HOME/.claude is a root-owned directory in the home directory of $PROBE_USER" "$run/stubs.log"; then gate pass "L2h case d: the root-owned .claude in a user's home is named in a warning"; else gate fail "L2h case d: the root-owned .claude in a user's home is named in a warning"; fi
       fi
+      if [ "$layout" = L4 ] || [ "$layout" = L4h ]; then
+        say "  $layout job home .bash_profile: $(stat -c '%U %a %s bytes' "$L_REAL_HOME/.bash_profile" 2>&1), content: $(head -c 200 "$L_REAL_HOME/.bash_profile" 2>&1 | tr '\n' ' ')"
+        printf '%s\n' "$(tool_text "$run" 2)" | grep -E "^K3 [A-Z]+ $L_REAL_HOME/\.bash_(profile|login)( |$)" | sed "s/^/  $layout /" | tee -a "$RESULTS"
+      fi
+      if [ "$layout" = L4h ]; then
+        if [ "$L4H_PROFILE_STATE" = has-bash-profile ]; then
+          say "  L4h login shell check skipped: $PROBE_HOME had a .bash_profile before the layout"
+        else
+          login_path=$(runuser -u "$PROBE_USER" -- env -i "HOME=$PROBE_HOME" PATH=/usr/bin:/bin /bin/bash -l -c 'printf %s "$PATH"' 2>&1)
+          say "  L4h bash login shell PATH after case d: $login_path"
+          case ":$login_path:" in
+            *:/rk-probe-profile-marker:*) gate pass "L4h case d: a bash login shell still reads .profile" ;;
+            *) gate fail "L4h case d: a bash login shell still reads .profile" ;;
+          esac
+        fi
+      fi
       say "  P7 $layout: hook token $RUN_HOOK"
       second="$OUT/$layout-d2"
       if prepare_run "$layout" d "$second"; then
@@ -627,6 +659,10 @@ for layout in "${LAYOUTS[@]}"; do
   fi
   if [ "$layout" = L4h ]; then
     rm -rf "$PROBE_HOME/actions-runner"
+    case "$L4H_PROFILE_STATE" in
+      saved) cp -p "$BASE/L4h/profile.orig" "$PROBE_HOME/.profile" ;;
+      missing) rm -f "$PROBE_HOME/.profile" ;;
+    esac
   fi
 done
 
