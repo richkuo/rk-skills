@@ -59,6 +59,7 @@ if ! id "$PROBE_USER" >/dev/null 2>&1; then
 fi
 PROBE_UID=$(id -u "$PROBE_USER")
 PROBE_HOME=$(getent passwd "$PROBE_USER" | cut -d: -f6)
+PROBE_HOME_STAT=$(stat -c '%a %U' "$PROBE_HOME" 2>&1)
 export RK_PROBE_USER="$PROBE_USER"
 
 ACTION_SHA=$(grep -oE 'anthropics/claude-code-action@[0-9a-f]{40}' "$WORKFLOW" | head -n 1 | cut -d@ -f2)
@@ -119,7 +120,7 @@ say "bubblewrap: $(bwrap --version 2>&1 | head -n 1)"
 say "apparmor_restrict_unprivileged_userns: $(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo absent)"
 say "action commit: $ACTION_SHA"
 say "claude code: $CC_VERSION"
-say "probe user: $PROBE_USER (uid $PROBE_UID)"
+say "probe user: $PROBE_USER (uid $PROBE_UID), home $PROBE_HOME mode and owner at start: $PROBE_HOME_STAT"
 
 load_env() {
   local key value
@@ -473,8 +474,8 @@ cleanup_check() {
     say "  K9 $label: no temporary home"
     return
   fi
-  if run_step "$L_USER" cleanup.sh "$run/cleanup-$label.log" "TEMP_AGENT_HOME=$temp" "HOME_PARENT=$L_PARENT" && [ -d "$temp" ] && [ -z "$(ls -A "$temp")" ] && [ "$(stat -c '%a' "$temp")" = 700 ]; then
-    say "  K9 $label: cleanup left $temp empty, mode 0700, owner $(stat -c %U "$temp")"
+  if run_step "$L_USER" cleanup.sh "$run/cleanup-$label.log" "TEMP_AGENT_HOME=$temp" "HOME_PARENT=$L_PARENT" && [ -d "$temp" ] && [ -z "$(ls -A "$temp")" ] && [ -z "$(find "$temp" -maxdepth 0 -perm /077 -print)" ]; then
+    say "  K9 $label: cleanup left $temp empty, mode $(stat -c %a "$temp"), owner $(stat -c %U "$temp")"
     K9_OK=pass
   else
     say "  K9 $label: cleanup failed $(tr '\n' ' ' < "$run/cleanup-$label.log" | head -c 300)"

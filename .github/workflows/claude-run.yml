@@ -414,8 +414,11 @@ jobs:
             if [ -n "$PW_RESOLVED" ] && [ "$PW_RESOLVED" != "/" ] && [ -d "$PW_RESOLVED" ] && [ -O "$PW_RESOLVED" ] && [ -z "$(find "$PW_RESOLVED" -maxdepth 0 -perm /022 -print)" ]; then
               PARENT="$PW_RESOLVED/.rk-claude-homes"
               mkdir "$PARENT" 2>/dev/null || true
-              if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ "$(stat -c %a "$PARENT")" != "700" ]; then
-                echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a mode-0700 directory owned by this user. Remove it when no review runs on this host."
+              if [ ! -L "$PARENT" ] && [ -d "$PARENT" ] && [ -O "$PARENT" ]; then
+                chmod go-rwx "$PARENT"
+              fi
+              if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ -n "$(find "$PARENT" -maxdepth 0 -perm /077 -print)" ]; then
+                echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a directory owned by this user with no group or other permissions ($(stat -c '%F, owner %U, mode %a' "$PARENT" 2>&1)). Remove it when no review runs on this host."
                 exit 1
               fi
               find "$PARENT" -mindepth 1 -maxdepth 1 -name 'home.??????????' -type d -empty -mmin +1440 -delete 2>/dev/null || true
@@ -437,8 +440,8 @@ jobs:
             exit 1
           fi
           AGENT_HOME=$(mktemp -d "$PARENT/home.XXXXXXXXXX")
-          if [ -L "$AGENT_HOME" ] || [ ! -d "$AGENT_HOME" ] || [ ! -O "$AGENT_HOME" ] || [ "$(stat -c %a "$AGENT_HOME")" != "700" ]; then
-            echo "::error::Review refused: the temporary agent home $AGENT_HOME is not a mode-0700 directory owned by this user."
+          if [ -L "$AGENT_HOME" ] || [ ! -d "$AGENT_HOME" ] || [ ! -O "$AGENT_HOME" ] || [ -n "$(find "$AGENT_HOME" -maxdepth 0 -perm /077 -print)" ]; then
+            echo "::error::Review refused: the temporary agent home $AGENT_HOME is not a directory owned by this user with no group or other permissions ($(stat -c '%F, owner %U, mode %a' "$AGENT_HOME" 2>&1))."
             exit 1
           fi
           printf '#!/bin/sh\nexit 0\n' > "$AGENT_HOME/.rk-exec-check"
@@ -1254,11 +1257,12 @@ jobs:
             echo "::error::The temporary agent home $T is not empty after cleanup."
             exit 1
           fi
-          if [ -z "$(find "$T" -maxdepth 0 -type d -user "$(id -u)" -perm 700 -print)" ]; then
-            echo "::error::The temporary agent home $T is not an empty mode-0700 directory owned by this user after cleanup."
+          MODE_STRING=$(ls -ld "$T" | cut -c1-10)
+          if [ -L "$T" ] || [ ! -d "$T" ] || [ ! -O "$T" ] || [ "${MODE_STRING:4:6}" != "------" ]; then
+            echo "::error::The temporary agent home $T is not an empty directory owned by this user with no group or other permissions after cleanup ($MODE_STRING)."
             exit 1
           fi
-          echo "The temporary agent home $T is empty, mode 0700, and stays until the host removes it, because later steps keep its program directories on PATH."
+          echo "The temporary agent home $T is empty, $MODE_STRING, and stays until a later review removes it after one day, because later steps keep its program directories on PATH."
 
       - name: Fail if Claude Code returned an error
         if: steps.claude.outcome == 'success'
