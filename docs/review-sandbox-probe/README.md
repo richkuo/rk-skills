@@ -55,7 +55,10 @@ Each run deletes and creates again the three directories under `/opt`, `/srv`,
 and `/var/tmp`. It reuses an existing probe user and does not change the
 package or sysctl state when that is already in place. Layout L4h creates an
 `actions-runner` directory in the probe user's home and deletes it when it ends;
-it skips when that directory already exists. Layout L2h and the stub
+it skips when that directory already exists. Its runs also leave the empty
+protected entries that the review and the sandbox create in that home
+(`.bash_profile`, `.npmrc`, `.ssh`, and the like); `sudo userdel -r rkprobe`
+removes them. Layout L2h and the stub
 fixture suite create a `.claude`, a `.mcp.json`, and a runner directory in the
 probe user's home, and delete them when they end (L2h also sets that home to mode 0755 while it runs, so a root sandbox can enter it, and restores the mode after); they skip when that home
 already has a `.claude` or `.mcp.json`.

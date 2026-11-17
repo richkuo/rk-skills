@@ -155,7 +155,12 @@ model until you copy the template again.
     is the home directory of the runner user ID in the passwd database. Its Claude Code settings
     and memory start empty. The step creates the home's startup, git, Bun,
     npm, Claude, ssh, and program-path entries before the run, so the
-    sandbox needs to create nothing in it. An always-run step empties the
+    sandbox needs to create nothing in it. With `HOME` moved, the sandbox no
+    longer protects the job home by itself, so the step also creates the same
+    entries in the job home when they are missing (empty files, `{}` for
+    `.claude.json`, mode-0700 directories), and the settings deny them. They
+    stay on the host, as the sandbox's own placeholders do in a real `HOME`
+    (the probe saw it create an empty `~/.bash_profile` there). An always-run step empties the
     temporary home after the action. The empty directory stays on the host
     because the action adds its program directories to `PATH` for the rest of
     the job; a failed cleanup skips every later step that would run a program

@@ -447,7 +447,7 @@ jobs:
           printf '#!/bin/sh\nexit 0\n' > "$AGENT_HOME/.rk-exec-check"
           chmod 700 "$AGENT_HOME/.rk-exec-check"
           if ! "$AGENT_HOME/.rk-exec-check"; then
-            echo "::error::Review refused: programs cannot run from the temporary agent home $AGENT_HOME (/tmp is mounted noexec)."
+            echo "::error::Review refused: programs cannot run from the temporary agent home $AGENT_HOME (its file system is mounted noexec)."
             exit 1
           fi
           rm -f "$AGENT_HOME/.rk-exec-check"
@@ -458,6 +458,31 @@ jobs:
           for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh runners actions-runner; do
             mkdir -p "$AGENT_HOME/$entry"
           done
+          JOB_HOME_CREATED=()
+          for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .claude.json; do
+            if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
+              if ! : > "$HOME/$entry"; then
+                echo "::error::Review refused: the job home entry $HOME/$entry cannot be created, so the scrub sandbox cannot protect it."
+                exit 1
+              fi
+              if [ "$entry" = .claude.json ]; then
+                printf '{}\n' > "$HOME/$entry"
+              fi
+              JOB_HOME_CREATED+=("$entry")
+            fi
+          done
+          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .ssh; do
+            if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
+              if ! mkdir -p "$HOME/$entry"; then
+                echo "::error::Review refused: the job home entry $HOME/$entry cannot be created, so the scrub sandbox cannot protect it."
+                exit 1
+              fi
+              JOB_HOME_CREATED+=("$entry")
+            fi
+          done
+          if [ "${#JOB_HOME_CREATED[@]}" -gt 0 ]; then
+            echo "The action step runs with a temporary HOME, so the sandbox no longer protects the job home $HOME by itself. Created the missing protected entries there, which the settings deny and which stay on the host, as the sandbox's own placeholders do for a real HOME: ${JOB_HOME_CREATED[*]}."
+          fi
           WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P)
           git config --file "$AGENT_HOME/.gitconfig" --add safe.directory "$GITHUB_WORKSPACE"
           if [ "$WS_RESOLVED" != "$GITHUB_WORKSPACE" ]; then
@@ -930,7 +955,7 @@ jobs:
               require_deny "$HOME_PARENT"
             fi
             require_deny "$RUNNER_TEMP"
-            for p in .bashrc .bash_profile .bash_login .profile .zshrc .ssh .gitconfig .git-credentials .config .local/bin .claude .claude.json; do
+            for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .config .pip .local/bin .ssh .claude .claude.json; do
               optional_deny "${REAL_HOME%/}/$p"
             done
             WORK_DIR=$(dirname "$RUNNER_TEMP")

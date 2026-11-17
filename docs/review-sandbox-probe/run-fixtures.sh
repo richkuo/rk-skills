@@ -276,7 +276,7 @@ test_settings() {
   local dir="$SCRATCH/settings" parent="$SCRATCH/settings/homes" agent="$SCRATCH/settings/homes/agent" hook_cmd
   rm -rf "$dir"
   mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun" "$agent/.config/git"
-  touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$agent/.gitconfig" "$dir/guard.sh"
+  touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$dir/real-home/.bash_profile" "$dir/real-home/.npmrc" "$agent/.gitconfig" "$dir/guard.sh"
 
   make_settings "$dir" ""
   expect_status 0 "settings: real-home run writes the settings"
@@ -303,6 +303,8 @@ test_settings() {
   deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings: RUNNER_TEMP is protected"
   deny_has "$dir/settings.json" "$parent" "settings: the parent of every temporary home is protected"
   deny_has "$dir/settings.json" "$dir/real-home/.bashrc" "settings: a real-home startup file is protected"
+  deny_has "$dir/settings.json" "$dir/real-home/.bash_profile" "settings: the real-home .bash_profile is protected"
+  deny_has "$dir/settings.json" "$dir/real-home/.npmrc" "settings: the real-home .npmrc is protected"
   deny_has "$dir/settings.json" "$dir/real-home/.ssh" "settings: the real-home ssh directory is protected"
   deny_has "$dir/settings.json" "$dir/runner/.credentials" "settings: the runner credential file is protected"
   deny_has "$dir/settings.json" "$dir/runner/bin" "settings: the runner binaries are protected"
@@ -461,9 +463,15 @@ test_agent_home() {
   run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=false"
   expect_status 1 "agent home: a temporary home without a protected parent is refused"
 
+  mkdir -p "$SCRATCH/ah-home/.config"
+  printf 'keep\n' > "$SCRATCH/ah-home/.bashrc"
+  printf 'keep\n' > "$SCRATCH/ah-home/.config/keep"
   : > "$out"
-  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
+  run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH/ah-home" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=true" "HOME_PARENT_DENY=true"
   expect_status 0 "agent home: temporary-home selection runs"
+  if [ "$(cat "$SCRATCH/ah-home/.bashrc")" = keep ] && [ "$(cat "$SCRATCH/ah-home/.config/keep")" = keep ]; then ok "agent home: existing job home entries are unchanged"; else bad "agent home: an existing job home entry changed"; fi
+  if [ -f "$SCRATCH/ah-home/.bash_profile" ] && [ ! -s "$SCRATCH/ah-home/.bash_profile" ] && [ -f "$SCRATCH/ah-home/.git-credentials" ] && [ -f "$SCRATCH/ah-home/.npmrc" ] && [ -d "$SCRATCH/ah-home/.ssh" ] && [ -d "$SCRATCH/ah-home/.local/bin" ] && [ -d "$SCRATCH/ah-home/.config/gh" ] && [ "$(cat "$SCRATCH/ah-home/.claude.json")" = '{}' ]; then ok "agent home: missing protected job home entries are created"; else bad "agent home: a missing protected job home entry was not created"; fi
+  if [ "$(stat -c '%a' "$SCRATCH/ah-home/.git-credentials") $(stat -c '%a' "$SCRATCH/ah-home/.ssh")" = "600 700" ]; then ok "agent home: created job home entries have no group or other permissions"; else bad "agent home: a created job home entry is open to group or others"; fi
   t=$(grep '^temp=' "$out" | cut -d= -f2-)
   case "$t" in
     "$parent"/home.??????????) ok "agent home: the temporary home is in the protected parent" ;;
