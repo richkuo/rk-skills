@@ -177,7 +177,7 @@ build_layout() {
       rm -rf "$runner"
       ;;
   esac
-  mkdir -p "$runner/bin" "$runner/externals/node/bin" "$runner/_work/_temp/rk-shared/scripts" "$runner/_work/_temp/rk-plugin-sources/rk-skills" "$runner/_work/_temp/_runner_file_commands" "$runner/_work/repo"
+  mkdir -p "$runner/bin" "$runner/externals/node/bin" "$runner/_work/_temp/rk-shared/scripts" "$runner/_work/_temp/rk-plugin-sources/rk-skills" "$runner/_work/_temp/_runner_file_commands" "$runner/_work/repo" "$runner/_work/_actions/anthropics/claude-code-action/pin/bin" "$runner/_work/_tool/go/1.0.0/x64" "$runner/_work/other/other/.git"
   if [ "$name" = L4h ]; then
     L4H_PROFILE_STATE=missing
     L4H_BASH_PROFILE_SAVED=false
@@ -213,6 +213,8 @@ build_layout() {
   printf '#!/bin/sh\nexit 0\n' > "$runner/_work/_temp/rk-shared/scripts/patch_claude_comment.sh"
   printf '{}\n' > "$runner/_work/_temp/rk-plugin-sources/rk-skills/marketplace.json"
   printf 'x\n' > "$runner/_work/_temp/_runner_file_commands/set_env_x"
+  printf '#!/bin/sh\nexit 0\n' > "$runner/_work/_actions/anthropics/claude-code-action/pin/bin/bun"
+  printf '[core]\n' > "$runner/_work/other/other/.git/config"
   if [ "$name" = L1t ]; then
     ln -s "$runner" "$home/actions-runner"
   fi
@@ -283,7 +285,7 @@ write_commands() {
     jq -n '["echo K9 sleeping; sleep 120"]' > "$file"
     return
   fi
-  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $home/.bashrc $home/.profile $home/.bash_profile $home/.bash_login $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin $home/.bun $home/.bun/bin"
+  targets="$runner/bin $runner/bin/Runner.Worker $runner/externals $runner/.runner $runner/.credentials $runner/.credentials_rsaparams $runner/.env $runner/.path $rt $rt/claude-review-credential-guard.sh $rt/claude-review-settings.json $rt/rk-shared/scripts/patch_claude_comment.sh $rt/rk-plugin-sources $rt/_runner_file_commands $runner/_work/_actions $runner/_work/_actions/anthropics/claude-code-action/pin/bin $runner/_work/_actions/anthropics/claude-code-action/pin/bin/bun $runner/_work/_tool $runner/_work/_tool/go/1.0.0/x64 $runner/_work/other $runner/_work/other/other/.git $runner/_work/other/other/.git/config $home/.bashrc $home/.profile $home/.bash_profile $home/.bash_login $home/.ssh $home/.gitconfig $home/.git-credentials $home/.config/git/credentials $home/.claude/settings.json $home/.local/bin $home/.bun $home/.bun/bin"
   if [ "$agent" != "$home" ]; then
     targets="$targets $agent $agent/.gitconfig $agent/.bashrc $agent/.bash_profile $agent/.bash_login $agent/.bash_logout $agent/.profile $agent/.zshrc $agent/.zshenv $agent/.zprofile $agent/.zlogin $agent/.zlogout $agent/.bunfig.toml $agent/.npmrc $agent/.yarnrc $agent/.yarnrc.yml $agent/.netrc $agent/.config/git $agent/.config/pip $agent/.config/gh $agent/.pip $agent/.local/bin $agent/.bun $agent/.bun/bin $agent/.ssh $agent/.claude $agent/.claude/settings.json $agent/.claude.json"
   fi
@@ -375,7 +377,7 @@ prepare_run() {
     echo "guard generation failed" > "$run/prepare.err"
     return 1
   fi
-  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "HOME_PARENT=$settings_parent" "HOME_PARENT_DENY=$settings_parent_deny" "GITHUB_OUTPUT=$run/settings.out"; then
+  if ! run_step "$user" settings.sh "$run/settings.log" "GITHUB_WORKSPACE=$ws" "RUNNER_TEMP=$rt" "RUNNER_TOOL_CACHE=$(dirname "$rt")/_tool" "SETTINGS_FILE=$rt/claude-review-settings.json" "GUARD_FILE=$rt/claude-review-credential-guard.sh" "GUARD_OID=$(out_value "$run/guard.out" guard_oid)" "REAL_HOME=$real_home" "TEMP_AGENT_HOME=$settings_temp" "HOME_PARENT=$settings_parent" "HOME_PARENT_DENY=$settings_parent_deny" "GITHUB_OUTPUT=$run/settings.out"; then
     echo "settings generation failed" > "$run/prepare.err"
     return 1
   fi
@@ -608,7 +610,7 @@ for layout in "${LAYOUTS[@]}"; do
       fi
       say "  $layout job home .bash_profile: $(stat -c '%U %a %s bytes' "$L_REAL_HOME/.bash_profile" 2>&1), content: $(head -c 200 "$L_REAL_HOME/.bash_profile" 2>&1 | tr '\n' ' ')"
       printf '%s\n' "$(tool_text "$run" 2)" | grep -E "^K3 [A-Z]+ $L_REAL_HOME/\.bash_(profile|login)( |$)" | sed "s/^/  $layout /" | tee -a "$RESULTS"
-      path_targets="$L_REAL_HOME/.local/bin $L_REAL_HOME/.bun $L_REAL_HOME/.bun/bin"
+      path_targets="$L_REAL_HOME/.local/bin $L_REAL_HOME/.bun $L_REAL_HOME/.bun/bin $L_RUNNER/_work/_actions/anthropics/claude-code-action/pin/bin/bun $L_RUNNER/_work/_tool $L_RUNNER/_work/other/other/.git/config"
       if [ "$L_AGENT" != "$L_REAL_HOME" ]; then
         path_targets="$path_targets $L_AGENT/.local/bin $L_AGENT/.bun $L_AGENT/.bun/bin $L_AGENT/.ssh $L_AGENT/.config/git $L_AGENT/.config/gh"
       fi

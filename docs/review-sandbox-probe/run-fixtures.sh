@@ -264,7 +264,7 @@ make_settings() {
   fi
   script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
   rm -f "$dir/settings.json"
-  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "GITHUB_OUTPUT=$dir/settings.out"
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE_IN:-}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "GITHUB_OUTPUT=$dir/settings.out"
 }
 
 deny_has() {
@@ -275,7 +275,7 @@ test_settings() {
   echo "== settings"
   local dir="$SCRATCH/settings" parent="$SCRATCH/settings/homes" agent="$SCRATCH/settings/homes/agent" hook_cmd
   rm -rf "$dir"
-  mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun/bin" "$agent/.config/git" "$agent/.config/pip" "$agent/.config/gh" "$agent/.pip" "$agent/.ssh" "$agent/.claude"
+  mkdir -p "$dir/runner/_work/repo/repo" "$dir/runner/_work/_temp" "$dir/runner/_work/_actions/owner/action/pin/bin" "$dir/runner/_work/other/other/.git" "$dir/runner/bin" "$dir/runner/externals" "$dir/real-home/.ssh" "$agent/.local/bin" "$agent/.bun/bin" "$agent/.config/git" "$agent/.config/pip" "$agent/.config/gh" "$agent/.pip" "$agent/.ssh" "$agent/.claude"
   touch "$dir/runner/.runner" "$dir/runner/.credentials" "$dir/real-home/.bashrc" "$dir/real-home/.bash_profile" "$dir/real-home/.npmrc" "$dir/guard.sh"
   for f in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .claude.json; do
     touch "$agent/$f"
@@ -318,6 +318,16 @@ test_settings() {
   deny_has "$dir/settings.json" "$agent/.ssh" "settings: the temporary home ssh directory is protected"
   if jq -e '(.claudeMdExcludes | length) == 10 and (.hooks.PreToolUse | length) == 1' "$dir/settings.json" >/dev/null; then ok "settings: temporary-home run keeps the exclusions and the hook"; else bad "settings: temporary-home run lost the exclusions or the hook"; fi
   if jq -e --arg w "$dir/runner/_work/repo/repo" '[.sandbox.filesystem.denyWrite[] | select(($w + "/") | startswith(. + "/"))] | length == 0' "$dir/settings.json" >/dev/null; then ok "settings: no protected path contains the workspace"; else bad "settings: a protected path contains the workspace"; fi
+
+  deny_has "$dir/settings.json" "$dir/runner/_work/_actions" "settings: the runner action cache is protected"
+  deny_has "$dir/settings.json" "$dir/runner/_work/other" "settings: another workspace of the runner is protected"
+  if jq -e --arg p "$dir/runner/_work/repo" '.sandbox.filesystem.denyWrite | index($p) | not' "$dir/settings.json" >/dev/null 2>&1; then ok "settings: the work directory entry that holds the workspace is not protected"; else bad "settings: the work directory entry that holds the workspace is protected"; fi
+
+  rm -rf "$dir/tool-cache"
+  RUNNER_TOOL_CACHE_IN="$dir/tool-cache" make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings: a run with a missing tool cache writes the settings"
+  if [ -d "$dir/tool-cache" ]; then ok "settings: a missing tool cache is created"; else bad "settings: the missing tool cache was not created"; fi
+  deny_has "$dir/settings.json" "$dir/tool-cache" "settings: the tool cache is protected"
 
   RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a missing required target stops the run"

@@ -981,11 +981,38 @@ jobs:
                 require_deny "${TEMP_AGENT_HOME%/}/$p"
               done
             fi
+            if [ -n "${RUNNER_TOOL_CACHE:-}" ]; then
+              if [ ! -e "$RUNNER_TOOL_CACHE" ] && [ ! -L "$RUNNER_TOOL_CACHE" ] && mkdir -p "$RUNNER_TOOL_CACHE" 2>/dev/null; then
+                echo "Created the tool cache $RUNNER_TOOL_CACHE, so the settings can deny sandboxed writes to it. It stays on the host."
+              fi
+              optional_deny "$RUNNER_TOOL_CACHE"
+            fi
             WORK_DIR=$(dirname "$RUNNER_TEMP")
             RUNNER_ROOT=$(dirname "$WORK_DIR")
             if [ -f "$RUNNER_ROOT/.runner" ]; then
               for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
                 optional_deny "$RUNNER_ROOT/$p"
+              done
+              for e in "$WORK_DIR"/* "$WORK_DIR"/.[!.]*; do
+                if [ ! -e "$e" ] && [ ! -L "$e" ]; then
+                  continue
+                fi
+                if [ "$e" = "${RUNNER_TEMP%/}" ] || grep -qxF "$e" "$DENY_LIST"; then
+                  continue
+                fi
+                E_RESOLVED=$(cd -P "$e" 2>/dev/null && pwd -P) || E_RESOLVED="$e"
+                HOLDS_WS=false
+                for w in "$GITHUB_WORKSPACE" "$WS_RESOLVED"; do
+                  for c in "${e%/}" "${E_RESOLVED%/}"; do
+                    case "$w/" in
+                      "$c"/*) HOLDS_WS=true ;;
+                    esac
+                  done
+                done
+                if [ "$HOLDS_WS" = true ]; then
+                  continue
+                fi
+                add_deny "$e"
               done
             else
               echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."

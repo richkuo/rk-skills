@@ -188,7 +188,13 @@ model until you copy the template again.
   program directories `.local/bin` and `.bun` (a review with the real `HOME`
   creates `.local/bin` and `.bun/bin` when they are missing, because the
   action installs programs there and adds them to `PATH`); the protected
-  entries of the temporary home; and the runner installation files. Without the first entry, a review could change
+  entries of the temporary home; the runner installation files; every entry of
+  the runner work directory except the one that holds the workspace (the
+  action cache `_work/_actions`, from which the action runs Bun with the job
+  token after Claude ends, the tool cache, and the workspaces of other
+  repositories); and `$RUNNER_TOOL_CACHE`, which the step creates when it is
+  missing. An entry that a review creates in the work directory during the
+  run is not covered. Without the first entry, a review could change
   the home of another review that runs as the same user at the same time.
   The directory is in the user's own home, so another user ID cannot create
   it first and stop that user's reviews; in shared `/tmp` it could. A review
