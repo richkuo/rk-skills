@@ -201,7 +201,7 @@ echo "ENDED run=$RUN exit=$(cat "$RUN/exit" 2>/dev/null) limit=$(cat "$RUN/limit
 
 ## check-validate.sh
 
-Usage: `bash "$SP/check-validate.sh" <N> "$SP/validate-<N>"`. It reads the run's `settings.json`. It applies the `cli-dispatch` section 9 Issue diff for update mode with the pass footer `Validated with LLM: <NAME> | <TIER> | Harness: Codex`. A failed invoking-user read and a missing or unparseable read time of record are each a `BLOCKER`. It prints the read time of record as `READ_AT`, the verdict line (`NO_VERDICT` when `result.md` holds no step 8 verdict, `Close issue?` verdict, or `Validation blocked` line), and the lines of `result.md` that match a gate condition (`GATE_HINTS`), and prints the snapshot diff. The driver judges the hints against the STOP table of `fable-validate-loop` step 2.
+Usage: `bash "$SP/check-validate.sh" <N> "$SP/validate-<N>"`. It reads the run's `settings.json`. It applies the `cli-dispatch` section 9 Issue diff for update mode with the pass footer `Validated with LLM: <NAME> | <TIER> | Harness: Codex`. A failed invoking-user read and a missing or unparseable read time of record are each a `BLOCKER`. It prints the read time of record as `READ_AT`, the verdict, and the lines of `result.md` that match a gate condition (`GATE_HINTS`, case-insensitive), and prints the snapshot diff. Verdict detection ignores case, markdown bold and backticks, and the wording of the label: an update decision ("Update issue description?", "update decision:", "Update issue:", "Update:") followed by `:`, `?`, `-`, or a dash and then Yes or No; a close verdict ("Close issue?", "close decision:") followed by Yes; and "Validation blocked". It prints the normalized value as `VERDICT Update issue description? <Yes|No>`, `VERDICT Close issue? Yes[ — <Completed|Invalid>]`, or `VERDICT Validation blocked`, and the matched line as `NOTE verdict source`. When forms disagree, `Validation blocked` wins over a close verdict, a close verdict wins over an update decision, and an update Yes wins over No, so a mixed result always takes the form that stops or checks more. With no recognizable verdict, a run that exited 0 and landed an edit (`OK body edit landed`) prints `VERDICT Update issue description? Yes (implied by landed edit)` and a `NOTE`; otherwise it prints `NO_VERDICT`. The driver judges the hints against the STOP table of `fable-validate-loop` step 2.
 
 ```sh
 set -u
@@ -241,10 +241,30 @@ prefix() { jq -r '.title | capture("^(?<p>\\[C[0-9]+\\])").p // "none"' "$1"; }
 tb=$(strip "$B"); ta=$(strip "$A")
 bb=$(jq -c .body "$B" | sum); ba=$(jq -c .body "$A" | sum)
 last=$(jq -r '.body | split("\n") | map(rtrimstr("\r")) | map(select(test("\\S"))) | last // ""' "$A")
-verdict=$(grep -oE 'Update issue description\? (Yes|No)|Close issue\? Yes[^*]*|Validation blocked[^*]*' "$RUN/result.md" 2>/dev/null | head -1)
-if [ -n "$verdict" ]; then echo "VERDICT $verdict"; else echo "NO_VERDICT result.md holds no step 8 verdict, Close issue? verdict, or Validation blocked line"; fi
+SEP='([[:space:]]|[*`:?=-]|—|–)+'
+END='([^[:alnum:]_]|$)'
+LEAD='(^|[^[:alnum:]_])'
+UPD="${LEAD}update( the)?( issue)?( description| decision| body)?${SEP}"
+vline() { grep -inE "$1" "$RUN/result.md" 2>/dev/null | tail -1 | cut -d: -f2- | cut -c1-200; }
+bl=$(vline "${LEAD}validation( is| was)?${SEP}blocked${END}")
+cl=$(vline "${LEAD}close( the)?( issue)?( decision| recommended)?${SEP}yes${END}")
+uy=$(vline "${UPD}yes${END}")
+un=$(vline "${UPD}no${END}")
+verdict=""; vsrc=""
+if [ -n "$bl" ]; then verdict="Validation blocked"; vsrc=$bl
+elif [ -n "$cl" ]; then
+  vsrc=$cl
+  case "$(printf '%s' "$cl" | grep -ioE 'completed|invalid' | head -1 | tr '[:upper:]' '[:lower:]')" in
+    completed) verdict="Close issue? Yes — Completed" ;;
+    invalid) verdict="Close issue? Yes — Invalid" ;;
+    *) verdict="Close issue? Yes" ;;
+  esac
+elif [ -n "$uy" ]; then verdict="Update issue description? Yes"; vsrc=$uy; [ -n "$un" ] && echo "NOTE result.md holds both a Yes and a No update decision; Yes is kept"
+elif [ -n "$un" ]; then verdict="Update issue description? No"; vsrc=$un
+fi
+landed=0
 if [ "$bb" != "$ba" ]; then
-  if [ "$last" = "$FOOTER" ]; then say "OK body edit landed"; else say "BLOCKER body changed and the last line is: $last"; fi
+  if [ "$last" = "$FOOTER" ]; then say "OK body edit landed"; landed=1; else say "BLOCKER body changed and the last line is: $last"; fi
   [ "$tb" = "$ta" ] || say "BLOCKER title changed beyond its score prefix"
   echo "NOTE title prefix $(prefix "$B") -> $(prefix "$A")"
 else
@@ -255,9 +275,12 @@ else
     *) say "OK no edit needed or made" ;;
   esac
 fi
+if [ -n "$verdict" ]; then echo "VERDICT $verdict"; echo "NOTE verdict source: $vsrc"
+elif [ "$landed" = 1 ] && [ "$(cat "$RUN/exit" 2>/dev/null)" = 0 ]; then echo "VERDICT Update issue description? Yes (implied by landed edit)"; echo "NOTE result.md holds no recognizable verdict, but the run exited 0 and landed an edit with the pass footer"
+else echo "NO_VERDICT result.md holds no recognizable update, close, or Validation blocked verdict, and no exit-0 run landed an edit"; fi
 echo "NOTE updatedAt $(jq -r .updatedAt "$B") -> $(jq -r .updatedAt "$A")"
 echo "GATE_HINTS"
-grep -nE 'Infeasible|too large|Close issue\?|Validation blocked|already (addressed|implemented)|open PR|merged PR' "$RUN/result.md" 2>/dev/null | cut -c1-200
+grep -niE 'Infeasible|too large|Close( the)?( issue| decision| recommended)|Validation( is| was)? blocked|already (addressed|implemented)|open PR|merged PR' "$RUN/result.md" 2>/dev/null | cut -c1-200
 echo "SNAPSHOT_DIFF"
 diff "$RUN/before" "$RUN/after"
 exit "$bad"
