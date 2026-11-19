@@ -201,7 +201,7 @@ echo "ENDED run=$RUN exit=$(cat "$RUN/exit" 2>/dev/null) limit=$(cat "$RUN/limit
 
 ## check-validate.sh
 
-Usage: `bash "$SP/check-validate.sh" <N> "$SP/validate-<N>"`. It reads the run's `settings.json`. It applies the `cli-dispatch` section 9 Issue diff for update mode with the pass footer `Validated with LLM: <NAME> | <TIER> | Harness: Codex`. A failed invoking-user read and a missing or unparseable read time of record are each a `BLOCKER`. It prints the read time of record as `READ_AT`, the verdict, and the lines of `result.md` that match a gate condition (`GATE_HINTS`, case-insensitive), and prints the snapshot diff. Verdict detection ignores case, markdown bold and backticks, and the wording of the label: an update decision ("Update issue description?", "update decision:", "Update issue:", "Update:") followed by `:`, `?`, `-`, or a dash and then Yes or No; a close verdict ("Close issue?", "close decision:") followed by Yes; and "Validation blocked". It prints the normalized value as `VERDICT Update issue description? <Yes|No>`, `VERDICT Close issue? Yes[ — <Completed|Invalid>]`, or `VERDICT Validation blocked`, and the matched line as `NOTE verdict source`. When forms disagree, `Validation blocked` wins over a close verdict, a close verdict wins over an update decision, and an update Yes wins over No, so a mixed result always takes the form that stops or checks more. With no recognizable verdict, a run that exited 0 and landed an edit (`OK body edit landed`) prints `VERDICT Update issue description? Yes (implied by landed edit)` and a `NOTE`; otherwise it prints `NO_VERDICT`. The driver judges the hints against the STOP table of `fable-validate-loop` step 2.
+Usage: `bash "$SP/check-validate.sh" <N> "$SP/validate-<N>"`. It reads the run's `settings.json`. It applies the `cli-dispatch` section 9 Issue diff for update mode with the pass footer `Validated with LLM: <NAME> | <TIER> | Harness: Codex`. A failed invoking-user read and a missing or unparseable read time of record are each a `BLOCKER`. It prints the read time of record as `READ_AT`, the verdict, and the lines of `result.md` that match a gate condition (`GATE_HINTS`, case-insensitive), and prints the snapshot diff. Verdict detection ignores case, markdown bold and backticks, and the wording of the label: an update decision ("Update issue description?", "update decision:", "Update issue:", "Update:") followed by `:`, `?`, `-`, or a dash and then Yes or No; a close verdict ("Close issue?", "close decision:") followed by Yes; and "Validation blocked". It reads the lines of `result.md` that name `#<N>` first, since every step 8 verdict line names the issue, and reads the whole file only when no such line holds a verdict, so a verdict phrase quoted in another section never replaces the verdict line. It prints the normalized value as `VERDICT Update issue description? <Yes|No>`, `VERDICT Close issue? Yes[ — <Completed|Invalid>]`, or `VERDICT Validation blocked`, and the matched line as `NOTE verdict source`. When forms disagree, `Validation blocked` wins over a close verdict, a close verdict wins over an update decision, and an update Yes wins over No, so a mixed result always takes the form that stops or checks more. With no recognizable verdict, a run that exited 0, landed an edit (`OK body edit landed`), and holds a `Scope: OK` field in `result.md` (any case, with or without markdown) prints `VERDICT Update issue description? Yes (implied by landed edit)` and a `NOTE`; otherwise it prints `NO_VERDICT`, because the step 8 scope field carries the `Scope: too large` stop signal. The driver judges the hints against the STOP table of `fable-validate-loop` step 2.
 
 ```sh
 set -u
@@ -245,11 +245,17 @@ SEP='([[:space:]]|[*`:?=-]|—|–)+'
 END='([^[:alnum:]_]|$)'
 LEAD='(^|[^[:alnum:]_])'
 UPD="${LEAD}update( the)?( issue)?( description| decision| body)?${SEP}"
-vline() { grep -inE "$1" "$RUN/result.md" 2>/dev/null | tail -1 | cut -d: -f2- | cut -c1-200; }
-bl=$(vline "${LEAD}validation( is| was)?${SEP}blocked${END}")
-cl=$(vline "${LEAD}close( the)?( issue)?( decision| recommended)?${SEP}yes${END}")
-uy=$(vline "${UPD}yes${END}")
-un=$(vline "${UPD}no${END}")
+vline() { printf '%s\n' "$TXT" | grep -inE "$1" | tail -1 | cut -d: -f2- | cut -c1-200; }
+detect() {
+  bl=$(vline "${LEAD}validation( is| was)?${SEP}blocked${END}")
+  cl=$(vline "${LEAD}close( the)?( issue)?( decision| recommended)?${SEP}yes${END}")
+  uy=$(vline "${UPD}yes${END}")
+  un=$(vline "${UPD}no${END}")
+}
+TXT=$(grep -E "#${N}([^0-9]|\$)" "$RUN/result.md" 2>/dev/null); detect
+[ -n "$bl$cl$uy$un" ] || { TXT=$(cat "$RUN/result.md" 2>/dev/null); detect; }
+TXT=$(cat "$RUN/result.md" 2>/dev/null)
+scope_ok=$(vline "${LEAD}scope${SEP}ok${END}")
 verdict=""; vsrc=""
 if [ -n "$bl" ]; then verdict="Validation blocked"; vsrc=$bl
 elif [ -n "$cl" ]; then
@@ -276,8 +282,8 @@ else
   esac
 fi
 if [ -n "$verdict" ]; then echo "VERDICT $verdict"; echo "NOTE verdict source: $vsrc"
-elif [ "$landed" = 1 ] && [ "$(cat "$RUN/exit" 2>/dev/null)" = 0 ]; then echo "VERDICT Update issue description? Yes (implied by landed edit)"; echo "NOTE result.md holds no recognizable verdict, but the run exited 0 and landed an edit with the pass footer"
-else echo "NO_VERDICT result.md holds no recognizable update, close, or Validation blocked verdict, and no exit-0 run landed an edit"; fi
+elif [ "$landed" = 1 ] && [ "$(cat "$RUN/exit" 2>/dev/null)" = 0 ] && [ -n "$scope_ok" ]; then echo "VERDICT Update issue description? Yes (implied by landed edit)"; echo "NOTE result.md holds no recognizable verdict, but the run exited 0, landed an edit with the pass footer, and states Scope: OK"; echo "NOTE scope source: $scope_ok"
+else echo "NO_VERDICT result.md holds no recognizable update, close, or Validation blocked verdict, and no exit-0 run landed an edit with a Scope: OK line in result.md"; fi
 echo "NOTE updatedAt $(jq -r .updatedAt "$B") -> $(jq -r .updatedAt "$A")"
 echo "GATE_HINTS"
 grep -niE 'Infeasible|too large|Close( the)?( issue| decision| recommended)|Validation( is| was)? blocked|already (addressed|implemented)|open PR|merged PR' "$RUN/result.md" 2>/dev/null | cut -c1-200
