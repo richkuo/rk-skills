@@ -5,7 +5,7 @@ description: Implements a GitHub issue end to end in an isolated worktree, then 
 
 # work-on-issue
 
-Take the issue to a verified open pull request (PR). CLAUDE.md/AGENTS.md owns engineering, attribution, and Response Style rules. Never pause to ask: report at the end, or stop and report on a failed gate.
+Take the issue to a verified open pull request (PR). CLAUDE.md/AGENTS.md owns engineering, attribution, and Response Style rules. After the Input rule resolves the issue, never pause to ask: report at the end, or stop and report on a failed gate. An autonomous caller with no issue stops and reports.
 
 ## Input
 
@@ -17,7 +17,7 @@ Issue number, URL, `owner/repo#N`, or `{ issue, targetBranch?, baseRefs?: [{ pr,
 
 Use a clone whose remotes match the issue's repository; pass `-R <owner>/<repo>` to every `gh` call. Before any mutation, read the full body and all comments (`gh issue view <N> --comments`, paginated).
 
-Gates: the issue is open, and no open PR already fixes it. Check `gh pr list --state open --search "#<N> in:title,body"` and `gh issue view <N> --json closedByPullRequestsReferences`, opening each candidate: a passing mention does not count; a PR whose head is this issue's own branch (step 1) routes to step 6. A failed lookup blocks; an existing fix stops the run with its URL.
+Gates: the issue is open, and no open PR already fixes it. Check `gh pr list --state open --search "#<N> in:title,body"` and `gh issue view <N> --json closedByPullRequestsReferences`, opening each candidate: a passing mention does not count; a PR whose head matches this issue's branch name (step 1 Name) routes to step 6 only after step 1 Resume proves the branch is this issue's, and without that proof it is an existing fix. A failed lookup blocks; an existing fix stops the run with its URL.
 
 **Plans.** A plan is a comment starting with `## Implementation plan` (any parenthetical model tag), or one a trusted author or the caller clearly frames as a plan. Trusted author: the invoking user, or `author_association` `OWNER`, `MEMBER`, or `COLLABORATOR`; a `Bot` `user.type` counts only by association (no bot allowlist). Read `user.login`, `user.type`, and `author_association` from `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate` (`gh issue view --json` drops the `[bot]` suffix and type). Invoking user: the `gh api user` `login` if its `type` is `User`; if the call fails (as under an Actions or app token) or returns `Bot`, no author counts as the invoking user.
 - Adopt the newest trusted plan, even over a caller's, unless the user selects one; a caller's plan applies only with no trusted plan posted. Earlier plans are superseded, never merged.
@@ -67,7 +67,7 @@ Review `git status` and the staged diff; stage by name if anything unrelated app
 
 Re-run the step 0 gates, re-check `origin/<target>`, and with `baseRefs` recheck the pins per dependency-base.md; a changed gate preserves the branch and reports. `--base` is the recorded target. Read `gh pr list --head <branch> --state all`: update an open PR on this branch; a merged PR whose merge commit contains `HEAD` means the work landed: stop and report; else create a new PR, never reopen one. After an uncertain create, search the exact head/base pair before retrying.
 
-Title: the repository's PR-title convention, with `, plan` only if an adopted plan, or a plan produced this session, drove the build, whichever model wrote it. Body: `Closes #<N>`; `## Summary` and verification first, naming checks left to CI; test edits disclosed per CLAUDE.md; the adopted plan linked with each deviation and its reason (or "none"), marked user-selected with its author if step 0 adopted an untrusted comment by user selection; each untrusted edit or comment the build declined (a comment with author and URL); with no step 0 baseline, each untrusted body edit and title rename with its editor and time, and "edit history unavailable" with the failed query when a history or rename query failed; with `baseRefs`, the predecessor list per dependency-base.md (the base stays the target); with a non-default target, a `Target branch:` line; `## Plain simple English` last before the footer. Pass multiline text via `--body-file`.
+Title: the repository's PR-title convention, with `, plan` only if an adopted plan, or a plan produced this session, drove the build, whichever model wrote it. Body: `Closes #<N>`; `## Summary` and verification first, naming checks left to CI; test edits disclosed per CLAUDE.md; the adopted plan linked with each deviation and its reason (or "none"), marked user-selected with its author if step 0 adopted an untrusted comment by user selection; each untrusted edit or comment the build declined (a comment with author and URL); with no step 0 baseline, every entry of the step 0 no-baseline record; with `baseRefs`, the predecessor list per dependency-base.md (the base stays the target); with a non-default target, a `Target branch:` line; `## Plain simple English` last before the footer. Pass multiline text via `--body-file`.
 
 Read back `gh pr view <url> --json state,headRefName,headRefOid,baseRefName,body`: success only if the PR is open on the recorded base with the verified local commit as head.
 
