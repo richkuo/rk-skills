@@ -156,9 +156,11 @@ What an opted-in launch loads: the workspace instruction files (through
 `--add-dir` with the environment variable; the probe proves `CLAUDE.md`), the
 user settings, and the plugins that the action installs. It does not load the
 project or local settings, so their hooks, `env`, and permission rules do not
-apply (the probe proves the hooks). With the project source off, project
-skills, commands, subagents, and the servers in a project `.mcp.json` are
-expected not to load; the probe does not test them.
+apply (the probe proves the hooks). The servers in a project `.mcp.json` do
+not start (the probe proves this, with a control launch that starts them when
+the policy flags are off). With the project source off, project skills,
+commands, and subagents are expected not to load; the probe does not test
+them.
 
 The runner needs `python3` at one of the two fixed paths, `git`, and `gh`. A
 missing interpreter, a checker that is missing, empty, a symlink, or does not
