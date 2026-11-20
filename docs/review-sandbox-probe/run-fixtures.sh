@@ -968,7 +968,7 @@ test_policy() {
   expect_status 1 "policy check: launch arguments where the policy flags are not last fail before the launch"
 
   mkdir -p "$POLICY_ROOT/home/.claude"
-  printf '{"enableAllProjectMcpServers": true, "enabledPlugins": {"x@y": true}}\n' > "$home_settings"
+  printf '{"enableAllProjectMcpServers": true, "enabledPlugins": {"x@y": true}, "extraKnownMarketplaces": {"m": {"source": {"source": "directory", "path": "/x"}}}}\n' > "$home_settings"
   policy_check after-main "$args_on" 0
   expect_status 0 "policy check: user settings changed only in the excluded keys pass"
   printf '{"hooks": {"PreToolUse": []}}\n' > "$home_settings"

@@ -889,7 +889,7 @@ policy_write_commands() {
 }
 
 policy_block_cmd() {
-  printf 'git log -1 --format=%s --output=%s' "$2" "$1"
+  printf 'git log -1 --format=tformat:%s --output=%s' "$2" "$1"
 }
 
 policy_cp1_shape() {
@@ -980,7 +980,7 @@ policy_cp3_switch() {
     "git checkout -q other" \
     "$(policy_block_cmd "$run/markers/block-2" rk-policy-block-marker)" \
     "git worktree add -q --detach $wt other" \
-    "git -C $wt log -1 --format=rk-policy-block-marker --output=$run/markers/block-3"
+    "git -C $wt log -1 --format=tformat:rk-policy-block-marker --output=$run/markers/block-3"
   policy_launch "$run" "$args" "$run/commands.json"
   policy_note "$run" "CP3 branch and worktree change"
   local head

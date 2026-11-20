@@ -136,7 +136,9 @@ What the run does:
   that a pull request or a branch change puts in the checkout does not run.
 - A check step before and after each launch (the main launch and the
   CLAUDE.md revision) fails the job when the staged checker, the settings
-  file, the interpreter, or the user settings changed, when the staged
+  file, the interpreter, or the user settings changed (outside the
+  `enableAllProjectMcpServers`, `enabledPlugins`, and `extraKnownMarketplaces`
+  keys, which the action and its plugin install write), when the staged
   directory holds another file, or when the launch arguments do not end with
   the policy flags. Before a launch it also refuses `disableAllHooks: true` in
   the user settings, and `disableAllHooks` or `allowManagedHooksOnly` set to

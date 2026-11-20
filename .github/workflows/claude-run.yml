@@ -1042,7 +1042,7 @@ jobs:
           esac
           USER_STATE=$("$INTERPRETER" -I - "$USER_SETTINGS" << 'PY'
           import hashlib, json, os, sys
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
           data = {}
@@ -1659,7 +1659,7 @@ jobs:
           if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
           import hashlib, json, os, sys
           path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -1876,7 +1876,7 @@ jobs:
           if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
           import hashlib, json, os, sys
           path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -2229,7 +2229,7 @@ jobs:
           if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
           import hashlib, json, os, sys
           path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -2435,7 +2435,7 @@ jobs:
           if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
           import hashlib, json, os, sys
           path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
