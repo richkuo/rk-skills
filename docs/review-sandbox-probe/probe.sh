@@ -784,6 +784,7 @@ policy_prepare() {
   git -C "$ws" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m other-hooks
   git -C "$ws" checkout -q pr
   policy_project_hooks "$ws" settings.json "$run/markers/project-shared"
+  jq -n --arg m "$run/markers/mcp-server" '{mcpServers: {"rk-probe-mcp": {command: "/bin/sh", args: ["-c", ("touch " + $m + "; exec cat")]}}}' > "$ws/.mcp.json"
   git -C "$ws" add -A
   git -C "$ws" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m pr-hooks
   policy_project_hooks "$ws" settings.local.json "$run/markers/project-local"
@@ -923,6 +924,11 @@ policy_cp1_shape() {
     gate fail "CP3 $shape: a hook from the workspace settings ran: $(ls "$run/markers" | tr '\n' ' ')"
   else
     gate pass "CP3 $shape: no hook from the workspace settings or local settings ran"
+  fi
+  if [ -e "$run/markers/mcp-server" ]; then
+    gate fail "CP3 $shape: a server from the workspace .mcp.json started"
+  else
+    gate pass "CP3 $shape: no server from the workspace .mcp.json started"
   fi
 }
 
@@ -1090,6 +1096,11 @@ else
       gate pass "CP7: a launch without the policy settings flags fails the after-phase check"
     else
       gate fail "CP7: the control launch did not fail the after-phase check (allow marker: $([ -e "$cp7/markers/allow" ] && echo present || echo absent)); $(tail -n 2 "$cp7/check-after-main.log" | tr '\n' ' ' | head -c 300)"
+    fi
+    if [ -e "$cp7/markers/mcp-server" ]; then
+      gate pass "CP3 control: a launch without the policy settings flags starts the workspace .mcp.json server, so the CP3 server gates can fail"
+    else
+      gate fail "CP3 control: the workspace .mcp.json server did not start in the launch without the policy settings flags, so the CP3 server gates prove nothing; init record: $(policy_init_record "$cp7" | jq -c '.mcp_servers // "none"' 2>/dev/null | head -c 300)"
     fi
   else
     gate fail "CP7 control: preparation failed"

@@ -122,10 +122,11 @@ a pull request state: an allow-all checker, a `.claude/settings.json` and a
 - CP2: the call is blocked when the hook interpreter does not exist, when the
   staged checker is removed or changed, when the checker raises, and when it
   runs past the timeout. A control without `onFailure` is reported only.
-- CP3: no workspace or local settings hook runs, and the policy still blocks
-  after `git checkout` to a branch with other `.claude` files and in a
-  `git worktree add` directory. Whether the runtime offers `EnterWorktree` is
-  reported only.
+- CP3: no workspace or local settings hook runs, no server from the workspace
+  `.mcp.json` starts, and the policy still blocks after `git checkout` to a
+  branch with other `.claude` files and in a `git worktree add` directory. A
+  control launch without the policy flags must start that server, so the server
+  gates can fail. Whether the runtime offers `EnterWorktree` is reported only.
 - CP4: a request holds the workspace `CLAUDE.md` marker, and the init record
   lists the fixture plugin. Plugins, MCP servers, and skills in the init record
   are reported for the docs.
