@@ -353,8 +353,8 @@ write_commands() {
     return
   fi
   if [ "$kind" = loop ]; then
-    jq -n --arg t1 "$home" --arg t2 "$agent" --arg tag "rk-k13-$runner" '[
-      ("echo K13 looping; bash -c '"'"'i=0; while [ $i -lt 120 ]; do : > \"$1\" 2>/dev/null; : > \"$2\" 2>/dev/null; i=$((i+1)); sleep 1; done'"'"' " + $tag + " " + ($t1 | @sh) + " " + ($t2 | @sh))
+    jq -n --arg t1 "$home" --arg t2 "$agent" --arg tag "rk-k13-$runner" --arg beat "$rt" '[
+      ("echo K13 looping; bash -c '"'"'i=0; while [ $i -lt 120 ]; do : > \"$3\" 2>/dev/null; : > \"$1\" 2>/dev/null; : > \"$2\" 2>/dev/null; i=$((i+1)); sleep 1; done'"'"' " + $tag + " " + ($t1 | @sh) + " " + ($t2 | @sh) + " " + ($beat | @sh))
     ]' > "$file"
     if [ "$(id -u)" = 0 ]; then chmod 644 "$file"; fi
     return
@@ -718,7 +718,7 @@ control_check() {
 }
 
 kill_check() {
-  local layout="$1" run="$OUT/$1-k13-kill" t1 t2 tag polls=0 seen=false leaked=false survivors
+  local layout="$1" run="$OUT/$1-k13-kill" t1 t2 tag beat polls=0 seen=false leaked=false ran=false survivors
   if ! prepare_run "$layout" d "$run"; then
     gate fail "K13 $layout: preparation failed"
     return
@@ -727,7 +727,8 @@ kill_check() {
   t1="$L_WORK_DIR/rk-k13-$L_NONCE"
   t2="$(dirname "$L_WS_RESOLVED")/rk-k13-$L_NONCE"
   tag="rk-k13-$L_NONCE"
-  write_commands "$run/commands.json" loop "$t1" "$t2" "$L_NONCE"
+  beat="$L_WS_RESOLVED/.rk-k13-$L_NONCE-alive"
+  write_commands "$run/commands.json" loop "$t1" "$t2" "$L_NONCE" "$beat"
   run_claude "$run" kill "$run/commands.json"
   say "  kill during a tool call on $layout: claude exit $(cat "$run/claude.status")"
   for _ in $(seq 1 10); do
@@ -744,11 +745,13 @@ kill_check() {
     sleep 0.5
   done
   if [ -e "$t1" ] || [ -L "$t1" ] || [ -e "$t2" ] || [ -L "$t2" ]; then leaked=true; fi
-  say "  K13 $layout: a sandboxed process outlived the kill: $seen, polls while it ran: $polls, processes left after the polls: ${survivors:-0}, targets on the host: $leaked"
-  if [ "$leaked" = false ]; then
+  if [ -e "$beat" ]; then ran=true; fi
+  say "  K13 $layout: the loop ran in the sandbox: $ran, a sandboxed process outlived the kill: $seen, polls while it ran: $polls, processes left after the polls: ${survivors:-0}, targets on the host: $leaked"
+  rm -f -- "$beat"
+  if [ "$ran" = true ] && [ "$leaked" = false ]; then
     gate pass "K13 $layout: a sandboxed loop that outlives the kill creates no work directory entry or workspace sibling"
   else
-    gate fail "K13 $layout: a sandboxed loop that outlives the kill creates no work directory entry or workspace sibling"
+    gate fail "K13 $layout: a sandboxed loop that outlives the kill creates no work directory entry or workspace sibling (loop ran: $ran, targets on the host: $leaked)"
   fi
   rm -f -- "$t1" "$t2"
   entries_check "$run" kill
@@ -770,11 +773,11 @@ nobwrap_check() {
   write_commands "$run/commands.json" nobwrap "" "" "" ""
   run_claude "$run" nobwrap "$run/commands.json"
   text=$(tool_text "$run" 0)
-  say "  K11 with bubblewrap masked: claude exit $(cat "$run/claude.status"), tool result is_error $(tool_error "$run" 0), output: $(printf '%s' "$text" | head -c 300 | tr '\n' ' ')"
+  say "  K11 with bubblewrap masked: claude exit $(cat "$run/claude.status"), tool result is_error ${text:+$(tool_error "$run" 0)}, output: $(printf '%s' "$text" | head -c 300 | tr '\n' ' '), Claude Code error output: $(grep -v '^[[:space:]]*$' "$run/claude.err" 2>/dev/null | head -n 2 | head -c 400 | tr '\n' ' ')"
   if printf '%s\n' "$text" | grep -qx 'K11 ran'; then
     say "  K11 REPORT: with bubblewrap masked, Claude Code ran the Bash call, so the preflight step is the only guard against a missing sandbox"
   else
-    gate pass "K11 Claude Code refuses a Bash call when bubblewrap is masked"
+    gate pass "K11 Claude Code runs no Bash call when bubblewrap is masked"
   fi
   cleanup_check "$run" "k11" >/dev/null
 }

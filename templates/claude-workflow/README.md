@@ -212,7 +212,9 @@ model until you copy the template again.
   setting exists and is not `0`, as the action does; both changes stay on the
   host. It then runs the same mount plan with `bwrap` as the job user and
   refuses the review unless a new entry in the work directory and beside the
-  workspace fails and a file in the workspace succeeds. A step before the
+  workspace fails and a file in the workspace succeeds. Without bubblewrap,
+  the pinned Claude Code also refuses to start in scrub mode (probe K11), so
+  no tool command runs unsandboxed. A step before the
   action records the entries of the work directory and of each directory
   between it and the workspace, and an always-run step after the action fails
   the job and names each new entry; it deletes nothing. The review refuses

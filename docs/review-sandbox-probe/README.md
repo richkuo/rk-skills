@@ -106,16 +106,19 @@ synthetic job token sits in a credential store; K6 zero-byte placeholders, a
 host git config write, and a repeated run; K8 a write-route run with and
 without stubs; K9 the temporary home cleanup after success, a forced API
 failure, and a kill during a tool call; K11 one scrub-on run on L1 inside
-`unshare -m` with `/dev/null` bound on `/usr/bin/bwrap`, which records
-whether Claude Code still runs the Bash call; K12 (case d) a new work
+`unshare -m` with `/dev/null` bound on `/usr/bin/bwrap`, which must run no
+Bash call (the pinned Claude Code refuses to start in scrub mode without
+bubblewrap; when a version runs the call, the probe prints the result with no
+gate, and the sandbox check step is then the only guard); K12 (case d) a new work
 directory entry and a new workspace sibling, each with a per-run nonce, in
 the literal and the resolved spelling, by file create, `mkdir`, `mv` of a
 workspace file, and `ln -s`, before and after `mount -o remount,rw,bind`,
 `umount`, and `umount -l` attempts on the work directory; each attempt must
 fail inside the sandbox and the target must be absent on the host after the
-run; K13 a sandboxed loop on L1 and L5w that writes both targets every
-second and outlives the kill of Claude Code; both targets must stay absent
-at every poll and after the last process ends; K14 a control run on every
+run; K13 a sandboxed loop on L1 and L5w that writes a heartbeat file in the
+workspace and both targets every second, and that can outlive the kill of
+Claude Code; the heartbeat must show that the loop ran, and both targets
+must stay absent at every poll and after the last process ends; K14 a control run on every
 second-base layout except L2ew, L2h, and L4h with `denyRead` and `allowRead` removed from
 the settings, which must leave both targets on the host (the probe removes
 them), so a pass of K12 there is not a default denial; K15 a read of a file
