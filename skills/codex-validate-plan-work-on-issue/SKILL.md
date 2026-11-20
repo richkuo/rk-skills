@@ -10,7 +10,7 @@ Run validate, plan, and build for one or more issues at the same time. Each issu
 
 Report length, wording, and formatting follow the Response Style section of CLAUDE.md/AGENTS.md. This skill restates none of it.
 
-The scripts, the prompt templates, and the check scripts are in [run-recipes.md](run-recipes.md). Read it completely before step 1. The session is the driver named in `cli-dispatch` section 9, so read that section completely too: this skill reuses its validate shim, its limits, its snapshot guard, and its issue check.
+The scripts, the prompt templates, and the check scripts are in [run-recipes.md](run-recipes.md). Read it completely before step 1. The session is the driver named in `cli-dispatch` section 9, so read that section and its [validate-pass.md](../cli-dispatch/validate-pass.md) file completely too: this skill reuses its validate shim, its limits, its snapshot guard, and its issue check.
 
 ## Input
 
