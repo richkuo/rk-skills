@@ -2,6 +2,17 @@
 
 Scripts and prompt templates for `codex-validate-plan-work-on-issue`. Write each script to `$SP` under the name in its heading. `stage.sh` reads its settings from the environment on the first launch of a run and saves them to `settings.json` in the run directory. A rerun and every other script read that file. Each script prints one-line markers the driver reads: `STARTED`, `BLOCKED`, `ENDED_EARLY`, `RUNNING`, `ENDED`, `BLOCKER`, `FLAG`, `OK`, `NOTE`, `VERDICT`, `NO_VERDICT`, `READ_AT`, `NO_PLAN`, `PLAN_STATUS`, `PLAN_URL`.
 
+## Contents
+
+- [Environment](#environment)
+- [Files in a stage run directory](#files-in-a-stage-run-directory)
+- [stage.sh](#stagesh)
+- [watch.sh](#watchsh)
+- [check-validate.sh](#check-validatesh)
+- [check-plan.sh](#check-plansh)
+- [Build subagent prompt](#build-subagent-prompt)
+- [Limits of these scripts](#limits-of-these-scripts)
+
 ## Environment
 
 Shell variables do not persist between Bash calls, so set these in the same Bash command as each `stage.sh` call. `stage.sh` uses them only when the run directory has no `settings.json`.
