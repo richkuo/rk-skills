@@ -765,19 +765,25 @@ kill_check() {
 }
 
 nobwrap_check() {
-  local run="$OUT/L1-k11-nobwrap" text
+  local run="$OUT/L1-k11-nobwrap" text status
   if ! prepare_run L1 d "$run"; then
-    say "  K11: preparation failed"
+    say "  K11: preparation failed: $(cat "$run/prepare.err" 2>/dev/null)"
+    gate fail "K11 Claude Code runs no Bash call when bubblewrap is masked (preparation failed, so the check did not run)"
     return
   fi
   write_commands "$run/commands.json" nobwrap "" "" "" ""
   run_claude "$run" nobwrap "$run/commands.json"
   text=$(tool_text "$run" 0)
-  say "  K11 with bubblewrap masked: claude exit $(cat "$run/claude.status"), tool result is_error ${text:+$(tool_error "$run" 0)}, output: $(printf '%s' "$text" | head -c 300 | tr '\n' ' '), Claude Code error output: $(grep -v '^[[:space:]]*$' "$run/claude.err" 2>/dev/null | head -n 2 | head -c 400 | tr '\n' ' ')"
+  status=$(cat "$run/claude.status" 2>/dev/null)
+  say "  K11 with bubblewrap masked: claude exit ${status:-none}, tool result is_error ${text:+$(tool_error "$run" 0)}, output: $(printf '%s' "$text" | head -c 300 | tr '\n' ' '), Claude Code error output: $(grep -v '^[[:space:]]*$' "$run/claude.err" 2>/dev/null | head -n 2 | head -c 400 | tr '\n' ' ')"
   if printf '%s\n' "$text" | grep -qx 'K11 ran'; then
-    say "  K11 REPORT: with bubblewrap masked, Claude Code ran the Bash call, so the preflight step is the only guard against a missing sandbox"
-  else
+    gate fail "K11 Claude Code runs no Bash call when bubblewrap is masked (Claude Code ran the Bash call, so the preflight step is the only guard against a missing sandbox)"
+  elif [ "$status" = 97 ]; then
+    gate fail "K11 Claude Code runs no Bash call when bubblewrap is masked (the bubblewrap mask failed, so the check did not run)"
+  elif [ -n "$status" ] && [ "$status" != 0 ] && [ -z "$text" ] && grep -qF 'bubblewrap is required' "$run/claude.err" 2>/dev/null; then
     gate pass "K11 Claude Code runs no Bash call when bubblewrap is masked"
+  else
+    gate fail "K11 Claude Code runs no Bash call when bubblewrap is masked (Claude Code exited ${status:-with no status} without the missing bubblewrap error, so the check did not show a refusal)"
   fi
   cleanup_check "$run" "k11" >/dev/null
 }

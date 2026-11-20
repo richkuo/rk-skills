@@ -107,9 +107,12 @@ host git config write, and a repeated run; K8 a write-route run with and
 without stubs; K9 the temporary home cleanup after success, a forced API
 failure, and a kill during a tool call; K11 one scrub-on run on L1 inside
 `unshare -m` with `/dev/null` bound on `/usr/bin/bwrap`, which must run no
-Bash call (the pinned Claude Code refuses to start in scrub mode without
-bubblewrap; when a version runs the call, the probe prints the result with no
-gate, and the sandbox check step is then the only guard); K12 (case d) a new work
+Bash call: it passes only when Claude Code exits non-zero with its missing
+bubblewrap error and no tool result, and it fails when the run preparation
+fails, when the mask fails (wrapper exit 97), when Claude Code exits for
+another reason, or when the Bash call runs (a Claude Code version that runs
+the call needs the sandbox check step as its only guard, and the
+documentation must change before the gate does); K12 (case d) a new work
 directory entry and a new workspace sibling, each with a per-run nonce, in
 the literal and the resolved spelling, by file create, `mkdir`, `mv` of a
 workspace file, and `ln -s`, before and after `mount -o remount,rw,bind`,
