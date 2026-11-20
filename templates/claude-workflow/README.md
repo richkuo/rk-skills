@@ -193,8 +193,40 @@ model until you copy the template again.
   action cache `_work/_actions`, from which the action runs Bun with the job
   token after Claude ends, the tool cache, and the workspaces of other
   repositories); and `$RUNNER_TOOL_CACHE`, which the step creates when it is
-  missing. An entry that a review creates in the work directory during the
-  run is not covered. Without the first entry, a review could change
+  missing. The same settings also set a read boundary around the runner work
+  directory (the resolved parent of `$RUNNER_TEMP`): `denyRead` names the
+  parent of the work directory (the runner directory in a standard layout)
+  and `allowRead` names the work directory. Inside every sandboxed command,
+  the runner directory is an empty private directory, the work directory is a
+  read-only view on top of it, and the workspace is writable on top of that.
+  So a sandboxed command cannot create, rename, or link a new entry anywhere
+  in the work directory outside the workspace, beside the workspace included,
+  from the first tool call until the last sandboxed process ends, also after
+  a kill, and it cannot read the runner credential files. A `$RUNNER_TOOL_CACHE`
+  or `PATH` directory inside the runner directory and outside the work
+  directory is added to `allowRead` as a read-only view; any other program in
+  the runner directory is absent for sandboxed commands. Before the
+  preparation steps, a check step installs `bubblewrap` and `socat` with the
+  commands of the action when they are missing (`sudo apt-get`, or `apt-get`
+  as root) and sets `kernel.apparmor_restrict_unprivileged_userns=0` when that
+  setting exists and is not `0`, as the action does; both changes stay on the
+  host. It then runs the same mount plan with `bwrap` as the job user and
+  refuses the review unless a new entry in the work directory and beside the
+  workspace fails and a file in the workspace succeeds. A step before the
+  action records the entries of the work directory and of each directory
+  between it and the workspace, and an always-run step after the action fails
+  the job and names each new entry; it deletes nothing. The review refuses
+  these layouts before Claude starts: a `$RUNNER_TEMP` that is not
+  `<work directory>/_temp`; a workspace outside the work directory; a work
+  directory whose parent is `/` or a directory directly under `/` (for
+  example `/actions-runner/_work`), because a top-level directory can be a
+  writable root of the sandbox; a job home, agent home, or temporary home
+  parent at or under the runner directory (for example a runner installed
+  directly in `/home/runner` with that `HOME`); a `*`, `?`, or `[` in the
+  runner, work directory, or workspace path; a `TMPDIR` or
+  `CLAUDE_CODE_TMPDIR` in the runner directory; and a host where `bwrap`
+  cannot run the mount plan. A work directory that a second mount point also
+  exposes is not detected and is not supported. Without the `.rk-claude-homes` denial, a review could change
   the home of another review that runs as the same user at the same time.
   The directory is in the user's own home, so another user ID cannot create
   it first and stop that user's reviews; in shared `/tmp` it could. A review

@@ -74,7 +74,10 @@ contract_env() {
     "ISSUE_AUTHOR_LOGIN=${ISSUE_AUTHOR_LOGIN:-}" \
     "PR_AUTHOR_ASSOC=${PR_AUTHOR_ASSOC:-}" \
     "PR_AUTHOR_LOGIN=${PR_AUTHOR_LOGIN:-}" \
-    "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT_IN:-github-hosted}"
+    "RUNNER_ENVIRONMENT=${RUNNER_ENVIRONMENT_IN:-github-hosted}" \
+    "RUNNER_TEMP=${RUNNER_TEMP_IN:-}" \
+    "TMPDIR=${TMPDIR_IN:-}" \
+    "CLAUDE_CODE_TMPDIR=${CC_TMPDIR_IN:-}"
 }
 
 run_contract() {
@@ -151,42 +154,110 @@ test_contract() {
 }
 
 test_contract_linux() {
-  local root="$SCRATCH/layouts" home ws out
+  local root="$SCRATCH/layouts" home ws out real_root top
   home="$root/home-a"
   ws="$home/actions-runner/_work/repo/repo"
-  mkdir -p "$ws"
+  mkdir -p "$ws" "$home/actions-runner/_work/_temp"
+  real_root=$(cd -P "$root" && pwd -P)
   out="$SCRATCH/l1.out"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
+  RUNNER_TEMP_IN="$home/actions-runner/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
   expect_status 0 "contract linux: home-based layout runs"
   expect_output "$out" scrub 1 "contract linux: home-based layout keeps the scrub on"
   expect_output "$out" needs_temp_home true "contract linux: home-based actions-runner layout selects a temporary home"
   expect_output "$out" stub_scan "$([ "$(id -u)" = 0 ] && echo true || echo false)" "contract linux: stub scan follows the user ID"
   expect_output "$out" home_parent_deny true "contract linux: a self-hosted Linux review protects the temporary home parent"
+  expect_output "$out" work_dir "$real_root/home-a/actions-runner/_work" "contract linux: records the resolved work directory"
+  expect_output "$out" work_parent "$real_root/home-a/actions-runner" "contract linux: records the parent of the work directory"
+
+  RUNNER_TEMP_IN="$home/actions-runner/_work/_temp" run_contract "$home" "$ws" "$SCRATCH/hosted.out"
+  expect_output "$SCRATCH/hosted.out" work_dir "" "contract linux: a hosted runner records no work directory"
+  expect_output "$SCRATCH/hosted.out" work_parent "" "contract linux: a hosted runner records no work directory parent"
 
   ws="$home/runners/r1/_work/repo/repo"
-  mkdir -p "$ws"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
+  mkdir -p "$ws" "$home/runners/r1/_work/_temp"
+  RUNNER_TEMP_IN="$home/runners/r1/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
   expect_output "$out" needs_temp_home true "contract linux: home-based runners layout selects a temporary home"
 
   ln -s "$home/actions-runner" "$root/runner-alias"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/runner-alias/_work/repo/repo" "$out"
+  RUNNER_TEMP_IN="$root/runner-alias/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/runner-alias/_work/repo/repo" "$out"
   expect_output "$out" needs_temp_home true "contract linux: a symlinked path into the home-based layout selects a temporary home"
+  expect_output "$out" work_dir "$real_root/home-a/actions-runner/_work" "contract linux: a symlinked runner path records the resolved work directory"
 
-  mkdir -p "$root/real-runner/_work/repo/repo" "$root/home-b"
+  mkdir -p "$root/real-runner/_work/repo/repo" "$root/real-runner/_work/_temp" "$root/home-b"
   ln -s "$root/real-runner" "$root/home-b/actions-runner"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/home-b" "$root/real-runner/_work/repo/repo" "$out"
+  RUNNER_TEMP_IN="$root/real-runner/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/home-b" "$root/real-runner/_work/repo/repo" "$out"
   expect_output "$out" needs_temp_home true "contract linux: a workspace under the target of a symlinked home actions-runner path selects a temporary home"
 
   ws="$root/plain/_work/repo/repo"
-  mkdir -p "$ws"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
+  mkdir -p "$ws" "$root/plain/_work/_temp"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$out"
   expect_output "$out" needs_temp_home false "contract linux: a layout outside the home uses the real home"
   expect_output "$out" scrub 1 "contract linux: a layout outside the home keeps the scrub on"
   expect_output "$out" home_parent_deny true "contract linux: a layout outside the home still protects the temporary home parent"
+  expect_output "$out" work_parent "$real_root/plain" "contract linux: a layout outside the home records the parent of the work directory"
 
-  SCRUB_SELF_HOSTED=true RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1b.out"
-  RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1a.out"
+  mkdir -p "$root/linked-work/real-work/_temp" "$root/linked-work/real-work/repo/repo" "$root/linked-work/runner"
+  ln -s "$root/linked-work/real-work" "$root/linked-work/runner/_work"
+  RUNNER_TEMP_IN="$root/linked-work/runner/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/linked-work/runner/_work/repo/repo" "$out"
+  expect_status 0 "contract linux: a symlinked work directory runs"
+  expect_output "$out" work_dir "$real_root/linked-work/real-work" "contract linux: a symlinked work directory records its target"
+  expect_output "$out" work_parent "$real_root/linked-work" "contract linux: a symlinked work directory records the parent of its target"
+
+  SCRUB_SELF_HOSTED=true RUNNER_TEMP_IN="$home/actions-runner/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1b.out"
+  RUNNER_TEMP_IN="$home/actions-runner/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$home/actions-runner/_work/repo/repo" "$SCRATCH/l1a.out"
   if cmp -s "$SCRATCH/l1a.out" "$SCRATCH/l1b.out"; then ok "contract linux: review_subprocess_scrub_self_hosted changes no layout output"; else bad "contract linux: review_subprocess_scrub_self_hosted changes the layout outputs"; fi
+
+  ws="$root/plain/_work/repo/repo"
+  contract_refusal() {
+    local label="$1" text="$2"
+    expect_status 1 "contract linux: $label is refused"
+    expect_log "Review refused: " "contract linux: $label gives a refusal"
+    expect_log "$text" "contract linux: the refusal for $label names the cause"
+    if grep -qE '^(work_dir|work_parent)=' "$SCRATCH/refused.out"; then bad "contract linux: the refusal for $label wrote a work directory output"; fi
+  }
+  RUNNER_TEMP_IN="" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "an empty RUNNER_TEMP" "RUNNER_TEMP is empty"
+  RUNNER_TEMP_IN="$root/plain/_work/missing/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "an unresolvable RUNNER_TEMP" "cannot be resolved"
+  mkdir -p "$root/plain/_work/tmp"
+  RUNNER_TEMP_IN="$root/plain/_work/tmp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a RUNNER_TEMP with a last component other than _temp" "does not end in _temp"
+  mkdir -p "$root/plain/_work/_temp-target"
+  rm -rf "$root/plain/_work/_temp"
+  ln -s "$root/plain/_work/_temp-target" "$root/plain/_work/_temp"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a RUNNER_TEMP that resolves to another directory" "which is not the _temp directory of the work directory"
+  rm -f "$root/plain/_work/_temp"
+  mkdir -p "$root/plain/_work/_temp" "$root/elsewhere/repo"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/elsewhere/repo" "$SCRATCH/refused.out"
+  contract_refusal "a workspace outside the work directory" "outside the work directory"
+  RUNNER_TEMP_IN="/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a work directory parent of /" "which is / or a directory directly under /"
+  top=$(mktemp -d /tmp/rk-fixture-top.XXXXXXXX)
+  mkdir -p "$top/_temp" "$top/repo/repo"
+  RUNNER_TEMP_IN="$top/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$top/repo/repo" "$SCRATCH/refused.out"
+  contract_refusal "a work directory parent directly under /" "which is / or a directory directly under /"
+  rm -rf "$top"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/plain" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a job home equal to the work directory parent" "is at or under"
+  mkdir -p "$root/plain/home-inside"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/plain/home-inside" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a job home under the work directory parent" "is at or under"
+  ln -s "$root/plain" "$root/home-link"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$root/home-link" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a job home that resolves to the work directory parent" "is at or under"
+  mkdir -p "$root/glob[1]/_work/_temp" "$root/glob[1]/_work/repo/repo"
+  RUNNER_TEMP_IN="$root/glob[1]/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/glob[1]/_work/repo/repo" "$SCRATCH/refused.out"
+  contract_refusal "a pattern character in the runner path" "holds a *, ?, or [ character"
+  mkdir -p "$root/plain/_work/repo/re?po"
+  RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$root/plain/_work/repo/re?po" "$SCRATCH/refused.out"
+  contract_refusal "a pattern character in the workspace path" "holds a *, ?, or [ character"
+  TMPDIR_IN="$root/plain/_work/_temp" RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a TMPDIR under the work directory parent" "TMPDIR is"
+  CC_TMPDIR_IN="$root/plain/tmp" RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/refused.out"
+  contract_refusal "a CLAUDE_CODE_TMPDIR under the work directory parent" "CLAUDE_CODE_TMPDIR is"
+  TMPDIR_IN=/tmp RUNNER_TEMP_IN="$root/plain/_work/_temp" RUNNER_ENVIRONMENT_IN=self-hosted run_contract "$home" "$ws" "$SCRATCH/l-tmp.out"
+  expect_status 0 "contract linux: a TMPDIR outside the work directory parent runs"
 }
 
 make_guard() {
@@ -262,9 +333,97 @@ make_settings() {
   if [ -z "$parent_deny" ]; then
     if [ -n "$parent" ]; then parent_deny=true; else parent_deny=false; fi
   fi
+  local rt="${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" work work_parent
+  work=$(cd -P "$(dirname "$rt")" 2>/dev/null && pwd -P) || work=$(dirname "$rt")
+  work="${WORK_DIR_IN-$work}"
+  work_parent=$(dirname "$work")
+  work_parent="${WORK_PARENT_IN-$work_parent}"
   script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
   rm -f "$dir/settings.json"
-  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE_IN:-}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "GITHUB_OUTPUT=$dir/settings.out"
+  run_script "$script" -i "PATH=${PATH_IN:-$PATH}" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=$rt" "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE_IN:-}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "AGENT_HOME=${AGENT_HOME_IN:-${temp_home:-$dir/real-home}}" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "WORK_DIR=$work" "WORK_PARENT=$work_parent" "GITHUB_OUTPUT=$dir/settings.out"
+}
+
+read_has() {
+  if jq -e --arg k "$2" --arg p "$3" '.sandbox.filesystem[$k] | index($p)' "$1" >/dev/null 2>&1; then ok "$4"; else bad "$4"; fi
+}
+
+read_lacks() {
+  if jq -e --arg k "$2" --arg p "$3" '(.sandbox.filesystem[$k] // []) | index($p) | not' "$1" >/dev/null 2>&1; then ok "$4"; else bad "$4"; fi
+}
+
+test_settings_boundary() {
+  local dir="$1" agent="$2" parent="$3" work work_parent ws
+  work=$(cd -P "$dir/runner/_work" && pwd -P)
+  work_parent=$(dirname "$work")
+  ws="$work/repo/repo"
+  make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings boundary: a self-hosted Linux run writes the read rules"
+  if jq -e --arg p "$work_parent" '.sandbox.filesystem.denyRead == [$p]' "$dir/settings.json" >/dev/null; then ok "settings boundary: denyRead names only the parent of the work directory"; else bad "settings boundary: denyRead is not [the parent of the work directory] ($(jq -c '.sandbox.filesystem.denyRead' "$dir/settings.json"))"; fi
+  if jq -e --arg w "$work" '.sandbox.filesystem.allowRead == [$w]' "$dir/settings.json" >/dev/null; then ok "settings boundary: allowRead names only the work directory"; else bad "settings boundary: allowRead is not [the work directory] ($(jq -c '.sandbox.filesystem.allowRead' "$dir/settings.json"))"; fi
+  for target in "$work/rk-new-entry" "$work/repo/rk-new-sibling"; do
+    if jq -e --arg t "$target" --arg ws "$ws" '
+        (.sandbox.filesystem.allowRead | any(. as $a | ($t + "/") | startswith($a + "/")))
+        and (.sandbox.filesystem.denyRead | any(. as $d | ($t + "/") | startswith($d + "/")))
+        and ((($t + "/") | startswith($ws + "/")) | not)
+      ' "$dir/settings.json" >/dev/null; then ok "settings boundary: $(basename "$target") is inside the read-only work directory and outside the workspace"; else bad "settings boundary: $(basename "$target") is not inside the read-only work directory or is inside the workspace"; fi
+  done
+  if jq -e --arg ws "$ws" '
+      (.sandbox.filesystem.allowRead | any(. as $a | ($ws + "/") | startswith($a + "/")))
+      and ([.sandbox.filesystem.denyWrite[] | select(($ws + "/") | startswith(. + "/"))] | length == 0)
+    ' "$dir/settings.json" >/dev/null; then ok "settings boundary: the workspace is inside the read-only work directory and under no denyWrite path"; else bad "settings boundary: the workspace is outside the re-allowed work directory or under a denyWrite path"; fi
+  deny_has "$dir/settings.json" "$dir/runner/_work/_temp" "settings boundary: RUNNER_TEMP stays in denyWrite"
+
+  mkdir -p "$dir/runner/_work/_tool"
+  RUNNER_TOOL_CACHE_IN="$dir/runner/_work/_tool" make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings boundary: a tool cache inside the work directory runs"
+  if jq -e --arg w "$work" '.sandbox.filesystem.allowRead == [$w]' "$dir/settings.json" >/dev/null; then ok "settings boundary: a tool cache inside the work directory adds no read rule"; else bad "settings boundary: a tool cache inside the work directory added a read rule"; fi
+  deny_has "$dir/settings.json" "$dir/runner/_work/_tool" "settings boundary: a tool cache inside the work directory stays in denyWrite"
+
+  mkdir -p "$dir/runner/tool-cache"
+  RUNNER_TOOL_CACHE_IN="$dir/runner/tool-cache" make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings boundary: a tool cache inside the runner directory runs"
+  read_has "$dir/settings.json" allowRead "$work_parent/tool-cache" "settings boundary: a tool cache inside the runner directory and outside the work directory is re-allowed for reads"
+  rm -rf "$dir/runner/tool-cache"
+
+  mkdir -p "$dir/outer-tool-cache"
+  RUNNER_TOOL_CACHE_IN="$dir/outer-tool-cache" make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings boundary: a tool cache outside the runner directory runs"
+  deny_has "$dir/settings.json" "$dir/outer-tool-cache" "settings boundary: a tool cache outside the runner directory stays in denyWrite"
+  read_lacks "$dir/settings.json" allowRead "$(cd -P "$dir/outer-tool-cache" && pwd -P)" "settings boundary: a tool cache outside the runner directory gets no read rule"
+  rm -rf "$dir/outer-tool-cache"
+
+  PATH_IN="$PATH:$dir/runner/bin:$dir/runner:$dir/runner/_work/_actions/owner/action/pin/bin:relative/bin" make_settings "$dir" "$agent" "$parent"
+  expect_status 0 "settings boundary: a PATH with runner directories runs"
+  read_has "$dir/settings.json" allowRead "$work_parent/bin" "settings boundary: a PATH directory inside the runner directory and outside the work directory is re-allowed for reads"
+  read_lacks "$dir/settings.json" allowRead "$work_parent" "settings boundary: a PATH entry equal to the runner directory does not re-allow it"
+  read_lacks "$dir/settings.json" allowRead "$work/_actions/owner/action/pin/bin" "settings boundary: a PATH directory inside the work directory adds no read rule"
+
+  WORK_DIR_IN="" make_settings "$dir" "$agent" "$parent"
+  expect_status 1 "settings boundary: an empty work directory value stops the run"
+  expect_log "names no work directory" "settings boundary: the refusal for an empty work directory names the cause"
+
+  WORK_PARENT_IN="" make_settings "$dir" "$agent" "$parent"
+  expect_status 1 "settings boundary: an empty work directory parent value stops the run"
+
+  WORK_DIR_IN="$work_parent" make_settings "$dir" "$agent" "$parent"
+  expect_status 1 "settings boundary: a work directory that differs from RUNNER_TEMP stops the run"
+  expect_log "differs from the work directory" "settings boundary: the refusal for a different work directory names the cause"
+
+  mkdir -p "$dir/runner/agent-inside"
+  AGENT_HOME_IN="$dir/runner/agent-inside" make_settings "$dir" "$agent" "$parent"
+  expect_status 1 "settings boundary: an agent home under the parent of the work directory stops the run"
+  expect_log "is at or under" "settings boundary: the refusal for a home under the parent names the cause"
+  rm -rf "$dir/runner/agent-inside"
+
+  mkdir -p "$dir/runner/homes"
+  make_settings "$dir" "$agent" "$dir/runner/homes"
+  expect_status 1 "settings boundary: a home parent under the parent of the work directory stops the run"
+  expect_log "is at or under" "settings boundary: the refusal for a home parent under the parent names the cause"
+  rm -rf "$dir/runner/homes"
+
+  make_settings "$dir" "" "$parent" false
+  expect_status 0 "settings boundary: a run without home_parent_deny writes the settings"
+  read_lacks "$dir/settings.json" denyRead "$work_parent" "settings boundary: a run without home_parent_deny adds no read rule"
 }
 
 deny_has() {
@@ -331,6 +490,7 @@ test_settings() {
 
   RUNNER_TEMP_IN="$dir/missing-runner-temp" make_settings "$dir" "$agent" "$parent"
   expect_status 1 "settings: a missing required target stops the run"
+  expect_log "is missing or a symlink" "settings: the refusal for a missing required target names the cause"
 
   mv "$agent/.local/bin" "$agent/.local/bin.away"
   make_settings "$dir" "$agent" "$parent"
@@ -347,6 +507,8 @@ test_settings() {
   bash -c "$hook_cmd" > "$LAST_LOG" 2>&1
   LAST_STATUS=$?
   expect_status 2 "settings: the hook refuses a guard whose hash changed"
+
+  test_settings_boundary "$dir" "$agent" "$parent"
 }
 
 test_cleanup() {
@@ -531,6 +693,123 @@ test_agent_home() {
   rm -rf "$t"
 }
 
+test_preflight() {
+  echo "== preflight"
+  if [ "$(uname -s)" != "Linux" ] || [ "$(id -u)" != 0 ] || [ -z "${RK_PROBE_USER:-}" ]; then
+    echo "SKIP preflight: it needs Linux, root, and RK_PROBE_USER"
+    return
+  fi
+  local root="$SCRATCH/preflight" script work parent ws left
+  rm -rf "$root"
+  mkdir -p "$root/runner/_work/_temp" "$root/runner/_work/repo/repo"
+  chmod 755 "$SCRATCH" "$root"
+  work=$(cd -P "$root/runner/_work" && pwd -P)
+  parent=$(dirname "$work")
+  ws="$work/repo/repo"
+  script=$(step_script "Check the scrub sandbox before Claude runs")
+  chmod 644 "$script"
+
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent"
+  expect_status 0 "preflight: root passes the boundary check"
+  expect_log "work:denied sibling:denied workspace:writable" "preflight: root sees the work directory read-only and the workspace writable"
+  left=$(find "$work" "$work/repo" "$ws" -maxdepth 1 -name 'rk-preflight-*' -print)
+  if [ -z "$left" ]; then ok "preflight: root leaves no check file on the host"; else bad "preflight: root left $left"; fi
+
+  chown -R "$RK_PROBE_USER" "$root/runner"
+  LAST_LOG="$SCRATCH/log-$RANDOM-$RANDOM.txt"
+  (cd / && runuser -u "$RK_PROBE_USER" -- env -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent" bash --noprofile --norc -eo pipefail "$script") > "$LAST_LOG" 2>&1
+  LAST_STATUS=$?
+  expect_status 0 "preflight: a user other than root passes the boundary check"
+  expect_log "work:denied sibling:denied workspace:writable" "preflight: a user other than root sees the work directory read-only and the workspace writable"
+  left=$(find "$work" "$work/repo" "$ws" -maxdepth 1 -name 'rk-preflight-*' -print)
+  if [ -z "$left" ]; then ok "preflight: a user other than root leaves no check file on the host"; else bad "preflight: a user other than root left $left"; fi
+  chown -R 0 "$root/runner"
+
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$root/missing-parent"
+  expect_status 1 "preflight: a mount plan that bubblewrap cannot run is refused"
+  expect_log "bubblewrap cannot run the mount plan" "preflight: the refusal names the failed mount plan"
+
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=" "WORK_PARENT="
+  expect_status 1 "preflight: an empty work directory is refused"
+
+  if ! command -v unshare >/dev/null 2>&1; then
+    bad "preflight: unshare is missing, so the masked bubblewrap case cannot run"
+    return
+  fi
+  LAST_LOG="$SCRATCH/log-$RANDOM-$RANDOM.txt"
+  unshare -m --propagation private /bin/sh -c '
+    for p in /usr/bin/bwrap /usr/bin/apt-get; do
+      if [ -e "$p" ]; then mount --bind /dev/null "$p" || exit 97; fi
+    done
+    exec env -i "PATH=$1" "GITHUB_WORKSPACE=$2" "WORK_DIR=$3" "WORK_PARENT=$4" bash --noprofile --norc -eo pipefail "$5"
+  ' sh "$PATH" "$ws" "$work" "$parent" "$script" > "$LAST_LOG" 2>&1
+  LAST_STATUS=$?
+  expect_status 1 "preflight: masked bubblewrap and apt-get are refused"
+  expect_log "bubblewrap (bwrap) is not installed and could not be installed" "preflight: the refusal for masked bubblewrap names the cause"
+}
+
+test_work_entries() {
+  echo "== work entries"
+  local root="$SCRATCH/entries" before after work ws out oid
+  rm -rf "$root"
+  mkdir -p "$root/runner/_work/_temp" "$root/runner/_work/repo/repo" "$root/runner/_work/_actions"
+  work=$(cd -P "$root/runner/_work" && pwd -P)
+  ws="$work/repo/repo"
+  before=$(step_script "Record the work directory entries before Claude runs")
+  after=$(step_script "Check that no work directory entry appeared while Claude ran")
+  out="$SCRATCH/entries.out"
+
+  record_entries() {
+    : > "$out"
+    run_script "$before" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "ENTRIES_FILE=$work/_temp/entries.txt" "GITHUB_OUTPUT=$out"
+    oid=$(grep '^oid=' "$out" | tail -n 1 | cut -d= -f2-)
+  }
+  check_entries() {
+    run_script "$after" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "ENTRIES_FILE=$work/_temp/entries.txt" "ENTRIES_OID=${1-$oid}"
+  }
+
+  record_entries
+  expect_status 0 "work entries: the record step runs"
+  if [ -n "$oid" ] && [ "$(git hash-object "$work/_temp/entries.txt")" = "$oid" ]; then ok "work entries: the recorded hash matches the record"; else bad "work entries: the recorded hash does not match the record"; fi
+  if [ "$(find "$work/_temp/entries.txt" -perm 400 -print)" = "$work/_temp/entries.txt" ]; then ok "work entries: the record is mode 400"; else bad "work entries: the record is not mode 400"; fi
+  if grep -qxF "E $work/_actions" "$work/_temp/entries.txt" && grep -qxF "E $work/repo/repo" "$work/_temp/entries.txt"; then ok "work entries: the record lists the work directory and the workspace parent entries"; else bad "work entries: the record misses an entry"; fi
+  if grep -qF "E $ws/" "$work/_temp/entries.txt"; then bad "work entries: the record lists entries inside the workspace"; else ok "work entries: the record does not list entries inside the workspace"; fi
+
+  printf 'x\n' > "$ws/inside-workspace"
+  check_entries
+  expect_status 0 "work entries: no new entry, and a new file inside the workspace, pass"
+  rm -f "$ws/inside-workspace"
+
+  printf 'x\n' > "$work/rk-new-entry"
+  check_entries
+  expect_status 1 "work entries: a new work directory entry fails the job"
+  expect_log "$work/rk-new-entry" "work entries: the failure names the new work directory entry"
+  if [ -f "$work/rk-new-entry" ]; then ok "work entries: the check deletes nothing"; else bad "work entries: the check deleted the new entry"; fi
+  rm -f "$work/rk-new-entry"
+
+  mkdir "$work/repo/.rk-new-sibling"
+  check_entries
+  expect_status 1 "work entries: a new workspace sibling fails the job"
+  expect_log "$work/repo/.rk-new-sibling" "work entries: the failure names the new workspace sibling"
+  rmdir "$work/repo/.rk-new-sibling"
+
+  ln -s /nonexistent "$work/rk-new-link"
+  check_entries
+  expect_status 1 "work entries: a new dangling symlink in the work directory fails the job"
+  rm -f "$work/rk-new-link"
+
+  rmdir "$work/_actions"
+  check_entries
+  expect_status 0 "work entries: a removed entry does not fail the job"
+  expect_log "gone after the action" "work entries: a removed entry is named in a notice"
+  mkdir "$work/_actions"
+
+  check_entries 0000
+  expect_status 1 "work entries: a record whose hash differs fails the job"
+  check_entries ""
+  expect_status 1 "work entries: a missing record hash fails the job"
+}
+
 stub_run() {
   local ws="$1" script
   script=$(step_script "Prepare workspace ancestor stubs for the scrub sandbox")
@@ -646,7 +925,7 @@ for tool in bun git jq; do
 done
 
 SUITES=("$@")
-[ "${#SUITES[@]}" -gt 0 ] || SUITES=(contract guard settings cleanup agent_home stubs)
+[ "${#SUITES[@]}" -gt 0 ] || SUITES=(contract guard settings cleanup agent_home stubs preflight work_entries)
 for suite in "${SUITES[@]}"; do
   case "$suite" in
     contract) test_contract ;;
@@ -655,6 +934,8 @@ for suite in "${SUITES[@]}"; do
     cleanup) test_cleanup ;;
     agent_home) test_agent_home ;;
     stubs) test_stubs ;;
+    preflight) test_preflight ;;
+    work_entries) test_work_entries ;;
     *) echo "unknown suite: $suite" >&2; exit 2 ;;
   esac
 done
