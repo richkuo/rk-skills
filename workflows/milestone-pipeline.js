@@ -1630,7 +1630,7 @@ function invalidClassification(validation) {
 function invalidDependentReason(issue, validation) {
   const diagnosis = `unmet in-track hard prerequisite #${issue}: validated INVALID`
   if (invalidClassification(validation) === 'completed') {
-    return `${diagnosis}; the validator classified #${issue} as completed, so it is a closure candidate: check its evidence and get the user's authorization before closing #${issue}, then re-run`
+    return `${diagnosis}; the validator classified #${issue} as completed, so it is a closure candidate: check its evidence and get the user's authorization for #${issue} itself (run-plan approval does not give it) before closing #${issue}, then re-run`
   }
   return diagnosis
 }
