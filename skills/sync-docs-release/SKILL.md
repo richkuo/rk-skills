@@ -1,17 +1,19 @@
 ---
 name: sync-docs-release
-description: Syncs the docs and then cuts a release in one run. It runs sync-docs through its own docs pull request, an optional merge of that PR, then create-release. Use for "sync docs and release", "sync and cut a release", or "update docs and publish a release".
+description: Syncs the docs and then cuts a release in one run. It runs sync-docs through its own docs pull request, an optional merge of that PR, then create-release, and stops with no release when the sync is blocked. Use for "sync docs and release", "sync and cut a release", or "update docs and publish a release".
 ---
 
 # sync-docs-release
 
-Runs three operations in strict sequence, all in the main session. Do not skip steps or reorder them, and do not delegate any step to a subagent.
+Runs three operations in strict sequence, all in the main session. Do not skip steps or reorder them, except where a step below stops the run, and do not delegate any step to a subagent.
 
 ## Step 1 — Sync docs
 
 Invoke the `sync-docs` skill via the Skill tool and follow it to completion here, passing the user's request plus any session context (target branch, last-sync SHA, specific files).
 
-sync-docs works in its own worktree off the latest `origin/<default>` and ends with either "no doc changes" or an open docs PR. Summarize the doc edits and the PR for the user before proceeding.
+sync-docs works in its own worktree off the latest `origin/<default>` and ends with "no doc changes", an open docs PR, or **blocked** (sync-docs step 11: a guide that the sync made larger fails a mandatory size limit or falls under an unresolved size-policy conflict, and no decision resolved it). Summarize the doc edits and the PR for the user before proceeding.
+
+On **blocked**, stop here: skip Steps 2 and 3, start no release, and report the blocked sync with each guide, its original and proposed byte counts, the limit and its source, and the worktree sync-docs kept.
 
 ## Step 2 — Decide how the docs PR relates to the release
 
