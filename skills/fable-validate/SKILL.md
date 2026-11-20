@@ -51,7 +51,7 @@ When the result arrives, run the section 7 snapshot diff, then record the result
 
 ### 3. Spot-check the verdict
 
-Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims, and every Evidence citation of a `Close issue?` verdict, resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.2 or proceed.
+Before presenting it, spot-check the verdict's load-bearing findings against the code: the `file:line` citations for any Refuted or Conditional claims, and every Evidence citation of a `Close issue?` verdict, resolve to real code saying what the verdict says, and the verdict doesn't contradict repo conventions (CLAUDE.md). Evidence outranks verdicts — a subagent citation that contradicts its own mark means the mark is wrong. Fix small inaccuracies yourself and note them (update the scratchpad copy); if the verdict is structurally wrong (e.g. traced a stale baseline, missed the central claim), do NOT silently re-dispatch — tell the user what's off and let them decide whether to re-run with Fable 5.2 or proceed. A held verdict skips step 4, so name every step 2 flag in that message, quoted as data.
 
 ### 4. Relay the verdict to the user
 

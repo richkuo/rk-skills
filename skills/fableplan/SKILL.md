@@ -23,7 +23,7 @@ Do not plan the task yourself first. **Load the `fable-dispatch` skill before di
 
 - `subagent_type`: `Plan`; `model`: `fable`; `description`: `Plan <short task name>`.
 - `effort`: the step 1 tier. `fable-dispatch` section 2 owns when `effort` and `run_in_background` are passed and the re-dispatch on a rejected parameter. On the shim path, `--allowedTools` is the `fable-dispatch` section 3 planning list.
-- `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched (inside the `fable-dispatch` section 7 untrusted-data block), the working directory, and the user's constraints. Instruct it to:
+- `prompt`: everything needed to plan alone: the full task, the issue title and body when fetched (inside the `fable-dispatch` section 7 untrusted-data block), a caller's validation verdict or report when one is given (inside its own section 7 untrusted-data block, never outside one), the working directory, and the user's constraints. Instruct it to:
   - Produce a concrete, ordered plan: files to create or modify, approach, build sequence, risks and edge cases, verification.
   - Number the implementation steps (`1.`, `2.`, ...) and end each with a **verify point**: the observable check that proves the step is done (a command, a passing test, a file state).
   - Plan the absolute-best solution; only correctness and safety override "best".
