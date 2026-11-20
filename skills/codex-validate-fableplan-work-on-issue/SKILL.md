@@ -10,7 +10,7 @@ This skill is `codex-validate-plan-work-on-issue` with its Codex plan stage repl
 
 Report length, wording, and formatting follow the Response Style section of CLAUDE.md/AGENTS.md. This skill restates none of it.
 
-Read these completely before step 1: [codex-validate-plan-work-on-issue](../codex-validate-plan-work-on-issue/SKILL.md) and its [run-recipes.md](../codex-validate-plan-work-on-issue/run-recipes.md), `cli-dispatch` section 9, [fableplan](../fableplan/SKILL.md) with its planning-phase-only section, and `fable-dispatch`. Below, "the base skill" means `codex-validate-plan-work-on-issue`.
+Read these completely before step 1: [codex-validate-plan-work-on-issue](../codex-validate-plan-work-on-issue/SKILL.md) and its [run-recipes.md](../codex-validate-plan-work-on-issue/run-recipes.md), `cli-dispatch` section 9 with its [validate-pass.md](../cli-dispatch/validate-pass.md) file, [fableplan](../fableplan/SKILL.md) with its planning-phase-only section, and `fable-dispatch`. Below, "the base skill" means `codex-validate-plan-work-on-issue`.
 
 ## Input
 

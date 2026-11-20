@@ -7,7 +7,7 @@ description: Validates a GitHub issue with Sol on the Codex CLI. It runs the val
 
 Delegate issue validation to **Sol 6.2 on the Codex CLI**, then act on its verdict in the main agent. The Codex run only validates: it runs in the `cli-dispatch` section 9 no-edit mode and never edits files or the issue. The main agent handles all follow-on actions. This is `fable-validate` with the Codex CLI validate pass in place of the Fable subagent.
 
-The session is the driver named in `cli-dispatch` section 9. **Load the `cli-dispatch` skill and read sections 1, 2, 4, 5, 6, 8 (a), and 9 completely before step 1.** That skill owns the shim, the sandbox, the limits, the snapshot guard, the issue check, the read time of record, and the retry rule. Steps 2 and 3 summarize the run limits, the no-edit blockers, the retry rule, and the read-time rule where they apply them. Those summaries are pointers: on any difference, the `cli-dispatch` text wins. `docs/contract-inventory.md` lists this skill on the rows that own those rules.
+The session is the driver named in `cli-dispatch` section 9. **Load the `cli-dispatch` skill and read sections 1, 2, 4, 5, 6, 8 (a), and 9, and the [validate-pass.md](../cli-dispatch/validate-pass.md) file that section 9 points to, completely before step 1.** That skill owns the shim, the sandbox, the limits, the snapshot guard, the issue check, the read time of record, and the retry rule. Steps 2 and 3 summarize the run limits, the no-edit blockers, the retry rule, and the read-time rule where they apply them. Those summaries are pointers: on any difference, the `cli-dispatch` text wins. `docs/contract-inventory.md` lists this skill on the rows that own those rules.
 
 ## Input
 
