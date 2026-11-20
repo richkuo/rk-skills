@@ -717,6 +717,371 @@ if prepare_run L1 d "$kill_run"; then
   say "  K6 placeholders after the kill: $(find "$L_WS" "$L_RUNNER" -xdev -newer "$kill_run/stamp" -type f -size 0 ! -path '*/.git/*' 2>/dev/null | head -n 20 | tr '\n' ' ')"
 fi
 
+POLICY_BASE="$BASE/policy"
+POLICY_ACTION="$OPT/action"
+POLICY_BUN="$OPT/bin/bun"
+POLICY_STUBS="$OPT/policy-stubs"
+POLICY_MARKET="$POLICY_BASE/market"
+POLICY_PLUGIN=rk-probe-plugin
+POLICY_MD_MARKER=rk-policy-claude-md-marker
+POLICY_INTERPRETER_LIST=/usr/bin/python3:/usr/local/bin/python3
+TAG_PREFIX='--permission-mode acceptEdits --allowedTools "Glob,Grep,LS,Read"'
+
+policy_setup() {
+  local log="$OUT/policy-setup.log"
+  rm -rf "$POLICY_ACTION" "$POLICY_BASE"
+  mkdir -p "$POLICY_ACTION" "$OPT/bin" "$POLICY_STUBS" "$POLICY_BASE"
+  chmod 755 "$POLICY_BASE"
+  git init -q "$POLICY_ACTION" &&
+    git -C "$POLICY_ACTION" fetch -q --depth 1 https://github.com/anthropics/claude-code-action "$ACTION_SHA" >> "$log" 2>&1 &&
+    git -C "$POLICY_ACTION" checkout -q FETCH_HEAD >> "$log" 2>&1 || return 1
+  [ "$(git -C "$POLICY_ACTION" rev-parse HEAD)" = "$ACTION_SHA" ] || return 1
+  (cd "$POLICY_ACTION/base-action" && bun install --frozen-lockfile) >> "$log" 2>&1 || return 1
+  cp "$(command -v bun)" "$POLICY_BUN" || return 1
+  printf '#!/bin/sh\n[ "${RK_FAKE_COMPARE:-ahead}" = fail ] && exit 1\nprintf "%%s\\n" "${RK_FAKE_COMPARE:-ahead}"\n' > "$POLICY_STUBS/gh"
+  chmod 755 "$POLICY_STUBS/gh"
+  cp "$WORKFLOW" "$OPT/steps/claude-run.yml"
+  extract "Resolve immutable runtime revisions" policy_runtime.sh
+  extract "Stage the command policy outside the workspace" policy_stage.sh
+  extract "Compose Claude prompt" policy_compose.sh
+  extract "Check the staged command policy before Claude runs" policy_check.sh
+  extract "Remove the staged command policy" policy_cleanup.sh
+  mkdir -p "$POLICY_MARKET/.claude-plugin" "$POLICY_MARKET/plugins/$POLICY_PLUGIN/.claude-plugin" "$POLICY_MARKET/plugins/$POLICY_PLUGIN/commands"
+  jq -n --arg p "$POLICY_PLUGIN" '{name: "rk-probe-market", owner: {name: "rk probe"}, plugins: [{name: $p, source: ("./plugins/" + $p), description: "Probe fixture plugin"}]}' > "$POLICY_MARKET/.claude-plugin/marketplace.json"
+  jq -n --arg p "$POLICY_PLUGIN" '{name: $p, version: "0.0.1", description: "Probe fixture plugin"}' > "$POLICY_MARKET/plugins/$POLICY_PLUGIN/.claude-plugin/plugin.json"
+  printf -- '---\ndescription: Probe fixture command\n---\nSay ok.\n' > "$POLICY_MARKET/plugins/$POLICY_PLUGIN/commands/rk-probe.md"
+  local caller="$POLICY_BASE/caller"
+  mkdir -p "$caller/.claude/hooks"
+  git init -q -b main "$caller"
+  cp "$HERE/command_policy_fixture.py" "$caller/.claude/hooks/command_policy.py"
+  printf '# Probe workspace\n\nThe probe marker is %s.\n' "$POLICY_MD_MARKER" > "$caller/CLAUDE.md"
+  git -C "$caller" add -A
+  git -C "$caller" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m policy
+  POLICY_SHA=$(git -C "$caller" rev-parse HEAD)
+  printf 'import sys\nsys.exit(0)\n' > "$caller/.claude/hooks/command_policy.py"
+  git -C "$caller" add -A
+  git -C "$caller" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m pull-request
+  git -C "$caller" branch -q pr
+  git -C "$caller" branch -q other
+  chmod -R a+rX "$OPT" "$POLICY_BASE"
+}
+
+policy_project_hooks() {
+  local ws="$1" file="$2" marker="$3"
+  mkdir -p "$ws/.claude"
+  jq -n --arg m "$marker" '{hooks: {PreToolUse: [{matcher: "*", hooks: [{type: "command", command: ("touch " + $m)}]}], SessionStart: [{hooks: [{type: "command", command: ("touch " + $m + ".session")}]}]}}' > "$ws/.claude/$file"
+}
+
+policy_prepare() {
+  local run="$1" ws="$1/ws" rt="$1/rt" home="$1/home"
+  rm -rf "$run"
+  mkdir -p "$run" "$rt/rk-shared" "$home" "$run/markers"
+  cp -R "$REPO_ROOT/templates/claude-workflow/prompts" "$rt/rk-shared/prompts"
+  git clone -q "$POLICY_BASE/caller" "$ws"
+  git -C "$ws" checkout -q other
+  policy_project_hooks "$ws" settings.json "$run/markers/project-other"
+  git -C "$ws" add -A
+  git -C "$ws" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m other-hooks
+  git -C "$ws" checkout -q pr
+  policy_project_hooks "$ws" settings.json "$run/markers/project-shared"
+  git -C "$ws" add -A
+  git -C "$ws" -c user.name=rkprobe -c user.email=rk@probe.invalid commit -q -m pr-hooks
+  policy_project_hooks "$ws" settings.local.json "$run/markers/project-local"
+  git -C "$ws" -c advice.detachedHead=false clone -q "$POLICY_BASE/caller" "$ws/.rk-command-policy"
+  git -C "$ws/.rk-command-policy" -c advice.detachedHead=false checkout -q --detach "$POLICY_SHA"
+  printf 'run the probe\n' > "$run/prompt.txt"
+  chown -R "$PROBE_USER" "$run"
+  chmod 755 "$run"
+  : > "$run/stage.out"
+  chown "$PROBE_USER" "$run/stage.out"
+  AS_USER_DIR="$ws" as_user "$PROBE_USER" env -i "PATH=$POLICY_STUBS:$SYS_PATH" "HOME=$home" "RUNNER_TEMP=$rt" "GITHUB_OUTPUT=$run/stage.out" \
+    "COMMAND_POLICY_SHA=$POLICY_SHA" "COMMAND_POLICY_PROOF_ACTION_SHA=$ACTION_SHA" "POLICY_INTERPRETERS=$POLICY_INTERPRETER_LIST" \
+    "POLICY_WORKFLOW_FILE=$OPT/steps/claude-run.yml" "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$ws" "AGENT_HOME=$home" \
+    "GH_TOKEN=$SYNTH_TOKEN" "REPO=owner/repo" "DEFAULT_BRANCH=main" \
+    bash --noprofile --norc -eo pipefail "$OPT/steps/policy_stage.sh" > "$run/stage.log" 2>&1 || return 1
+  local shape out
+  for shape in implement fix-pr off; do
+    out="$run/compose-$shape.out"
+    : > "$out"
+    chown "$PROBE_USER" "$out"
+    AS_USER_DIR="$ws" as_user "$PROBE_USER" env -i "PATH=$SYS_PATH" "HOME=$home" "RUNNER_TEMP=$rt" "GITHUB_OUTPUT=$out" \
+      "CLAUDE_HARNESS=anthropics/claude-code-action@v1" "MODEL_ID=claude-sonnet-5-5" "EFFORT=low" "MODE=${shape/off/implement}" "FLOW=" "EXTRA_ALLOWED=" \
+      "DEFAULT_BRANCH=main" "HEAD_SHA=" "BASE_SHA=" "SETTINGS_FILE=$rt/claude-review-settings.json" "GH_TOKEN=$SYNTH_TOKEN" \
+      "COMMAND_POLICY=$([ "$shape" = off ] && echo false || echo true)" "POLICY_SETTINGS=$(out_value "$run/stage.out" settings_file)" "POLICY_WORKSPACE=$ws" \
+      bash --noprofile --norc -eo pipefail "$OPT/steps/policy_compose.sh" > "$run/compose-$shape.log" 2>&1 || return 1
+  done
+}
+
+policy_args() {
+  awk -v key="$2" '
+    state == 0 && index($0, key "<<") == 1 { delim = substr($0, length(key) + 3); state = 1; next }
+    state == 1 && $0 == delim { exit }
+    state == 1 { print }
+  ' "$1"
+}
+
+policy_launch_args() {
+  local run="$1" shape="$2"
+  case "$shape" in
+    implement) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-implement.out" claude_args)" ;;
+    fix-pr) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-fix-pr.out" claude_args)" ;;
+    guide) policy_args "$run/compose-implement.out" guide_claude_args ;;
+    off) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-off.out" claude_args)" ;;
+  esac
+}
+
+policy_check_run() {
+  local run="$1" phase="$2" args="$3" before="${4:-}" execfile="${5:-}"
+  : > "$run/check.out"
+  chown "$PROBE_USER" "$run/check.out"
+  AS_USER_DIR="$run/ws" as_user "$PROBE_USER" env -i "PATH=$SYS_PATH" "HOME=$run/home" "GITHUB_OUTPUT=$run/check.out" "PHASE=$phase" "POLICY_ARGS=$args" \
+    "POLICY_CALLS_BEFORE=$before" "EXECUTION_FILE=$execfile" \
+    "POLICY_DIR=$(out_value "$run/stage.out" dir)" "POLICY_CHECKER=$(out_value "$run/stage.out" checker)" "POLICY_CHECKER_OID=$(out_value "$run/stage.out" checker_oid)" \
+    "POLICY_SETTINGS=$(out_value "$run/stage.out" settings_file)" "POLICY_SETTINGS_OID=$(out_value "$run/stage.out" settings_oid)" \
+    "POLICY_INTERPRETER=$(out_value "$run/stage.out" interpreter)" "POLICY_INTERPRETER_REAL=$(out_value "$run/stage.out" interpreter_real)" "POLICY_INTERPRETER_OID=$(out_value "$run/stage.out" interpreter_oid)" \
+    "POLICY_CALL_RECORD=$(out_value "$run/stage.out" call_record)" "POLICY_USER_SETTINGS=$(out_value "$run/stage.out" user_settings)" \
+    "POLICY_USER_SETTINGS_DIGEST=$(out_value "$run/stage.out" user_settings_digest)" "POLICY_USER_SETTINGS_KEYS=$(out_value "$run/stage.out" user_settings_keys)" \
+    "POLICY_WORKSPACE=$run/ws" "POLICY_MANAGED_DIRS=/etc/claude-code" \
+    bash --noprofile --norc -e -o pipefail "$OPT/steps/policy_check.sh" > "$run/check-$phase.log" 2>&1
+}
+
+policy_launch() {
+  local run="$1" args="$2" commands="$3" port mock_pid status
+  rm -f "$run/port" "$run/mock.jsonl" "$run/rt/claude-execution-output.json"
+  python3 -I "$HERE/mock_messages_api.py" --port-file "$run/port" --script "$commands" --log "$run/mock.jsonl" --marker "$POLICY_MD_MARKER" &
+  mock_pid=$!
+  for _ in $(seq 1 50); do [ -s "$run/port" ] && break; sleep 0.1; done
+  port=$(cat "$run/port" 2>/dev/null)
+  [ -n "$port" ] || { kill "$mock_pid" 2>/dev/null; echo "mock did not start" > "$run/launch.err"; return 1; }
+  : > "$run/action.out"
+  chown "$PROBE_USER" "$run/action.out"
+  (
+    AS_USER_DIR="$run/ws" as_user "$PROBE_USER" env -i "PATH=$SYS_PATH" "HOME=$run/home" "RUNNER_TEMP=$run/rt" "GITHUB_WORKSPACE=$run/ws" "GITHUB_OUTPUT=$run/action.out" \
+      "ANTHROPIC_API_KEY=$SYNTH_KEY" "ANTHROPIC_BASE_URL=http://127.0.0.1:$port" "INPUT_PROMPT_FILE=$run/prompt.txt" "INPUT_CLAUDE_ARGS=$args" \
+      "INPUT_PATH_TO_CLAUDE_CODE_EXECUTABLE=$CLAUDE" "INPUT_PLUGIN_MARKETPLACES=$POLICY_MARKET" "INPUT_PLUGINS=$POLICY_PLUGIN@rk-probe-market" \
+      "INPUT_SHOW_FULL_OUTPUT=true" "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1" DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 DISABLE_AUTOUPDATER=1 \
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 timeout 300 "$POLICY_BUN" run "$POLICY_ACTION/base-action/src/index.ts"
+  ) > "$run/launch.log" 2>&1
+  status=$?
+  echo "$status" > "$run/launch.status"
+  kill "$mock_pid" 2>/dev/null
+  wait "$mock_pid" 2>/dev/null
+  return 0
+}
+
+policy_result() {
+  jq -r --argjson i "$2" 'select(.event == "tool_result" and .index == $i) | .text' "$1/mock.jsonl" 2>/dev/null
+}
+
+policy_note() {
+  local run="$1" label="$2"
+  say "  $label: launch exit $(cat "$run/launch.status" 2>/dev/null), tool results: $(jq -r 'select(.event == "tool_result") | "[\(.index) error=\(.is_error)] \(.text | gsub("\n"; " ") | .[0:160])"' "$run/mock.jsonl" 2>/dev/null | tr '\n' ' ' | head -c 900)"
+  if [ "$(cat "$run/launch.status" 2>/dev/null)" != 0 ]; then
+    say "  $label: launch log tail: $(tail -n 8 "$run/launch.log" 2>/dev/null | tr '\n' ' ' | head -c 900)"
+  fi
+}
+
+policy_write_commands() {
+  local file="$1"
+  shift
+  jq -n '$ARGS.positional' --args "$@" > "$file"
+  chmod 644 "$file"
+}
+
+policy_block_cmd() {
+  printf 'git log -1 --format=%s --output=%s' "$2" "$1"
+}
+
+policy_cp1_shape() {
+  local shape="$1" run="$POLICY_BASE/cp1-$1" args block allow
+  if ! policy_prepare "$run"; then
+    gate fail "CP1 $shape: preparation failed: $(tail -n 3 "$run"/stage.log "$run"/compose-*.log 2>/dev/null | tr '\n' ' ' | head -c 600)"
+    return 1
+  fi
+  args=$(policy_launch_args "$run" "$shape")
+  block="$run/markers/block"
+  allow="$run/markers/allow"
+  policy_write_commands "$run/commands.json" "$(policy_block_cmd "$block" rk-policy-block-marker)" "$(policy_block_cmd "$allow" ok)"
+  if [ "$shape" = guide ]; then
+    policy_check_run "$run" before-guide "$args"
+  else
+    policy_check_run "$run" before-main "$args"
+  fi
+  POLICY_BEFORE_STATUS=$?
+  POLICY_BEFORE_LINES=$(out_value "$run/check.out" call_lines)
+  policy_launch "$run" "$args" "$run/commands.json"
+  policy_note "$run" "CP1 $shape"
+  if [ ! -e "$block" ] && policy_result "$run" 0 | grep -qF "rk-policy-fixture: the command policy blocked" && [ -e "$allow" ]; then
+    gate pass "CP1 $shape: the staged policy blocks the block marker command and allows the harmless command"
+  else
+    gate fail "CP1 $shape: block marker file present: $([ -e "$block" ] && echo yes || echo no), fixture message in the result: $(policy_result "$run" 0 | grep -qF 'rk-policy-fixture' && echo yes || echo no), allow marker file present: $([ -e "$allow" ] && echo yes || echo no)"
+  fi
+  if [ -n "$(find "$run/markers" -name 'project-*' -print -quit)" ]; then
+    gate fail "CP3 $shape: a hook from the workspace settings ran: $(ls "$run/markers" | tr '\n' ' ')"
+  else
+    gate pass "CP3 $shape: no hook from the workspace settings or local settings ran"
+  fi
+}
+
+policy_cp2_case() {
+  local name="$1" mutate="$2" marker_word="$3" run="$POLICY_BASE/cp2-$1" args settings block
+  if ! policy_prepare "$run"; then
+    gate fail "CP2 $name: preparation failed"
+    return
+  fi
+  args=$(policy_launch_args "$run" implement)
+  settings=$(out_value "$run/stage.out" settings_file)
+  block="$run/markers/block"
+  case "$mutate" in
+    missing-interpreter|control)
+      jq --arg ctl "$mutate" '.hooks.PreToolUse[0].hooks[0].command |= sub("^[^ ]+"; "/nonexistent/rk-probe/python3") | if $ctl == "control" then del(.hooks.PreToolUse[0].hooks[0].onFailure) else . end' "$settings" > "$run/settings-$mutate.json"
+      chmod 644 "$run/settings-$mutate.json"
+      args="${args/"$settings"/$run/settings-$mutate.json}"
+      ;;
+    removed)
+      chmod 700 "$(dirname "$settings")"
+      rm -f "$(out_value "$run/stage.out" checker)"
+      chmod 500 "$(dirname "$settings")"
+      ;;
+    changed)
+      local checker
+      checker=$(out_value "$run/stage.out" checker)
+      chmod 700 "$(dirname "$settings")"
+      chmod 600 "$checker"
+      printf 'import sys\nsys.exit(0)\n' > "$checker"
+      chmod 400 "$checker"
+      chmod 500 "$(dirname "$settings")"
+      ;;
+  esac
+  policy_write_commands "$run/commands.json" "$(policy_block_cmd "$block" "$marker_word")"
+  policy_launch "$run" "$args" "$run/commands.json"
+  policy_note "$run" "CP2 $name"
+  if [ "$mutate" = control ]; then
+    say "  CP2 control without onFailure, interpreter missing: the command $([ -e "$block" ] && echo ran || echo was blocked) (reported only)"
+    return
+  fi
+  if [ ! -e "$block" ]; then
+    gate pass "CP2 $name: the tool call is blocked"
+  else
+    gate fail "CP2 $name: the tool call ran"
+  fi
+}
+
+policy_cp3_switch() {
+  local run="$POLICY_BASE/cp3-switch" args wt
+  if ! policy_prepare "$run"; then
+    gate fail "CP3 branch and worktree change: preparation failed"
+    return
+  fi
+  args=$(policy_launch_args "$run" implement)
+  wt="$run/worktree"
+  policy_write_commands "$run/commands.json" \
+    "$(policy_block_cmd "$run/markers/block-1" rk-policy-block-marker)" \
+    "git checkout -q other" \
+    "$(policy_block_cmd "$run/markers/block-2" rk-policy-block-marker)" \
+    "git worktree add -q --detach $wt other" \
+    "git -C $wt log -1 --format=rk-policy-block-marker --output=$run/markers/block-3"
+  policy_launch "$run" "$args" "$run/commands.json"
+  policy_note "$run" "CP3 branch and worktree change"
+  local head
+  head=$(git -C "$run/ws" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  say "  CP3 workspace branch after the launch: $head; worktree present: $([ -d "$wt" ] && echo yes || echo no)"
+  if [ "$head" = other ] && [ -d "$wt" ] && [ ! -e "$run/markers/block-1" ] && [ ! -e "$run/markers/block-2" ] && [ ! -e "$run/markers/block-3" ] && [ -z "$(find "$run/markers" -name 'project-*' -print -quit)" ]; then
+    gate pass "CP3: after a branch change and in a new worktree, the staged policy still blocks and no workspace hook runs"
+  else
+    gate fail "CP3: branch change or worktree: markers present: $(ls "$run/markers" | tr '\n' ' ')"
+  fi
+  if jq -e 'select(.type == "system" and .subtype == "init") | .tools | index("EnterWorktree")' "$run/rt/claude-execution-output.json" >/dev/null 2>&1 || jq -e '.[] | select(.type == "system" and .subtype == "init") | .tools | index("EnterWorktree")' "$run/rt/claude-execution-output.json" >/dev/null 2>&1; then
+    say "  CP3 EnterWorktree: the runtime offers the tool; this probe does not call it (reported only)"
+  else
+    say "  CP3 EnterWorktree: the runtime does not list the tool in this launch (reported only)"
+  fi
+}
+
+policy_init_record() {
+  jq -c '(if type == "array" then .[] else . end) | select(.type == "system" and .subtype == "init")' "$1/rt/claude-execution-output.json" 2>/dev/null | head -n 1
+}
+
+say ""
+say "== command policy (CP1 to CP8)"
+if ! policy_setup; then
+  gate fail "CP setup: cannot fetch or install the action at $ACTION_SHA ($(tail -n 5 "$OUT/policy-setup.log" 2>/dev/null | tr '\n' ' ' | head -c 400))"
+else
+  say "  action source: $(git -C "$POLICY_ACTION" rev-parse HEAD), launched through base-action/src/index.ts with bun $("$POLICY_BUN" --version 2>/dev/null)"
+  for shape in implement fix-pr guide; do
+    policy_cp1_shape "$shape"
+    if [ "$shape" = implement ]; then
+      cp1="$POLICY_BASE/cp1-implement"
+      if [ "$POLICY_BEFORE_STATUS" = 0 ]; then gate pass "CP6 before phase: the check passes on the real staged policy"; else gate fail "CP6 before phase: $(tail -n 3 "$cp1/check-before-main.log" | tr '\n' ' ')"; fi
+      lines=$(wc -l < "$(out_value "$cp1/stage.out" call_record)" 2>/dev/null | tr -d ' ')
+      if [ "${lines:-0}" -ge 1 ]; then gate pass "CP7: the call record has $lines lines after the launch"; else gate fail "CP7: the call record has no line after the launch"; fi
+      init=$(policy_init_record "$cp1")
+      if grep -q "\"event\": \"marker\", \"text\": \"$POLICY_MD_MARKER\"" "$cp1/mock.jsonl" 2>/dev/null; then gate pass "CP4: a request holds the workspace CLAUDE.md marker"; else gate fail "CP4: no request holds the workspace CLAUDE.md marker"; fi
+      if printf '%s' "$init" | grep -qF "$POLICY_PLUGIN"; then gate pass "CP4: the init record lists the fixture plugin"; else gate fail "CP4: the init record does not list the fixture plugin"; fi
+      say "  CP4 report: init plugins: $(printf '%s' "$init" | jq -c '.plugins // "none"' 2>/dev/null | head -c 300); mcp servers: $(printf '%s' "$init" | jq -c '.mcp_servers // "none"' 2>/dev/null | head -c 300); skills: $(printf '%s' "$init" | jq -c '.skills // "none"' 2>/dev/null | head -c 300)"
+      say "  CP6 user settings after the launch: $(jq -c 'keys' "$cp1/home/.claude/settings.json" 2>&1 | head -c 300)"
+      if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
+        gate pass "CP6: the after-phase check passes after a real launch with a plugin install"
+      else
+        gate fail "CP6: the after-phase check fails after a real launch: $(grep '::error::' "$cp1/check-after-main.log" | tr '\n' ' ' | head -c 600)"
+      fi
+      jq '.hooks = {"PreToolUse": []}' "$cp1/home/.claude/settings.json" > "$cp1/home/.claude/settings.json.new" && mv "$cp1/home/.claude/settings.json.new" "$cp1/home/.claude/settings.json"
+      chown "$PROBE_USER" "$cp1/home/.claude/settings.json"
+      if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
+        gate fail "CP6: the after-phase check passes after a hooks key was added to the user settings"
+      else
+        if grep -qF 'changed top-level keys: hooks' "$cp1/check-after-main.log"; then gate pass "CP6: a hooks key added to the user settings fails the after-phase check"; else gate fail "CP6: the after-phase check failed for another reason: $(grep '::error::' "$cp1/check-after-main.log" | tr '\n' ' ' | head -c 400)"; fi
+      fi
+    fi
+  done
+
+  policy_cp2_case missing-interpreter missing-interpreter rk-policy-block-marker
+  policy_cp2_case removed removed rk-policy-block-marker
+  policy_cp2_case changed changed rk-policy-block-marker
+  policy_cp2_case raises none rk-policy-crash-marker
+  policy_cp2_case sleeps none rk-policy-sleep-marker
+  policy_cp2_case control control rk-policy-block-marker
+
+  policy_cp3_switch
+
+  cp5="$POLICY_BASE/cp5"
+  if policy_prepare "$cp5"; then
+    mkdir -p "$cp5/home/.claude"
+    printf '{"disableAllHooks": true}\n' > "$cp5/home/.claude/settings.json"
+    chown -R "$PROBE_USER" "$cp5/home/.claude"
+    policy_write_commands "$cp5/commands.json" "$(policy_block_cmd "$cp5/markers/block" rk-policy-block-marker)"
+    policy_launch "$cp5" "$(policy_launch_args "$cp5" implement)" "$cp5/commands.json"
+    policy_note "$cp5" "CP5"
+    if [ ! -e "$cp5/markers/block" ]; then gate pass "CP5: disableAllHooks true in the user settings does not turn the policy hook off"; else gate fail "CP5: disableAllHooks true in the user settings turned the policy hook off"; fi
+  else
+    gate fail "CP5: preparation failed"
+  fi
+
+  cp7="$POLICY_BASE/cp7-control"
+  if policy_prepare "$cp7"; then
+    policy_check_run "$cp7" before-main "$(policy_launch_args "$cp7" implement)"
+    before_lines=$(out_value "$cp7/check.out" call_lines)
+    policy_write_commands "$cp7/commands.json" "$(policy_block_cmd "$cp7/markers/allow" ok)"
+    policy_launch "$cp7" "$(policy_launch_args "$cp7" off)" "$cp7/commands.json"
+    policy_note "$cp7" "CP7 control"
+    if [ -e "$cp7/markers/allow" ] && ! policy_check_run "$cp7" after-main "$(policy_launch_args "$cp7" implement)" "$before_lines" "$cp7/rt/claude-execution-output.json" && grep -qF 'the policy hook did not run' "$cp7/check-after-main.log"; then
+      gate pass "CP7: a launch without the policy settings flags fails the after-phase check"
+    else
+      gate fail "CP7: the control launch did not fail the after-phase check (allow marker: $([ -e "$cp7/markers/allow" ] && echo present || echo absent)); $(tail -n 2 "$cp7/check-after-main.log" | tr '\n' ' ' | head -c 300)"
+    fi
+  else
+    gate fail "CP7 control: preparation failed"
+  fi
+fi
+
+PROOF_SHA=$(bun "$HERE/extract-step.mjs" "$WORKFLOW" "Stage the command policy outside the workspace" --field env.COMMAND_POLICY_PROOF_ACTION_SHA 2>/dev/null)
+say "  recorded hook proof action commit: ${PROOF_SHA:-none}; pinned action commit: $ACTION_SHA; Claude Code: $CC_VERSION"
+if [ "$PROOF_SHA" = "$ACTION_SHA" ]; then
+  gate pass "CP8: COMMAND_POLICY_PROOF_ACTION_SHA equals the pinned action commit"
+else
+  gate fail "CP8: COMMAND_POLICY_PROOF_ACTION_SHA (${PROOF_SHA:-empty}) differs from the pinned action commit $ACTION_SHA"
+fi
+
 say ""
 say "== decision inputs"
 for layout in L1 L1r L1s L1t L4 L4h L2 L3; do

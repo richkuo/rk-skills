@@ -62,6 +62,16 @@ on:
         required: false
         type: boolean
         default: false
+      command_policy:
+        description: 'Write routes only (implement, fix-pr, fix-pr-review, and the docs and release flows); the review route ignores it. true loads the command policy checker .claude/hooks/command_policy.py of the calling repository at command_policy_sha from a copy outside the checkout, through a settings file that this workflow writes, for every launch except the review route. The run stops before Claude starts when the policy, the hook interpreter, or the runtime proof cannot be trusted. See the command policy section of templates/claude-workflow/README.md.'
+        required: false
+        type: boolean
+        default: false
+      command_policy_sha:
+        description: 'Write routes only, with command_policy true; ignored on the review route and when command_policy is false. The full 40-character commit of the calling repository, on its default branch, that holds the reviewed checker. There is no branch or tag fallback.'
+        required: false
+        type: string
+        default: ''
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         description: 'Claude Code OAuth token for agent authentication'
@@ -533,6 +543,9 @@ jobs:
         env:
           WORKFLOW_SHA: ${{ job.workflow_sha }}
           PLUGINS_OFFICIAL_SHA: e0ab6e51219eef74e417a0e1d89e5d53e5e763d4
+          MODE: ${{ inputs.mode }}
+          COMMAND_POLICY: ${{ inputs.command_policy }}
+          COMMAND_POLICY_SHA: ${{ inputs.command_policy_sha }}
         run: |
           set -euo pipefail
           require_sha() {
@@ -545,9 +558,24 @@ jobs:
           }
           require_sha "Called workflow revision" "$WORKFLOW_SHA"
           require_sha "Pinned Claude plugin marketplace" "$PLUGINS_OFFICIAL_SHA"
+          POLICY_ON=false
+          POLICY_SHA=""
+          if [ "$MODE" != "review" ] && [ "$COMMAND_POLICY" = "true" ]; then
+            case "$COMMAND_POLICY_SHA" in
+              *$'\n'*|*$'\r'*)
+                echo "::error::Command policy refused: command_policy_sha holds a line break. The run stops. There is no branch or tag fallback."
+                exit 1
+                ;;
+            esac
+            require_sha "Command policy revision (command_policy_sha)" "$COMMAND_POLICY_SHA"
+            POLICY_ON=true
+            POLICY_SHA="$COMMAND_POLICY_SHA"
+          fi
           {
             printf 'workflow_sha=%s\n' "$WORKFLOW_SHA"
             printf 'plugins_official_sha=%s\n' "$PLUGINS_OFFICIAL_SHA"
+            printf 'command_policy=%s\n' "$POLICY_ON"
+            printf 'command_policy_sha=%s\n' "$POLICY_SHA"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout rk-skills (shared prompts and scripts)
@@ -749,6 +777,308 @@ jobs:
           test -d "$pinned/$md_rel"
           test ! -e .rk-skills-shared
           test ! -e .rk-plugin-official
+
+      - name: Checkout the caller command policy
+        if: steps.runtime_sources.outputs.command_policy == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ steps.runtime_sources.outputs.command_policy_sha }}
+          path: .rk-command-policy
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Stage the command policy outside the workspace
+        id: command_policy
+        if: steps.runtime_sources.outputs.command_policy == 'true'
+        env:
+          COMMAND_POLICY_SHA: ${{ steps.runtime_sources.outputs.command_policy_sha }}
+          COMMAND_POLICY_PROOF_ACTION_SHA: ''
+          POLICY_INTERPRETERS: /usr/bin/python3:/usr/local/bin/python3
+          POLICY_WORKFLOW_FILE: ${{ runner.temp }}/rk-plugin-sources/rk-skills/.github/workflows/claude-run.yml
+          POLICY_DIR: ${{ runner.temp }}/rk-command-policy
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          AGENT_HOME: ${{ steps.agent_home.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "::error::Command policy refused: $1"
+            exit 1
+          }
+          require_sha() {
+            case "$2" in
+              *$'\n'*|*$'\r'*) refuse "$1 holds a line break." ;;
+            esac
+            if ! printf '%s' "$2" | grep -qxE '[0-9a-f]{40}'; then
+              refuse "$1 is not a full commit identifier. There is no branch or tag fallback."
+            fi
+          }
+          safe_path() {
+            case "$2" in
+              ''|*'"'*|*'`'*|*'$'*|*'\'*|*$'\n'*|*$'\r'*)
+                refuse "$1 is empty or holds a double quote, backtick, dollar sign, backslash, or line break, so the launch arguments cannot carry it."
+                ;;
+            esac
+          }
+
+          require_sha "command_policy_sha" "$COMMAND_POLICY_SHA"
+          if [ -z "$COMMAND_POLICY_PROOF_ACTION_SHA" ]; then
+            refuse "no hook proof is recorded for the pinned anthropics/claude-code-action commit (COMMAND_POLICY_PROOF_ACTION_SHA is empty). Run the review sandbox probe on the pin and record the commit it proved."
+          fi
+          require_sha "The action commit that the hook proof ran against (COMMAND_POLICY_PROOF_ACTION_SHA)" "$COMMAND_POLICY_PROOF_ACTION_SHA"
+
+          if [ ! -f "$POLICY_WORKFLOW_FILE" ] || [ -L "$POLICY_WORKFLOW_FILE" ]; then
+            refuse "the called workflow file $POLICY_WORKFLOW_FILE is missing, so the pinned action commit cannot be read."
+          fi
+          PIN_COUNT=0
+          while IFS= read -r line; do
+            pin=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*anthropics\/claude-code-action@([0-9a-f]{40})([[:space:]].*)?$/\2/p')
+            if [ -z "$pin" ]; then
+              refuse "the called workflow has an action step that does not pin anthropics/claude-code-action to a full commit, so the hook proof cannot cover it: $line"
+            fi
+            if [ "$pin" != "$COMMAND_POLICY_PROOF_ACTION_SHA" ]; then
+              refuse "the pinned anthropics/claude-code-action commit $pin differs from the commit $COMMAND_POLICY_PROOF_ACTION_SHA that the hook proof ran against. Run the review sandbox probe on the new pin and record its commit."
+            fi
+            PIN_COUNT=$((PIN_COUNT + 1))
+          done < <(grep -E '^[[:space:]]*(-[[:space:]]+)?uses:.*claude-code-action' "$POLICY_WORKFLOW_FILE" || true)
+          if [ "$PIN_COUNT" -eq 0 ]; then
+            refuse "the called workflow has no anthropics/claude-code-action step, so the pinned action commit cannot be read."
+          fi
+
+          if [ ! -d .rk-command-policy ] || [ -L .rk-command-policy ]; then
+            refuse "the policy checkout .rk-command-policy is missing."
+          fi
+          GOT_SHA=$(git -C .rk-command-policy rev-parse HEAD) || refuse "the policy checkout has no commit."
+          if [ "$GOT_SHA" != "$COMMAND_POLICY_SHA" ]; then
+            refuse "the policy checkout is at $GOT_SHA, which differs from command_policy_sha $COMMAND_POLICY_SHA."
+          fi
+
+          case "$DEFAULT_BRANCH" in
+            ''|-*|*..*|*[!A-Za-z0-9._/-]*) refuse "the default branch name of the repository is empty or is not a plain branch name." ;;
+          esac
+          command -v gh >/dev/null 2>&1 || refuse "gh is required to confirm that command_policy_sha is on the default branch."
+          COMPARE=$(gh api "repos/$REPO/compare/$COMMAND_POLICY_SHA...$DEFAULT_BRANCH" -q .status 2>/dev/null) || refuse "the compare of command_policy_sha with the default branch $DEFAULT_BRANCH failed."
+          case "$COMPARE" in
+            ahead|identical) ;;
+            *) refuse "command_policy_sha $COMMAND_POLICY_SHA is not on the default branch $DEFAULT_BRANCH (compare status: ${COMPARE:-none}). Use a commit that the default branch contains." ;;
+          esac
+
+          POLICY_PATH=.claude/hooks/command_policy.py
+          ENTRY=$(git -C .rk-command-policy ls-tree HEAD -- "$POLICY_PATH") || refuse "the tree of command_policy_sha cannot be read."
+          if [ -z "$ENTRY" ]; then
+            refuse "$POLICY_PATH is missing at $COMMAND_POLICY_SHA, or a directory on its path is not a real directory."
+          fi
+          if [ "$(printf '%s\n' "$ENTRY" | wc -l | tr -d ' ')" != 1 ]; then
+            refuse "$POLICY_PATH matches more than one tree entry at $COMMAND_POLICY_SHA."
+          fi
+          ENTRY_NAME="${ENTRY#*$'\t'}"
+          read -r ENTRY_MODE ENTRY_TYPE CHECKER_OID <<< "${ENTRY%%$'\t'*}"
+          if [ "$ENTRY_NAME" != "$POLICY_PATH" ] || [ "$ENTRY_TYPE" != blob ]; then
+            refuse "$POLICY_PATH is not a regular file at $COMMAND_POLICY_SHA."
+          fi
+          case "$ENTRY_MODE" in
+            100644|100755) ;;
+            *) refuse "$POLICY_PATH is not a regular file at $COMMAND_POLICY_SHA (mode $ENTRY_MODE)." ;;
+          esac
+
+          INTERPRETER=""
+          IFS=: read -r -a CANDIDATES <<< "$POLICY_INTERPRETERS"
+          for candidate in "${CANDIDATES[@]}"; do
+            case "$candidate" in
+              /*) ;;
+              *) continue ;;
+            esac
+            if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+              INTERPRETER="$candidate"
+              break
+            fi
+          done
+          if [ -z "$INTERPRETER" ]; then
+            refuse "no hook interpreter: none of $POLICY_INTERPRETERS is an executable regular file. Install python3 at one of these paths."
+          fi
+          INTERPRETER_REAL=$("$INTERPRETER" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$INTERPRETER") || refuse "the hook interpreter $INTERPRETER does not run."
+          if [ ! -f "$INTERPRETER_REAL" ] || [ -L "$INTERPRETER_REAL" ] || [ ! -x "$INTERPRETER_REAL" ]; then
+            refuse "the hook interpreter $INTERPRETER resolves to $INTERPRETER_REAL, which is not an executable regular file."
+          fi
+          safe_path "The workspace path" "$POLICY_WORKSPACE"
+          safe_path "RUNNER_TEMP" "$RUNNER_TEMP"
+          safe_path "The hook interpreter path" "$INTERPRETER"
+          if [ "$POLICY_DIR" != "$RUNNER_TEMP/rk-command-policy" ]; then
+            refuse "the staging directory $POLICY_DIR is not RUNNER_TEMP/rk-command-policy."
+          fi
+          WS_REAL=$(cd -P "$POLICY_WORKSPACE" && pwd -P) || refuse "the workspace cannot be resolved."
+          RT_REAL=$(cd -P "$RUNNER_TEMP" && pwd -P) || refuse "RUNNER_TEMP cannot be resolved."
+          for root in "$POLICY_WORKSPACE" "$WS_REAL" "$RUNNER_TEMP" "$RT_REAL"; do
+            for path in "$INTERPRETER" "$INTERPRETER_REAL"; do
+              case "$path/" in
+                "${root%/}"/*) refuse "the hook interpreter path $path is inside $root, where a session can change it." ;;
+              esac
+            done
+          done
+          INTERPRETER_OID=$(git -C / hash-object --no-filters "$INTERPRETER_REAL") || refuse "the hook interpreter cannot be hashed."
+
+          if [ -L "$POLICY_DIR" ]; then
+            rm -f "$POLICY_DIR"
+          elif [ -e "$POLICY_DIR" ]; then
+            if [ ! -d "$POLICY_DIR" ] || [ ! -O "$POLICY_DIR" ]; then
+              refuse "a stale $POLICY_DIR is not a directory of this user, so it is not touched."
+            fi
+            find "$POLICY_DIR" -type d -exec chmod u+rwx {} \;
+            rm -rf "$POLICY_DIR"
+          fi
+          if [ -e "$POLICY_DIR" ] || [ -L "$POLICY_DIR" ]; then
+            refuse "the stale $POLICY_DIR cannot be removed."
+          fi
+          (umask 077 && mkdir "$POLICY_DIR")
+          CHECKER="$POLICY_DIR/command_policy.py"
+          SETTINGS="$POLICY_DIR/settings.json"
+          CALL_RECORD="$POLICY_DIR/hook-calls.log"
+          (umask 077 && git -C .rk-command-policy cat-file blob "$CHECKER_OID" > "$CHECKER") || refuse "the checker cannot be read from the policy commit."
+          if [ "$(git -C .rk-command-policy hash-object --no-filters "$CHECKER")" != "$CHECKER_OID" ]; then
+            refuse "the staged checker differs from the tree entry $CHECKER_OID."
+          fi
+          if [ ! -s "$CHECKER" ]; then
+            refuse "$POLICY_PATH is empty at $COMMAND_POLICY_SHA."
+          fi
+          if ! "$INTERPRETER" -I -c 'import sys; compile(open(sys.argv[1], "rb").read(), sys.argv[1], "exec")' "$CHECKER"; then
+            refuse "$POLICY_PATH at $COMMAND_POLICY_SHA does not compile with $INTERPRETER."
+          fi
+          CHECKER_OID=$(git -C / hash-object --no-filters "$CHECKER")
+          CHECKER_SHA256=$("$INTERPRETER" -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$CHECKER")
+          (umask 077 && : > "$CALL_RECORD")
+
+          LAUNCHER=$(cat << 'PY'
+          import hashlib, os, sys, time
+          def deny(reason):
+              sys.stderr.write("Command policy hook: " + reason + " The tool call is blocked.\n")
+              sys.exit(2)
+          if len(sys.argv) != 4:
+              deny("the launcher arguments are wrong.")
+          path, digest, record = sys.argv[1:4]
+          try:
+              fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+              with os.fdopen(fd, "rb") as handle:
+                  body = handle.read()
+          except OSError:
+              deny("the staged checker cannot be opened.")
+          if hashlib.sha256(body).hexdigest() != digest:
+              deny("the staged checker changed.")
+          try:
+              with open(record, "a") as handle:
+                  handle.write("%f %d\n" % (time.time(), os.getpid()))
+          except OSError:
+              deny("the call record cannot be written.")
+          sys.argv = [path]
+          scope = {"__name__": "__main__", "__file__": path, "__builtins__": __builtins__}
+          try:
+              exec(compile(body, path, "exec"), scope)
+          except SystemExit as stop:
+              if stop.code is None or stop.code == 0:
+                  sys.exit(0)
+              if stop.code == 2:
+                  sys.exit(2)
+              if not isinstance(stop.code, int):
+                  sys.stderr.write(str(stop.code) + "\n")
+              deny("the checker stopped with an unexpected status.")
+          except BaseException as error:
+              deny("the checker failed (" + type(error).__name__ + ").")
+          sys.exit(0)
+          PY
+          )
+          case "$LAUNCHER" in
+            *"'"*) refuse "the hook launcher holds a single quote." ;;
+          esac
+          SELF_TEST=$("$INTERPRETER" -I - "$INTERPRETER" "$LAUNCHER" "$CHECKER" "$CHECKER_SHA256" "$CALL_RECORD" "$SETTINGS" << 'PY'
+          import json, shlex, sys
+          interpreter, launcher, checker, digest, record, dest = sys.argv[1:7]
+          def command(value):
+              return " ".join([shlex.quote(interpreter), "-I", "-c", shlex.quote(launcher), shlex.quote(checker), value, shlex.quote(record)])
+          body = {
+              "disableAllHooks": False,
+              "hooks": {
+                  "PreToolUse": [
+                      {
+                          "matcher": "Bash",
+                          "hooks": [
+                              {
+                                  "type": "command",
+                                  "command": command(digest),
+                                  "timeout": 30,
+                                  "onFailure": "block",
+                              }
+                          ],
+                      }
+                  ]
+              },
+          }
+          with open(dest, "x") as handle:
+              json.dump(body, handle, indent=2)
+              handle.write("\n")
+          print(command("0" * 64))
+          PY
+          ) || refuse "the policy settings file cannot be written."
+          chmod 400 "$CHECKER" "$SETTINGS"
+          chmod 600 "$CALL_RECORD"
+          SELF_STATUS=0
+          printf '{}\n' | /bin/sh -c "$SELF_TEST" > /dev/null 2>&1 || SELF_STATUS=$?
+          if [ "$SELF_STATUS" != 2 ]; then
+            refuse "the hook self-test with a wrong checker hash exited $SELF_STATUS; it must exit 2."
+          fi
+          if [ -s "$CALL_RECORD" ]; then
+            refuse "the hook self-test wrote to the call record."
+          fi
+          chmod 500 "$POLICY_DIR"
+          SETTINGS_OID=$(git -C / hash-object --no-filters "$SETTINGS")
+
+          rm -rf .rk-command-policy
+          test ! -e .rk-command-policy
+
+          USER_SETTINGS="${CLAUDE_CONFIG_DIR:-${AGENT_HOME:-$HOME}/.claude}/settings.json"
+          case "$USER_SETTINGS" in
+            *$'\n'*|*$'\r'*) refuse "the user settings path holds a line break." ;;
+          esac
+          USER_STATE=$("$INTERPRETER" -I - "$USER_SETTINGS" << 'PY'
+          import hashlib, json, os, sys
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          def canon(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          data = {}
+          if os.path.lexists(sys.argv[1]):
+              with open(sys.argv[1], "rb") as handle:
+                  raw = handle.read()
+              if raw.strip():
+                  data = json.loads(raw)
+          if not isinstance(data, dict):
+              raise SystemExit("the user settings file is not a JSON object")
+          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          keys = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+          print(hashlib.sha256(canon(kept).encode()).hexdigest())
+          print(canon(keys))
+          PY
+          ) || refuse "the user settings file $USER_SETTINGS cannot be read as a JSON object."
+          USER_DIGEST=$(printf '%s\n' "$USER_STATE" | sed -n 1p)
+          USER_KEYS=$(printf '%s\n' "$USER_STATE" | sed -n 2p)
+
+          {
+            printf 'dir=%s\n' "$POLICY_DIR"
+            printf 'checker=%s\n' "$CHECKER"
+            printf 'checker_oid=%s\n' "$CHECKER_OID"
+            printf 'checker_sha256=%s\n' "$CHECKER_SHA256"
+            printf 'settings_file=%s\n' "$SETTINGS"
+            printf 'settings_oid=%s\n' "$SETTINGS_OID"
+            printf 'interpreter=%s\n' "$INTERPRETER"
+            printf 'interpreter_real=%s\n' "$INTERPRETER_REAL"
+            printf 'interpreter_oid=%s\n' "$INTERPRETER_OID"
+            printf 'call_record=%s\n' "$CALL_RECORD"
+            printf 'user_settings=%s\n' "$USER_SETTINGS"
+            printf 'user_settings_digest=%s\n' "$USER_DIGEST"
+            printf 'user_settings_keys=%s\n' "$USER_KEYS"
+            printf 'instructions_env=1\n'
+          } >> "$GITHUB_OUTPUT"
+          echo "Staged the command policy from $COMMAND_POLICY_SHA at $CHECKER (blob $CHECKER_OID) with the hook interpreter $INTERPRETER."
 
       - name: Resolve model and effort
         id: resolve
@@ -1082,6 +1412,9 @@ jobs:
           BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
           SETTINGS_FILE: ${{ runner.temp }}/claude-review-settings.json
           GH_TOKEN: ${{ github.token }}
+          COMMAND_POLICY: ${{ steps.runtime_sources.outputs.command_policy }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
         run: |
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
           if [ -n "$FLOW" ]; then
@@ -1160,9 +1493,26 @@ jobs:
           if [ "$MODE" = "review" ]; then
             ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task,Read(//proc/**),Bash(git *--output*),Bash(git diff*--no-index*),Bash(git fetch*--upload-pack*),Bash(gh pr comment*--body-file*),Bash(gh pr comment* -F*)\" --setting-sources user --settings ${SETTINGS_FILE}"
           fi
+          POLICY_SUFFIX=""
+          if [ "$MODE" != "review" ] && [ "$COMMAND_POLICY" = "true" ]; then
+            for value in "$POLICY_SETTINGS" "$POLICY_WORKSPACE"; do
+              case "$value" in
+                ''|*'"'*|*'`'*|*'$'*|*'\'*|*$'\n'*|*$'\r'*)
+                  echo "::error::Command policy refused: the staged settings file or the workspace path is empty or holds a double quote, backtick, dollar sign, backslash, or line break, so the launch cannot load the policy."
+                  exit 1
+                  ;;
+              esac
+            done
+            POLICY_SUFFIX=" --setting-sources user --settings \"${POLICY_SETTINGS}\" --add-dir \"${POLICY_WORKSPACE}\""
+            ARGS="$ARGS$POLICY_SUFFIX"
+          fi
+          GUIDE_ARGS="--model ${MODEL_ID} --effort ${EFFORT} --permission-mode default --allowedTools \"Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write\"$POLICY_SUFFIX"
           {
             printf 'claude_args<<CLAUDE_ARGS_EOF\n'
             printf '%s\n' "$ARGS"
+            printf 'CLAUDE_ARGS_EOF\n'
+            printf 'guide_claude_args<<CLAUDE_ARGS_EOF\n'
+            printf '%s\n' "$GUIDE_ARGS"
             printf 'CLAUDE_ARGS_EOF\n'
           } >> "$GITHUB_OUTPUT"
 
@@ -1222,12 +1572,204 @@ jobs:
             exit 1
           fi
 
+      - name: Check the staged command policy before Claude runs
+        id: policy_before_main
+        if: steps.runtime_sources.outputs.command_policy == 'true'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: before-main
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.claude_args }}
+          POLICY_CALLS_BEFORE: ''
+          EXECUTION_FILE: ''
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          while IFS= read -r name; do
+            unset "$name"
+          done < <(compgen -e | grep -E '^(GIT_|PYTHON)' || true)
+          fail() {
+            echo "::error::Command policy check ($PHASE): $1"
+            exit 1
+          }
+          case "$PHASE" in
+            before-main|after-main|before-guide|after-guide) ;;
+            *) fail "the phase is not known." ;;
+          esac
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+            if [ -z "${!name:-}" ]; then
+              fail "$name is empty, so the staged policy cannot be checked."
+            fi
+          done
+          D="$POLICY_DIR"
+          if [ "$POLICY_CHECKER" != "$D/command_policy.py" ] || [ "$POLICY_SETTINGS" != "$D/settings.json" ] || [ "$POLICY_CALL_RECORD" != "$D/hook-calls.log" ]; then
+            fail "the recorded policy file paths are not inside the staged directory $D."
+          fi
+          if [ -L "$D" ] || [ ! -d "$D" ] || [ ! -O "$D" ]; then
+            fail "the staged directory $D is missing, a symlink, or not a directory of this user."
+          fi
+          if [ -z "$(find "$D" -maxdepth 0 -perm 0500 -print)" ]; then
+            fail "the staged directory $D does not have mode 0500."
+          fi
+          NAMES=$(cd "$D" && ls -A | LC_ALL=C sort | tr '\n' ' ')
+          if [ "$NAMES" != "command_policy.py hook-calls.log settings.json " ]; then
+            fail "the staged directory $D holds an unexpected set of entries: $NAMES"
+          fi
+          check_file() {
+            if [ -L "$2" ] || [ ! -f "$2" ] || [ ! -O "$2" ]; then
+              fail "$1 $2 is missing, a symlink, or not a regular file of this user."
+            fi
+            if [ -z "$(find "$2" -maxdepth 0 -perm "$4" -print)" ]; then
+              fail "$1 $2 does not have mode $4."
+            fi
+            if [ -n "$3" ] && [ "$(git -C / hash-object --no-filters "$2" 2>/dev/null)" != "$3" ]; then
+              fail "$1 $2 changed since the policy was staged."
+            fi
+          }
+          check_file "The staged checker" "$POLICY_CHECKER" "$POLICY_CHECKER_OID" 0400
+          check_file "The policy settings file" "$POLICY_SETTINGS" "$POLICY_SETTINGS_OID" 0400
+          check_file "The hook call record" "$POLICY_CALL_RECORD" "" 0600
+          if [ -L "$POLICY_INTERPRETER_REAL" ] || [ ! -f "$POLICY_INTERPRETER_REAL" ] || [ "$(git -C / hash-object --no-filters "$POLICY_INTERPRETER_REAL" 2>/dev/null)" != "$POLICY_INTERPRETER_OID" ]; then
+            fail "the hook interpreter $POLICY_INTERPRETER_REAL is missing or changed since the policy was staged."
+          fi
+          if [ ! -f "$POLICY_INTERPRETER" ] || [ ! -x "$POLICY_INTERPRETER" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER is missing or not executable."
+          fi
+          RESOLVED=$("$POLICY_INTERPRETER_REAL" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$POLICY_INTERPRETER") || fail "the hook interpreter does not run."
+          if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
+          fi
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          import hashlib, json, os, sys
+          path, digest, baseline, phase, managed = sys.argv[1:6]
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          problems = []
+          def canon(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          def load(name):
+              with open(name, "rb") as handle:
+                  raw = handle.read()
+              if not raw.strip():
+                  return {}
+              data = json.loads(raw)
+              if not isinstance(data, dict):
+                  raise ValueError("the top level is not an object")
+              return data
+          try:
+              data = load(path) if os.path.lexists(path) else {}
+          except (OSError, ValueError) as error:
+              print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
+              sys.exit(1)
+          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
+              try:
+                  before = json.loads(baseline)
+              except ValueError:
+                  before = {}
+              now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+              changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
+              problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          if phase.startswith("before"):
+              if data.get("disableAllHooks") is True:
+                  problems.append("the user settings file %s sets disableAllHooks to true." % path)
+              for base in [item for item in managed.split(":") if item]:
+                  files = []
+                  single = os.path.join(base, "managed-settings.json")
+                  if os.path.lexists(single):
+                      files.append(single)
+                  dropins = os.path.join(base, "managed-settings.d")
+                  if os.path.lexists(dropins):
+                      try:
+                          names = sorted(name for name in os.listdir(dropins) if name.endswith(".json") and not name.startswith("."))
+                      except OSError as error:
+                          problems.append("the managed settings directory %s cannot be read (%s)." % (dropins, error))
+                          names = []
+                      files.extend(os.path.join(dropins, name) for name in names)
+                  for name in files:
+                      try:
+                          managed_data = load(name)
+                      except (OSError, ValueError) as error:
+                          problems.append("the managed settings file %s cannot be read as a JSON object (%s)." % (name, error))
+                          continue
+                      for key in ("disableAllHooks", "allowManagedHooksOnly"):
+                          if managed_data.get(key) is True:
+                              problems.append("the managed settings file %s sets %s to true, so the policy hook would not run." % (name, key))
+          for problem in problems:
+              print(problem)
+          sys.exit(1 if problems else 0)
+          PY
+          ); then
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::Command policy check ($PHASE): $line"
+            done <<< "$PROBLEMS"
+            fail "the user or managed settings do not keep the policy hook in force."
+          fi
+          LINES=$(wc -l < "$POLICY_CALL_RECORD" | tr -d ' ')
+          case "$PHASE" in
+            before-*)
+              SUFFIX=" --setting-sources user --settings \"$POLICY_SETTINGS\" --add-dir \"$POLICY_WORKSPACE\""
+              case "${POLICY_ARGS:-}" in
+                *"$SUFFIX") ;;
+                *) fail "the launch arguments do not end with the policy settings flags, so the launch would not load the staged policy." ;;
+              esac
+              echo "call_lines=$LINES" >> "$GITHUB_OUTPUT"
+              ;;
+            after-*)
+              case "${POLICY_CALLS_BEFORE:-}" in
+                ''|*[!0-9]*) fail "the call record line count from before the launch is missing." ;;
+              esac
+              if [ -z "${EXECUTION_FILE:-}" ] || [ ! -f "$EXECUTION_FILE" ]; then
+                echo "::notice::Command policy check ($PHASE): the execution file is missing, so the check that the hook ran for each Bash call is skipped."
+              else
+                BASH_OK=$("$POLICY_INTERPRETER_REAL" -I - "$EXECUTION_FILE" << 'PY'
+          import json, sys
+          with open(sys.argv[1]) as handle:
+              data = json.load(handle)
+          records = []
+          for item in data if isinstance(data, list) else [data]:
+              records.extend(item if isinstance(item, list) else [item])
+          def blocks(record, kind):
+              if not isinstance(record, dict) or record.get("type") != kind:
+                  return []
+              message = record.get("message")
+              content = message.get("content") if isinstance(message, dict) else None
+              return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+          bash_ids = {block.get("id") for record in records for block in blocks(record, "assistant") if block.get("type") == "tool_use" and block.get("name") == "Bash"}
+          print(sum(1 for record in records for block in blocks(record, "user") if block.get("type") == "tool_result" and block.get("tool_use_id") in bash_ids and not block.get("is_error")))
+          PY
+                ) || fail "the execution file $EXECUTION_FILE cannot be read."
+                if [ "$BASH_OK" -gt 0 ] && [ "$LINES" -le "$POLICY_CALLS_BEFORE" ]; then
+                  fail "the policy hook did not run: the launch ran $BASH_OK Bash calls without an error result, and the call record gained no line."
+                fi
+              fi
+              ;;
+          esac
+          echo "The staged command policy is unchanged ($PHASE)."
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         env:
           HOME: ${{ steps.agent_home.outputs.path }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: ${{ steps.review_contract.outputs.scrub }}
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: ${{ steps.command_policy.outputs.instructions_env }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -1247,6 +1789,196 @@ jobs:
             rk-skills@rk-skills
 
           claude_args: ${{ steps.compose_prompt.outputs.claude_args }}
+
+      - name: Check the staged command policy after Claude runs
+        if: always() && steps.runtime_sources.outputs.command_policy == 'true' && steps.claude.outcome != 'skipped'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: after-main
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.claude_args }}
+          POLICY_CALLS_BEFORE: ${{ steps.policy_before_main.outputs.call_lines }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          while IFS= read -r name; do
+            unset "$name"
+          done < <(compgen -e | grep -E '^(GIT_|PYTHON)' || true)
+          fail() {
+            echo "::error::Command policy check ($PHASE): $1"
+            exit 1
+          }
+          case "$PHASE" in
+            before-main|after-main|before-guide|after-guide) ;;
+            *) fail "the phase is not known." ;;
+          esac
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+            if [ -z "${!name:-}" ]; then
+              fail "$name is empty, so the staged policy cannot be checked."
+            fi
+          done
+          D="$POLICY_DIR"
+          if [ "$POLICY_CHECKER" != "$D/command_policy.py" ] || [ "$POLICY_SETTINGS" != "$D/settings.json" ] || [ "$POLICY_CALL_RECORD" != "$D/hook-calls.log" ]; then
+            fail "the recorded policy file paths are not inside the staged directory $D."
+          fi
+          if [ -L "$D" ] || [ ! -d "$D" ] || [ ! -O "$D" ]; then
+            fail "the staged directory $D is missing, a symlink, or not a directory of this user."
+          fi
+          if [ -z "$(find "$D" -maxdepth 0 -perm 0500 -print)" ]; then
+            fail "the staged directory $D does not have mode 0500."
+          fi
+          NAMES=$(cd "$D" && ls -A | LC_ALL=C sort | tr '\n' ' ')
+          if [ "$NAMES" != "command_policy.py hook-calls.log settings.json " ]; then
+            fail "the staged directory $D holds an unexpected set of entries: $NAMES"
+          fi
+          check_file() {
+            if [ -L "$2" ] || [ ! -f "$2" ] || [ ! -O "$2" ]; then
+              fail "$1 $2 is missing, a symlink, or not a regular file of this user."
+            fi
+            if [ -z "$(find "$2" -maxdepth 0 -perm "$4" -print)" ]; then
+              fail "$1 $2 does not have mode $4."
+            fi
+            if [ -n "$3" ] && [ "$(git -C / hash-object --no-filters "$2" 2>/dev/null)" != "$3" ]; then
+              fail "$1 $2 changed since the policy was staged."
+            fi
+          }
+          check_file "The staged checker" "$POLICY_CHECKER" "$POLICY_CHECKER_OID" 0400
+          check_file "The policy settings file" "$POLICY_SETTINGS" "$POLICY_SETTINGS_OID" 0400
+          check_file "The hook call record" "$POLICY_CALL_RECORD" "" 0600
+          if [ -L "$POLICY_INTERPRETER_REAL" ] || [ ! -f "$POLICY_INTERPRETER_REAL" ] || [ "$(git -C / hash-object --no-filters "$POLICY_INTERPRETER_REAL" 2>/dev/null)" != "$POLICY_INTERPRETER_OID" ]; then
+            fail "the hook interpreter $POLICY_INTERPRETER_REAL is missing or changed since the policy was staged."
+          fi
+          if [ ! -f "$POLICY_INTERPRETER" ] || [ ! -x "$POLICY_INTERPRETER" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER is missing or not executable."
+          fi
+          RESOLVED=$("$POLICY_INTERPRETER_REAL" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$POLICY_INTERPRETER") || fail "the hook interpreter does not run."
+          if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
+          fi
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          import hashlib, json, os, sys
+          path, digest, baseline, phase, managed = sys.argv[1:6]
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          problems = []
+          def canon(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          def load(name):
+              with open(name, "rb") as handle:
+                  raw = handle.read()
+              if not raw.strip():
+                  return {}
+              data = json.loads(raw)
+              if not isinstance(data, dict):
+                  raise ValueError("the top level is not an object")
+              return data
+          try:
+              data = load(path) if os.path.lexists(path) else {}
+          except (OSError, ValueError) as error:
+              print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
+              sys.exit(1)
+          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
+              try:
+                  before = json.loads(baseline)
+              except ValueError:
+                  before = {}
+              now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+              changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
+              problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          if phase.startswith("before"):
+              if data.get("disableAllHooks") is True:
+                  problems.append("the user settings file %s sets disableAllHooks to true." % path)
+              for base in [item for item in managed.split(":") if item]:
+                  files = []
+                  single = os.path.join(base, "managed-settings.json")
+                  if os.path.lexists(single):
+                      files.append(single)
+                  dropins = os.path.join(base, "managed-settings.d")
+                  if os.path.lexists(dropins):
+                      try:
+                          names = sorted(name for name in os.listdir(dropins) if name.endswith(".json") and not name.startswith("."))
+                      except OSError as error:
+                          problems.append("the managed settings directory %s cannot be read (%s)." % (dropins, error))
+                          names = []
+                      files.extend(os.path.join(dropins, name) for name in names)
+                  for name in files:
+                      try:
+                          managed_data = load(name)
+                      except (OSError, ValueError) as error:
+                          problems.append("the managed settings file %s cannot be read as a JSON object (%s)." % (name, error))
+                          continue
+                      for key in ("disableAllHooks", "allowManagedHooksOnly"):
+                          if managed_data.get(key) is True:
+                              problems.append("the managed settings file %s sets %s to true, so the policy hook would not run." % (name, key))
+          for problem in problems:
+              print(problem)
+          sys.exit(1 if problems else 0)
+          PY
+          ); then
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::Command policy check ($PHASE): $line"
+            done <<< "$PROBLEMS"
+            fail "the user or managed settings do not keep the policy hook in force."
+          fi
+          LINES=$(wc -l < "$POLICY_CALL_RECORD" | tr -d ' ')
+          case "$PHASE" in
+            before-*)
+              SUFFIX=" --setting-sources user --settings \"$POLICY_SETTINGS\" --add-dir \"$POLICY_WORKSPACE\""
+              case "${POLICY_ARGS:-}" in
+                *"$SUFFIX") ;;
+                *) fail "the launch arguments do not end with the policy settings flags, so the launch would not load the staged policy." ;;
+              esac
+              echo "call_lines=$LINES" >> "$GITHUB_OUTPUT"
+              ;;
+            after-*)
+              case "${POLICY_CALLS_BEFORE:-}" in
+                ''|*[!0-9]*) fail "the call record line count from before the launch is missing." ;;
+              esac
+              if [ -z "${EXECUTION_FILE:-}" ] || [ ! -f "$EXECUTION_FILE" ]; then
+                echo "::notice::Command policy check ($PHASE): the execution file is missing, so the check that the hook ran for each Bash call is skipped."
+              else
+                BASH_OK=$("$POLICY_INTERPRETER_REAL" -I - "$EXECUTION_FILE" << 'PY'
+          import json, sys
+          with open(sys.argv[1]) as handle:
+              data = json.load(handle)
+          records = []
+          for item in data if isinstance(data, list) else [data]:
+              records.extend(item if isinstance(item, list) else [item])
+          def blocks(record, kind):
+              if not isinstance(record, dict) or record.get("type") != kind:
+                  return []
+              message = record.get("message")
+              content = message.get("content") if isinstance(message, dict) else None
+              return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+          bash_ids = {block.get("id") for record in records for block in blocks(record, "assistant") if block.get("type") == "tool_use" and block.get("name") == "Bash"}
+          print(sum(1 for record in records for block in blocks(record, "user") if block.get("type") == "tool_result" and block.get("tool_use_id") in bash_ids and not block.get("is_error")))
+          PY
+                ) || fail "the execution file $EXECUTION_FILE cannot be read."
+                if [ "$BASH_OK" -gt 0 ] && [ "$LINES" -le "$POLICY_CALLS_BEFORE" ]; then
+                  fail "the policy hook did not run: the launch ran $BASH_OK Bash calls without an error result, and the call record gained no line."
+                fi
+              fi
+              ;;
+          esac
+          echo "The staged command policy is unchanged ($PHASE)."
 
       - name: Confirm no job credential persisted on disk while Claude ran
         if: always() && inputs.mode == 'review' && steps.claude.outcome != 'skipped'
@@ -1410,9 +2142,203 @@ jobs:
           SELECT_ONLY: '1'
         run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
 
+      - name: Check the staged command policy before the CLAUDE.md revision
+        id: policy_before_guide
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true' && steps.runtime_sources.outputs.command_policy == 'true'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: before-guide
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_claude_args }}
+          POLICY_CALLS_BEFORE: ''
+          EXECUTION_FILE: ''
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          while IFS= read -r name; do
+            unset "$name"
+          done < <(compgen -e | grep -E '^(GIT_|PYTHON)' || true)
+          fail() {
+            echo "::error::Command policy check ($PHASE): $1"
+            exit 1
+          }
+          case "$PHASE" in
+            before-main|after-main|before-guide|after-guide) ;;
+            *) fail "the phase is not known." ;;
+          esac
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+            if [ -z "${!name:-}" ]; then
+              fail "$name is empty, so the staged policy cannot be checked."
+            fi
+          done
+          D="$POLICY_DIR"
+          if [ "$POLICY_CHECKER" != "$D/command_policy.py" ] || [ "$POLICY_SETTINGS" != "$D/settings.json" ] || [ "$POLICY_CALL_RECORD" != "$D/hook-calls.log" ]; then
+            fail "the recorded policy file paths are not inside the staged directory $D."
+          fi
+          if [ -L "$D" ] || [ ! -d "$D" ] || [ ! -O "$D" ]; then
+            fail "the staged directory $D is missing, a symlink, or not a directory of this user."
+          fi
+          if [ -z "$(find "$D" -maxdepth 0 -perm 0500 -print)" ]; then
+            fail "the staged directory $D does not have mode 0500."
+          fi
+          NAMES=$(cd "$D" && ls -A | LC_ALL=C sort | tr '\n' ' ')
+          if [ "$NAMES" != "command_policy.py hook-calls.log settings.json " ]; then
+            fail "the staged directory $D holds an unexpected set of entries: $NAMES"
+          fi
+          check_file() {
+            if [ -L "$2" ] || [ ! -f "$2" ] || [ ! -O "$2" ]; then
+              fail "$1 $2 is missing, a symlink, or not a regular file of this user."
+            fi
+            if [ -z "$(find "$2" -maxdepth 0 -perm "$4" -print)" ]; then
+              fail "$1 $2 does not have mode $4."
+            fi
+            if [ -n "$3" ] && [ "$(git -C / hash-object --no-filters "$2" 2>/dev/null)" != "$3" ]; then
+              fail "$1 $2 changed since the policy was staged."
+            fi
+          }
+          check_file "The staged checker" "$POLICY_CHECKER" "$POLICY_CHECKER_OID" 0400
+          check_file "The policy settings file" "$POLICY_SETTINGS" "$POLICY_SETTINGS_OID" 0400
+          check_file "The hook call record" "$POLICY_CALL_RECORD" "" 0600
+          if [ -L "$POLICY_INTERPRETER_REAL" ] || [ ! -f "$POLICY_INTERPRETER_REAL" ] || [ "$(git -C / hash-object --no-filters "$POLICY_INTERPRETER_REAL" 2>/dev/null)" != "$POLICY_INTERPRETER_OID" ]; then
+            fail "the hook interpreter $POLICY_INTERPRETER_REAL is missing or changed since the policy was staged."
+          fi
+          if [ ! -f "$POLICY_INTERPRETER" ] || [ ! -x "$POLICY_INTERPRETER" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER is missing or not executable."
+          fi
+          RESOLVED=$("$POLICY_INTERPRETER_REAL" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$POLICY_INTERPRETER") || fail "the hook interpreter does not run."
+          if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
+          fi
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          import hashlib, json, os, sys
+          path, digest, baseline, phase, managed = sys.argv[1:6]
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          problems = []
+          def canon(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          def load(name):
+              with open(name, "rb") as handle:
+                  raw = handle.read()
+              if not raw.strip():
+                  return {}
+              data = json.loads(raw)
+              if not isinstance(data, dict):
+                  raise ValueError("the top level is not an object")
+              return data
+          try:
+              data = load(path) if os.path.lexists(path) else {}
+          except (OSError, ValueError) as error:
+              print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
+              sys.exit(1)
+          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
+              try:
+                  before = json.loads(baseline)
+              except ValueError:
+                  before = {}
+              now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+              changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
+              problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          if phase.startswith("before"):
+              if data.get("disableAllHooks") is True:
+                  problems.append("the user settings file %s sets disableAllHooks to true." % path)
+              for base in [item for item in managed.split(":") if item]:
+                  files = []
+                  single = os.path.join(base, "managed-settings.json")
+                  if os.path.lexists(single):
+                      files.append(single)
+                  dropins = os.path.join(base, "managed-settings.d")
+                  if os.path.lexists(dropins):
+                      try:
+                          names = sorted(name for name in os.listdir(dropins) if name.endswith(".json") and not name.startswith("."))
+                      except OSError as error:
+                          problems.append("the managed settings directory %s cannot be read (%s)." % (dropins, error))
+                          names = []
+                      files.extend(os.path.join(dropins, name) for name in names)
+                  for name in files:
+                      try:
+                          managed_data = load(name)
+                      except (OSError, ValueError) as error:
+                          problems.append("the managed settings file %s cannot be read as a JSON object (%s)." % (name, error))
+                          continue
+                      for key in ("disableAllHooks", "allowManagedHooksOnly"):
+                          if managed_data.get(key) is True:
+                              problems.append("the managed settings file %s sets %s to true, so the policy hook would not run." % (name, key))
+          for problem in problems:
+              print(problem)
+          sys.exit(1 if problems else 0)
+          PY
+          ); then
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::Command policy check ($PHASE): $line"
+            done <<< "$PROBLEMS"
+            fail "the user or managed settings do not keep the policy hook in force."
+          fi
+          LINES=$(wc -l < "$POLICY_CALL_RECORD" | tr -d ' ')
+          case "$PHASE" in
+            before-*)
+              SUFFIX=" --setting-sources user --settings \"$POLICY_SETTINGS\" --add-dir \"$POLICY_WORKSPACE\""
+              case "${POLICY_ARGS:-}" in
+                *"$SUFFIX") ;;
+                *) fail "the launch arguments do not end with the policy settings flags, so the launch would not load the staged policy." ;;
+              esac
+              echo "call_lines=$LINES" >> "$GITHUB_OUTPUT"
+              ;;
+            after-*)
+              case "${POLICY_CALLS_BEFORE:-}" in
+                ''|*[!0-9]*) fail "the call record line count from before the launch is missing." ;;
+              esac
+              if [ -z "${EXECUTION_FILE:-}" ] || [ ! -f "$EXECUTION_FILE" ]; then
+                echo "::notice::Command policy check ($PHASE): the execution file is missing, so the check that the hook ran for each Bash call is skipped."
+              else
+                BASH_OK=$("$POLICY_INTERPRETER_REAL" -I - "$EXECUTION_FILE" << 'PY'
+          import json, sys
+          with open(sys.argv[1]) as handle:
+              data = json.load(handle)
+          records = []
+          for item in data if isinstance(data, list) else [data]:
+              records.extend(item if isinstance(item, list) else [item])
+          def blocks(record, kind):
+              if not isinstance(record, dict) or record.get("type") != kind:
+                  return []
+              message = record.get("message")
+              content = message.get("content") if isinstance(message, dict) else None
+              return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+          bash_ids = {block.get("id") for record in records for block in blocks(record, "assistant") if block.get("type") == "tool_use" and block.get("name") == "Bash"}
+          print(sum(1 for record in records for block in blocks(record, "user") if block.get("type") == "tool_result" and block.get("tool_use_id") in bash_ids and not block.get("is_error")))
+          PY
+                ) || fail "the execution file $EXECUTION_FILE cannot be read."
+                if [ "$BASH_OK" -gt 0 ] && [ "$LINES" -le "$POLICY_CALLS_BEFORE" ]; then
+                  fail "the policy hook did not run: the launch ran $BASH_OK Bash calls without an error result, and the call record gained no line."
+                fi
+              fi
+              ;;
+          esac
+          echo "The staged command policy is unchanged ($PHASE)."
+
       - name: Revise CLAUDE.md with session learnings
+        id: revise_guide
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        env:
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: ${{ steps.command_policy.outputs.instructions_env }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
@@ -1421,7 +2347,197 @@ jobs:
           plugins: |
             code-review@rk-pinned-claude-plugins
             claude-md-management@rk-pinned-claude-plugins
-          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"
+          claude_args: ${{ steps.compose_prompt.outputs.guide_claude_args }}
+
+      - name: Check the staged command policy after the CLAUDE.md revision
+        if: always() && steps.runtime_sources.outputs.command_policy == 'true' && steps.revise_guide.outcome != 'skipped' && steps.revise_guide.outcome != ''
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: after-guide
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_claude_args }}
+          POLICY_CALLS_BEFORE: ${{ steps.policy_before_guide.outputs.call_lines }}
+          EXECUTION_FILE: ${{ steps.revise_guide.outputs.execution_file }}
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          while IFS= read -r name; do
+            unset "$name"
+          done < <(compgen -e | grep -E '^(GIT_|PYTHON)' || true)
+          fail() {
+            echo "::error::Command policy check ($PHASE): $1"
+            exit 1
+          }
+          case "$PHASE" in
+            before-main|after-main|before-guide|after-guide) ;;
+            *) fail "the phase is not known." ;;
+          esac
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+            if [ -z "${!name:-}" ]; then
+              fail "$name is empty, so the staged policy cannot be checked."
+            fi
+          done
+          D="$POLICY_DIR"
+          if [ "$POLICY_CHECKER" != "$D/command_policy.py" ] || [ "$POLICY_SETTINGS" != "$D/settings.json" ] || [ "$POLICY_CALL_RECORD" != "$D/hook-calls.log" ]; then
+            fail "the recorded policy file paths are not inside the staged directory $D."
+          fi
+          if [ -L "$D" ] || [ ! -d "$D" ] || [ ! -O "$D" ]; then
+            fail "the staged directory $D is missing, a symlink, or not a directory of this user."
+          fi
+          if [ -z "$(find "$D" -maxdepth 0 -perm 0500 -print)" ]; then
+            fail "the staged directory $D does not have mode 0500."
+          fi
+          NAMES=$(cd "$D" && ls -A | LC_ALL=C sort | tr '\n' ' ')
+          if [ "$NAMES" != "command_policy.py hook-calls.log settings.json " ]; then
+            fail "the staged directory $D holds an unexpected set of entries: $NAMES"
+          fi
+          check_file() {
+            if [ -L "$2" ] || [ ! -f "$2" ] || [ ! -O "$2" ]; then
+              fail "$1 $2 is missing, a symlink, or not a regular file of this user."
+            fi
+            if [ -z "$(find "$2" -maxdepth 0 -perm "$4" -print)" ]; then
+              fail "$1 $2 does not have mode $4."
+            fi
+            if [ -n "$3" ] && [ "$(git -C / hash-object --no-filters "$2" 2>/dev/null)" != "$3" ]; then
+              fail "$1 $2 changed since the policy was staged."
+            fi
+          }
+          check_file "The staged checker" "$POLICY_CHECKER" "$POLICY_CHECKER_OID" 0400
+          check_file "The policy settings file" "$POLICY_SETTINGS" "$POLICY_SETTINGS_OID" 0400
+          check_file "The hook call record" "$POLICY_CALL_RECORD" "" 0600
+          if [ -L "$POLICY_INTERPRETER_REAL" ] || [ ! -f "$POLICY_INTERPRETER_REAL" ] || [ "$(git -C / hash-object --no-filters "$POLICY_INTERPRETER_REAL" 2>/dev/null)" != "$POLICY_INTERPRETER_OID" ]; then
+            fail "the hook interpreter $POLICY_INTERPRETER_REAL is missing or changed since the policy was staged."
+          fi
+          if [ ! -f "$POLICY_INTERPRETER" ] || [ ! -x "$POLICY_INTERPRETER" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER is missing or not executable."
+          fi
+          RESOLVED=$("$POLICY_INTERPRETER_REAL" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$POLICY_INTERPRETER") || fail "the hook interpreter does not run."
+          if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
+            fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
+          fi
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          import hashlib, json, os, sys
+          path, digest, baseline, phase, managed = sys.argv[1:6]
+          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins"}
+          problems = []
+          def canon(value):
+              return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          def load(name):
+              with open(name, "rb") as handle:
+                  raw = handle.read()
+              if not raw.strip():
+                  return {}
+              data = json.loads(raw)
+              if not isinstance(data, dict):
+                  raise ValueError("the top level is not an object")
+              return data
+          try:
+              data = load(path) if os.path.lexists(path) else {}
+          except (OSError, ValueError) as error:
+              print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
+              sys.exit(1)
+          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
+              try:
+                  before = json.loads(baseline)
+              except ValueError:
+                  before = {}
+              now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+              changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
+              problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          if phase.startswith("before"):
+              if data.get("disableAllHooks") is True:
+                  problems.append("the user settings file %s sets disableAllHooks to true." % path)
+              for base in [item for item in managed.split(":") if item]:
+                  files = []
+                  single = os.path.join(base, "managed-settings.json")
+                  if os.path.lexists(single):
+                      files.append(single)
+                  dropins = os.path.join(base, "managed-settings.d")
+                  if os.path.lexists(dropins):
+                      try:
+                          names = sorted(name for name in os.listdir(dropins) if name.endswith(".json") and not name.startswith("."))
+                      except OSError as error:
+                          problems.append("the managed settings directory %s cannot be read (%s)." % (dropins, error))
+                          names = []
+                      files.extend(os.path.join(dropins, name) for name in names)
+                  for name in files:
+                      try:
+                          managed_data = load(name)
+                      except (OSError, ValueError) as error:
+                          problems.append("the managed settings file %s cannot be read as a JSON object (%s)." % (name, error))
+                          continue
+                      for key in ("disableAllHooks", "allowManagedHooksOnly"):
+                          if managed_data.get(key) is True:
+                              problems.append("the managed settings file %s sets %s to true, so the policy hook would not run." % (name, key))
+          for problem in problems:
+              print(problem)
+          sys.exit(1 if problems else 0)
+          PY
+          ); then
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::Command policy check ($PHASE): $line"
+            done <<< "$PROBLEMS"
+            fail "the user or managed settings do not keep the policy hook in force."
+          fi
+          LINES=$(wc -l < "$POLICY_CALL_RECORD" | tr -d ' ')
+          case "$PHASE" in
+            before-*)
+              SUFFIX=" --setting-sources user --settings \"$POLICY_SETTINGS\" --add-dir \"$POLICY_WORKSPACE\""
+              case "${POLICY_ARGS:-}" in
+                *"$SUFFIX") ;;
+                *) fail "the launch arguments do not end with the policy settings flags, so the launch would not load the staged policy." ;;
+              esac
+              echo "call_lines=$LINES" >> "$GITHUB_OUTPUT"
+              ;;
+            after-*)
+              case "${POLICY_CALLS_BEFORE:-}" in
+                ''|*[!0-9]*) fail "the call record line count from before the launch is missing." ;;
+              esac
+              if [ -z "${EXECUTION_FILE:-}" ] || [ ! -f "$EXECUTION_FILE" ]; then
+                echo "::notice::Command policy check ($PHASE): the execution file is missing, so the check that the hook ran for each Bash call is skipped."
+              else
+                BASH_OK=$("$POLICY_INTERPRETER_REAL" -I - "$EXECUTION_FILE" << 'PY'
+          import json, sys
+          with open(sys.argv[1]) as handle:
+              data = json.load(handle)
+          records = []
+          for item in data if isinstance(data, list) else [data]:
+              records.extend(item if isinstance(item, list) else [item])
+          def blocks(record, kind):
+              if not isinstance(record, dict) or record.get("type") != kind:
+                  return []
+              message = record.get("message")
+              content = message.get("content") if isinstance(message, dict) else None
+              return [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+          bash_ids = {block.get("id") for record in records for block in blocks(record, "assistant") if block.get("type") == "tool_use" and block.get("name") == "Bash"}
+          print(sum(1 for record in records for block in blocks(record, "user") if block.get("type") == "tool_result" and block.get("tool_use_id") in bash_ids and not block.get("is_error")))
+          PY
+                ) || fail "the execution file $EXECUTION_FILE cannot be read."
+                if [ "$BASH_OK" -gt 0 ] && [ "$LINES" -le "$POLICY_CALLS_BEFORE" ]; then
+                  fail "the policy hook did not run: the launch ran $BASH_OK Bash calls without an error result, and the call record gained no line."
+                fi
+              fi
+              ;;
+          esac
+          echo "The staged command policy is unchanged ($PHASE)."
 
       - name: Append LLM footer to Claude comment
         env:
@@ -1469,6 +2585,46 @@ jobs:
           fi
 
           bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
+
+      - name: Remove the staged command policy
+        if: always() && steps.runtime_sources.outputs.command_policy == 'true'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          POLICY_DIR: ${{ runner.temp }}/rk-command-policy
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          D="$POLICY_DIR"
+          case "$D" in
+            /*/rk-command-policy) ;;
+            *)
+              echo "::error::The staged command policy path $D does not match the name this workflow creates, so it is not touched."
+              exit 1
+              ;;
+          esac
+          if [ -n "$POLICY_WORKSPACE" ]; then
+            rm -rf "$POLICY_WORKSPACE/.rk-command-policy"
+          fi
+          if [ ! -e "$D" ] && [ ! -L "$D" ]; then
+            echo "No staged command policy at $D."
+            exit 0
+          fi
+          if [ -L "$D" ] || [ ! -d "$D" ] || [ ! -O "$D" ]; then
+            echo "::error::The staged command policy $D is a symlink, not a directory, or not owned by this user, so it is not touched."
+            exit 1
+          fi
+          find "$D" -type d -exec chmod u+rwx {} \;
+          rm -rf "$D"
+          if [ -e "$D" ] || [ -L "$D" ]; then
+            echo "::error::The staged command policy $D is still present after cleanup."
+            exit 1
+          fi
+          echo "Removed the staged command policy $D."
 
       - name: Clean up worktrees after Claude runs
         if: always() && steps.agent_home_cleanup.outcome != 'failure'
