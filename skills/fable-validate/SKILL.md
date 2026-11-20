@@ -65,7 +65,7 @@ Handle the user's reply per the validate-issue procedure — these are main-agen
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
 - **"issueplan"** or **"fableplan"** → apply validate-issue step 10.
-- **"close issue"** → apply validate-issue step 13 to a `Close issue?` verdict, with the footer from the "update issue" bullet. This agent never ran step 0, so step 13 first rebuilds `REPO`, `DEFAULT`, and `BASE` from the step 1 reference and the baseline line the subagent returned, in the dispatch `<clone-dir>` when `REPO` is another repository.
+- **"close issue"** → apply validate-issue step 13 to a `Close issue?` verdict, reading the `close-issue.md` that step 13 points to (beside the `SKILL.md` path step 1 recorded) completely, with the footer from the "update issue" bullet. This agent never ran step 0, so step 13 first rebuilds `REPO`, `DEFAULT`, and `BASE` from the step 1 reference and the baseline line the subagent returned, in the dispatch `<clone-dir>` when `REPO` is another repository.
 
 ## Notes
 
