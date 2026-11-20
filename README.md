@@ -47,9 +47,9 @@ Issues carry a **complexity score** (`C0` to `C100`) in the title and a `plan: y
 
 | Skill | What it does |
 |-------|--------------|
-| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, and `README.md` to match what recent commits changed, working from the latest default branch and opening a PR. |
+| `sync-docs` | Updates `CLAUDE.md`, `AGENTS.md`, existing path-scoped rule files, `SKILL.md`, and `README.md` to match what recent commits changed, working from the latest default branch and opening a PR. It applies the repository's own doc size limits, and reports a blocked sync with no PR when an edit cannot fit a mandatory limit without a decision. |
 | `create-release` | Bumps the package version through a PR, then tags a commit on the default branch and publishes a GitHub release with generated notes. |
-| `sync-docs-release` | Runs `sync-docs`, asks whether to merge its docs PR, then runs `create-release`. |
+| `sync-docs-release` | Runs `sync-docs`, asks whether to merge its docs PR, then runs `create-release`. A blocked sync stops the run before any release. |
 
 ### Fable-driven skills
 
