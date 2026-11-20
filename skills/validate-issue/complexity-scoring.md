@@ -2,6 +2,22 @@
 
 The canonical formula and both routing tables live only in the main skill (step 6).
 
+## Contents
+
+- [What the score is](#what-the-score-is)
+- [Grading rules](#grading-rules)
+- [Build the edit list first](#build-the-edit-list-first)
+- [Axis anchors](#axis-anchors)
+  - [Scope](#scope-feeds-volume)
+  - [Coupling](#coupling-feeds-volume-and-the-capability-floor)
+  - [Risk](#risk-feeds-capability)
+  - [Uncertainty](#uncertainty-feeds-capability)
+  - [Verification](#verification-feeds-volume)
+- [Compute and report](#compute-and-report)
+- [Reachable scores](#reachable-scores)
+- [Golden examples](#golden-examples-consistency-checklist)
+- [Routing details](#routing-details)
+
 ## What the score is
 
 Five grades route the issue; each answers one question about the correct implementation:
