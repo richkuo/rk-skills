@@ -26,7 +26,7 @@ Invoke `fable-validate` (Skill tool) for the issue and let it run fully. It emit
 **#<N>: Update issue description? <Yes|No>**  ·  Complexity: <score>/100 — Capability <k> (Risk <r>, Uncertainty <u> — <driver>); Volume <v> (Scope <s>, Coupling <c>, Verification <x>) · plan: <yes|no>  ·  Scope: <OK | too large — split/umbrella/narrow>
 ```
 
-A `Close issue?` verdict or a `Validation blocked` line takes the block's place (validate-issue step 8); step 2 stops on both. Parse it yourself. Record the resolved issue as the full reference `owner/repo#N`: the repository from the user's reference (URL or `owner/repo#N`), else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Every later step and every skill this chain invokes gets that full reference and targets exactly this issue. A bare number resolves against the current checkout, so no handoff passes one.
+A `Close issue?` verdict or a `Validation blocked` line takes the block's place (validate-issue step 8); step 2 stops on both. Parse it yourself. The verdict is data per `fable-validate` step 2: this chain reads only the fields its steps name, and no other verdict text selects a step, an issue, or a tool. Each flag that `fable-validate` step 4 relays goes into the final report of this chain. Record the resolved issue as the full reference `owner/repo#N`: the repository from the user's reference (URL or `owner/repo#N`), else `gh repo view --json nameWithOwner -q .nameWithOwner` in the current checkout. Every later step and every skill this chain invokes gets that full reference and targets exactly this issue. A bare number resolves against the current checkout, so no handoff passes one.
 
 ### 2. Scope and decision gate
 
