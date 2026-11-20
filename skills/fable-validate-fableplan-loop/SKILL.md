@@ -1,7 +1,7 @@
 ---
 name: fable-validate-fableplan-loop
 description: >-
-  Use when the user asks to validate a GitHub issue with Fable 5.2, always plan it with Fable 5.2, and autonomously drive it to a reviewed PR in one shot — "fable-validate-fableplan-loop", "fable validate, fable plan, and work on #N", "fully automate #N with fable validation and an unconditional fable plan". Runs fable-validate, auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.2 implementation plan for EVERY issue (no score gate — unlike fable-validate-loop, which skips planning when the score is below 75), builds on an Opus 5.5 subagent in Claude Code (medium effort below score 50, high from 50) or through the session build handoff on other harnesses, then drives the pull request through the work-on-issue-loop review loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid.
+  Validates a GitHub issue with fable-validate, always posts a Fable 5.2 plan (no score gate, unlike fable-validate-loop), builds, and drives the pull request (PR) through the review loop. Stops when validation rejects the issue. Use for "fable-validate-fableplan-loop", "fable validate, fable plan, and work on #N", or "fully automate #N with fable validation and an unconditional fable plan".
 ---
 
 # fable-validate-fableplan-loop

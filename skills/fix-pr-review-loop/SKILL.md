@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review-loop
-description: Use when the user asks to fix a PR review and drive it to approval autonomously — "fix the PR review and loop until approved", "fix-pr-review-loop", "keep addressing review comments until this PR is approved". Takes an optional PR number/URL (defaults to the current branch's PR). Repeatedly calls fix-pr-review, waits for the bot's re-review (@claude by default, @codex when selected), and repeats. Stops on a bare LGTM, on the first LGTM past 5 cycles, or to escalate when four or more cycles keep producing blocking findings in code the loop itself added.
+description: Drives a pull request (PR) review to approval. It runs fix-pr-review, waits for the bot's re-review (@claude by default, @codex when selected), and repeats until an LGTM or an escalation. Takes an optional PR number or URL. Use for "fix the PR review and loop until approved", "fix-pr-review-loop", or "keep addressing review comments until this PR is approved".
 ---
 
 # fix-pr-review-loop

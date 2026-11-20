@@ -1,6 +1,6 @@
 ---
 name: prd-to-issues
-description: Turn a finished Product Requirements Document (PRD) into GitHub milestones and complete, scored issues with typed dependencies and Execution blocks. Use for "file the issues from the PRD", "/prd-to-issues", or "break this into GitHub issues". Stage 4 of the new-app-pipeline.
+description: Turns a finished Product Requirements Document (PRD) into GitHub milestones and complete, scored issues with typed dependencies and Execution blocks. Use for "file the issues from the PRD", "/prd-to-issues", or "break this into GitHub issues". Stage 4 of the new-app-pipeline.
 ---
 
 # prd-to-issues

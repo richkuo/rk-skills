@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const emoji = /[\p{Extended_Pictographic}\u{FE0F}\u{20E3}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu
 const descriptionLimit = 1024
+const descriptionRepoLimit = 400
+const descriptionTag = /<[^>]*>/
 
 function descriptionSource(lines) {
   const index = lines.findIndex((line) => line.startsWith('description:'))
@@ -39,6 +41,10 @@ function checkSkill(name) {
   }
   const descriptionBytes = Buffer.byteLength(data.description, 'utf8')
   if (descriptionBytes > descriptionLimit) failures.push(`${path}: description is ${descriptionBytes} bytes in UTF-8 (${[...data.description].length} characters), over the ${descriptionLimit} limit`)
+  const descriptionCharacters = [...data.description].length
+  if (descriptionCharacters > descriptionRepoLimit) failures.push(`${path}: description is ${descriptionCharacters} characters, over the repository limit of ${descriptionRepoLimit}`)
+  const tag = data.description.match(descriptionTag)
+  if (tag) failures.push(`${path}: description contains the angle-bracket sequence ${JSON.stringify(tag[0])}`)
   const expected = descriptionSource(match[1].split('\n'))
   if (!expected) failures.push(`${path}: description is not a top-level key`)
   else if (/^["'|>]/.test(expected.text) && expected.style === 'plain') failures.push(`${path}: description must be a plain scalar or a >- block`)

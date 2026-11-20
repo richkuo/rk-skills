@@ -1,6 +1,6 @@
 ---
 name: fable-validate
-description: Use when the user wants a GitHub issue validated by a Fable 5.2 subagent. Spins up a read-only subagent running on Fable 5.2 that executes the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score), then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/fable-validate", "fable validate <issue>", or "validate this with fable".
+description: Validates a GitHub issue through a read-only Fable 5.2 subagent, which runs the validate-issue procedure (claim tracing, architecture and consistency checks, complexity score) and relays the verdict to the main agent for presentation and any follow-on action. Use for "/fable-validate", "fable validate" with an issue, or "validate this with fable".
 ---
 
 # fable-validate

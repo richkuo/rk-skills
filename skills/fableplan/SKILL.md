@@ -1,6 +1,6 @@
 ---
 name: fableplan
-description: Use when the user wants a task planned by a Fable 5.2 planning subagent. Spins up a Plan subagent running on Fable 5.2 to produce an implementation plan, checks it against the code, relays it to the main agent, and — if a GitHub issue is referenced — posts the plan as a comment on that issue, then stops. It never builds; `work-on-issue` or `fableplan-work-on-issue` builds from the plan. Trigger on "/fableplan", "fableplan this", or "plan this with fable".
+description: Plans a task through a Fable 5.2 Plan subagent, checks the plan against the code, and posts it as a comment when a GitHub issue is referenced, then stops. It never builds; `work-on-issue` or `fableplan-work-on-issue` builds from the plan. Use for "/fableplan", "fableplan this", or "plan this with fable".
 ---
 
 # fableplan

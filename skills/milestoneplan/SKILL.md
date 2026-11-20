@@ -1,6 +1,6 @@
 ---
 name: milestoneplan
-description: Use when the user wants a milestone's execution plan shown as a table — "milestoneplan v1", "/milestoneplan", "show the plan for v1". Read-only - reads every issue in the milestone and renders one table of issue number, description, complexity, dependencies, validate/build model and effort, plan, plan effort, and first-review trigger. Never edits an issue and never launches a run. Stage 6 of the new-app-pipeline.
+description: Shows a milestone's execution plan as one read-only table of issue number, description, complexity, dependencies, validate and build model and effort, plan, plan effort, and first-review trigger. Never edits an issue and never launches a run. Stage 6 of the new-app-pipeline. Use for "milestoneplan v1", "/milestoneplan", or "show the plan for v1".
 ---
 
 # milestoneplan

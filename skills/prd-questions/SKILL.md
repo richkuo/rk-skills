@@ -1,6 +1,6 @@
 ---
 name: prd-questions
-description: Use when the user wants every open question in a PRD resolved interactively — "ask me all questions", "/prd-questions", "let's resolve the open questions". Sweeps the PRD for open questions and ambiguities, asks them in batched multiple-choice form with recommendations, folds every answer back into the owning spec section, and empties the Open Questions section. Stage 2 of the new-app-pipeline.
+description: Resolves every open question in a PRD with the user. It sweeps the PRD for open questions and ambiguities, asks them as batched multiple-choice questions with recommendations, folds each answer into the owning spec section, and empties the Open Questions section. Stage 2 of the new-app-pipeline. Use for "ask me all questions", "/prd-questions", or "let's resolve the open questions".
 ---
 
 # prd-questions

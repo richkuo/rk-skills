@@ -1,6 +1,6 @@
 ---
 name: new-app-pipeline
-description: Use when the user wants to take a new app from raw idea to running multi-agent implementation — "/new-app-pipeline", "let's build a new app", "run the app pipeline on this idea". Orchestrates the full sequence - idea → PRD → question refinement → GitHub issues with Execution blocks → execution-plan review → milestone pre-flight → milestone workflow — with a user checkpoint between every stage.
+description: Takes a new app from raw idea to a running multi-agent build through PRD, question refinement, GitHub issues with Execution blocks, execution-plan review, milestone pre-flight, and the milestone workflow, with a user checkpoint between stages. Use for "/new-app-pipeline", "let's build a new app", or "run the app pipeline on this idea".
 ---
 
 # new-app-pipeline

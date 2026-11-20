@@ -1,6 +1,6 @@
 ---
 name: fable-new-issue-loop
-description: Use when the user asks to have a Fable 5.2 subagent draft and file a GitHub issue, then autonomously drive it all the way to a reviewed PR in one shot — "fable-new-issue-loop", "fable create the issue and run it to completion". Runs fable-new-issue to create a fully-specified issue (drafted by a Fable 5.2 subagent), then hands the new issue's `owner/repo#N` reference to validate-issue-loop (validate → update → work-on-issue-loop) — stopping instead when a duplicate is found or the discussion hasn't converged on one issue.
+description: Has a Fable 5.2 subagent draft and file a GitHub issue through fable-new-issue, then hands the new issue to validate-issue-loop, which drives it to a reviewed pull request (PR). Stops when a duplicate exists or the discussion has not converged on one issue. Use for "fable-new-issue-loop" or "fable create the issue and run it to completion".
 ---
 
 # fable-new-issue-loop

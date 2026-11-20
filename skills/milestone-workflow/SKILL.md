@@ -1,7 +1,6 @@
 ---
 name: milestone-workflow
-description: >-
-  Use when the user wants a milestone of Execution-block-stamped GitHub issues implemented via a multi-agent dynamic workflow: "create the workflow for v0", "run v0 continuously", "/milestone-workflow v0". Builds tracks, gets the run plan approved, runs the milestone-pipeline workflow to LGTM PRs, merges them in-session, and releases when every issue merges. Stage 7 of the new-app-pipeline.
+description: Implements a milestone of Execution-block-stamped GitHub issues through the milestone-pipeline workflow. It builds tracks, gets the run plan approved, runs to LGTM pull requests, merges them in-session, and releases when every issue merges. Stage 7 of the new-app-pipeline. Use for "create the workflow for v0", "run v0 continuously", or "/milestone-workflow v0".
 ---
 
 # milestone-workflow

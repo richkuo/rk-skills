@@ -1,6 +1,6 @@
 ---
 name: fix-pr-review
-description: Use when the user asks to fix, address, or respond to a PR review — "fix the PR review", "/fix-pr-review". Optional PR number/URL (defaults to the current branch's PR); optional `codex` argument selects Codex.
+description: Fixes, addresses, or answers the findings of a pull request (PR) review. Use for "fix the PR review" or "/fix-pr-review". Takes an optional PR number or URL (defaults to the current branch's PR) and an optional `codex` argument that selects Codex.
 ---
 
 # fix-pr-review

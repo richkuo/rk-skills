@@ -1,6 +1,6 @@
 ---
 name: wans
-description: Use when the user types /wans to get the next steps for the current work, written in ASD-STE100, as a short numbered list.
+description: Gives the next steps for the current work as a short numbered list, written in ASD-STE100. Use when the user types /wans.
 ---
 
 # WANS

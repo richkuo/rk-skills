@@ -1,6 +1,6 @@
 ---
 name: new-issue
-description: Use when the user says "new issue", "create an issue", "file an issue", "/new-issue", or asks to turn a bug, idea, or discussion into a GitHub issue. Takes an optional description of what the issue should cover; with no input, derives the issue from what was discussed in the current conversation. Verifies claims against the code before filing and produces a complete, complexity-scored issue, never a stub.
+description: Files a complete, complexity-scored GitHub issue from a bug, idea, or discussion, and verifies each claim against the code first. With no input, it derives the issue from the current conversation. Use when the user says "new issue", "create an issue", "file an issue", or "/new-issue".
 ---
 
 # new-issue
