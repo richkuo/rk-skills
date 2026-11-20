@@ -641,12 +641,492 @@ test_stubs() {
   rm -rf "$uhome/.claude" "$uhome/.mcp.json" "$uhome/rk-fixture-runner"
 }
 
+heredoc_output() {
+  awk -v key="$2" '
+    state == 0 && index($0, key "<<") == 1 { delim = substr($0, length(key) + 3); state = 1; next }
+    state == 1 && $0 == delim { exit }
+    state == 1 { print }
+  ' "$1"
+}
+
+field_of() {
+  bun "$EXTRACT" "$WORKFLOW" "$1" --field "$2" 2>/dev/null
+}
+
+expect_field() {
+  local got
+  got=$(field_of "$1" "$2")
+  if [ "$got" = "$3" ]; then ok "$4"; else bad "$4 ('$got', expected '$3')"; fi
+}
+
+policy_runtime() {
+  local out="$1" script
+  shift
+  script=$(step_script "Resolve immutable runtime revisions")
+  : > "$out"
+  run_script "$script" -i "PATH=$PATH" "GITHUB_OUTPUT=$out" "WORKFLOW_SHA=0123456789abcdef0123456789abcdef01234567" "PLUGINS_OFFICIAL_SHA=e0ab6e51219eef74e417a0e1d89e5d53e5e763d4" "$@"
+}
+
+policy_commit() {
+  local repo="$1" label="$2"
+  git -C "$repo" add -A
+  git -C "$repo" -c user.name=rkfixture -c user.email=rk@fixture.invalid commit -q --allow-empty -m "$label"
+  git -C "$repo" rev-parse HEAD
+}
+
+policy_caller() {
+  local repo="$POLICY_ROOT/caller"
+  rm -rf "$repo"
+  mkdir -p "$repo/.claude/hooks"
+  git -C "$repo" init -q
+  printf 'caller\n' > "$repo/README.md"
+  cp "$HERE/command_policy_fixture.py" "$repo/.claude/hooks/command_policy.py"
+  C_GOOD=$(policy_commit "$repo" good)
+  printf '\n' >> "$repo/README.md"
+  C_OTHER=$(policy_commit "$repo" other)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+  rm "$repo/.claude/hooks/command_policy.py"
+  C_MISSING=$(policy_commit "$repo" missing)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+  rm "$repo/.claude/hooks/command_policy.py"
+  ln -s ../../README.md "$repo/.claude/hooks/command_policy.py"
+  C_SYMLINK=$(policy_commit "$repo" symlink)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+  mkdir -p "$repo/policy-real"
+  git -C "$repo" mv .claude/hooks/command_policy.py policy-real/command_policy.py
+  rmdir "$repo/.claude/hooks"
+  ln -s ../policy-real "$repo/.claude/hooks"
+  C_DIRLINK=$(policy_commit "$repo" dirlink)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+  : > "$repo/.claude/hooks/command_policy.py"
+  C_EMPTY=$(policy_commit "$repo" empty)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+  printf 'def broken(:\n' > "$repo/.claude/hooks/command_policy.py"
+  C_SYNTAX=$(policy_commit "$repo" syntax)
+  git -C "$repo" checkout -q --detach "$C_GOOD"
+}
+
+policy_stage() {
+  local ws="$1" rt="$2" sha="$3" checkout_sha="${4:-$3}" script out="$POLICY_ROOT/stage.out"
+  script=$(step_script "Stage the command policy outside the workspace")
+  if [ -d "$rt/rk-command-policy" ] && [ ! -L "$rt/rk-command-policy" ]; then chmod -R u+rwx "$rt/rk-command-policy"; rm -rf "$rt/rk-command-policy"; fi
+  rm -rf "$ws/.rk-command-policy"
+  mkdir -p "$ws" "$rt" "$POLICY_ROOT/home"
+  git -c advice.detachedHead=false clone -q "$POLICY_ROOT/caller" "$ws/.rk-command-policy"
+  git -C "$ws/.rk-command-policy" checkout -q --detach "$checkout_sha"
+  : > "$out"
+  LAST_LOG="$SCRATCH/log-$RANDOM-$RANDOM.txt"
+  (cd "$ws" && env -i "PATH=$POLICY_STUBS:$PATH" "HOME=$POLICY_ROOT/home" "RUNNER_TEMP=$rt" "GITHUB_OUTPUT=$out" \
+    "COMMAND_POLICY_SHA=$sha" "COMMAND_POLICY_PROOF_ACTION_SHA=${PROOF_SHA_IN-$POLICY_PIN}" \
+    "POLICY_INTERPRETERS=${INTERPRETERS_IN:-$POLICY_PYTHON}" "POLICY_WORKFLOW_FILE=${WORKFLOW_FILE_IN:-$WORKFLOW}" \
+    "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$ws" "AGENT_HOME=$POLICY_ROOT/home" \
+    "GH_TOKEN=$SYNTH_TOKEN" "REPO=owner/repo" "DEFAULT_BRANCH=${DEFAULT_BRANCH_IN:-main}" "RK_FAKE_COMPARE=${COMPARE_IN:-ahead}" \
+    "POLICY_MAIN_MARKETPLACES=$POLICY_MARKETS/pinned"$'\n'"$POLICY_MARKETS/skills"$'\n' "POLICY_MAIN_PLUGINS=code-review@rk-pinned-claude-plugins"$'\n'"rk-skills@rk-skills"$'\n' \
+    "POLICY_GUIDE_MARKETPLACES=${GUIDE_MARKETS_IN:-$POLICY_MARKETS/pinned}"$'\n' "POLICY_GUIDE_PLUGINS=code-review@rk-pinned-claude-plugins"$'\n'"claude-md-management@rk-pinned-claude-plugins"$'\n' \
+    bash --noprofile --norc -eo pipefail "$script") > "$LAST_LOG" 2>&1
+  LAST_STATUS=$?
+  STAGE_OUT="$out"
+}
+
+policy_check() {
+  local phase="$1" args="$2" before="${3:-}" execfile="${4:-}" script
+  script=$(step_script "Check the staged command policy before Claude runs")
+  : > "$POLICY_ROOT/check.out"
+  run_script "$script" -i "PATH=$PATH" "GITHUB_OUTPUT=$POLICY_ROOT/check.out" "PHASE=$phase" "POLICY_ARGS=$args" "POLICY_CALLS_BEFORE=$before" "EXECUTION_FILE=$execfile" \
+    "POLICY_DIR=$(out_of dir)" "POLICY_CHECKER=$(out_of checker)" "POLICY_CHECKER_OID=$(out_of checker_oid)" "POLICY_SETTINGS=$(out_of settings_file)" "POLICY_SETTINGS_OID=$(out_of settings_oid)" \
+    "POLICY_INTERPRETER=$(out_of interpreter)" "POLICY_INTERPRETER_REAL=$(out_of interpreter_real)" "POLICY_INTERPRETER_OID=$(out_of interpreter_oid)" "POLICY_CALL_RECORD=$(out_of call_record)" \
+    "POLICY_USER_SETTINGS=$(out_of user_settings)" "POLICY_USER_SETTINGS_DIGEST=$(out_of user_settings_digest)" "POLICY_USER_SETTINGS_KEYS=$(out_of user_settings_keys)" \
+    "POLICY_USER_SETTINGS_BASE=$(out_of user_settings_base)" "POLICY_USER_SETTINGS_ALLOWED=$(out_of user_settings_allowed)" \
+    "POLICY_WORKSPACE=$POLICY_WS" "POLICY_MANAGED_DIRS=${MANAGED_IN:-$POLICY_ROOT/no-managed}"
+}
+
+out_of() {
+  grep -E "^$1=" "$STAGE_OUT" | tail -n 1 | cut -d= -f2-
+}
+
+policy_suffix() {
+  printf ' --setting-sources user --settings "%s" --add-dir "%s"' "$(out_of settings_file)" "$POLICY_WS"
+}
+
+policy_compose() {
+  local out="$1" mode="$2" flow="$3" policy="$4" settings="$5" script
+  script=$(step_script "Compose Claude prompt")
+  : > "$out"
+  LAST_LOG="$SCRATCH/log-$RANDOM-$RANDOM.txt"
+  (cd "$POLICY_ROOT/compose-ws" && env -i "PATH=$PATH" "HOME=$POLICY_ROOT/home" "RUNNER_TEMP=$POLICY_ROOT/compose-rt" "GITHUB_OUTPUT=$out" \
+    "CLAUDE_HARNESS=anthropics/claude-code-action@v1" "MODEL_ID=claude-opus-5-5" "EFFORT=high" "MODE=$mode" "FLOW=$flow" "EXTRA_ALLOWED=${EXTRA_IN:-}" \
+    "DEFAULT_BRANCH=main" "HEAD_SHA=1111111111111111111111111111111111111111" "BASE_SHA=2222222222222222222222222222222222222222" \
+    "SETTINGS_FILE=$POLICY_ROOT/compose-rt/claude-review-settings.json" "GH_TOKEN=$SYNTH_TOKEN" \
+    "COMMAND_POLICY=$policy" "POLICY_SETTINGS=$settings" "POLICY_WORKSPACE=$POLICY_WS" \
+    bash --noprofile --norc -eo pipefail "$script") > "$LAST_LOG" 2>&1
+  LAST_STATUS=$?
+}
+
+test_policy() {
+  echo "== policy"
+  POLICY_ROOT="$SCRATCH/policy"
+  POLICY_WS="$POLICY_ROOT/ws"
+  POLICY_STUBS="$POLICY_ROOT/stubs"
+  POLICY_MARKETS="$POLICY_ROOT/markets"
+  rm -rf "$POLICY_ROOT"
+  mkdir -p "$POLICY_ROOT" "$POLICY_STUBS" "$POLICY_ROOT/no-managed" "$POLICY_MARKETS/pinned/.claude-plugin" "$POLICY_MARKETS/skills/.claude-plugin" "$POLICY_MARKETS/unnamed/.claude-plugin"
+  printf '{"name": "rk-pinned-claude-plugins", "plugins": []}\n' > "$POLICY_MARKETS/pinned/.claude-plugin/marketplace.json"
+  printf '{"name": "rk-skills", "plugins": []}\n' > "$POLICY_MARKETS/skills/.claude-plugin/marketplace.json"
+  printf '{"plugins": []}\n' > "$POLICY_MARKETS/unnamed/.claude-plugin/marketplace.json"
+  printf '#!/bin/sh\n[ "$RK_FAKE_COMPARE" = fail ] && exit 1\nprintf "%%s\\n" "$RK_FAKE_COMPARE"\n' > "$POLICY_STUBS/gh"
+  chmod 755 "$POLICY_STUBS/gh"
+  POLICY_PYTHON=$(command -v python3)
+  POLICY_PIN=$(grep -oE 'anthropics/claude-code-action@[0-9a-f]{40}' "$WORKFLOW" | head -n 1 | cut -d@ -f2)
+  local good_sha="0123456789abcdef0123456789abcdef01234567" mode out rt="$POLICY_ROOT/rt" settings hook_cmd
+
+  for mode in implement fix-pr fix-pr-review; do
+    for bad_sha in "" 0123456 0123456789ABCDEF0123456789ABCDEF01234567 "$good_sha"$'\n'"$good_sha"; do
+      policy_runtime "$POLICY_ROOT/rt.out" "MODE=$mode" "COMMAND_POLICY=true" "COMMAND_POLICY_SHA=$bad_sha"
+      expect_status 1 "policy revision: $mode refuses the revision '$(printf '%s' "$bad_sha" | head -c 12 | tr '\n' ' ')'"
+      if grep -q '^command_policy=' "$POLICY_ROOT/rt.out"; then bad "policy revision: a refused $mode run wrote an output"; fi
+    done
+    policy_runtime "$POLICY_ROOT/rt.out" "MODE=$mode" "COMMAND_POLICY=true" "COMMAND_POLICY_SHA=$good_sha"
+    expect_status 0 "policy revision: $mode accepts a full revision"
+    expect_output "$POLICY_ROOT/rt.out" command_policy true "policy revision: $mode emits command_policy=true"
+    expect_output "$POLICY_ROOT/rt.out" command_policy_sha "$good_sha" "policy revision: $mode emits the revision"
+    policy_runtime "$POLICY_ROOT/rt.out" "MODE=$mode" "COMMAND_POLICY=false" "COMMAND_POLICY_SHA=not-a-sha"
+    expect_status 0 "policy revision: $mode with the opt-in off runs with any revision text"
+    expect_output "$POLICY_ROOT/rt.out" command_policy false "policy revision: $mode with the opt-in off emits command_policy=false"
+  done
+  policy_runtime "$POLICY_ROOT/rt.out" "MODE=review" "COMMAND_POLICY=true" "COMMAND_POLICY_SHA="
+  expect_status 0 "policy revision: review ignores the opt-in"
+  expect_output "$POLICY_ROOT/rt.out" command_policy false "policy revision: review emits command_policy=false"
+
+  expect_field "Checkout the caller command policy" with.repository '${{ github.repository }}' "policy checkout: reads the calling repository"
+  expect_field "Checkout the caller command policy" with.ref '${{ steps.runtime_sources.outputs.command_policy_sha }}' "policy checkout: reads the validated revision"
+  expect_field "Checkout the caller command policy" with.path .rk-command-policy "policy checkout: uses its own path"
+  expect_field "Checkout the caller command policy" with.fetch-depth 1 "policy checkout: fetches one commit"
+  expect_field "Checkout the caller command policy" with.persist-credentials false "policy checkout: keeps no credential"
+  expect_field "Checkout the caller command policy" if "steps.runtime_sources.outputs.command_policy == 'true'" "policy checkout: runs only with the opt-in"
+  expect_field "Run Claude Code" with.claude_args '${{ steps.compose_prompt.outputs.claude_args }}' "policy launch: the main launch reads claude_args"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_MAIN_MARKETPLACES "$(field_of "Run Claude Code" with.plugin_marketplaces)" "policy stage: the expected main marketplaces equal the main launch input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_MAIN_PLUGINS "$(field_of "Run Claude Code" with.plugins)" "policy stage: the expected main plugins equal the main launch input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_GUIDE_MARKETPLACES "$(field_of "Revise CLAUDE.md with session learnings" with.plugin_marketplaces)" "policy stage: the expected guide marketplaces equal the guide revision input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_GUIDE_PLUGINS "$(field_of "Revise CLAUDE.md with session learnings" with.plugins)" "policy stage: the expected guide plugins equal the guide revision input"
+  expect_field "Revise CLAUDE.md with session learnings" with.claude_args '${{ steps.compose_prompt.outputs.guide_claude_args }}' "policy launch: the guide revision reads guide_claude_args"
+  expect_field "Run Claude Code" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the main launch loads instruction files from added directories"
+  expect_field "Revise CLAUDE.md with session learnings" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the guide revision loads instruction files from added directories"
+
+  policy_caller
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 0 "policy stage: a good policy is staged"
+  settings=$(out_of settings_file)
+  if [ "$(find "$rt/rk-command-policy" -maxdepth 0 -perm 0500 -print)" = "$rt/rk-command-policy" ] && [ -n "$(find "$(out_of checker)" -perm 0400 -print)" ] && [ -n "$(find "$settings" -perm 0400 -print)" ] && [ -n "$(find "$(out_of call_record)" -perm 0600 -print)" ]; then ok "policy stage: the directory is 0500, the checker and settings 0400, the call record 0600"; else bad "policy stage: wrong modes in the staged directory"; fi
+  if [ ! -e "$POLICY_WS/.rk-command-policy" ]; then ok "policy stage: the scratch checkout is removed"; else bad "policy stage: the scratch checkout stays"; fi
+  if cmp -s "$(out_of checker)" "$HERE/command_policy_fixture.py"; then ok "policy stage: the staged checker is the committed file"; else bad "policy stage: the staged checker differs from the committed file"; fi
+  if jq -e --arg c "$(out_of checker)" --arg h "$(out_of checker_sha256)" --arg r "$(out_of call_record)" '
+      .disableAllHooks == false and (keys | sort) == ["disableAllHooks", "hooks"] and (.hooks | keys) == ["PreToolUse"]
+      and (.hooks.PreToolUse | length) == 1 and .hooks.PreToolUse[0].matcher == "Bash" and (.hooks.PreToolUse[0].hooks | length) == 1
+      and .hooks.PreToolUse[0].hooks[0].type == "command" and .hooks.PreToolUse[0].hooks[0].timeout == 30 and .hooks.PreToolUse[0].hooks[0].onFailure == "block"
+      and (.hooks.PreToolUse[0].hooks[0].command | startswith("/") and contains(" -I -c ") and contains($c) and contains($h) and contains($r))' "$settings" >/dev/null; then ok "policy stage: the settings file has the expected shape"; else bad "policy stage: the settings file shape is wrong"; fi
+  expect_output "$STAGE_OUT" instructions_env 1 "policy stage: instruction files from added directories are turned on"
+  expect_output "$STAGE_OUT" interpreter "$POLICY_PYTHON" "policy stage: the interpreter comes from the fixed list"
+
+  hook_cmd=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$settings")
+  for pair in "rk-policy-block-marker:2" "echo harmless:0" "rk-policy-crash-marker:2"; do
+    LAST_LOG="$SCRATCH/hook-$RANDOM.log"
+    (cd "$POLICY_WS" && jq -cn --arg c "${pair%:*}" '{tool_name: "Bash", tool_input: {command: $c}, cwd: "/"}' | /bin/sh -c "$hook_cmd") > "$LAST_LOG" 2>&1
+    LAST_STATUS=$?
+    expect_status "${pair##*:}" "policy hook: the command '${pair%:*}' exits ${pair##*:}"
+  done
+  if [ "$(wc -l < "$(out_of call_record)" | tr -d ' ')" = 3 ]; then ok "policy hook: each run adds one call record line"; else bad "policy hook: the call record has $(wc -l < "$(out_of call_record)") lines, expected 3"; fi
+
+  local spaced="$POLICY_ROOT/runner temp"
+  policy_stage "$POLICY_WS" "$spaced" "$C_GOOD" "$C_GOOD"
+  expect_status 0 "policy stage: a RUNNER_TEMP with a space is staged"
+  hook_cmd=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$(out_of settings_file)")
+  for pair in "rk-policy-block-marker:2" "echo harmless:0"; do
+    LAST_LOG="$SCRATCH/hook-$RANDOM.log"
+    (cd "$POLICY_WS" && jq -cn --arg c "${pair%:*}" '{tool_name: "Bash", tool_input: {command: $c}}' | /bin/sh -c "$hook_cmd") > "$LAST_LOG" 2>&1
+    LAST_STATUS=$?
+    expect_status "${pair##*:}" "policy hook: with a space in RUNNER_TEMP, '${pair%:*}' exits ${pair##*:}"
+  done
+  chmod -R u+rwx "$spaced"
+
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_OTHER"
+  expect_status 1 "policy stage: a checkout at another commit is refused"
+  expect_log "which differs from command_policy_sha" "policy stage: a checkout at another commit is refused (reason)"
+  policy_stage "$POLICY_WS" "$rt" "$C_MISSING" "$C_MISSING"
+  expect_status 1 "policy stage: a missing checker is refused"
+  expect_log "is missing at" "policy stage: a missing checker is refused (reason)"
+  policy_stage "$POLICY_WS" "$rt" "$C_SYMLINK" "$C_SYMLINK"
+  expect_status 1 "policy stage: a symlinked checker is refused"
+  expect_log "is not a regular file at" "policy stage: a symlinked checker is refused (reason)"
+  policy_stage "$POLICY_WS" "$rt" "$C_DIRLINK" "$C_DIRLINK"
+  expect_status 1 "policy stage: a symlinked .claude/hooks is refused"
+  expect_log "is missing at" "policy stage: a symlinked .claude/hooks is refused (reason)"
+  policy_stage "$POLICY_WS" "$rt" "$C_EMPTY" "$C_EMPTY"
+  expect_status 1 "policy stage: an empty checker is refused"
+  expect_log "is empty at" "policy stage: an empty checker is refused (reason)"
+  GUIDE_MARKETS_IN="$POLICY_MARKETS/unnamed" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a staged marketplace with no name is refused"
+  expect_log "has no name" "policy stage: a staged marketplace with no name is refused (reason)"
+  GUIDE_MARKETS_IN="$POLICY_MARKETS/missing" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a missing staged marketplace is refused"
+  policy_stage "$POLICY_WS" "$rt" "$C_SYNTAX" "$C_SYNTAX"
+  expect_status 1 "policy stage: a checker with a syntax error is refused"
+  expect_log "does not compile" "policy stage: a checker with a syntax error is refused (reason)"
+  INTERPRETERS_IN="$POLICY_ROOT/none/python3:/nonexistent/python3" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: no interpreter in the list is refused"
+  expect_log "no hook interpreter" "policy stage: no interpreter in the list is refused (reason)"
+  INTERPRETERS_IN="python3" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a relative interpreter name is refused"
+  expect_log "no hook interpreter" "policy stage: a relative interpreter name is refused (reason)"
+  mkdir -p "$POLICY_WS/bin"
+  ln -sf "$POLICY_PYTHON" "$POLICY_WS/bin/python3"
+  INTERPRETERS_IN="$POLICY_WS/bin/python3" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: an interpreter path inside the workspace is refused"
+  expect_log "where a session can change it" "policy stage: an interpreter path inside the workspace is refused (reason)"
+  rm -rf "${POLICY_WS:?}/bin"
+  PROOF_SHA_IN=1111111111111111111111111111111111111111 policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a pinned action that differs from the proof commit is refused"
+  expect_log "that the hook proof ran against" "policy stage: a pinned action that differs from the proof commit is refused (reason)"
+  PROOF_SHA_IN="" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: an empty proof commit is refused"
+  expect_log "no hook proof is recorded" "policy stage: an empty proof commit is refused (reason)"
+  awk '!done && /uses: anthropics\/claude-code-action@[0-9a-f]+/ { sub(/@[0-9a-f]+/, "@v1"); done = 1 } { print }' "$WORKFLOW" > "$POLICY_ROOT/tag-workflow.yml"
+  if grep -q 'uses: anthropics/claude-code-action@v1 ' "$POLICY_ROOT/tag-workflow.yml"; then ok "policy stage: the tag fixture holds a tag pin"; else bad "policy stage: the tag fixture holds no tag pin"; fi
+  WORKFLOW_FILE_IN="$POLICY_ROOT/tag-workflow.yml" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: an action step pinned to a tag is refused"
+  expect_log "does not pin anthropics/claude-code-action to a full commit" "policy stage: an action step pinned to a tag is refused (reason)"
+  for status in behind diverged fail; do
+    COMPARE_IN="$status" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+    expect_status 1 "policy stage: a default branch compare that reports $status is refused"
+    if [ "$status" = fail ]; then expect_log "failed." "policy stage: the failed compare is named"; else expect_log "is not on the default branch" "policy stage: the $status compare is named"; fi
+  done
+  COMPARE_IN=identical policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 0 "policy stage: a revision identical to the default branch is staged"
+  DEFAULT_BRANCH_IN='main;x' policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a default branch name with shell characters is refused"
+  expect_log "is not a plain branch name" "policy stage: a default branch name with shell characters is refused (reason)"
+  policy_stage "$POLICY_WS" "$rt" "0123456" "$C_GOOD"
+  expect_status 1 "policy stage: an abbreviated revision is refused"
+  expect_log "is not a full commit identifier" "policy stage: an abbreviated revision is refused (reason)"
+  mkdir -p "$POLICY_ROOT/elsewhere"
+  rm -rf "$rt/rk-command-policy"
+  ln -s "$POLICY_ROOT/elsewhere" "$rt/rk-command-policy"
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 0 "policy stage: a symlink at the staging path is replaced"
+  if [ ! -L "$rt/rk-command-policy" ] && [ -d "$POLICY_ROOT/elsewhere" ] && [ -z "$(ls -A "$POLICY_ROOT/elsewhere")" ]; then ok "policy stage: the symlink target is untouched"; else bad "policy stage: the symlink target changed"; fi
+
+  local compose_rt="$POLICY_ROOT/compose-rt" off_args on_args off_guide on_guide suffix guide_literal flow
+  mkdir -p "$compose_rt/rk-shared" "$POLICY_ROOT/compose-ws"
+  cp -R "$REPO_ROOT/templates/claude-workflow/prompts" "$compose_rt/rk-shared/prompts"
+  git -C "$POLICY_ROOT/compose-ws" init -q
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  settings=$(out_of settings_file)
+  suffix=$(policy_suffix)
+  guide_literal='--model claude-opus-5-5 --effort high --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"'
+  for shape in implement: fix-pr: fix-pr-review: review: implement:sync-docs implement:create-release implement:sync-release; do
+    mode="${shape%%:*}"
+    flow="${shape#*:}"
+    policy_compose "$POLICY_ROOT/off.out" "$mode" "$flow" false ""
+    expect_status 0 "policy compose: $shape with the opt-in off runs"
+    off_args=$(heredoc_output "$POLICY_ROOT/off.out" claude_args)
+    off_guide=$(heredoc_output "$POLICY_ROOT/off.out" guide_claude_args)
+    case "$off_args" in *--add-dir*) bad "policy compose: $shape with the opt-in off holds --add-dir" ;; *) ok "policy compose: $shape with the opt-in off holds no --add-dir" ;; esac
+    case "$mode:$off_args" in
+      review:*--settings*) ok "policy compose: review with the opt-in off keeps its own settings file" ;;
+      review:*) bad "policy compose: review lost its settings file" ;;
+      *:*--settings*) bad "policy compose: $shape with the opt-in off holds --settings" ;;
+      *) ok "policy compose: $shape with the opt-in off holds no --settings" ;;
+    esac
+    if [ "$off_guide" = "$guide_literal" ]; then ok "policy compose: $shape with the opt-in off keeps the guide revision arguments"; else bad "policy compose: $shape guide revision arguments differ: $off_guide"; fi
+    policy_compose "$POLICY_ROOT/on.out" "$mode" "$flow" true "$settings"
+    expect_status 0 "policy compose: $shape with the opt-in on runs"
+    on_args=$(heredoc_output "$POLICY_ROOT/on.out" claude_args)
+    on_guide=$(heredoc_output "$POLICY_ROOT/on.out" guide_claude_args)
+    if [ "$mode" = review ]; then
+      if [ "$on_args" = "$off_args" ]; then ok "policy compose: review arguments are byte-identical with the opt-in on"; else bad "policy compose: review arguments change with the opt-in on"; fi
+    else
+      if [ "$on_args" = "$off_args$suffix" ]; then ok "policy compose: $shape with the opt-in on adds exactly the policy flags at the end"; else bad "policy compose: $shape with the opt-in on does not equal the off arguments plus the policy flags"; fi
+      if [ "$on_guide" = "$guide_literal$suffix" ]; then ok "policy compose: $shape guide revision arguments add exactly the policy flags"; else bad "policy compose: $shape guide revision arguments with the opt-in on are wrong"; fi
+    fi
+  done
+  policy_compose "$POLICY_ROOT/on.out" implement "" true ""
+  expect_status 1 "policy compose: the opt-in with no staged settings file stops the run"
+  policy_compose "$POLICY_ROOT/on.out" implement "" true "$POLICY_ROOT/bad\"path/settings.json"
+  expect_status 1 "policy compose: a settings path with a double quote stops the run"
+
+  local args_on="--model m$suffix" home_settings="$POLICY_ROOT/home/.claude/settings.json" exec_file="$POLICY_ROOT/execution.json"
+  local bodies=() n
+  for n in "before Claude runs" "after Claude runs" "before the CLAUDE.md revision" "after the CLAUDE.md revision"; do
+    bodies+=("$(step_script "Check the staged command policy $n")")
+  done
+  if cmp -s "${bodies[0]}" "${bodies[1]}" && cmp -s "${bodies[0]}" "${bodies[2]}" && cmp -s "${bodies[0]}" "${bodies[3]}"; then ok "policy check: the four check steps share one script body"; else bad "policy check: the four check step bodies differ"; fi
+
+  policy_check before-main "$args_on"
+  expect_status 0 "policy check: an unchanged policy passes before the launch"
+  expect_output "$POLICY_ROOT/check.out" call_lines 0 "policy check: the before phase records the call record line count"
+  printf '[{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git status"}}]}},{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":false,"content":"ok"}]}}]\n' > "$exec_file"
+  policy_check after-main "$args_on" 0 "$exec_file"
+  expect_status 1 "policy check: an executed Bash call with no call record line fails after the launch"
+  expect_log "the policy hook did not run" "policy check: the failure names the hook that did not run"
+  chmod u+w "$(out_of call_record)"
+  printf '1 1\n' >> "$(out_of call_record)"
+  policy_check after-main "$args_on" 0 "$exec_file"
+  expect_status 0 "policy check: an executed Bash call with a call record line passes after the launch"
+  policy_check after-main "$args_on" 0 "$POLICY_ROOT/missing-execution.json"
+  expect_status 0 "policy check: a missing execution file skips the hook-ran check"
+  expect_log "the execution file is missing" "policy check: the skip is named"
+  policy_check after-main "$args_on" ""
+  expect_status 1 "policy check: a missing line count before the launch fails"
+  expect_log "line count from before the launch is missing" "policy check: a missing line count before the launch fails (reason)"
+  policy_check before-main "--model m"
+  expect_status 1 "policy check: launch arguments without the policy flags fail before the launch"
+  expect_log "do not end with the policy settings flags" "policy check: launch arguments without the policy flags fail before the launch (reason)"
+  policy_check before-main "--model m$suffix --settings other.json"
+  expect_status 1 "policy check: launch arguments where the policy flags are not last fail before the launch"
+
+  mkdir -p "$POLICY_ROOT/home/.claude"
+  local pinned_entry skills_entry
+  pinned_entry=$(jq -cn --arg p "$POLICY_MARKETS/pinned" '{source: {source: "directory", path: $p}}')
+  skills_entry=$(jq -cn --arg p "$POLICY_MARKETS/skills" '{source: {source: "directory", path: $p}}')
+  write_user() {
+    jq -n --argjson pinned "$pinned_entry" --argjson skills "$skills_entry" "$1" > "$home_settings"
+  }
+  write_user '{enableAllProjectMcpServers: true, enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "rk-skills@rk-skills": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned, "rk-skills": $skills}}'
+  policy_check after-main "$args_on" 0
+  expect_status 0 "policy check: the marketplaces and plugins of the main launch pass after it"
+  policy_check before-guide "$args_on"
+  expect_status 0 "policy check: the marketplaces and plugins of the main launch pass before the guide revision"
+  policy_check before-main "$args_on"
+  expect_status 1 "policy check: plugin entries before the main launch installs them fail"
+  expect_log "enabledPlugins holds the entry" "policy check: the early plugin entry is named"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "rk-skills@rk-skills": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned, "rk-skills": $skills, "rk-extra": {source: {source: "directory", path: "/tmp/rk-extra-market"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an added marketplace fails"
+  expect_log 'extraKnownMarketplaces holds the entry "rk-extra"' "policy check: the added marketplace is named"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": {source: {source: "directory", path: "/tmp/rk-other-path"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected marketplace name with another directory fails"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": {source: {source: "github", repo: "someone/market"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected marketplace name with another source type fails"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "other@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an added enabled plugin fails"
+  expect_log 'enabledPlugins holds the entry "other@rk-pinned-claude-plugins"' "policy check: the added plugin is named"
+  write_user '{enabledPlugins: {"claude-md-management@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned}}'
+  policy_check before-guide "$args_on"
+  expect_status 1 "policy check: a guide revision plugin before the guide revision launch fails"
+  policy_check after-guide "$args_on" 0
+  expect_status 0 "policy check: a guide revision plugin after the guide revision launch passes"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": false}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected plugin with a value other than true fails"
+  write_user '{enabledPlugins: ["code-review@rk-pinned-claude-plugins"]}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an enabledPlugins value that is not an object fails"
+  write_user '{enableAllProjectMcpServers: false}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an enableAllProjectMcpServers value that the job does not write fails"
+  rm -f "$home_settings"
+  printf '{"hooks": {"PreToolUse": []}}\n' > "$home_settings"
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: user settings with a new hooks key fail"
+  expect_log "changed top-level keys: hooks" "policy check: the failure names the changed key"
+  printf '{"disableAllHooks": true}\n' > "$home_settings"
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  policy_check before-main "--model m$(policy_suffix)"
+  expect_status 1 "policy check: user settings with disableAllHooks true fail before the launch"
+  expect_log "sets disableAllHooks to true" "policy check: user settings with disableAllHooks true fail before the launch (reason)"
+  rm -f "$home_settings"
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  args_on="--model m$(policy_suffix)"
+  mkdir -p "$POLICY_ROOT/managed-a" "$POLICY_ROOT/managed-b/managed-settings.d"
+  printf '{"allowManagedHooksOnly": true}\n' > "$POLICY_ROOT/managed-a/managed-settings.json"
+  MANAGED_IN="$POLICY_ROOT/managed-a" policy_check before-main "$args_on"
+  expect_status 1 "policy check: a managed allowManagedHooksOnly true fails before the launch"
+  expect_log "sets allowManagedHooksOnly to true" "policy check: a managed allowManagedHooksOnly true fails before the launch (reason)"
+  printf '{"disableAllHooks": true}\n' > "$POLICY_ROOT/managed-b/managed-settings.d/20-hooks.json"
+  MANAGED_IN="$POLICY_ROOT/managed-b" policy_check before-main "$args_on"
+  expect_status 1 "policy check: a managed drop-in with disableAllHooks true fails before the launch"
+  expect_log "managed-settings.d/20-hooks.json sets disableAllHooks to true" "policy check: a managed drop-in with disableAllHooks true fails before the launch (reason)"
+  printf '{"disableAllHooks": false}\n' > "$POLICY_ROOT/managed-b/managed-settings.d/20-hooks.json"
+  MANAGED_IN="$POLICY_ROOT/managed-b" policy_check before-main "$args_on"
+  expect_status 0 "policy check: a managed drop-in with disableAllHooks false passes"
+
+  policy_mutate() {
+    policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+    args_on="--model m$(policy_suffix)"
+    chmod 700 "$rt/rk-command-policy"
+    "$@"
+    policy_check before-main "$args_on"
+  }
+  change_checker() { chmod 600 "$(out_of checker)"; printf '\n' >> "$(out_of checker)"; chmod 400 "$(out_of checker)"; chmod 500 "$rt/rk-command-policy"; }
+  change_settings() { chmod 600 "$(out_of settings_file)"; printf ' ' >> "$(out_of settings_file)"; chmod 400 "$(out_of settings_file)"; chmod 500 "$rt/rk-command-policy"; }
+  delete_checker() { rm -f "$(out_of checker)"; chmod 500 "$rt/rk-command-policy"; }
+  link_checker() { cp "$(out_of checker)" "$POLICY_ROOT/copy.py"; rm -f "$(out_of checker)"; ln -s "$POLICY_ROOT/copy.py" "$(out_of checker)"; chmod 500 "$rt/rk-command-policy"; }
+  extra_file() { : > "$rt/rk-command-policy/extra"; chmod 500 "$rt/rk-command-policy"; }
+  open_dir() { :; }
+  policy_mutate change_checker
+  expect_status 1 "policy check: a changed checker fails"
+  expect_log "changed since the policy was staged" "policy check: a changed checker fails (reason)"
+  policy_mutate change_settings
+  expect_status 1 "policy check: a changed settings file fails"
+  expect_log "changed since the policy was staged" "policy check: a changed settings file fails (reason)"
+  policy_mutate delete_checker
+  expect_status 1 "policy check: a deleted checker fails"
+  expect_log "unexpected set of entries" "policy check: a deleted checker fails (reason)"
+  policy_mutate link_checker
+  expect_status 1 "policy check: a symlink in place of the checker fails"
+  expect_log "a symlink, or not a regular file" "policy check: a symlink in place of the checker fails (reason)"
+  policy_mutate extra_file
+  expect_status 1 "policy check: an extra file in the staged directory fails"
+  expect_log "unexpected set of entries" "policy check: an extra file in the staged directory fails (reason)"
+  policy_mutate open_dir
+  expect_status 1 "policy check: a staged directory that is writable again fails"
+  expect_log "does not have mode 0500" "policy check: a staged directory that is writable again fails (reason)"
+
+  mkdir -p "$POLICY_ROOT/interp"
+  ln -sf "$POLICY_PYTHON" "$POLICY_ROOT/interp/python3"
+  INTERPRETERS_IN="$POLICY_ROOT/interp/python3" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 0 "policy stage: an interpreter symlink outside the workspace is staged"
+  args_on="--model m$(policy_suffix)"
+  policy_check before-main "$args_on"
+  expect_status 0 "policy check: the interpreter link passes before it moves"
+  ln -sf "$(command -v git)" "$POLICY_ROOT/interp/python3"
+  policy_check before-main "$args_on"
+  expect_status 1 "policy check: a moved interpreter link fails"
+  expect_log "now resolves to" "policy check: a moved interpreter link fails (reason)"
+
+  local cleanup target="$POLICY_ROOT/cleanup-target"
+  cleanup=$(step_script "Remove the staged command policy")
+  policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  chmod 700 "$rt/rk-command-policy"
+  mkdir -p "$rt/rk-command-policy/locked/inner"
+  : > "$rt/rk-command-policy/locked/inner/file"
+  chmod 000 "$rt/rk-command-policy/locked"
+  chmod 500 "$rt/rk-command-policy"
+  mkdir -p "$POLICY_WS/.rk-command-policy"
+  run_script "$cleanup" -i "PATH=$PATH" "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$POLICY_WS"
+  expect_status 0 "policy cleanup: a read-only staged tree with a mode-0000 directory is removed"
+  if [ ! -e "$rt/rk-command-policy" ] && [ ! -e "$POLICY_WS/.rk-command-policy" ]; then ok "policy cleanup: the staged tree and a leftover checkout are gone"; else bad "policy cleanup: an entry stays"; fi
+  run_script "$cleanup" -i "PATH=$PATH" "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$POLICY_WS"
+  expect_status 0 "policy cleanup: an absent staged tree passes"
+  mkdir -p "$target"
+  printf 'keep\n' > "$target/file"
+  ln -s "$target" "$rt/rk-command-policy"
+  run_script "$cleanup" -i "PATH=$PATH" "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$POLICY_WS"
+  expect_status 1 "policy cleanup: a symlink at the staged path is refused"
+  if [ "$(cat "$target/file")" = keep ]; then ok "policy cleanup: the symlink target is untouched"; else bad "policy cleanup: the symlink target changed"; fi
+  rm -f "$rt/rk-command-policy"
+  run_script "$cleanup" -i "PATH=$PATH" "POLICY_DIR=$rt/other-name" "POLICY_WORKSPACE=$POLICY_WS"
+  expect_status 1 "policy cleanup: a path with another name is refused"
+}
+
 for tool in bun git jq; do
   command -v "$tool" >/dev/null 2>&1 || { echo "missing $tool" >&2; exit 2; }
 done
 
 SUITES=("$@")
-[ "${#SUITES[@]}" -gt 0 ] || SUITES=(contract guard settings cleanup agent_home stubs)
+[ "${#SUITES[@]}" -gt 0 ] || SUITES=(contract guard settings cleanup agent_home stubs policy)
 for suite in "${SUITES[@]}"; do
   case "$suite" in
     contract) test_contract ;;
@@ -655,6 +1135,7 @@ for suite in "${SUITES[@]}"; do
     cleanup) test_cleanup ;;
     agent_home) test_agent_home ;;
     stubs) test_stubs ;;
+    policy) test_policy ;;
     *) echo "unknown suite: $suite" >&2; exit 2 ;;
   esac
 done

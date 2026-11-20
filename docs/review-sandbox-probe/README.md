@@ -17,14 +17,23 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   operator's home or a live runner directory. It changes the host; see
   "Host changes" below.
 - `mock_messages_api.py`: a standard-library mock of the Messages API. It
-  answers each Claude Code request with the next scripted Bash call and logs
-  each tool result.
+  answers each Claude Code request with the next scripted tool call (a Bash
+  command, or an object that names another tool and its input), logs each
+  tool result, and with `--marker` logs each request that holds a given text.
 - `run-fixtures.sh`: shell-level checks of the contract, guard, settings,
-  cleanup, agent home, and stub steps. The contract, guard, settings, and
-  cleanup suites run on macOS too. The agent home suite needs Linux. The stub
-  suite needs Linux, root, and `RK_PROBE_USER`.
+  cleanup, agent home, stub, and command policy steps. The contract, guard,
+  settings, cleanup, and `policy` suites run on macOS too. The agent home
+  suite needs Linux. The stub suite needs Linux, root, and `RK_PROBE_USER`.
+  The `policy` suite runs the revision check, the staging step with a local
+  fixture repository, the hook command, the compose step for every route and
+  flow, the four check steps, and the cleanup step.
+- `command_policy_fixture.py`: a standard-library checker with the caller
+  contract. It blocks a Bash command that holds `rk-policy-block-marker`,
+  raises on `rk-policy-crash-marker`, sleeps 60 seconds on
+  `rk-policy-sleep-marker`, and allows every other command.
 - `extract-step.mjs`: prints a step's `run` script from a workflow, with Bun's
-  YAML parser.
+  YAML parser. With `--field <dotted key>` it prints one scalar field of a
+  step of any kind, such as `with.claude_args` or `env.<NAME>`.
 
 ## Run it
 
@@ -49,6 +58,7 @@ The probe leaves these changes on the host after it ends:
 | Installs Claude Code and the extracted step scripts under `/opt/rk-review-sandbox-probe` | `sudo rm -rf /opt/rk-review-sandbox-probe` |
 | Builds the layouts under `/srv/rk-review-sandbox-probe` (or `RK_PROBE_BASE`) | `sudo rm -rf /srv/rk-review-sandbox-probe` |
 | Writes the results and run files under `/var/tmp/rk-review-sandbox-probe` (or `RK_PROBE_OUT`) | `sudo rm -rf /var/tmp/rk-review-sandbox-probe` |
+| Fetches `anthropics/claude-code-action` at the pin, its `base-action` dependencies (`bun install --frozen-lockfile`), and a copy of `bun` under `/opt/rk-review-sandbox-probe` for the command policy gates; the Bun install cache stays in root's home | `sudo rm -rf /opt/rk-review-sandbox-probe`; `sudo rm -rf ~root/.bun/install/cache` |
 | Leaves empty temporary homes and probe sibling homes in `.rk-claude-homes` in the passwd home directory of root and of the probe user, and probe sibling homes directly in `/tmp` for cases (a) and (b) | Only while no review runs on the host as root, `sudo rm -rf ~root/.rk-claude-homes`; `sudo userdel -r rkprobe` removes the probe user's copy; restart for `/tmp/rk-probe-sibling.*`. A review removes empty homes older than one day by itself |
 
 Each run deletes and creates again the three directories under `/opt`, `/srv`,
@@ -94,5 +104,43 @@ host git config write, and a repeated run; K8 a write-route run with and
 without stubs; K9 the temporary home cleanup after success, a forced API
 failure, and a kill during a tool call.
 
-The probe exits non-zero when a case (d) check, a K5, K8, or K9 check, or a
-fixture suite fails. It reports cases (a) to (c) without failing on them.
+Command policy gates (`== command policy` in the results) prove the
+`command_policy` and `command_policy_sha` inputs of `claude-run.yml` on the
+Claude Code version that the pin installs. The probe fetches
+the action at the pin and launches it through its own entrypoint,
+`base-action/src/index.ts`, as the probe user, so the action's settings write,
+plugin install, argument parser, and Agent SDK launch all run. The launch
+arguments come from the extracted compose step, and the staged policy comes
+from the extracted staging step with the fixture checker. Each workspace holds
+a pull request state: an allow-all checker, a `.claude/settings.json` and a
+`.claude/settings.local.json` whose hooks write marker files, and a
+`CLAUDE.md` with a marker text.
+
+- CP1: for the implement, fix-pr, and CLAUDE.md revision launch shapes, the
+  harmless block command (`git log --format=rk-policy-block-marker --output=<file>`)
+  is blocked with the fixture message, and the allow command writes its file.
+- CP2: the call is blocked when the hook interpreter does not exist, when the
+  staged checker is removed or changed, when the checker raises, and when it
+  runs past the timeout. A control without `onFailure` is reported only.
+- CP3: no workspace or local settings hook runs, no server from the workspace
+  `.mcp.json` starts, and the policy still blocks after `git checkout` to a
+  branch with other `.claude` files and in a `git worktree add` directory. A
+  control launch without the policy flags must start that server, so the server
+  gates can fail. Whether the runtime offers `EnterWorktree` is reported only.
+- CP4: a request holds the workspace `CLAUDE.md` marker, and the init record
+  lists the fixture plugin. Plugins, MCP servers, and skills in the init record
+  are reported for the docs.
+- CP5: `disableAllHooks: true` in the user settings does not turn the policy
+  hook off.
+- CP6: the extracted check step passes before and after a real launch with a
+  plugin install, and fails after a marketplace is added, after a plugin is
+  enabled, and after a `hooks` key is added to the user settings. The results
+  record the plugin keys that the launch wrote.
+- CP7: an executed Bash call leaves a call record line, and a control launch
+  without the policy flags fails the after-launch check.
+- CP8: `COMMAND_POLICY_PROOF_ACTION_SHA` in `claude-run.yml` equals the action
+  pin. A pin change keeps this gate red until the proof value moves.
+
+The probe exits non-zero when a case (d) check, a K5, K8, or K9 check, a CP
+gate, or a fixture suite fails. It reports cases (a) to (c) without failing on
+them.

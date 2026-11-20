@@ -10,6 +10,7 @@ parser.add_argument("--port-file", required=True)
 parser.add_argument("--script", required=True)
 parser.add_argument("--log", required=True)
 parser.add_argument("--fail", action="store_true")
+parser.add_argument("--marker", action="append", default=[])
 args = parser.parse_args()
 
 with open(args.script) as handle:
@@ -109,6 +110,9 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw or b"{}")
         except ValueError:
             body = {}
+        for marker in args.marker:
+            if marker.encode() in raw:
+                log({"event": "marker", "text": marker})
         if path.endswith("/messages/count_tokens"):
             self.reply_json(200, {"input_tokens": 1})
             return
@@ -132,7 +136,12 @@ class Handler(BaseHTTPRequestHandler):
             index = len(results)
             if index < len(COMMANDS):
                 log({"event": "dispatch", "index": index})
-                block = {"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": "Bash", "input": {"command": COMMANDS[index], "description": f"probe step {index}"}}
+                entry = COMMANDS[index]
+                if isinstance(entry, dict):
+                    name, tool_input = entry["name"], entry["input"]
+                else:
+                    name, tool_input = "Bash", {"command": entry, "description": f"probe step {index}"}
+                block = {"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": name, "input": tool_input}
                 stop = "tool_use"
             else:
                 log({"event": "done"})

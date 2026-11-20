@@ -63,6 +63,8 @@ to hosted runners while `classify` keeps working.
 | `review_subprocess_scrub` | `true` | Review route only. `false` turns the secret scrub off on every runner; the review then runs only for a trusted pull request author and only with `review_subprocess_scrub_off_accepted: true`. See the security model. |
 | `review_subprocess_scrub_off_accepted` | `false` | Review route only. Accepts the credential exposure of `review_subprocess_scrub: false` for a trusted author. It never admits an untrusted author. |
 | `review_subprocess_scrub_self_hosted` | `false` | Ignored. Kept so an older caller that passes it still runs. It skips no layout detection, preparation, protection check, or author gate. |
+| `command_policy` | `false` | Write routes only (`implement`, `fix-pr`, and the docs and release flows); the review route ignores it. `true` loads the caller's command policy checker from a copy outside the checkout. See the command policy section. |
+| `command_policy_sha` | (empty) | With `command_policy: true`: the full 40-character commit of the calling repository, on its default branch, that holds the reviewed checker. An empty, abbreviated, or unknown commit stops the run. |
 
 Self-hosted runners should provide `git`, `gh`, `jq`, and `python3`. A run that
 ends green needs both `jq` and `python3`, because the post-run comment steps use
@@ -81,6 +83,90 @@ PR whose merge triggers the repo's own release workflow). `claude.yml` does not
 detect that phrase by default; add it to the flow candidate list only if your
 repo has a merge-triggered release workflow that parses the `docs-release/*`
 branch name.
+
+## Command policy (opt-in, write routes)
+
+A caller can make every Claude launch except the review route run its own
+command checker before each Bash call. Set both inputs on the `implement` and
+`fix-pr` jobs (and on a docs or release job, if you run one):
+
+```yaml
+    with:
+      command_policy: true
+      command_policy_sha: ${{ github.sha }}
+```
+
+On `issue_comment` and `issues` events, `github.sha` is the last commit of the
+default branch. The run refuses a commit that the default branch does not
+contain.
+
+The checker contract:
+
+- One self-contained Python file at `.claude/hooks/command_policy.py`, with
+  only the standard library.
+- It reads the Claude Code `PreToolUse` event for a Bash call as JSON on
+  standard input.
+- Exit `0` allows the call. Exit `2` blocks it, and the text on standard error
+  goes back to Claude. Every other result blocks too: another exit code, an
+  exception, a checker that cannot start, and a run past the 30-second
+  timeout.
+- It must judge or block the action's git wrapper scripts (`git-commit.sh`,
+  `git-push.sh`, `git-add.sh`, and `git-rm.sh` in the action directory),
+  because the action allows them on the implement and fix-pr routes. A checker
+  that pins the wrapper digests needs a new digest when the action pin moves.
+
+What the run does:
+
+- Before the first launch, it checks out the caller at `command_policy_sha`
+  in a separate directory, confirms the commit, confirms through the GitHub
+  API that the default branch contains it, and copies the checker blob to
+  `$RUNNER_TEMP/rk-command-policy` (directory mode `0500`, files `0400`). It
+  then removes that checkout. No step reads the policy from the workspace
+  after a session has run.
+- It writes its own settings file there with one `PreToolUse` hook for Bash.
+  The hook runs a fixed Python interpreter (`/usr/bin/python3`, else
+  `/usr/local/bin/python3`, never one from `PATH`) in isolated mode. A short
+  launcher opens the staged checker without following a link, compares its
+  SHA-256 with the recorded value, writes one line to a call record, and runs
+  the bytes it checked.
+- Each covered launch gets
+  `--setting-sources user --settings <staged file> --add-dir <workspace>` as
+  its last arguments, and `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`.
+  The project and local settings of the checkout do not load, so a hook file
+  that a pull request or a branch change puts in the checkout does not run.
+- A check step before and after each launch (the main launch and the
+  CLAUDE.md revision) fails the job when the staged checker, the settings
+  file, the interpreter, or the user settings changed, when the staged
+  directory holds another file, or when the launch arguments do not end with
+  the policy flags. Before a launch it also refuses `disableAllHooks: true` in
+  the user settings, and `disableAllHooks` or `allowManagedHooksOnly` set to
+  `true` in a managed settings file (`/etc/claude-code/` on Linux,
+  `/Library/Application Support/ClaudeCode/` on macOS). The action and its
+  plugin install write three user settings keys, so these keys are compared
+  entry by entry: `enabledPlugins` may hold only the plugins that the
+  launches so far install, `extraKnownMarketplaces` only the staged
+  marketplaces under `$RUNNER_TEMP/rk-plugin-sources` as `directory`
+  sources, and `enableAllProjectMcpServers` only `true`. Any other entry
+  fails the job and is named. After a launch it
+  fails the job when Bash calls ran without an error result and the call
+  record gained no line.
+- An always-run step removes the staged directory.
+
+What an opted-in launch loads: the workspace instruction files (through
+`--add-dir` with the environment variable; the probe proves `CLAUDE.md`), the
+user settings, and the plugins that the action installs. It does not load the
+project or local settings, so their hooks, `env`, and permission rules do not
+apply (the probe proves the hooks). The servers in a project `.mcp.json` do
+not start (the probe proves this, with a control launch that starts them when
+the policy flags are off). With the project source off, project skills,
+commands, and subagents are expected not to load; the probe does not test
+them.
+
+The runner needs `python3` at one of the two fixed paths, `git`, and `gh`. A
+missing interpreter, a checker that is missing, empty, a symlink, or does not
+compile, a hook-disabling user or managed setting, or an action pin that the
+hook proof does not cover stops the run before Claude starts, with the reason
+in the log.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 
@@ -237,6 +323,20 @@ model until you copy the template again.
   the login order.
   `review_subprocess_scrub: false` skips the host changes and the scrub, under
   the scrub-off exception above.
+- **Command policy from a staged copy (opt-in):** with `command_policy: true`,
+  every launch except the review route loads the caller's checker from a copy
+  outside the checkout, through a settings file that the workflow writes.
+  Project and local settings do not load, so a pull request, a branch change,
+  or a worktree change cannot replace the checker. The workflow checks the
+  staged checker, the settings file, the interpreter, and the user settings
+  before each launch and after each launch, and a change fails the job. On
+  these routes the session runs as the runner user with no sandbox. The file
+  modes stop a change made with the file tools alone. A session that runs a
+  program can still change these files or its own environment. The checks
+  detect a change that is still present. They do not prevent a change, they do
+  not see a change that the session restores, and they do not undo a commit or
+  a push that the session made before the check. The checker reads the text of
+  each Bash call only.
 
 ## Pinned revisions
 
@@ -280,6 +380,7 @@ Do not point a caller at a branch to keep a private workflow reachable.
 |--------|---------|--------|
 | Prompts, scripts, and the `rk-skills` plugin | The commit the caller pins | `job.workflow_sha` for that run |
 | `anthropics/claude-plugins-official` (`code-review`, `claude-md-management`) | No release tag. Snapshot of `main` on 2026-11-12. | `e0ab6e51219eef74e417a0e1d89e5d53e5e763d4` |
+| Command policy hook proof (`COMMAND_POLICY_PROOF_ACTION_SHA` in the staging step) | `anthropics/claude-code-action` v1.0.276, Claude Code 2.1.325, proved by the `Review sandbox probe` gates CP1 to CP8 | `f3b070c88125d33dbae5653df5f143101d4ea9dc` |
 
 Record a new mapping in this table. Do not add the version as a comment in the
 workflow file.
@@ -301,3 +402,8 @@ workflow file.
    the inputs, the permissions, and the author gates are unchanged.
 6. To roll back, restore the previous plugin commit in the workflow and in the
    table, then move each caller pin back to the previous workflow commit.
+7. A change of the `anthropics/claude-code-action` pin needs a
+   `Review sandbox probe` run on the new pin. Opted-in command policy runs stop
+   until `COMMAND_POLICY_PROOF_ACTION_SHA` and the hook proof row above name
+   the commit that the probe proved (gate CP8). A caller checker that pins the
+   action's wrapper script digests needs its own update.
