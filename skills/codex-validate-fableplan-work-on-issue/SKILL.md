@@ -1,7 +1,7 @@
 ---
 name: codex-validate-fableplan-work-on-issue
 description: >-
-  Use when the user wants one or more GitHub issues run in parallel through a Codex CLI validate pass, a Fable 5.2 plan, and a Claude subagent build that opens a pull request (PR) per issue. Triggers include "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", and "do the next 3 issues the same way with a fable plan". Optionally picks the next N independent issues first. Per issue: validate-issue in update mode on the Codex CLI (default Sol 6.2 at high), then, at score 75 or higher or on a safety flag from the validation, a Fable 5.2 plan on a background Plan subagent (high at 90 or higher, medium below 90), then work-on-issue on a background Opus 5.5 subagent (high at score 50 or higher, medium below 50) that adopts any plan and opens the PR. After each PR opens and passes its check, the session posts one @claude review trigger on it; it runs no review loop and merges nothing.
+  Runs one or more GitHub issues in parallel through a Codex CLI validate pass, a Fable 5.2 plan when the score or a safety flag calls for one, and a Claude subagent build that opens a pull request per issue. It merges nothing. Use for "codex-validate-fableplan-work-on-issue", "validate with codex, plan with fable, then work on #A #B #C", or "do the next 3 issues the same way with a fable plan".
 ---
 
 # codex-validate-fableplan-work-on-issue

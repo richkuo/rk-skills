@@ -1,6 +1,6 @@
 ---
 name: app-prd
-description: Use when the user wants an app idea turned into a Product Requirements Document (PRD) committed to a repo — "create a PRD", "/app-prd", "turn this idea into a PRD", or a raw idea dump ending with "save it to this repo". Produces a complete, section-numbered PRD.md landed via worktree + PR, bootstrapping an empty repo if needed. Stage 1 of the new-app-pipeline.
+description: Turns an app idea into a complete, section-numbered Product Requirements Document (PRD.md) and lands it through a worktree and a pull request, bootstrapping an empty repo if needed. Stage 1 of the new-app-pipeline. Use when the user says "create a PRD", "/app-prd", "turn this idea into a PRD", or gives a raw idea that ends with "save it to this repo".
 ---
 
 # app-prd

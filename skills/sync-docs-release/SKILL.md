@@ -1,6 +1,6 @@
 ---
 name: sync-docs-release
-description: Use when the user wants to sync docs and then cut a release in one shot. Combines sync-docs (which lands its edits through its own docs PR) → optional merge of that PR → create-release in sequence. Triggers on phrases like "sync docs and release", "sync and cut a release", "update docs and publish a release".
+description: Syncs the docs and then cuts a release in one run. It runs sync-docs through its own docs pull request, an optional merge of that PR, then create-release. Use for "sync docs and release", "sync and cut a release", or "update docs and publish a release".
 ---
 
 # sync-docs-release

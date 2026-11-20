@@ -1,6 +1,6 @@
 ---
 name: new-issue-loop
-description: Use when the user asks to file a GitHub issue and then autonomously drive it all the way to a reviewed PR in one shot — "new-issue-loop", "create the issue and run it to completion", "file this and fully automate it". Runs new-issue to create a fully-specified issue, then hands the new issue's `owner/repo#N` reference to validate-issue-loop (validate → update → work-on-issue-loop) — stopping instead when new-issue finds a duplicate or the discussion hasn't converged on one issue.
+description: Files a GitHub issue through new-issue, then hands it to validate-issue-loop, which drives it to a reviewed pull request (PR). Stops when new-issue finds a duplicate or the discussion has not converged on one issue. Use for "new-issue-loop", "create the issue and run it to completion", or "file this and fully automate it".
 ---
 
 # new-issue-loop

@@ -1,6 +1,6 @@
 ---
 name: validate-issue
-description: Use when the user asks to validate, review, or check a GitHub issue against the code. Returns a cited update decision with a complexity score, or a cited close recommendation when the issue is already completed or invalid.
+description: Validates a GitHub issue against the code and returns a cited update decision with a complexity score, or a cited close recommendation when the issue is already completed or invalid. Use when the user asks to validate, review, or check a GitHub issue.
 ---
 
 # validate-issue

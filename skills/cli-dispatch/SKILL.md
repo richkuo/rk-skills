@@ -1,6 +1,7 @@
 ---
 name: cli-dispatch
-description: Required dispatch procedure for running a build, fix pass, or validate pass on an external coding CLI — the Codex CLI (`codex exec`) or the Cursor CLI (`agent -p`) — when an issue's Execution block stamps that harness as the Build model or the Validate model. Preflight, the shims, the prompt-as-data rule, the background run and its limits, result parsing, the substitution check, attribution, the snapshot guard, and the failure table. Load BEFORE dispatching any Codex CLI or Cursor CLI build or validate pass.
+description: >-
+  Required dispatch procedure for a build, fix pass, or validate pass on an external coding CLI: the Codex CLI (`codex exec`) or the Cursor CLI (`agent -p`). Covers preflight, the shims, the background run, result parsing, the substitution check, and attribution. Load BEFORE dispatching any Codex CLI or Cursor CLI pass, as when an issue's Execution block stamps that harness.
 ---
 
 # CLI dispatch

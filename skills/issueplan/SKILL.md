@@ -1,7 +1,6 @@
 ---
 name: issueplan
-description: >-
-  Plan a task or GitHub issue on the current session model, then stop. A Plan subagent writes the plan by default; when the user asks for it, the main agent plans in the session with no subagent. With an issue, it posts the plan as an issue comment; with a task description and no issue, it presents the plan. It never builds; `work-on-issue` builds from a posted plan. Use for "/issueplan", "issueplan this", "issue-plan", "issueplan in session", or requests to plan an issue on the session model.
+description: Plans a task or GitHub issue on the current session model, then stops. A Plan subagent writes the plan by default, or the main agent plans in the session on request. It posts the plan as an issue comment, or presents it when there is no issue. It never builds. Use for "/issueplan", "issueplan this", "issue-plan", or "issueplan in session".
 ---
 
 # issueplan

@@ -1,7 +1,7 @@
 ---
 name: validate-fableplan-loop
 description: >-
-  Use when the user asks to validate a GitHub issue (without Fable), conditionally plan it with fableplan, then autonomously drive it to a reviewed PR in one shot — "validate-fableplan-loop", "validate, plan, and work on #N", "validate and fableplan and fully automate #N". Runs validate-issue on your session model (not a Fable subagent), auto-applies its update-issue edits when the verdict calls for it, has fableplan produce and post a Fable 5.2 implementation plan (skipped only when the verdict's signal reads `plan: no`: the title score and the recomputed score are both below 75, with no safety flags and no `plan first: Yes` stamp), then hands off to work-on-issue-loop — stopping instead when validation flags the issue as too large, architecturally infeasible, or already addressed by an existing PR, or recommended for closure as completed or invalid, or when the issue edit does not land. The non-Fable-validation counterpart to fable-validate-loop.
+  Validates a GitHub issue with validate-issue on the session model, posts a Fable 5.2 plan when the score gate, a safety flag, or a `plan first` stamp calls for one, then hands off to work-on-issue-loop. The non-Fable-validation counterpart to fable-validate-loop. Use for "validate-fableplan-loop", "validate, plan, and work on #N", or "validate and fableplan and fully automate #N".
 ---
 
 # validate-fableplan-loop

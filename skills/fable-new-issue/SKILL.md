@@ -1,6 +1,6 @@
 ---
 name: fable-new-issue
-description: Use when the user wants a GitHub issue created by a Fable 5.2 subagent. Spins up a read-only subagent running on Fable 5.2 that executes the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a fully-composed issue draft, which the main agent spot-checks and files. Trigger on "/fable-new-issue", "fable new issue <description>", or "create this issue with fable".
+description: Creates a GitHub issue through a read-only Fable 5.2 subagent, which runs the new-issue procedure (duplicate check, code grounding, approach design, complexity score) and returns a full draft that the main agent spot-checks and files. Use for "/fable-new-issue", "fable new issue" with a description, or "create this issue with fable".
 ---
 
 # fable-new-issue

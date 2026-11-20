@@ -1,6 +1,6 @@
 ---
 name: tldr
-description: Use when the user types /tldr to get a plain-simple-English summary, written in ASD-STE100, of the most recent response, aiming for under 25 words and never over 50.
+description: Gives a plain-simple-English summary of the most recent response, written in ASD-STE100, aiming for under 25 words and never over 50. Use when the user types /tldr.
 ---
 
 # TLDR

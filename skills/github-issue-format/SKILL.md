@@ -1,6 +1,7 @@
 ---
 name: github-issue-format
-description: Required format for creating or editing any GitHub issue — [C<score>] title convention, complexity rationale line, complete-body rule, mandatory Plain simple English section, attribution footer, milestone title rule. Load BEFORE creating or editing a GitHub issue or milestone.
+description: >-
+  Required format for creating or editing any GitHub issue: the scored title convention such as `[C95]`, complexity rationale line, complete-body rule, mandatory Plain simple English section, attribution footer, milestone title rule. Load BEFORE creating or editing a GitHub issue or milestone.
 ---
 
 # GitHub issue format

@@ -1,6 +1,6 @@
 ---
 name: execution-plan-review
-description: Use when the user wants to review or revise the ordering/model/effort/plan/plan-effort assignments on a milestone's GitHub issues — "review the execution plan", "/execution-plan-review", "show me the model assignments", or piecemeal revisions like "11 should be medium" or "plan 17 at medium". Renders the assignment table from the issues' Execution blocks, validates revisions, and writes them back. Stage 5 of the new-app-pipeline.
+description: Renders the assignment table from the Execution blocks of a milestone's GitHub issues (order, model, effort, plan, plan effort), validates revisions, and writes them back. Stage 5 of the new-app-pipeline. Use for "review the execution plan", "/execution-plan-review", "show me the model assignments", or a revision such as "11 should be medium" or "plan 17 at medium".
 ---
 
 # execution-plan-review

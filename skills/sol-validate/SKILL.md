@@ -1,6 +1,6 @@
 ---
 name: sol-validate
-description: Use when the user wants a GitHub issue validated by Sol on the Codex CLI. Runs the validate-issue procedure (claim tracing, architecture/consistency checks, complexity score) as a read-only Codex CLI validate pass on Sol 6.2 at high, with the session as the driver, then relays the verdict back to the main agent, which presents it and takes any follow-on action (update issue, work on issue). Trigger on "/sol-validate", "sol validate <issue>", or "validate this with sol".
+description: Validates a GitHub issue with Sol on the Codex CLI. It runs the validate-issue procedure as a read-only Codex CLI pass on Sol 6.2 at high, with the session as the driver, and relays the verdict to the main agent for presentation and any follow-on action. Use for "/sol-validate", "sol validate" with an issue, or "validate this with sol".
 ---
 
 # sol-validate

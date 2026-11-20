@@ -1,6 +1,6 @@
 ---
 name: work-on-issue-loop
-description: Use when the user asks to implement a GitHub issue and drive it through review to completion autonomously — "work on issue and loop until approved", "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop. Runs work-on-issue to implement and open the PR, triggers the first review from the selected review bot itself (@claude by default, @codex when selected), then waits for each review to land and calls fix-pr-review to resolve it. Stops on a bare LGTM with nothing left to fix; once past 5 review cycles it stops at the first LGTM it sees even if non-blocking findings remain, rather than continuing to chase them.
+description: Implements a GitHub issue through work-on-issue, triggers the first review from the selected bot (@claude by default, @codex when selected), and resolves each review with fix-pr-review until an LGTM. Use for "work on issue and loop until approved" or "work-on-issue-loop", or as the automatic follow-on from validate-issue-loop.
 ---
 
 # work-on-issue-loop

@@ -1,6 +1,6 @@
 ---
 name: fable-advisor
-description: Use when the user wants a task executed by the current session model with a persistent Fable 5.2 advisor overseeing it. A read-only Fable 5.2 subagent writes the plan and answers checkpoint consults; a separate fresh Fable 5.2 reviewer issues a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Trigger on "/fable-advisor", "fable-advisor <task or issue>", or "execute this with a fable advisor".
+description: Executes a task on the current session model under a persistent Fable 5.2 advisor. A read-only Fable 5.2 subagent writes the plan and answers checkpoint consults, and a separate fresh Fable 5.2 reviewer gives a binding pre-commit verdict. Accepts a GitHub issue or a prose task. Use for "/fable-advisor", "fable-advisor" with a task or issue, or "execute this with a fable advisor".
 ---
 
 # fable-advisor

@@ -1,6 +1,6 @@
 ---
 name: fable-orchestrate
-description: Use when the user wants a task decomposed and driven by a Fable 5.2 orchestrator delegating implementation to Sonnet 5.5 workers. Fable decomposes into self-contained specs, dispatches Sonnet workers (Agents for 1–2 pieces, a Workflow for fan-out), reviews each result, merges into one branch, and takes a binding verdict from a fresh Fable reviewer. Trigger on "/fable-orchestrate", "fable-orchestrate <task>", or "orchestrate this with fable".
+description: Decomposes a task under a Fable 5.2 orchestrator that delegates implementation to Sonnet 5.5 workers, reviews each result, merges the work into one branch, and takes a binding verdict from a fresh Fable reviewer. Use for "/fable-orchestrate", "fable-orchestrate" with a task, or "orchestrate this with fable".
 ---
 
 # fable-orchestrate
