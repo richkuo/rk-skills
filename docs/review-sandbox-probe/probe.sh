@@ -798,6 +798,8 @@ policy_prepare() {
     "COMMAND_POLICY_SHA=$POLICY_SHA" "COMMAND_POLICY_PROOF_ACTION_SHA=$ACTION_SHA" "POLICY_INTERPRETERS=$POLICY_INTERPRETER_LIST" \
     "POLICY_WORKFLOW_FILE=$OPT/steps/claude-run.yml" "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$ws" "AGENT_HOME=$home" \
     "GH_TOKEN=$SYNTH_TOKEN" "REPO=owner/repo" "DEFAULT_BRANCH=main" \
+    "POLICY_MAIN_MARKETPLACES=$POLICY_MARKET"$'\n' "POLICY_MAIN_PLUGINS=$POLICY_PLUGIN@rk-probe-market"$'\n' \
+    "POLICY_GUIDE_MARKETPLACES=$POLICY_MARKET"$'\n' "POLICY_GUIDE_PLUGINS=$POLICY_PLUGIN@rk-probe-market"$'\n' \
     bash --noprofile --norc -eo pipefail "$OPT/steps/policy_stage.sh" > "$run/stage.log" 2>&1 || return 1
   local shape out
   for shape in implement fix-pr off; do
@@ -841,6 +843,7 @@ policy_check_run() {
     "POLICY_INTERPRETER=$(out_value "$run/stage.out" interpreter)" "POLICY_INTERPRETER_REAL=$(out_value "$run/stage.out" interpreter_real)" "POLICY_INTERPRETER_OID=$(out_value "$run/stage.out" interpreter_oid)" \
     "POLICY_CALL_RECORD=$(out_value "$run/stage.out" call_record)" "POLICY_USER_SETTINGS=$(out_value "$run/stage.out" user_settings)" \
     "POLICY_USER_SETTINGS_DIGEST=$(out_value "$run/stage.out" user_settings_digest)" "POLICY_USER_SETTINGS_KEYS=$(out_value "$run/stage.out" user_settings_keys)" \
+    "POLICY_USER_SETTINGS_BASE=$(out_value "$run/stage.out" user_settings_base)" "POLICY_USER_SETTINGS_ALLOWED=$(out_value "$run/stage.out" user_settings_allowed)" \
     "POLICY_WORKSPACE=$run/ws" "POLICY_MANAGED_DIRS=/etc/claude-code" \
     bash --noprofile --norc -e -o pipefail "$OPT/steps/policy_check.sh" > "$run/check-$phase.log" 2>&1
 }
@@ -1019,13 +1022,32 @@ else
       if grep -q "\"event\": \"marker\", \"text\": \"$POLICY_MD_MARKER\"" "$cp1/mock.jsonl" 2>/dev/null; then gate pass "CP4: a request holds the workspace CLAUDE.md marker"; else gate fail "CP4: no request holds the workspace CLAUDE.md marker"; fi
       if printf '%s' "$init" | grep -qF "$POLICY_PLUGIN"; then gate pass "CP4: the init record lists the fixture plugin"; else gate fail "CP4: the init record does not list the fixture plugin"; fi
       say "  CP4 report: init plugins: $(printf '%s' "$init" | jq -c '.plugins // "none"' 2>/dev/null | head -c 300); mcp servers: $(printf '%s' "$init" | jq -c '.mcp_servers // "none"' 2>/dev/null | head -c 300); skills: $(printf '%s' "$init" | jq -c '.skills // "none"' 2>/dev/null | head -c 300)"
-      say "  CP6 user settings after the launch: $(jq -c 'keys' "$cp1/home/.claude/settings.json" 2>&1 | head -c 300)"
+      say "  CP6 user settings after the launch: $(jq -c '{keys: keys, enableAllProjectMcpServers, enabledPlugins, extraKnownMarketplaces}' "$cp1/home/.claude/settings.json" 2>&1 | head -c 600)"
       if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
         gate pass "CP6: the after-phase check passes after a real launch with a plugin install"
       else
         gate fail "CP6: the after-phase check fails after a real launch: $(grep '::error::' "$cp1/check-after-main.log" | tr '\n' ' ' | head -c 600)"
       fi
-      jq '.hooks = {"PreToolUse": []}' "$cp1/home/.claude/settings.json" > "$cp1/home/.claude/settings.json.new" && mv "$cp1/home/.claude/settings.json.new" "$cp1/home/.claude/settings.json"
+      cp -p "$cp1/home/.claude/settings.json" "$cp1/settings.after-launch.json"
+      jq '.extraKnownMarketplaces["rk-probe-extra"] = {"source": {"source": "directory", "path": "/tmp/rk-probe-extra"}}' "$cp1/settings.after-launch.json" > "$cp1/home/.claude/settings.json"
+      chown "$PROBE_USER" "$cp1/home/.claude/settings.json"
+      if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
+        gate fail "CP6: the after-phase check passes after a marketplace was added to the user settings"
+      elif grep -qF 'extraKnownMarketplaces holds the entry "rk-probe-extra"' "$cp1/check-after-main.log"; then
+        gate pass "CP6: a marketplace added to the user settings fails the after-phase check"
+      else
+        gate fail "CP6: the added marketplace failed the check for another reason: $(grep '::error::' "$cp1/check-after-main.log" | tr '\n' ' ' | head -c 400)"
+      fi
+      jq '.enabledPlugins["rk-probe-extra@rk-probe-market"] = true' "$cp1/settings.after-launch.json" > "$cp1/home/.claude/settings.json"
+      chown "$PROBE_USER" "$cp1/home/.claude/settings.json"
+      if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
+        gate fail "CP6: the after-phase check passes after a plugin was enabled in the user settings"
+      elif grep -qF 'enabledPlugins holds the entry "rk-probe-extra@rk-probe-market"' "$cp1/check-after-main.log"; then
+        gate pass "CP6: a plugin enabled in the user settings fails the after-phase check"
+      else
+        gate fail "CP6: the added plugin failed the check for another reason: $(grep '::error::' "$cp1/check-after-main.log" | tr '\n' ' ' | head -c 400)"
+      fi
+      jq '.hooks = {"PreToolUse": []}' "$cp1/settings.after-launch.json" > "$cp1/home/.claude/settings.json"
       chown "$PROBE_USER" "$cp1/home/.claude/settings.json"
       if policy_check_run "$cp1" after-main "$(policy_launch_args "$cp1" implement)" "$POLICY_BEFORE_LINES" "$cp1/rt/claude-execution-output.json"; then
         gate fail "CP6: the after-phase check passes after a hooks key was added to the user settings"

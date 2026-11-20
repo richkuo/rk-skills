@@ -136,24 +136,29 @@ What the run does:
   that a pull request or a branch change puts in the checkout does not run.
 - A check step before and after each launch (the main launch and the
   CLAUDE.md revision) fails the job when the staged checker, the settings
-  file, the interpreter, or the user settings changed (outside the
-  `enableAllProjectMcpServers`, `enabledPlugins`, and `extraKnownMarketplaces`
-  keys, which the action and its plugin install write), when the staged
+  file, the interpreter, or the user settings changed, when the staged
   directory holds another file, or when the launch arguments do not end with
   the policy flags. Before a launch it also refuses `disableAllHooks: true` in
   the user settings, and `disableAllHooks` or `allowManagedHooksOnly` set to
   `true` in a managed settings file (`/etc/claude-code/` on Linux,
-  `/Library/Application Support/ClaudeCode/` on macOS). After a launch it
+  `/Library/Application Support/ClaudeCode/` on macOS). The action and its
+  plugin install write three user settings keys, so these keys are compared
+  entry by entry: `enabledPlugins` may hold only the plugins that the
+  launches so far install, `extraKnownMarketplaces` only the staged
+  marketplaces under `$RUNNER_TEMP/rk-plugin-sources` as `directory`
+  sources, and `enableAllProjectMcpServers` only `true`. Any other entry
+  fails the job and is named. After a launch it
   fails the job when Bash calls ran without an error result and the call
   record gained no line.
 - An always-run step removes the staged directory.
 
-What an opted-in launch loads: the project instruction files `CLAUDE.md`,
-`.claude/CLAUDE.md`, and `.claude/rules/*.md` of the workspace (through
-`--add-dir` with the environment variable), the user settings, and the plugins
-that the action installs. It does not load the project or local settings
-(their hooks, `env`, and permission rules), project skills, commands, and
-subagents, or the servers in a project `.mcp.json`.
+What an opted-in launch loads: the workspace instruction files (through
+`--add-dir` with the environment variable; the probe proves `CLAUDE.md`), the
+user settings, and the plugins that the action installs. It does not load the
+project or local settings, so their hooks, `env`, and permission rules do not
+apply (the probe proves the hooks). With the project source off, project
+skills, commands, subagents, and the servers in a project `.mcp.json` are
+expected not to load; the probe does not test them.
 
 The runner needs `python3` at one of the two fixed paths, `git`, and `gh`. A
 missing interpreter, a checker that is missing, empty, a symlink, or does not

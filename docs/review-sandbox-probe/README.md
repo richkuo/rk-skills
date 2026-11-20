@@ -132,7 +132,9 @@ a pull request state: an allow-all checker, a `.claude/settings.json` and a
 - CP5: `disableAllHooks: true` in the user settings does not turn the policy
   hook off.
 - CP6: the extracted check step passes before and after a real launch with a
-  plugin install, and fails after a `hooks` key is added to the user settings.
+  plugin install, and fails after a marketplace is added, after a plugin is
+  enabled, and after a `hooks` key is added to the user settings. The results
+  record the plugin keys that the launch wrote.
 - CP7: an executed Bash call leaves a call record line, and a control launch
   without the policy flags fails the after-launch check.
 - CP8: `COMMAND_POLICY_PROOF_ACTION_SHA` in `claude-run.yml` equals the action

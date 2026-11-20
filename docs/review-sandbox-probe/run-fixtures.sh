@@ -721,6 +721,8 @@ policy_stage() {
     "POLICY_INTERPRETERS=${INTERPRETERS_IN:-$POLICY_PYTHON}" "POLICY_WORKFLOW_FILE=${WORKFLOW_FILE_IN:-$WORKFLOW}" \
     "POLICY_DIR=$rt/rk-command-policy" "POLICY_WORKSPACE=$ws" "AGENT_HOME=$POLICY_ROOT/home" \
     "GH_TOKEN=$SYNTH_TOKEN" "REPO=owner/repo" "DEFAULT_BRANCH=${DEFAULT_BRANCH_IN:-main}" "RK_FAKE_COMPARE=${COMPARE_IN:-ahead}" \
+    "POLICY_MAIN_MARKETPLACES=$POLICY_MARKETS/pinned"$'\n'"$POLICY_MARKETS/skills"$'\n' "POLICY_MAIN_PLUGINS=code-review@rk-pinned-claude-plugins"$'\n'"rk-skills@rk-skills"$'\n' \
+    "POLICY_GUIDE_MARKETPLACES=${GUIDE_MARKETS_IN:-$POLICY_MARKETS/pinned}"$'\n' "POLICY_GUIDE_PLUGINS=code-review@rk-pinned-claude-plugins"$'\n'"claude-md-management@rk-pinned-claude-plugins"$'\n' \
     bash --noprofile --norc -eo pipefail "$script") > "$LAST_LOG" 2>&1
   LAST_STATUS=$?
   STAGE_OUT="$out"
@@ -734,6 +736,7 @@ policy_check() {
     "POLICY_DIR=$(out_of dir)" "POLICY_CHECKER=$(out_of checker)" "POLICY_CHECKER_OID=$(out_of checker_oid)" "POLICY_SETTINGS=$(out_of settings_file)" "POLICY_SETTINGS_OID=$(out_of settings_oid)" \
     "POLICY_INTERPRETER=$(out_of interpreter)" "POLICY_INTERPRETER_REAL=$(out_of interpreter_real)" "POLICY_INTERPRETER_OID=$(out_of interpreter_oid)" "POLICY_CALL_RECORD=$(out_of call_record)" \
     "POLICY_USER_SETTINGS=$(out_of user_settings)" "POLICY_USER_SETTINGS_DIGEST=$(out_of user_settings_digest)" "POLICY_USER_SETTINGS_KEYS=$(out_of user_settings_keys)" \
+    "POLICY_USER_SETTINGS_BASE=$(out_of user_settings_base)" "POLICY_USER_SETTINGS_ALLOWED=$(out_of user_settings_allowed)" \
     "POLICY_WORKSPACE=$POLICY_WS" "POLICY_MANAGED_DIRS=${MANAGED_IN:-$POLICY_ROOT/no-managed}"
 }
 
@@ -764,8 +767,12 @@ test_policy() {
   POLICY_ROOT="$SCRATCH/policy"
   POLICY_WS="$POLICY_ROOT/ws"
   POLICY_STUBS="$POLICY_ROOT/stubs"
+  POLICY_MARKETS="$POLICY_ROOT/markets"
   rm -rf "$POLICY_ROOT"
-  mkdir -p "$POLICY_ROOT" "$POLICY_STUBS" "$POLICY_ROOT/no-managed"
+  mkdir -p "$POLICY_ROOT" "$POLICY_STUBS" "$POLICY_ROOT/no-managed" "$POLICY_MARKETS/pinned/.claude-plugin" "$POLICY_MARKETS/skills/.claude-plugin" "$POLICY_MARKETS/unnamed/.claude-plugin"
+  printf '{"name": "rk-pinned-claude-plugins", "plugins": []}\n' > "$POLICY_MARKETS/pinned/.claude-plugin/marketplace.json"
+  printf '{"name": "rk-skills", "plugins": []}\n' > "$POLICY_MARKETS/skills/.claude-plugin/marketplace.json"
+  printf '{"plugins": []}\n' > "$POLICY_MARKETS/unnamed/.claude-plugin/marketplace.json"
   printf '#!/bin/sh\n[ "$RK_FAKE_COMPARE" = fail ] && exit 1\nprintf "%%s\\n" "$RK_FAKE_COMPARE"\n' > "$POLICY_STUBS/gh"
   chmod 755 "$POLICY_STUBS/gh"
   POLICY_PYTHON=$(command -v python3)
@@ -797,6 +804,10 @@ test_policy() {
   expect_field "Checkout the caller command policy" with.persist-credentials false "policy checkout: keeps no credential"
   expect_field "Checkout the caller command policy" if "steps.runtime_sources.outputs.command_policy == 'true'" "policy checkout: runs only with the opt-in"
   expect_field "Run Claude Code" with.claude_args '${{ steps.compose_prompt.outputs.claude_args }}' "policy launch: the main launch reads claude_args"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_MAIN_MARKETPLACES "$(field_of "Run Claude Code" with.plugin_marketplaces)" "policy stage: the expected main marketplaces equal the main launch input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_MAIN_PLUGINS "$(field_of "Run Claude Code" with.plugins)" "policy stage: the expected main plugins equal the main launch input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_GUIDE_MARKETPLACES "$(field_of "Revise CLAUDE.md with session learnings" with.plugin_marketplaces)" "policy stage: the expected guide marketplaces equal the guide revision input"
+  expect_field "Stage the command policy outside the workspace" env.POLICY_GUIDE_PLUGINS "$(field_of "Revise CLAUDE.md with session learnings" with.plugins)" "policy stage: the expected guide plugins equal the guide revision input"
   expect_field "Revise CLAUDE.md with session learnings" with.claude_args '${{ steps.compose_prompt.outputs.guide_claude_args }}' "policy launch: the guide revision reads guide_claude_args"
   expect_field "Run Claude Code" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the main launch loads instruction files from added directories"
   expect_field "Revise CLAUDE.md with session learnings" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the guide revision loads instruction files from added directories"
@@ -852,6 +863,11 @@ test_policy() {
   policy_stage "$POLICY_WS" "$rt" "$C_EMPTY" "$C_EMPTY"
   expect_status 1 "policy stage: an empty checker is refused"
   expect_log "is empty at" "policy stage: an empty checker is refused (reason)"
+  GUIDE_MARKETS_IN="$POLICY_MARKETS/unnamed" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a staged marketplace with no name is refused"
+  expect_log "has no name" "policy stage: a staged marketplace with no name is refused (reason)"
+  GUIDE_MARKETS_IN="$POLICY_MARKETS/missing" policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
+  expect_status 1 "policy stage: a missing staged marketplace is refused"
   policy_stage "$POLICY_WS" "$rt" "$C_SYNTAX" "$C_SYNTAX"
   expect_status 1 "policy stage: a checker with a syntax error is refused"
   expect_log "does not compile" "policy stage: a checker with a syntax error is refused (reason)"
@@ -968,9 +984,49 @@ test_policy() {
   expect_status 1 "policy check: launch arguments where the policy flags are not last fail before the launch"
 
   mkdir -p "$POLICY_ROOT/home/.claude"
-  printf '{"enableAllProjectMcpServers": true, "enabledPlugins": {"x@y": true}, "extraKnownMarketplaces": {"m": {"source": {"source": "directory", "path": "/x"}}}}\n' > "$home_settings"
+  local pinned_entry skills_entry
+  pinned_entry=$(jq -cn --arg p "$POLICY_MARKETS/pinned" '{source: {source: "directory", path: $p}}')
+  skills_entry=$(jq -cn --arg p "$POLICY_MARKETS/skills" '{source: {source: "directory", path: $p}}')
+  write_user() {
+    jq -n --argjson pinned "$pinned_entry" --argjson skills "$skills_entry" "$1" > "$home_settings"
+  }
+  write_user '{enableAllProjectMcpServers: true, enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "rk-skills@rk-skills": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned, "rk-skills": $skills}}'
   policy_check after-main "$args_on" 0
-  expect_status 0 "policy check: user settings changed only in the excluded keys pass"
+  expect_status 0 "policy check: the marketplaces and plugins of the main launch pass after it"
+  policy_check before-guide "$args_on"
+  expect_status 0 "policy check: the marketplaces and plugins of the main launch pass before the guide revision"
+  policy_check before-main "$args_on"
+  expect_status 1 "policy check: plugin entries before the main launch installs them fail"
+  expect_log "enabledPlugins holds the entry" "policy check: the early plugin entry is named"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "rk-skills@rk-skills": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned, "rk-skills": $skills, "rk-extra": {source: {source: "directory", path: "/tmp/rk-extra-market"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an added marketplace fails"
+  expect_log 'extraKnownMarketplaces holds the entry "rk-extra"' "policy check: the added marketplace is named"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": {source: {source: "directory", path: "/tmp/rk-other-path"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected marketplace name with another directory fails"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": {source: {source: "github", repo: "someone/market"}}}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected marketplace name with another source type fails"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": true, "other@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an added enabled plugin fails"
+  expect_log 'enabledPlugins holds the entry "other@rk-pinned-claude-plugins"' "policy check: the added plugin is named"
+  write_user '{enabledPlugins: {"claude-md-management@rk-pinned-claude-plugins": true}, extraKnownMarketplaces: {"rk-pinned-claude-plugins": $pinned}}'
+  policy_check before-guide "$args_on"
+  expect_status 1 "policy check: a guide revision plugin before the guide revision launch fails"
+  policy_check after-guide "$args_on" 0
+  expect_status 0 "policy check: a guide revision plugin after the guide revision launch passes"
+  write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": false}}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an expected plugin with a value other than true fails"
+  write_user '{enabledPlugins: ["code-review@rk-pinned-claude-plugins"]}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an enabledPlugins value that is not an object fails"
+  write_user '{enableAllProjectMcpServers: false}'
+  policy_check after-main "$args_on" 0
+  expect_status 1 "policy check: an enableAllProjectMcpServers value that the job does not write fails"
+  rm -f "$home_settings"
   printf '{"hooks": {"PreToolUse": []}}\n' > "$home_settings"
   policy_check after-main "$args_on" 0
   expect_status 1 "policy check: user settings with a new hooks key fail"

@@ -793,7 +793,7 @@ jobs:
         if: steps.runtime_sources.outputs.command_policy == 'true'
         env:
           COMMAND_POLICY_SHA: ${{ steps.runtime_sources.outputs.command_policy_sha }}
-          COMMAND_POLICY_PROOF_ACTION_SHA: ''
+          COMMAND_POLICY_PROOF_ACTION_SHA: f3b070c88125d33dbae5653df5f143101d4ea9dc
           POLICY_INTERPRETERS: /usr/bin/python3:/usr/local/bin/python3
           POLICY_WORKFLOW_FILE: ${{ runner.temp }}/rk-plugin-sources/rk-skills/.github/workflows/claude-run.yml
           POLICY_DIR: ${{ runner.temp }}/rk-command-policy
@@ -802,6 +802,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          POLICY_MAIN_MARKETPLACES: |
+            ${{ runner.temp }}/rk-plugin-sources/rk-pinned-claude-plugins
+            ${{ runner.temp }}/rk-plugin-sources/rk-skills
+          POLICY_MAIN_PLUGINS: |
+            code-review@rk-pinned-claude-plugins
+            rk-skills@rk-skills
+          POLICY_GUIDE_MARKETPLACES: |
+            ${{ runner.temp }}/rk-plugin-sources/rk-pinned-claude-plugins
+          POLICY_GUIDE_PLUGINS: |
+            code-review@rk-pinned-claude-plugins
+            claude-md-management@rk-pinned-claude-plugins
         run: |
           set -euo pipefail
           refuse() {
@@ -1040,11 +1051,25 @@ jobs:
           case "$USER_SETTINGS" in
             *$'\n'*|*$'\r'*) refuse "the user settings path holds a line break." ;;
           esac
-          USER_STATE=$("$INTERPRETER" -I - "$USER_SETTINGS" << 'PY'
+          USER_STATE=$("$INTERPRETER" -I - "$USER_SETTINGS" "$POLICY_MAIN_MARKETPLACES" "$POLICY_MAIN_PLUGINS" "$POLICY_GUIDE_MARKETPLACES" "$POLICY_GUIDE_PLUGINS" << 'PY'
           import hashlib, json, os, sys
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
+          CONTROLLED = ("enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces")
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+          def items(text):
+              return [item.strip() for item in text.split("\n") if item.strip()]
+          def stage(markets, plugins):
+              found = {}
+              for path in items(markets):
+                  try:
+                      with open(os.path.join(path, ".claude-plugin", "marketplace.json")) as handle:
+                          name = json.load(handle).get("name")
+                  except (OSError, ValueError, AttributeError) as error:
+                      raise SystemExit("the staged marketplace %s cannot be read (%s)" % (path, error))
+                  if not isinstance(name, str) or not name:
+                      raise SystemExit("the staged marketplace %s has no name" % path)
+                  found[name] = sorted({path, os.path.realpath(path)})
+              return {"extraKnownMarketplaces": found, "enabledPlugins": sorted(items(plugins))}
           data = {}
           if os.path.lexists(sys.argv[1]):
               with open(sys.argv[1], "rb") as handle:
@@ -1053,14 +1078,20 @@ jobs:
                   data = json.loads(raw)
           if not isinstance(data, dict):
               raise SystemExit("the user settings file is not a JSON object")
-          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          kept = {key: value for key, value in data.items() if key not in CONTROLLED}
           keys = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
+          base = {key: data[key] for key in CONTROLLED if key in data}
+          allowed = {"main": stage(sys.argv[2], sys.argv[3]), "guide": stage(sys.argv[4], sys.argv[5])}
           print(hashlib.sha256(canon(kept).encode()).hexdigest())
           print(canon(keys))
+          print(canon(base))
+          print(canon(allowed))
           PY
-          ) || refuse "the user settings file $USER_SETTINGS cannot be read as a JSON object."
+          ) || refuse "the user settings file $USER_SETTINGS or a staged plugin marketplace cannot be read as JSON."
           USER_DIGEST=$(printf '%s\n' "$USER_STATE" | sed -n 1p)
           USER_KEYS=$(printf '%s\n' "$USER_STATE" | sed -n 2p)
+          USER_BASE=$(printf '%s\n' "$USER_STATE" | sed -n 3p)
+          USER_ALLOWED=$(printf '%s\n' "$USER_STATE" | sed -n 4p)
 
           {
             printf 'dir=%s\n' "$POLICY_DIR"
@@ -1076,6 +1107,8 @@ jobs:
             printf 'user_settings=%s\n' "$USER_SETTINGS"
             printf 'user_settings_digest=%s\n' "$USER_DIGEST"
             printf 'user_settings_keys=%s\n' "$USER_KEYS"
+            printf 'user_settings_base=%s\n' "$USER_BASE"
+            printf 'user_settings_allowed=%s\n' "$USER_ALLOWED"
             printf 'instructions_env=1\n'
           } >> "$GITHUB_OUTPUT"
           echo "Staged the command policy from $COMMAND_POLICY_SHA at $CHECKER (blob $CHECKER_OID) with the hook interpreter $INTERPRETER."
@@ -1593,6 +1626,8 @@ jobs:
           POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
           POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
           POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
           POLICY_WORKSPACE: ${{ github.workspace }}
           POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
           BASH_ENV: ''
@@ -1613,7 +1648,7 @@ jobs:
             before-main|after-main|before-guide|after-guide) ;;
             *) fail "the phase is not known." ;;
           esac
-          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_USER_SETTINGS_BASE POLICY_USER_SETTINGS_ALLOWED POLICY_WORKSPACE; do
             if [ -z "${!name:-}" ]; then
               fail "$name is empty, so the staged policy cannot be checked."
             fi
@@ -1656,10 +1691,11 @@ jobs:
           if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
             fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
           fi
-          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" "$POLICY_USER_SETTINGS_BASE" "$POLICY_USER_SETTINGS_ALLOWED" << 'PY'
           import hashlib, json, os, sys
-          path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
+          path, digest, baseline, phase, managed, base_text, allowed_text = sys.argv[1:8]
+          CONTROLLED = ("enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces")
+          MISSING = object()
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -1677,7 +1713,7 @@ jobs:
           except (OSError, ValueError) as error:
               print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
               sys.exit(1)
-          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          kept = {key: value for key, value in data.items() if key not in CONTROLLED}
           if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
               try:
                   before = json.loads(baseline)
@@ -1686,6 +1722,45 @@ jobs:
               now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
               changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
               problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          try:
+              base = json.loads(base_text)
+              allowed = json.loads(allowed_text)
+          except ValueError:
+              problems.append("the recorded user settings baseline or the expected plugin settings cannot be read.")
+              base, allowed = {}, {}
+          if not isinstance(base, dict) or not isinstance(allowed, dict):
+              problems.append("the recorded user settings baseline or the expected plugin settings are not JSON objects.")
+              base, allowed = {}, {}
+          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"]}.get(phase, [])
+          markets = {}
+          plugins = set()
+          for stage in stages:
+              expected = allowed.get(stage) if isinstance(allowed.get(stage), dict) else {}
+              for name, paths in (expected.get("extraKnownMarketplaces") or {}).items():
+                  markets.setdefault(name, set()).update(paths)
+              plugins.update(expected.get("enabledPlugins") or [])
+          value = data.get("enableAllProjectMcpServers", MISSING)
+          if value != base.get("enableAllProjectMcpServers", MISSING) and not (stages and value is True):
+              problems.append("the user settings key enableAllProjectMcpServers holds a value that this job does not write.")
+          def entries(source, key):
+              value = source.get(key, {})
+              if not isinstance(value, dict):
+                  if source is data:
+                      problems.append("the user settings key %s is not a JSON object." % key)
+                  return {}
+              return value
+          base_plugins = entries(base, "enabledPlugins")
+          for name, value in entries(data, "enabledPlugins").items():
+              if (name in base_plugins and base_plugins[name] == value) or (name in plugins and value is True):
+                  continue
+              problems.append("the user settings key enabledPlugins holds the entry %s, which this job does not install at this point." % json.dumps(name))
+          base_markets = entries(base, "extraKnownMarketplaces")
+          for name, value in entries(data, "extraKnownMarketplaces").items():
+              if name in base_markets and base_markets[name] == value:
+                  continue
+              if name in markets and any(value == {"source": {"source": "directory", "path": item}} for item in markets[name]):
+                  continue
+              problems.append("the user settings key extraKnownMarketplaces holds the entry %s, which is not a plugin marketplace that this job stages at this point." % json.dumps(name))
           if phase.startswith("before"):
               if data.get("disableAllHooks") is True:
                   problems.append("the user settings file %s sets disableAllHooks to true." % path)
@@ -1810,6 +1885,8 @@ jobs:
           POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
           POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
           POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
           POLICY_WORKSPACE: ${{ github.workspace }}
           POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
           BASH_ENV: ''
@@ -1830,7 +1907,7 @@ jobs:
             before-main|after-main|before-guide|after-guide) ;;
             *) fail "the phase is not known." ;;
           esac
-          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_USER_SETTINGS_BASE POLICY_USER_SETTINGS_ALLOWED POLICY_WORKSPACE; do
             if [ -z "${!name:-}" ]; then
               fail "$name is empty, so the staged policy cannot be checked."
             fi
@@ -1873,10 +1950,11 @@ jobs:
           if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
             fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
           fi
-          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" "$POLICY_USER_SETTINGS_BASE" "$POLICY_USER_SETTINGS_ALLOWED" << 'PY'
           import hashlib, json, os, sys
-          path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
+          path, digest, baseline, phase, managed, base_text, allowed_text = sys.argv[1:8]
+          CONTROLLED = ("enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces")
+          MISSING = object()
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -1894,7 +1972,7 @@ jobs:
           except (OSError, ValueError) as error:
               print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
               sys.exit(1)
-          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          kept = {key: value for key, value in data.items() if key not in CONTROLLED}
           if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
               try:
                   before = json.loads(baseline)
@@ -1903,6 +1981,45 @@ jobs:
               now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
               changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
               problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          try:
+              base = json.loads(base_text)
+              allowed = json.loads(allowed_text)
+          except ValueError:
+              problems.append("the recorded user settings baseline or the expected plugin settings cannot be read.")
+              base, allowed = {}, {}
+          if not isinstance(base, dict) or not isinstance(allowed, dict):
+              problems.append("the recorded user settings baseline or the expected plugin settings are not JSON objects.")
+              base, allowed = {}, {}
+          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"]}.get(phase, [])
+          markets = {}
+          plugins = set()
+          for stage in stages:
+              expected = allowed.get(stage) if isinstance(allowed.get(stage), dict) else {}
+              for name, paths in (expected.get("extraKnownMarketplaces") or {}).items():
+                  markets.setdefault(name, set()).update(paths)
+              plugins.update(expected.get("enabledPlugins") or [])
+          value = data.get("enableAllProjectMcpServers", MISSING)
+          if value != base.get("enableAllProjectMcpServers", MISSING) and not (stages and value is True):
+              problems.append("the user settings key enableAllProjectMcpServers holds a value that this job does not write.")
+          def entries(source, key):
+              value = source.get(key, {})
+              if not isinstance(value, dict):
+                  if source is data:
+                      problems.append("the user settings key %s is not a JSON object." % key)
+                  return {}
+              return value
+          base_plugins = entries(base, "enabledPlugins")
+          for name, value in entries(data, "enabledPlugins").items():
+              if (name in base_plugins and base_plugins[name] == value) or (name in plugins and value is True):
+                  continue
+              problems.append("the user settings key enabledPlugins holds the entry %s, which this job does not install at this point." % json.dumps(name))
+          base_markets = entries(base, "extraKnownMarketplaces")
+          for name, value in entries(data, "extraKnownMarketplaces").items():
+              if name in base_markets and base_markets[name] == value:
+                  continue
+              if name in markets and any(value == {"source": {"source": "directory", "path": item}} for item in markets[name]):
+                  continue
+              problems.append("the user settings key extraKnownMarketplaces holds the entry %s, which is not a plugin marketplace that this job stages at this point." % json.dumps(name))
           if phase.startswith("before"):
               if data.get("disableAllHooks") is True:
                   problems.append("the user settings file %s sets disableAllHooks to true." % path)
@@ -2163,6 +2280,8 @@ jobs:
           POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
           POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
           POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
           POLICY_WORKSPACE: ${{ github.workspace }}
           POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
           BASH_ENV: ''
@@ -2183,7 +2302,7 @@ jobs:
             before-main|after-main|before-guide|after-guide) ;;
             *) fail "the phase is not known." ;;
           esac
-          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_USER_SETTINGS_BASE POLICY_USER_SETTINGS_ALLOWED POLICY_WORKSPACE; do
             if [ -z "${!name:-}" ]; then
               fail "$name is empty, so the staged policy cannot be checked."
             fi
@@ -2226,10 +2345,11 @@ jobs:
           if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
             fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
           fi
-          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" "$POLICY_USER_SETTINGS_BASE" "$POLICY_USER_SETTINGS_ALLOWED" << 'PY'
           import hashlib, json, os, sys
-          path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
+          path, digest, baseline, phase, managed, base_text, allowed_text = sys.argv[1:8]
+          CONTROLLED = ("enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces")
+          MISSING = object()
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -2247,7 +2367,7 @@ jobs:
           except (OSError, ValueError) as error:
               print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
               sys.exit(1)
-          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          kept = {key: value for key, value in data.items() if key not in CONTROLLED}
           if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
               try:
                   before = json.loads(baseline)
@@ -2256,6 +2376,45 @@ jobs:
               now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
               changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
               problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          try:
+              base = json.loads(base_text)
+              allowed = json.loads(allowed_text)
+          except ValueError:
+              problems.append("the recorded user settings baseline or the expected plugin settings cannot be read.")
+              base, allowed = {}, {}
+          if not isinstance(base, dict) or not isinstance(allowed, dict):
+              problems.append("the recorded user settings baseline or the expected plugin settings are not JSON objects.")
+              base, allowed = {}, {}
+          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"]}.get(phase, [])
+          markets = {}
+          plugins = set()
+          for stage in stages:
+              expected = allowed.get(stage) if isinstance(allowed.get(stage), dict) else {}
+              for name, paths in (expected.get("extraKnownMarketplaces") or {}).items():
+                  markets.setdefault(name, set()).update(paths)
+              plugins.update(expected.get("enabledPlugins") or [])
+          value = data.get("enableAllProjectMcpServers", MISSING)
+          if value != base.get("enableAllProjectMcpServers", MISSING) and not (stages and value is True):
+              problems.append("the user settings key enableAllProjectMcpServers holds a value that this job does not write.")
+          def entries(source, key):
+              value = source.get(key, {})
+              if not isinstance(value, dict):
+                  if source is data:
+                      problems.append("the user settings key %s is not a JSON object." % key)
+                  return {}
+              return value
+          base_plugins = entries(base, "enabledPlugins")
+          for name, value in entries(data, "enabledPlugins").items():
+              if (name in base_plugins and base_plugins[name] == value) or (name in plugins and value is True):
+                  continue
+              problems.append("the user settings key enabledPlugins holds the entry %s, which this job does not install at this point." % json.dumps(name))
+          base_markets = entries(base, "extraKnownMarketplaces")
+          for name, value in entries(data, "extraKnownMarketplaces").items():
+              if name in base_markets and base_markets[name] == value:
+                  continue
+              if name in markets and any(value == {"source": {"source": "directory", "path": item}} for item in markets[name]):
+                  continue
+              problems.append("the user settings key extraKnownMarketplaces holds the entry %s, which is not a plugin marketplace that this job stages at this point." % json.dumps(name))
           if phase.startswith("before"):
               if data.get("disableAllHooks") is True:
                   problems.append("the user settings file %s sets disableAllHooks to true." % path)
@@ -2369,6 +2528,8 @@ jobs:
           POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
           POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
           POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
           POLICY_WORKSPACE: ${{ github.workspace }}
           POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
           BASH_ENV: ''
@@ -2389,7 +2550,7 @@ jobs:
             before-main|after-main|before-guide|after-guide) ;;
             *) fail "the phase is not known." ;;
           esac
-          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_WORKSPACE; do
+          for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_USER_SETTINGS_BASE POLICY_USER_SETTINGS_ALLOWED POLICY_WORKSPACE; do
             if [ -z "${!name:-}" ]; then
               fail "$name is empty, so the staged policy cannot be checked."
             fi
@@ -2432,10 +2593,11 @@ jobs:
           if [ "$RESOLVED" != "$POLICY_INTERPRETER_REAL" ]; then
             fail "the hook interpreter path $POLICY_INTERPRETER now resolves to $RESOLVED, which differs from the recorded $POLICY_INTERPRETER_REAL."
           fi
-          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" << 'PY'
+          if ! PROBLEMS=$("$POLICY_INTERPRETER_REAL" -I - "$POLICY_USER_SETTINGS" "$POLICY_USER_SETTINGS_DIGEST" "$POLICY_USER_SETTINGS_KEYS" "$PHASE" "${POLICY_MANAGED_DIRS:-}" "$POLICY_USER_SETTINGS_BASE" "$POLICY_USER_SETTINGS_ALLOWED" << 'PY'
           import hashlib, json, os, sys
-          path, digest, baseline, phase, managed = sys.argv[1:6]
-          EXCLUDED = {"enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces"}
+          path, digest, baseline, phase, managed, base_text, allowed_text = sys.argv[1:8]
+          CONTROLLED = ("enableAllProjectMcpServers", "enabledPlugins", "extraKnownMarketplaces")
+          MISSING = object()
           problems = []
           def canon(value):
               return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -2453,7 +2615,7 @@ jobs:
           except (OSError, ValueError) as error:
               print("the user settings file %s cannot be read as a JSON object (%s)." % (path, error))
               sys.exit(1)
-          kept = {key: value for key, value in data.items() if key not in EXCLUDED}
+          kept = {key: value for key, value in data.items() if key not in CONTROLLED}
           if hashlib.sha256(canon(kept).encode()).hexdigest() != digest:
               try:
                   before = json.loads(baseline)
@@ -2462,6 +2624,45 @@ jobs:
               now = {key: hashlib.sha256(canon(value).encode()).hexdigest() for key, value in kept.items()}
               changed = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
               problems.append("the user settings file %s changed since the policy was staged; changed top-level keys: %s." % (path, ", ".join(changed) if changed else "none named"))
+          try:
+              base = json.loads(base_text)
+              allowed = json.loads(allowed_text)
+          except ValueError:
+              problems.append("the recorded user settings baseline or the expected plugin settings cannot be read.")
+              base, allowed = {}, {}
+          if not isinstance(base, dict) or not isinstance(allowed, dict):
+              problems.append("the recorded user settings baseline or the expected plugin settings are not JSON objects.")
+              base, allowed = {}, {}
+          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"]}.get(phase, [])
+          markets = {}
+          plugins = set()
+          for stage in stages:
+              expected = allowed.get(stage) if isinstance(allowed.get(stage), dict) else {}
+              for name, paths in (expected.get("extraKnownMarketplaces") or {}).items():
+                  markets.setdefault(name, set()).update(paths)
+              plugins.update(expected.get("enabledPlugins") or [])
+          value = data.get("enableAllProjectMcpServers", MISSING)
+          if value != base.get("enableAllProjectMcpServers", MISSING) and not (stages and value is True):
+              problems.append("the user settings key enableAllProjectMcpServers holds a value that this job does not write.")
+          def entries(source, key):
+              value = source.get(key, {})
+              if not isinstance(value, dict):
+                  if source is data:
+                      problems.append("the user settings key %s is not a JSON object." % key)
+                  return {}
+              return value
+          base_plugins = entries(base, "enabledPlugins")
+          for name, value in entries(data, "enabledPlugins").items():
+              if (name in base_plugins and base_plugins[name] == value) or (name in plugins and value is True):
+                  continue
+              problems.append("the user settings key enabledPlugins holds the entry %s, which this job does not install at this point." % json.dumps(name))
+          base_markets = entries(base, "extraKnownMarketplaces")
+          for name, value in entries(data, "extraKnownMarketplaces").items():
+              if name in base_markets and base_markets[name] == value:
+                  continue
+              if name in markets and any(value == {"source": {"source": "directory", "path": item}} for item in markets[name]):
+                  continue
+              problems.append("the user settings key extraKnownMarketplaces holds the entry %s, which is not a plugin marketplace that this job stages at this point." % json.dumps(name))
           if phase.startswith("before"):
               if data.get("disableAllHooks") is True:
                   problems.append("the user settings file %s sets disableAllHooks to true." % path)
