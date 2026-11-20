@@ -1,7 +1,7 @@
 ---
 name: fable-validate-loop
 description: >-
-  Validates a GitHub issue with fable-validate, posts a Fable 5.2 plan when the score gate or a safety flag calls for one, then hands off to work-on-issue-loop to reach a reviewed pull request (PR). Stops when validation rejects the issue. Use for "fable-validate-loop", "fable validate and work on #N", or "fully automate issue #N with fable".
+  Validates a GitHub issue with fable-validate, posts a Fable 5.2 plan when the score gate, a safety flag, or a `plan first` stamp calls for one, then hands off to work-on-issue-loop to reach a reviewed pull request (PR). Stops when validation rejects the issue. Use for "fable-validate-loop", "fable validate and work on #N", or "fully automate issue #N with fable".
 ---
 
 # fable-validate-loop

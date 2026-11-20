@@ -1,7 +1,7 @@
 ---
 name: validate-fableplan-loop
 description: >-
-  Validates a GitHub issue with validate-issue on the session model (no Fable subagent), posts a Fable 5.2 plan when the score gate or a safety flag calls for one, then hands off to work-on-issue-loop. The non-Fable-validation counterpart to fable-validate-loop. Use for "validate-fableplan-loop", "validate, plan, and work on #N", or "validate and fableplan and fully automate #N".
+  Validates a GitHub issue with validate-issue on the session model, posts a Fable 5.2 plan when the score gate, a safety flag, or a `plan first` stamp calls for one, then hands off to work-on-issue-loop. The non-Fable-validation counterpart to fable-validate-loop. Use for "validate-fableplan-loop", "validate, plan, and work on #N", or "validate and fableplan and fully automate #N".
 ---
 
 # validate-fableplan-loop
