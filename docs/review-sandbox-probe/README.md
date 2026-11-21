@@ -25,7 +25,10 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   cleanup suites run on macOS too. The agent home suite needs Linux. The stub
   suite needs Linux, root, and `RK_PROBE_USER`.
 - `extract-step.mjs`: prints a step's `run` script from a workflow, with Bun's
-  YAML parser.
+  YAML parser. The probe and the fixtures extract the contract and cleanup
+  steps from `claude-run.yml`, and read the stub, agent home, guard, and
+  settings scripts from `templates/claude-workflow/scripts/review_*.sh`, which
+  the workflow runs from its staged copy.
 
 ## Run it
 

@@ -5,6 +5,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 REPO_ROOT=$(cd "$HERE/../.." && pwd -P)
 WORKFLOW="$REPO_ROOT/.github/workflows/claude-run.yml"
 EXTRACT="$HERE/extract-step.mjs"
+SCRIPTS="$REPO_ROOT/templates/claude-workflow/scripts"
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/rk-fixtures.XXXXXXXX")
 PASS=0
 FAIL=0
@@ -191,7 +192,7 @@ test_contract_linux() {
 
 make_guard() {
   local dir="$1" script
-  script=$(step_script "Stage the pull request under review" 'rm -f "$GUARD_FILE" "$SETTINGS_FILE"' 'echo "guard_oid=$GUARD_OID" >> "$GITHUB_OUTPUT"')
+  script="$SCRIPTS/review_write_guard.sh"
   run_script "$script" -i "PATH=$PATH" "GUARD_FILE=$dir/guard.sh" "SETTINGS_FILE=$dir/settings.json" "REAL_HOME=$dir/real-home" "AGENT_HOME=$dir/agent-home" "XDG_CONFIG_HOME=$dir/xdg" "GITHUB_OUTPUT=$dir/guard.out"
 }
 
@@ -262,7 +263,7 @@ make_settings() {
   if [ -z "$parent_deny" ]; then
     if [ -n "$parent" ]; then parent_deny=true; else parent_deny=false; fi
   fi
-  script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
+  script="$SCRIPTS/review_write_settings.sh"
   rm -f "$dir/settings.json"
   run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=${RUNNER_TEMP_IN:-$dir/runner/_work/_temp}" "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE_IN:-}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "GITHUB_OUTPUT=$dir/settings.out"
 }
@@ -434,7 +435,7 @@ test_agent_home() {
   fi
   local script out ws="$SCRATCH/ah-ws" t parent pw_home old_empty old_full fresh_empty
   mkdir -p "$ws"
-  script=$(step_script "Select the agent home")
+  script="$SCRIPTS/review_agent_home.sh"
   out="$SCRATCH/ah.out"
   : > "$out"
   run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=false"
@@ -533,7 +534,7 @@ test_agent_home() {
 
 stub_run() {
   local ws="$1" script
-  script=$(step_script "Prepare workspace ancestor stubs for the scrub sandbox")
+  script="$SCRIPTS/review_ancestor_stubs.sh"
   run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws"
 }
 

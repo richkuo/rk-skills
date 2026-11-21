@@ -214,310 +214,6 @@ jobs:
             printf 'home_parent_deny=%s\n' "$HOME_PARENT_DENY"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Prepare workspace ancestor stubs for the scrub sandbox
-        id: ancestor_stubs
-        if: inputs.mode == 'review' && steps.review_contract.outputs.stub_scan == 'true'
-        run: |
-          set -euo pipefail
-          if ! command -v python3 >/dev/null 2>&1; then
-            echo "::error::Review refused: python3 is required to prepare the workspace ancestor stubs safely."
-            exit 1
-          fi
-          python3 -I - "$GITHUB_WORKSPACE" << 'PY'
-          import errno
-          import os
-          import pwd
-          import secrets
-          import stat
-          import sys
-
-          MCP_CONTENT = b'{"mcpServers":{}}\n'
-          workspace = sys.argv[1]
-          os.umask(0o022)
-          rejected = []
-
-          def report(kind, path, detail=""):
-              print(f"{kind}: {path}{(' (' + detail + ')') if detail else ''}")
-
-          def ancestors_of(path):
-              found = []
-              current = os.path.dirname(path.rstrip("/") or "/")
-              while current and current != "/":
-                  found.append(current)
-                  current = os.path.dirname(current)
-              return found
-
-          candidates = []
-          for source in (workspace, os.path.realpath(workspace)):
-              for ancestor in ancestors_of(source):
-                  canonical = os.path.realpath(ancestor)
-                  if canonical != "/" and canonical not in candidates:
-                      candidates.append(canonical)
-
-          def open_dir_nofollow(path):
-              fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
-              try:
-                  for part in [p for p in path.split("/") if p]:
-                      next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-                      os.close(fd)
-                      fd = next_fd
-              except BaseException:
-                  os.close(fd)
-                  raise
-              return fd
-
-          def entry_state(fd, name):
-              try:
-                  return os.stat(name, dir_fd=fd, follow_symlinks=False)
-              except FileNotFoundError:
-                  return None
-
-          def check_dir_entry(fd, path, name, st, created):
-              target = f"{path}/{name}"
-              if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
-                  report("rejected", target, "exists and is not a real directory")
-                  rejected.append(target)
-                  return
-              report("created" if created else "kept", target)
-
-          def check_file_entry(fd, path, name, st, created):
-              target = f"{path}/{name}"
-              if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
-                  report("rejected", target, "exists and is not a regular file")
-                  rejected.append(target)
-                  return
-              report("created" if created else "kept", target)
-
-          def home_owner(path, owner):
-              try:
-                  entry = pwd.getpwuid(owner)
-              except KeyError:
-                  return None
-              if entry.pw_dir and os.path.realpath(entry.pw_dir) == path:
-                  return entry
-              return None
-
-          def warn_home_stub(fd, path, owner_entry):
-              if not owner_entry:
-                  return
-              st = entry_state(fd, ".claude")
-              if st is None or st.st_uid != 0:
-                  return
-              print(f"::warning::{path}/.claude is a root-owned directory in the home directory of {owner_entry.pw_name}. The scrub sandbox of a root review needs it there (anthropics/claude-code#97731), so it stays. Claude Code run by {owner_entry.pw_name} cannot write its settings in it. To give the directory back, move the runner out of that home, then run: sudo rm -r {path}/.claude")
-
-          def ensure_claude_dir(fd, path):
-              name = ".claude"
-              st = entry_state(fd, name)
-              if st is not None:
-                  check_dir_entry(fd, path, name, st, False)
-                  return
-              try:
-                  os.mkdir(name, 0o755, dir_fd=fd)
-              except FileExistsError:
-                  st = entry_state(fd, name)
-                  if st is None:
-                      report("rejected", f"{path}/{name}", "changed during creation")
-                      rejected.append(f"{path}/{name}")
-                      return
-                  check_dir_entry(fd, path, name, st, False)
-                  return
-              new_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-              try:
-                  os.fchmod(new_fd, 0o755)
-                  st = os.fstat(new_fd)
-              finally:
-                  os.close(new_fd)
-              if st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o755:
-                  report("rejected", f"{path}/{name}", "created with the wrong owner or mode")
-                  rejected.append(f"{path}/{name}")
-                  return
-              check_dir_entry(fd, path, name, st, True)
-
-          def ensure_mcp_file(fd, path):
-              name = ".mcp.json"
-              st = entry_state(fd, name)
-              if st is not None:
-                  check_file_entry(fd, path, name, st, False)
-                  return
-              temp_name = f".mcp.json.rk-{os.getpid()}-{secrets.token_hex(8)}"
-              temp_fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
-              try:
-                  try:
-                      os.write(temp_fd, MCP_CONTENT)
-                      os.fchmod(temp_fd, 0o644)
-                      os.fsync(temp_fd)
-                  finally:
-                      os.close(temp_fd)
-                  try:
-                      os.link(temp_name, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
-                      created = True
-                  except FileExistsError:
-                      created = False
-              finally:
-                  try:
-                      os.unlink(temp_name, dir_fd=fd)
-                  except FileNotFoundError:
-                      pass
-              st = entry_state(fd, name)
-              if st is None:
-                  report("rejected", f"{path}/{name}", "changed during creation")
-                  rejected.append(f"{path}/{name}")
-                  return
-              if created and (st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o644):
-                  report("rejected", f"{path}/{name}", "created with the wrong owner or mode")
-                  rejected.append(f"{path}/{name}")
-                  return
-              check_file_entry(fd, path, name, st, created)
-
-          for path in candidates:
-              try:
-                  fd = open_dir_nofollow(path)
-              except OSError as error:
-                  report("rejected", path, f"cannot open without following a link: {errno.errorcode.get(error.errno, error.errno)}")
-                  rejected.append(path)
-                  continue
-              try:
-                  owner = os.fstat(fd).st_uid
-                  if owner == 0:
-                      continue
-                  owner_entry = home_owner(path, owner)
-                  if owner_entry:
-                      print(f"ancestor owned by uid {owner} is the home of {owner_entry.pw_name}: {path}")
-                  else:
-                      print(f"ancestor owned by uid {owner}: {path}")
-                  ensure_claude_dir(fd, path)
-                  ensure_mcp_file(fd, path)
-                  warn_home_stub(fd, path, owner_entry)
-              except OSError as error:
-                  report("rejected", path, f"stub preparation failed: {errno.errorcode.get(error.errno, error.errno)}")
-                  rejected.append(path)
-              finally:
-                  os.close(fd)
-
-          if rejected:
-              print("::error::Review refused: the workspace ancestor stubs could not be prepared safely, so the scrub sandbox cannot run. Safe entries stay in place. Rejected: " + ", ".join(rejected))
-              sys.exit(1)
-          PY
-
-      - name: Select the agent home
-        id: agent_home
-        env:
-          NEEDS_TEMP_HOME: ${{ steps.review_contract.outputs.needs_temp_home }}
-          HOME_PARENT_DENY: ${{ steps.review_contract.outputs.home_parent_deny }}
-        run: |
-          set -euo pipefail
-          umask 077
-          PARENT=""
-          NO_PARENT_REASON=""
-          if [ "${HOME_PARENT_DENY:-}" = "true" ]; then
-            UID_NOW=$(id -u)
-            PW_HOME=$(getent passwd "$UID_NOW" 2>/dev/null | cut -d: -f6) || PW_HOME=""
-            PW_RESOLVED=""
-            if [ -n "$PW_HOME" ]; then
-              PW_RESOLVED=$(cd -P "$PW_HOME" 2>/dev/null && pwd -P) || PW_RESOLVED=""
-            fi
-            if [ -n "$PW_RESOLVED" ] && [ "$PW_RESOLVED" != "/" ] && [ -d "$PW_RESOLVED" ] && [ -O "$PW_RESOLVED" ] && [ -z "$(find "$PW_RESOLVED" -maxdepth 0 -perm /022 -print)" ]; then
-              PARENT="$PW_RESOLVED/.rk-claude-homes"
-              mkdir "$PARENT" 2>/dev/null || true
-              if [ ! -L "$PARENT" ] && [ -d "$PARENT" ] && [ -O "$PARENT" ]; then
-                chmod go-rwx "$PARENT"
-              fi
-              if [ -L "$PARENT" ] || [ ! -d "$PARENT" ] || [ ! -O "$PARENT" ] || [ -n "$(find "$PARENT" -maxdepth 0 -perm /077 -print)" ]; then
-                echo "::error::Review refused: $PARENT, the directory that holds the temporary agent homes of this user, is not a directory owned by this user with no group or other permissions ($(stat -c '%F, owner %U, mode %a' "$PARENT" 2>&1)). Remove it when no review runs on this host."
-                exit 1
-              fi
-              find "$PARENT" -mindepth 1 -maxdepth 1 -name 'home.??????????' -type d -empty -mmin +1440 -delete 2>/dev/null || true
-            else
-              NO_PARENT_REASON="the home directory of user ID $UID_NOW in the passwd database (${PW_HOME:-none}) is missing, is /, is not owned by this user, or is writable by group or others"
-              echo "No directory for temporary agent homes: $NO_PARENT_REASON."
-            fi
-          fi
-          if [ "${HOME_PARENT_DENY:-}" = "true" ] && [ ! -e "$HOME/.bash_profile" ] && [ ! -L "$HOME/.bash_profile" ]; then
-            if printf '%s\n' "if [ -s \"\$HOME/.bash_login\" ]; then . \"\$HOME/.bash_login\"; elif [ -f \"\$HOME/.profile\" ]; then . \"\$HOME/.profile\"; fi" > "$HOME/.bash_profile" 2>/dev/null; then
-              echo "Created $HOME/.bash_profile, which loads a .bash_login that has content, or else .profile, as a bash login shell does without it. Without this file, the scrub sandbox or the protected job home entries leave an empty .bash_profile, and a bash login shell then skips .profile. It stays on the host; delete it to remove it."
-            else
-              echo "::warning::$HOME/.bash_profile cannot be created. The scrub sandbox can leave an empty .bash_profile there, and a bash login shell then skips .profile."
-            fi
-          fi
-          if [ "$NEEDS_TEMP_HOME" != "true" ]; then
-            if [ "${HOME_PARENT_DENY:-}" = "true" ]; then
-              for entry in .local/bin .bun/bin; do
-                if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
-                  if ! mkdir -p "$HOME/$entry"; then
-                    echo "::error::Review refused: $HOME/$entry, where the action installs a program and which it adds to PATH, cannot be created, so the settings cannot deny sandboxed writes to it."
-                    exit 1
-                  fi
-                  echo "Created $HOME/$entry, where the action installs a program and which it adds to PATH, so the settings can deny sandboxed writes to it. The action fills it; it stays on the host."
-                fi
-              done
-            fi
-            {
-              printf 'path=%s\n' "$HOME"
-              printf 'temp=\n'
-              printf 'parent=%s\n' "$PARENT"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ -z "$PARENT" ]; then
-            echo "::error::Review refused: a temporary agent home is needed, but there is no protected directory to hold it: ${NO_PARENT_REASON:-the run contract does not protect one}."
-            exit 1
-          fi
-          AGENT_HOME=$(mktemp -d "$PARENT/home.XXXXXXXXXX")
-          if [ -L "$AGENT_HOME" ] || [ ! -d "$AGENT_HOME" ] || [ ! -O "$AGENT_HOME" ] || [ -n "$(find "$AGENT_HOME" -maxdepth 0 -perm /077 -print)" ]; then
-            echo "::error::Review refused: the temporary agent home $AGENT_HOME is not a directory owned by this user with no group or other permissions ($(stat -c '%F, owner %U, mode %a' "$AGENT_HOME" 2>&1))."
-            exit 1
-          fi
-          printf '#!/bin/sh\nexit 0\n' > "$AGENT_HOME/.rk-exec-check"
-          chmod 700 "$AGENT_HOME/.rk-exec-check"
-          if ! "$AGENT_HOME/.rk-exec-check"; then
-            echo "::error::Review refused: programs cannot run from the temporary agent home $AGENT_HOME (its file system is mounted noexec)."
-            exit 1
-          fi
-          rm -f "$AGENT_HOME/.rk-exec-check"
-          for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc; do
-            : > "$AGENT_HOME/$entry"
-          done
-          printf '{}\n' > "$AGENT_HOME/.claude.json"
-          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .bun/bin .ssh runners actions-runner; do
-            mkdir -p "$AGENT_HOME/$entry"
-          done
-          JOB_HOME_CREATED=()
-          for entry in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .claude.json; do
-            if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
-              if ! : > "$HOME/$entry"; then
-                echo "::error::Review refused: the job home entry $HOME/$entry cannot be created, so the scrub sandbox cannot protect it."
-                exit 1
-              fi
-              if [ "$entry" = .claude.json ]; then
-                printf '{}\n' > "$HOME/$entry"
-              fi
-              JOB_HOME_CREATED+=("$entry")
-            fi
-          done
-          for entry in .claude .config/git .config/pip .config/gh .pip .local/bin .bun/bin .ssh; do
-            if [ ! -e "$HOME/$entry" ] && [ ! -L "$HOME/$entry" ]; then
-              if ! mkdir -p "$HOME/$entry"; then
-                echo "::error::Review refused: the job home entry $HOME/$entry cannot be created, so the scrub sandbox cannot protect it."
-                exit 1
-              fi
-              JOB_HOME_CREATED+=("$entry")
-            fi
-          done
-          if [ "${#JOB_HOME_CREATED[@]}" -gt 0 ]; then
-            echo "The action step runs with a temporary HOME, so the sandbox no longer protects the job home $HOME by itself. Created the missing protected entries there, which the settings deny and which stay on the host: ${JOB_HOME_CREATED[*]}. Delete the listed entries to remove them."
-          fi
-          WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P)
-          git config --file "$AGENT_HOME/.gitconfig" --add safe.directory "$GITHUB_WORKSPACE"
-          if [ "$WS_RESOLVED" != "$GITHUB_WORKSPACE" ]; then
-            git config --file "$AGENT_HOME/.gitconfig" --add safe.directory "$WS_RESOLVED"
-          fi
-          echo "The action step runs with the temporary HOME $AGENT_HOME."
-          {
-            printf 'path=%s\n' "$AGENT_HOME"
-            printf 'temp=%s\n' "$AGENT_HOME"
-            printf 'parent=%s\n' "$PARENT"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -564,27 +260,6 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Stage shared prompts and scripts outside the workspace
-        env:
-          WORKFLOW_SHA: ${{ steps.runtime_sources.outputs.workflow_sha }}
-        run: |
-          set -euo pipefail
-          if ! printf '%s' "$WORKFLOW_SHA" | grep -qxE '[0-9a-f]{40}'; then
-            echo "::error::Called workflow revision is not a full commit identifier. The run stops. There is no branch or tag fallback."
-            exit 1
-          fi
-          got_workflow="$(git -C .rk-skills-shared rev-parse HEAD)"
-          if [ "$got_workflow" != "$WORKFLOW_SHA" ]; then
-            echo "::error::Shared checkout ${got_workflow} does not match the called workflow commit ${WORKFLOW_SHA}."
-            exit 1
-          fi
-          rm -rf "$RUNNER_TEMP/rk-shared"
-          mkdir -p "$RUNNER_TEMP/rk-shared"
-          cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
-          cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
-          test -d "$RUNNER_TEMP/rk-shared/prompts"
-          test -f "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh"
-
       - name: Checkout pinned Claude plugin sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -594,23 +269,12 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Stage pinned plugin sources outside the workspace
+      - name: Stage shared scripts and pinned plugin sources outside the workspace
         env:
           WORKFLOW_SHA: ${{ steps.runtime_sources.outputs.workflow_sha }}
           PLUGINS_OFFICIAL_SHA: ${{ steps.runtime_sources.outputs.plugins_official_sha }}
         run: |
           set -euo pipefail
-          require_sha() {
-            name="$1"
-            value="$2"
-            if ! printf '%s' "$value" | grep -qxE '[0-9a-f]{40}'; then
-              echo "::error::${name} is not a full commit identifier. The run stops. There is no branch or tag fallback."
-              exit 1
-            fi
-          }
-          require_sha "Called workflow revision" "$WORKFLOW_SHA"
-          require_sha "Pinned Claude plugin marketplace" "$PLUGINS_OFFICIAL_SHA"
-
           got_workflow="$(git -C .rk-skills-shared rev-parse HEAD)"
           if [ "$got_workflow" != "$WORKFLOW_SHA" ]; then
             echo "::error::Shared checkout ${got_workflow} does not match the called workflow commit ${WORKFLOW_SHA}."
@@ -621,6 +285,11 @@ jobs:
             echo "::error::Plugin checkout ${got_plugins} does not match the pinned commit ${PLUGINS_OFFICIAL_SHA}."
             exit 1
           fi
+
+          rm -rf "$RUNNER_TEMP/rk-shared"
+          mkdir -p "$RUNNER_TEMP/rk-shared"
+          cp -R .rk-skills-shared/templates/claude-workflow/prompts "$RUNNER_TEMP/rk-shared/prompts"
+          cp -R .rk-skills-shared/templates/claude-workflow/scripts "$RUNNER_TEMP/rk-shared/scripts"
 
           plugin_source() {
             file="$1"
@@ -755,6 +424,18 @@ jobs:
           test ! -e .rk-skills-shared
           test ! -e .rk-plugin-official
 
+      - name: Prepare workspace ancestor stubs for the scrub sandbox
+        id: ancestor_stubs
+        if: inputs.mode == 'review' && steps.review_contract.outputs.stub_scan == 'true'
+        run: bash "$RUNNER_TEMP/rk-shared/scripts/review_ancestor_stubs.sh"
+
+      - name: Select the agent home
+        id: agent_home
+        env:
+          NEEDS_TEMP_HOME: ${{ steps.review_contract.outputs.needs_temp_home }}
+          HOME_PARENT_DENY: ${{ steps.review_contract.outputs.home_parent_deny }}
+        run: bash "$RUNNER_TEMP/rk-shared/scripts/review_agent_home.sh"
+
       - name: Resolve model and effort
         id: resolve
         env:
@@ -822,95 +503,8 @@ jobs:
             echo "::error::The run contract has no job home or agent home, so the credential guard cannot cover them."
             exit 1
           fi
-          rm -f "$GUARD_FILE" "$SETTINGS_FILE"
-          {
-            printf '#!/usr/bin/env bash\n'
-            printf 'RK_REAL_HOME=%q\n' "$REAL_HOME"
-            printf 'RK_AGENT_HOME=%q\n' "$AGENT_HOME"
-            printf 'RK_XDG_CONFIG_HOME=%q\n' "${XDG_CONFIG_HOME:-}"
-            cat <<'GUARD_EOF'
-          set -u
-          block() {
-            echo "Credential guard: $1. The job token can be readable, so stop the review and report that this run is unsafe." >&2
-            exit 2
-          }
-          AFTER_ACTION=0
-          [ "${1:-}" = "--after-action" ] && AFTER_ACTION=1
-          action_token_output_only() {
-            case "$1" in
-              "${RUNNER_TEMP:-/nonexistent}"/_runner_file_commands/set_output_*) ;;
-              *) return 1 ;;
-            esac
-            [ -f "$1" ] && [ ! -L "$1" ] || return 1
-            awk -v t="$2" -v b="$3" '
-              state == 1 { if ($0 != t) bad = 1; state = 2; next }
-              state == 2 { if ($0 != delim) bad = 1; state = 0; next }
-              /^github_token<<ghadelimiter_[0-9a-f-]+$/ { delim = substr($0, 15); state = 1; next }
-              index($0, t) || index($0, b) { bad = 1 }
-              END { exit (bad || state != 0) }
-            ' "$1"
-          }
-          WS="${GITHUB_WORKSPACE:-$PWD}"
-          git -C "$WS" rev-parse --git-dir >/dev/null 2>&1 || block "git does not open the workspace as a trusted repository, so its config cannot be checked"
-          CONFIG=$(git -C "$WS" config --list 2>/dev/null) || block "git config cannot be read"
-          for CONFIG_FILE in "$RK_REAL_HOME/.gitconfig" "$RK_REAL_HOME/.config/git/config" "$RK_AGENT_HOME/.gitconfig" "$RK_AGENT_HOME/.config/git/config" ${RK_XDG_CONFIG_HOME:+"$RK_XDG_CONFIG_HOME/git/config"}; do
-            [ -e "$CONFIG_FILE" ] || continue
-            MORE=$(git config --includes --file "$CONFIG_FILE" --list 2>/dev/null) || block "the git config file $CONFIG_FILE cannot be read"
-            CONFIG=$(printf '%s\n%s' "$CONFIG" "$MORE")
-          done
-          if printf '%s\n' "$CONFIG" | grep -qiE '^http\..*\.extraheader='; then
-            block "git config sets an http extraheader entry"
-          fi
-          CREDENTIAL_URLS=$(printf '%s\n' "$CONFIG" | grep -iE '^remote\.[^=]*\.(push)?url=[a-z][a-z0-9+.-]*://[^/@]*@' | grep -viE '^remote\.[^=]*\.(push)?url=https://x-access-token@[^/@:]+/' || true)
-          if [ -n "$CREDENTIAL_URLS" ]; then
-            block "a git remote URL holds a credential"
-          fi
-          if printf '%s\n' "$CONFIG" | grep -qF 'x-access-token:'; then
-            block "a git config value holds an access token"
-          fi
-          if printf 'protocol=https\nhost=example.invalid\n\n' | GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= git -C "$WS" credential fill 2>/dev/null | grep -q '^password='; then
-            block "git offers a credential to a host other than the GitHub server"
-          fi
-          STORES=(
-            "$RK_REAL_HOME/.git-credentials"
-            "$RK_REAL_HOME/.config/git/credentials"
-            "$RK_AGENT_HOME/.git-credentials"
-            "$RK_AGENT_HOME/.config/git/credentials"
-            "${HOME:-/nonexistent}/.git-credentials"
-            "${XDG_CONFIG_HOME:-${HOME:-/nonexistent}/.config}/git/credentials"
-          )
-          if [ -n "$RK_XDG_CONFIG_HOME" ]; then
-            STORES+=("$RK_XDG_CONFIG_HOME/git/credentials")
-          fi
-          TOKEN_SEEN=0
-          for TOKEN in "${GH_TOKEN:-}" "${GITHUB_TOKEN:-}"; do
-            [ -n "$TOKEN" ] || continue
-            TOKEN_SEEN=1
-            AUTH_B64=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
-            if printf '%s\n' "$CONFIG" | grep -qF -e "$TOKEN" -e "$AUTH_B64"; then
-              block "a git config value holds the job token"
-            fi
-            LEAKED=""
-            while IFS= read -r FILE; do
-              [ -n "$FILE" ] || continue
-              if [ "$AFTER_ACTION" = 1 ] && action_token_output_only "$FILE" "$TOKEN" "$AUTH_B64"; then
-                continue
-              fi
-              LEAKED="$LEAKED $FILE"
-            done < <(grep -rlF -e "$TOKEN" -e "$AUTH_B64" "${RUNNER_TEMP:-/nonexistent}" "${STORES[@]}" 2>/dev/null)
-            if [ -n "$LEAKED" ]; then
-              block "a file under RUNNER_TEMP or a git credential store holds the job token:$LEAKED"
-            fi
-          done
-          if [ "$TOKEN_SEEN" != 1 ]; then
-            block "GH_TOKEN and GITHUB_TOKEN are both empty, so the job token scan cannot run"
-          fi
-          exit 0
-          GUARD_EOF
-          } > "$GUARD_FILE"
-          chmod 400 "$GUARD_FILE"
+          bash "$RUNNER_TEMP/rk-shared/scripts/review_write_guard.sh"
           GUARD_OID=$(git hash-object "$GUARD_FILE")
-          echo "guard_oid=$GUARD_OID" >> "$GITHUB_OUTPUT"
 
           BASE_REF=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName -q .baseRefName)
           git fetch --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/rk-claude/pr-head"
@@ -919,132 +513,7 @@ jobs:
           echo "base_sha=$(git merge-base refs/rk-claude/pr-base refs/rk-claude/pr-head)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-          cat > "$SETTINGS_FILE" <<EOF
-          {
-            "claudeMdExcludes": [
-              "${GITHUB_WORKSPACE}/CLAUDE.md",
-              "${GITHUB_WORKSPACE}/CLAUDE.local.md",
-              "${GITHUB_WORKSPACE}/AGENTS.md",
-              "${GITHUB_WORKSPACE}/.claude/CLAUDE.md",
-              "${GITHUB_WORKSPACE}/.claude/rules/**",
-              "${GITHUB_WORKSPACE}/**/CLAUDE.md",
-              "${GITHUB_WORKSPACE}/**/CLAUDE.local.md",
-              "${GITHUB_WORKSPACE}/**/AGENTS.md",
-              "${GITHUB_WORKSPACE}/**/.claude/CLAUDE.md",
-              "${GITHUB_WORKSPACE}/**/.claude/rules/**"
-            ],
-            "hooks": {
-              "PreToolUse": [
-                {
-                  "matcher": "*",
-                  "hooks": [
-                    { "type": "command", "command": "git hash-object ${GUARD_FILE} | grep -qx ${GUARD_OID} || { echo 'Credential guard: the guard script changed, so stop the review and report that this run is unsafe.' >&2; exit 2; }; bash ${GUARD_FILE} || exit 2" }
-                  ]
-                }
-              ]
-            }
-          }
-          EOF
-          if [ -n "$TEMP_AGENT_HOME" ] || [ "${HOME_PARENT_DENY:-}" = "true" ]; then
-            WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" && pwd -P) || { echo "::error::The workspace cannot be resolved."; exit 1; }
-            DENY_LIST=$(mktemp)
-            add_deny() {
-              case "$1" in
-                *$'\n'*|*$'\r'*) echo "::error::The protected path $1 holds a line break."; exit 1 ;;
-              esac
-              for w in "$GITHUB_WORKSPACE" "$WS_RESOLVED"; do
-                case "$w/" in
-                  "${1%/}"/*)
-                    echo "::error::The protected path $1 contains the workspace $w, so denying writes to it would break the review."
-                    exit 1
-                    ;;
-                esac
-              done
-              printf '%s\n' "$1" >> "$DENY_LIST"
-            }
-            require_deny() {
-              if [ ! -e "$1" ] || [ -L "$1" ]; then
-                echo "::error::Review refused: the protected path $1 is missing or a symlink, so the sandbox cannot protect it."
-                exit 1
-              fi
-              add_deny "$1"
-            }
-            optional_deny() {
-              if [ -e "$1" ] || [ -L "$1" ]; then
-                add_deny "$1"
-              fi
-            }
-            if [ -n "$HOME_PARENT" ]; then
-              require_deny "$HOME_PARENT"
-            fi
-            require_deny "$RUNNER_TEMP"
-            for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .git-credentials .config .pip .local/bin .bun .ssh .claude .claude.json; do
-              optional_deny "${REAL_HOME%/}/$p"
-            done
-            if [ -n "$TEMP_AGENT_HOME" ]; then
-              for p in .bashrc .bash_profile .bash_login .bash_logout .profile .zshrc .zshenv .zprofile .zlogin .zlogout .bunfig.toml .npmrc .yarnrc .yarnrc.yml .netrc .gitconfig .config/git .config/pip .config/gh .pip .local/bin .bun .ssh .claude .claude.json; do
-                require_deny "${TEMP_AGENT_HOME%/}/$p"
-              done
-            fi
-            if [ -n "${RUNNER_TOOL_CACHE:-}" ]; then
-              if [ ! -e "$RUNNER_TOOL_CACHE" ] && [ ! -L "$RUNNER_TOOL_CACHE" ] && mkdir -p "$RUNNER_TOOL_CACHE" 2>/dev/null; then
-                echo "Created the tool cache $RUNNER_TOOL_CACHE, so the settings can deny sandboxed writes to it. It stays on the host."
-              fi
-              optional_deny "$RUNNER_TOOL_CACHE"
-            fi
-            WORK_DIR=$(dirname "$RUNNER_TEMP")
-            RUNNER_ROOT=$(dirname "$WORK_DIR")
-            if [ -f "$RUNNER_ROOT/.runner" ]; then
-              for p in bin externals .runner .credentials .credentials_rsaparams .env .path config.sh run.sh run-helper.sh svc.sh safe_sleep.sh; do
-                optional_deny "$RUNNER_ROOT/$p"
-              done
-              for e in "$WORK_DIR"/* "$WORK_DIR"/.[!.]*; do
-                if [ ! -e "$e" ] && [ ! -L "$e" ]; then
-                  continue
-                fi
-                if [ "$e" = "${RUNNER_TEMP%/}" ] || grep -qxF "$e" "$DENY_LIST"; then
-                  continue
-                fi
-                E_RESOLVED=$(cd -P "$e" 2>/dev/null && pwd -P) || E_RESOLVED="$e"
-                HOLDS_WS=false
-                for w in "$GITHUB_WORKSPACE" "$WS_RESOLVED"; do
-                  for c in "${e%/}" "${E_RESOLVED%/}"; do
-                    case "$w/" in
-                      "$c"/*) HOLDS_WS=true ;;
-                    esac
-                  done
-                done
-                if [ "$HOLDS_WS" = true ]; then
-                  continue
-                fi
-                add_deny "$e"
-              done
-            else
-              echo "::notice::No .runner file at $RUNNER_ROOT, so the runner installation files are not listed. The sandbox default write policy still applies."
-            fi
-            echo "Sandboxed commands cannot write to:"
-            cat "$DENY_LIST"
-            if command -v jq >/dev/null 2>&1; then
-              jq --rawfile deny "$DENY_LIST" '.sandbox.filesystem.denyWrite = ($deny | split("\n") | map(select(length > 0)))' "$SETTINGS_FILE" > "$SETTINGS_FILE.new"
-            elif command -v python3 >/dev/null 2>&1; then
-              python3 -I - "$SETTINGS_FILE" "$DENY_LIST" > "$SETTINGS_FILE.new" << 'PY'
-          import json, sys
-          with open(sys.argv[1]) as handle:
-              data = json.load(handle)
-          with open(sys.argv[2]) as handle:
-              deny = [line for line in handle.read().split("\n") if line]
-          data.setdefault("sandbox", {}).setdefault("filesystem", {})["denyWrite"] = deny
-          json.dump(data, sys.stdout, indent=2)
-          sys.stdout.write("\n")
-          PY
-            else
-              echo "::error::Review refused: jq or python3 is required to write the sandbox protection entries."
-              exit 1
-            fi || { echo "::error::Review refused: the sandbox protection entries could not be written."; exit 1; }
-            mv "$SETTINGS_FILE.new" "$SETTINGS_FILE"
-            rm -f "$DENY_LIST"
-          fi
-          chmod 400 "$SETTINGS_FILE"
+          GUARD_OID="$GUARD_OID" bash "$RUNNER_TEMP/rk-shared/scripts/review_write_settings.sh"
           echo "settings_oid=$(git hash-object "$SETTINGS_FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go (gofmt only)
@@ -1180,6 +649,10 @@ jobs:
           if [ -n "$(printf '%s' "$GUIDE_PERMIT" | LC_ALL=C tr -d ',[:space:]')" ]; then
             GUIDE_REQUIRED=true
           fi
+          GUIDE_HEADING=false
+          if [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            GUIDE_HEADING=true
+          fi
           guide_stop() {
             GUIDE_STOP_REASON=$(printf '%s' "$1" | tr '\r\n' '  ')
             echo "guide_stop_reason=$GUIDE_STOP_REASON" >> "$GITHUB_OUTPUT"
@@ -1201,11 +674,11 @@ jobs:
               guide_stop "the caller sets guide_contract_permit, but CLAUDE.md is missing at the default-branch commit ${TRUSTED_SHA}"
             elif [ "$GUIDE_REGULAR" != true ]; then
               guide_stop "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} is not a regular file"
-            elif ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            elif [ "$GUIDE_HEADING" != true ]; then
               guide_stop "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} has no line that is exactly ## Agent guide contract"
             fi
           fi
-          if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+          if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ "$GUIDE_HEADING" = true ]; then
             GUIDE_DIR="$RUNNER_TEMP/rk-guide"
             GUIDE_RUNNER="$GUIDE_DIR/guide_contract.py"
             GUIDE_STAGE_DIR="$RUNNER_TEMP/rk-guide-stage"
@@ -1250,7 +723,7 @@ jobs:
                 PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
               fi
             fi
-          elif [ -z "$FLOW" ] && [ -n "$ROUTE_EXTRA" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+          elif [ -z "$FLOW" ] && [ -n "$ROUTE_EXTRA" ] && [ "$GUIDE_HEADING" = true ]; then
             ROUTE_OUT=""
             if command -v python3 >/dev/null 2>&1; then
               ROUTE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" python3 -I "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" route-extra --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA") || ROUTE_OUT=""
@@ -1301,13 +774,9 @@ jobs:
         if: inputs.mode == 'review'
         env:
           GH_TOKEN: ${{ github.token }}
-          REAL_HOME: ${{ steps.review_contract.outputs.real_home }}
-          AGENT_HOME: ${{ steps.agent_home.outputs.path }}
+          GUARD_FILE: ${{ runner.temp }}/claude-review-credential-guard.sh
+          GUARD_OID: ${{ steps.pr_context.outputs.guard_oid }}
         run: |
-          if [ -z "$REAL_HOME" ] || [ -z "$AGENT_HOME" ]; then
-            echo "::error::The run contract has no job home or agent home, so the credential check cannot cover them."
-            exit 1
-          fi
           echo "Git config keys, each with the file that sets it:"
           git config --list --show-origin --name-only
           echo "RUNNER_TEMP contents:"
@@ -1318,37 +787,11 @@ jobs:
           fi
           AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
           echo "::add-mask::$AUTH_B64"
-          FOUND=0
-          if git config --list --name-only | grep -qiE '^http\..*\.extraheader$'; then
-            echo "::error::Git config sets an http extraheader entry."
-            FOUND=1
+          if [ -z "$GUARD_OID" ] || [ "$(git hash-object "$GUARD_FILE" 2>/dev/null)" != "$GUARD_OID" ]; then
+            echo "::error::The credential guard script is missing or changed before Claude ran."
+            exit 1
           fi
-          if git config --list | grep -qF -e "$GH_TOKEN" -e "$AUTH_B64"; then
-            echo "::error::A git config value holds the job token."
-            FOUND=1
-          fi
-          for CONFIG_FILE in "$REAL_HOME/.gitconfig" "$REAL_HOME/.config/git/config" "$AGENT_HOME/.gitconfig" "$AGENT_HOME/.config/git/config" ${XDG_CONFIG_HOME:+"$XDG_CONFIG_HOME/git/config"}; do
-            [ -e "$CONFIG_FILE" ] || continue
-            if ! MORE=$(git config --includes --file "$CONFIG_FILE" --list 2>/dev/null); then
-              echo "::error::The git config file $CONFIG_FILE cannot be read."
-              FOUND=1
-              continue
-            fi
-            if printf '%s\n' "$MORE" | grep -qiE '^http\..*\.extraheader='; then
-              echo "::error::The git config file $CONFIG_FILE sets an http extraheader entry."
-              FOUND=1
-            fi
-            if printf '%s\n' "$MORE" | grep -qF -e "$GH_TOKEN" -e "$AUTH_B64"; then
-              echo "::error::The git config file $CONFIG_FILE holds the job token."
-              FOUND=1
-            fi
-          done
-          LEAKED=$(grep -rlF -e "$GH_TOKEN" -e "$AUTH_B64" "$RUNNER_TEMP" "$REAL_HOME/.git-credentials" "$REAL_HOME/.config/git/credentials" "$AGENT_HOME/.git-credentials" "$AGENT_HOME/.config/git/credentials" "$HOME/.git-credentials" "${XDG_CONFIG_HOME:-$HOME/.config}/git/credentials" 2>/dev/null || true)
-          if [ -n "$LEAKED" ]; then
-            echo "::error::Files under RUNNER_TEMP or in a git credential store hold the job token: $(printf '%s' "$LEAKED" | tr '\n' ' ')"
-            FOUND=1
-          fi
-          if [ "$FOUND" -ne 0 ]; then
+          if ! bash "$GUARD_FILE"; then
             echo "::error::A job credential persists on disk, so Claude does not start."
             exit 1
           fi

@@ -95,10 +95,14 @@ extract() {
   chmod 644 "$OPT/steps/$file"
 }
 extract "Resolve the review execution contract" contract.sh
-extract "Prepare workspace ancestor stubs for the scrub sandbox" stubs.sh
-extract "Select the agent home" agent_home.sh
-extract "Stage the pull request under review" guard.sh 'rm -f "$GUARD_FILE" "$SETTINGS_FILE"' 'echo "guard_oid=$GUARD_OID" >> "$GITHUB_OUTPUT"'
-extract "Stage the pull request under review" settings.sh 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"'
+shared() {
+  cp "$REPO_ROOT/templates/claude-workflow/scripts/$1" "$OPT/steps/$2" || die "cannot copy $1"
+  chmod 644 "$OPT/steps/$2"
+}
+shared review_ancestor_stubs.sh stubs.sh
+shared review_agent_home.sh agent_home.sh
+shared review_write_guard.sh guard.sh
+shared review_write_settings.sh settings.sh
 extract "Empty the temporary agent home" cleanup.sh
 
 cat > "$OPT/hook.sh" <<'HOOK'

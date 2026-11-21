@@ -12,7 +12,7 @@ the Codex twin and documents only what differs from this file.
 | `workflows/claude.yml` | The ONLY file a consumer repo vendors: trigger, author gate, fail-closed `classify` job, one caller job per route with least-privilege `permissions:`, and an `untrusted-issue` job that posts a fixed refusal comment. |
 | `../../.github/workflows/claude-run.yml` (repo root) | Reusable run body. Call it with `uses: richkuo/rk-skills/.github/workflows/claude-run.yml@<40-character commit>`. That commit supplies the prompts, the scripts, and the `rk-skills` plugin. The plugin commit in the pinned revisions section supplies `code-review` and `claude-md-management`. A caller that still uses `@main` runs the moving branch tip. |
 | `prompts/*.md` | One prompt per route, fetched at run time. Must never contain `"`, backticks, or `$` (shell-evaluated downstream). |
-| `scripts/` | Comment patch/compose helpers. |
+| `scripts/` | Comment patch/compose helpers, the agent guide contract runner, and the review sandbox preparation scripts (`review_*.sh`) that `claude-run.yml` stages from the called workflow commit and runs before Claude starts. |
 
 ## Install
 

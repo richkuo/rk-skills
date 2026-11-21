@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/claude-run.yml
       - .github/workflows/review-sandbox-probe.yml
+      - templates/claude-workflow/scripts/review_*.sh
       - docs/review-sandbox-probe/**
   workflow_dispatch:
 
