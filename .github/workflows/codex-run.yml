@@ -528,11 +528,6 @@ jobs:
             echo "state=none" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ -n "$FLOW" ]; then
-            echo "state=skip" >> "$GITHUB_OUTPUT"
-            echo "::notice::A documentation flow keeps the agent guides through its own sync, so the guide contract revise pass does not run."
-            exit 0
-          fi
           RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
           GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
           command -v python3 >/dev/null 2>&1 || stop "python3 is missing, so the guide contract revise pass cannot run"

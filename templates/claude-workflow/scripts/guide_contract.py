@@ -661,6 +661,7 @@ def write_prompt(template, out, data, contract):
         "",
         f"The work tree for this pass is {data['worktree']}. Edit files only inside it.",
         f"The stated source files are: {', '.join(contract['sources'])}.",
+        "The root CLAUDE.md is a stated source, so the rule 3 fallback to CLAUDE.md applies." if matches_any(contract["sources"], "CLAUDE.md") else "The root CLAUDE.md is not a stated source, so never edit it: when no existing stated source fits a rule, change nothing for that rule.",
         f"The stated generated files are: {', '.join(contract['generated'])}.",
         f"The stated command files are: {', '.join(contract['command_files'])}.",
         f"The session changes are the commits from refs/rk-guide/base to refs/rk-guide/session, the session branch {data['branch']}.",
@@ -674,9 +675,6 @@ def cmd_prepare(args):
     repo = os.path.abspath(args.repo)
     extra = os.environ.get("RK_EXTRA_ALLOWED", "")
     try:
-        if args.flow:
-            emit([("state", "skip"), ("reason", "a documentation flow keeps the guides through its own sync")])
-            return 0
         if not SHA_RE.match(args.trusted or ""):
             raise Stop("the trusted default-branch commit was not recorded before the session ran")
         if not SLUG_RE.match(args.slug):
@@ -684,6 +682,9 @@ def cmd_prepare(args):
         state, reason, contract, trusted_entries = trusted_contract(repo, args.trusted)
         if state == "none":
             emit([("state", "none"), ("reason", reason)])
+            return 0
+        if args.flow:
+            emit([("state", "skip"), ("reason", "a documentation flow keeps the agent guides through its own sync, so the guide contract revise pass does not run")])
             return 0
         if state != "ok":
             raise Stop(f"the agent guide contract on the default branch is malformed: {reason}")

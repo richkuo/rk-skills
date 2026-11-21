@@ -530,8 +530,23 @@ for (const flavor of ['claude', 'codex']) {
     check(r.prepare.outputs.state === 'none' && r.comments.length === 0 && r.report === undefined, `${layout}: the state is none, so only the legacy revise step runs`)
   }
   {
-    const r = postImplement(flavor, { flow: 'sync-docs' })
-    check(r.prepare.outputs.state === 'skip' && r.report === undefined, 'a documentation flow skips the revise pass')
+    for (const flow of ['sync-docs', 'sync-release']) {
+      const r = postImplement(flavor, { flow })
+      check(r.prepare.outputs.state === 'skip' && r.report === undefined && !existsSync(r.revise), `${flow}: a documentation flow with a contract skips the revise pass`)
+    }
+    const fencedOnly = '# Plain\n\n```\n' + HEADING + '\n- Generated: `AGENTS.md`\n```\n'
+    const fencedFlow = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs' })
+    check(fencedFlow.prepare.outputs.state === 'none' && fencedFlow.report === undefined, `a fenced heading with a documentation flow gives the state none, so the legacy revise step runs (${JSON.stringify(fencedFlow.prepare.outputs)})`)
+    const fencedPlain = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly) })
+    check(fencedPlain.prepare.outputs.state === 'none', 'a fenced heading with no flow gives the state none')
+    const fencedBeside = postImplement(flavor, { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `${readFileSync(join(s, 'CLAUDE.md'), 'utf8')}\n## Example\n\n\`\`\`\n${HEADING}\n- Generated: \`OTHER.md\`\n\`\`\`\n`) })
+    check(fencedBeside.prepare.outputs.state === 'ready', `a fenced example beside a valid statement with no flow gives the state ready (${JSON.stringify(fencedBeside.prepare.outputs)})`)
+    const promptOf = (r) => readFileSync(join(r.p.rt, 'rk-guide-revise/prompt.md'), 'utf8')
+    const withRoot = postImplement(flavor, {})
+    check(promptOf(withRoot).includes('The root CLAUDE.md is a stated source, so the rule 3 fallback to CLAUDE.md applies.'), 'the revise prompt keeps the CLAUDE.md fallback when CLAUDE.md is a stated source')
+    const rulesOnly = postImplement(flavor, { mutate: (s) => replaceIn(s, 'CLAUDE.md', '- Sources: `CLAUDE.md`, `.claude/rules/*.md`', '- Sources: `.claude/rules/*.md`'), edit: (wt) => writeFileSync(join(wt, '.claude/rules/area.md'), `${readFileSync(join(wt, '.claude/rules/area.md'), 'utf8')}- A learned area rule.\n`) })
+    check(rulesOnly.prepare.outputs.state === 'ready' && promptOf(rulesOnly).includes('The root CLAUDE.md is not a stated source, so never edit it') && !promptOf(rulesOnly).includes('fallback to CLAUDE.md applies'), `with rule files as the only sources the revise prompt forbids a CLAUDE.md edit (${JSON.stringify(rulesOnly.prepare.outputs)})`)
+    check(['committed', 'pushed'].includes(rulesOnly.settle?.outputs.result) && rulesOnly.comments.length === 0, `with rule files as the only sources a rule-file edit lands (${rulesOnly.settle?.log})`)
   }
   {
     const p = project('plain')
