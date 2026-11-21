@@ -952,7 +952,10 @@ for (const flavor of ['claude', 'codex']) {
       const p = project('contract')
       stage(p, flavor)
       const start = 'a'.repeat(40)
-      const prDetect = (env) => runStep(p, flavor, DETECT[flavor], { GH_TOKEN: 'fixture-token', PRE_HEAD_SHA: start, BASELINE_KIND: 'pr', PR_NUMBER: '7', REPO: SLUG, REFS_SHA: '', RUNNER_SHA: '', DEFAULT_BRANCH: 'main', GITHUB_REF_NAME: 'main', ...env })
+      const record = runStep(p, flavor, RECORD[flavor], { GH_TOKEN: 'fixture-token', PR_NUMBER: '7', REPO: SLUG, RK_GH_PR_HEAD: start })
+      check(record.status === 0 && record.outputs.baseline_kind === 'pr' && record.outputs.head_sha === start, `the record step takes a readable pull request head as the pull request baseline (${JSON.stringify(record.outputs)})`)
+      rmSync(join(p.ghLog, 'argv.log'), { force: true })
+      const prDetect = (env) => runStep(p, flavor, DETECT[flavor], { GH_TOKEN: 'fixture-token', PRE_HEAD_SHA: record.outputs.head_sha, BASELINE_KIND: record.outputs.baseline_kind, PR_NUMBER: '7', REPO: SLUG, REFS_SHA: '', RUNNER_SHA: '', DEFAULT_BRANCH: 'main', GITHUB_REF_NAME: 'main', ...env })
       for (const [label, env, expected] of [
         ['a pull request head that moved', { RK_GH_PR_HEAD: 'b'.repeat(40) }, 'true'],
         ['a pull request head at the start commit', { RK_GH_PR_HEAD: start }, 'false'],
@@ -963,6 +966,20 @@ for (const flavor of ['claude', 'codex']) {
         check(d.status === 0 && d.outputs.made_commits === expected, `${label}: the pull request baseline gives made_commits=${expected} and exits 0 (exit ${d.status}, ${JSON.stringify(d.outputs)} ${d.log.slice(0, 300)})`)
       }
       check(readFileSync(join(p.ghLog, 'argv.log'), 'utf8').includes(`pr view 7 --repo ${SLUG} --json headRefOid -q .headRefOid`), 'the pull request baseline reads the head of the run pull request')
+    }
+
+    for (const [label, change, expected] of [
+      ['no change', undefined, 'false'],
+      ['a commit on the checked-out branch', (ws) => { writeFileSync(join(ws, 'feature.txt'), 'implemented\n'); git(ws, 'add', 'feature.txt'); git(ws, 'commit', '-q', '-m', 'feat: implement the fixture issue') }, 'true'],
+      ['an uncommitted edit of a tracked file', (ws) => writeFileSync(join(ws, 'CLAUDE.md'), '# Edited\n'), 'true'],
+      ['an untracked file', (ws) => writeFileSync(join(ws, 'new.txt'), 'new\n'), 'true'],
+    ]) {
+      const p = project('contract')
+      stage(p, flavor)
+      const record = runStep(p, flavor, RECORD[flavor], { GH_TOKEN: 'fixture-token', PR_NUMBER: '', REPO: SLUG })
+      change?.(p.ws)
+      const d = runStep(p, flavor, DETECT[flavor], { GH_TOKEN: 'fixture-token', PRE_HEAD_SHA: record.outputs.head_sha, BASELINE_KIND: record.outputs.baseline_kind, PR_NUMBER: '', REPO: SLUG, REFS_SHA: '', RUNNER_SHA: '', DEFAULT_BRANCH: 'main', GITHUB_REF_NAME: 'main' })
+      check(record.outputs.baseline_kind === 'local' && d.status === 0 && d.outputs.made_commits === expected, `${label}: the local baseline gives made_commits=${expected} (exit ${d.status}, ${JSON.stringify(record.outputs)} ${JSON.stringify(d.outputs)} ${d.log.slice(0, 300)})`)
     }
 
     {
