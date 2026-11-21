@@ -460,7 +460,7 @@ Do not point a caller at a branch to keep a private workflow reachable.
 |--------|---------|--------|
 | Prompts, scripts, and the `rk-skills` plugin | The commit the caller pins | `job.workflow_sha` for that run |
 | `anthropics/claude-plugins-official` (`code-review`, `claude-md-management`) | No release tag. Snapshot of `main` on 2026-11-12. | `e0ab6e51219eef74e417a0e1d89e5d53e5e763d4` |
-| Command policy hook proof (`COMMAND_POLICY_PROOF_ACTION_SHA` in the staging step) | `anthropics/claude-code-action` v1.0.276, Claude Code 2.1.325, proved by the `Review sandbox probe` gates CP1 to CP8 | `f3b070c88125d33dbae5653df5f143101d4ea9dc` |
+| Command policy hook proof (`COMMAND_POLICY_PROOF_ACTION_SHA` in the staging step) | `anthropics/claude-code-action` v1.0.286, Claude Code 2.1.330, proved by the `Review sandbox probe` gates CP1 to CP8 | `acfe7992852970efb4fee683d63d628e3e52df67` |
 
 Record a new mapping in this table. Do not add the version as a comment in the
 workflow file.

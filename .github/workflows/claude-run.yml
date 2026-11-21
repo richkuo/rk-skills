@@ -798,7 +798,7 @@ jobs:
         if: steps.runtime_sources.outputs.command_policy == 'true'
         env:
           COMMAND_POLICY_SHA: ${{ steps.runtime_sources.outputs.command_policy_sha }}
-          COMMAND_POLICY_PROOF_ACTION_SHA: f3b070c88125d33dbae5653df5f143101d4ea9dc
+          COMMAND_POLICY_PROOF_ACTION_SHA: acfe7992852970efb4fee683d63d628e3e52df67
           POLICY_INTERPRETERS: /usr/bin/python3:/usr/local/bin/python3
           POLICY_WORKFLOW_FILE: ${{ runner.temp }}/rk-plugin-sources/rk-skills/.github/workflows/claude-run.yml
           POLICY_DIR: ${{ runner.temp }}/rk-command-policy
