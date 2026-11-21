@@ -245,6 +245,10 @@ def permit_list(permit):
     return [entry for entry in split_extra(permit) if COMMAND_RE.match(entry)]
 
 
+def permit_required(permit):
+    return any(entry.strip(" \t\n\r\v\f") for entry in permit.split(","))
+
+
 def permit_state(contract, permit):
     entries = permit_list(permit)
     for label, command in (("regenerate", contract["regenerate"]), ("verify", contract["verify"])):
@@ -711,6 +715,8 @@ def cmd_prepare(args):
             raise Stop("the repository name is not owner/name")
         state, reason, contract, trusted_entries = trusted_contract(repo, args.trusted)
         if state == "none":
+            if permit_required(permit):
+                raise Stop(f"the caller sets guide_contract_permit, but {reason}, so no guide revision runs")
             emit([("state", "none"), ("reason", reason)])
             return 0
         if args.flow:
