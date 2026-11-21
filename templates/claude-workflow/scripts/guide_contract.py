@@ -705,6 +705,30 @@ def write_prompt(template, out, data, contract):
         handle.write(text + "\n".join(details) + "\n")
 
 
+def session_candidates(before, after, default_branch, start):
+    start = start if SHA_RE.match(start or "") else ""
+    return sorted(
+        name for name, sha in after.items()
+        if before.get(name) != sha
+        and name != default_branch
+        and not name.startswith("rk-guide/")
+        and not (start and name not in before and sha == start)
+    )
+
+
+def cmd_session_branches(args):
+    repo = os.path.abspath(args.repo)
+    try:
+        with open(args.refs_before) as handle:
+            before = read_refs(handle.read())
+        after = read_refs(git_text(repo, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads"))
+    except (OSError, UnicodeDecodeError, Stop) as error:
+        print(f"error={one_line(getattr(error, 'reason', error))}", file=sys.stderr)
+        return 1
+    emit([("count", len(session_candidates(before, after, args.default_branch, args.start)))])
+    return 0
+
+
 def cmd_prepare(args):
     repo = os.path.abspath(args.repo)
     permit = os.environ.get("RK_GUIDE_PERMIT", "")
@@ -730,10 +754,7 @@ def cmd_prepare(args):
         with open(args.refs_before) as handle:
             before = read_refs(handle.read())
         after = read_refs(git_text(repo, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads"))
-        candidates = sorted(
-            name for name, sha in after.items()
-            if before.get(name) != sha and name != args.default_branch and not name.startswith("rk-guide/")
-        )
+        candidates = session_candidates(before, after, args.default_branch, args.start)
         if len(candidates) != 1:
             raise Stop(f"the session left {len(candidates)} new or moved local branches ({', '.join(candidates) or 'none'}), and this step needs exactly one")
         branch = candidates[0]
@@ -992,6 +1013,12 @@ def main():
     p.add_argument("--flavor", choices=("claude", "codex"), required=True)
     p.add_argument("--flow", default="")
     p.set_defaults(func=cmd_prepare)
+    p = sub.add_parser("session-branches")
+    p.add_argument("--repo", required=True)
+    p.add_argument("--refs-before", required=True)
+    p.add_argument("--default-branch", required=True)
+    p.add_argument("--start", default="")
+    p.set_defaults(func=cmd_session_branches)
     p = sub.add_parser("settle")
     p.add_argument("--state-file", required=True)
     p.add_argument("--state", required=True)

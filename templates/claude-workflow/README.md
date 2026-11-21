@@ -167,6 +167,18 @@ block on a session branch.
   place of `none`: no revise work tree is made, the legacy `Revise CLAUDE.md
   with session learnings` step does not run, `Report the guide contract result`
   posts the reason, and the implementation commit stays on the session branch.
+  `Detect if Claude made commits` opens the prepare step when the main checkout
+  changed, or when the runner `session-branches` command finds one or more
+  session branches. This includes a session that commits only in a work tree
+  under `.claude/worktrees/`. A session branch is a local branch that is new or
+  moved since the record step. The default branch, a branch under `rk-guide/`,
+  and a new branch that still points at the start commit (such as the unmoved
+  action branch) are no session branches, and the prepare step uses the same
+  rule. When the detect step cannot prove the recorded branch list or the
+  runner, or `python3` is missing, it opens the prepare step, so that the
+  prepare step posts its stop reason. The detect step never reads
+  `guide_contract_permit`. The legacy `Revise CLAUDE.md with session learnings`
+  step still reads only the main checkout result.
 - **Limits.** A docs-flow agent must call the runner; Claude Code enforces this
   only because the raw command entries are off its allowlist. The command-file
   list is the repository's statement: a helper that the generator loads and the

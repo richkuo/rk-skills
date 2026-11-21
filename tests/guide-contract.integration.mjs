@@ -217,6 +217,8 @@ function composeEnv(flavor, p, flow, { extra = '', permit = '', mode = 'implemen
 
 const COMPOSE = { claude: 'Compose Claude prompt', codex: 'Compose the Codex prompt' }
 const RECORD = { claude: 'Record PR head sha before Claude runs', codex: 'Record PR head sha before Codex runs' }
+const DETECT = { claude: 'Detect if Claude made commits', codex: 'Detect if Codex made commits' }
+const ACTION_BRANCH = 'claude/issue-1-20261121-1533'
 const PREPARE = 'Prepare the guide contract revise pass'
 const SETTLE = { claude: 'Regenerate, verify, and commit the agent guides', codex: 'Regenerate, verify, commit, and push the agent guides' }
 const REPORT = 'Report the guide contract result'
@@ -589,19 +591,54 @@ section = 'claude compose, agent routes'
   }
 }
 
-function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success', trustedSha, source = 'current' } = {}) {
-  const p = project(kind, { mutate })
+function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success', trustedSha, source = 'current', ignore = false, actionBranch = false, commit = true, worktree = true, push = true, gate = false, detectSource = 'current' } = {}) {
+  const fixtureMutate = ignore
+    ? (s) => {
+      mutate?.(s)
+      const path = join(s, '.gitignore')
+      writeFileSync(path, `${existsSync(path) ? readFileSync(path, 'utf8') : ''}.claude/worktrees/\n`)
+    }
+    : mutate
+  const p = project(kind, { mutate: fixtureMutate })
   stage(p, flavor)
   const record = runStep(p, flavor, RECORD[flavor], { GH_TOKEN: 'fixture-token', PR_NUMBER: '', REPO: SLUG })
   const composed = runStep(p, flavor, COMPOSE[flavor], composeEnv(flavor, p, flow, { extra, permit }))
+  if (actionBranch) {
+    if (flavor === 'claude') git(p.ws, 'checkout', '-q', '-b', ACTION_BRANCH)
+    else git(p.ws, 'branch', ACTION_BRANCH)
+  }
   const wt = join(p.ws, '.claude/worktrees/cc/issue-1-session')
-  git(p.ws, 'worktree', 'add', '-q', '-b', 'cc/issue-1-session', wt)
-  writeFileSync(join(wt, 'feature.txt'), 'implemented\n')
-  git(wt, 'add', 'feature.txt')
-  git(wt, 'commit', '-q', '-m', 'feat: implement the fixture issue')
+  if (commit || worktree) git(p.ws, 'worktree', 'add', '-q', '-b', 'cc/issue-1-session', wt)
+  if (commit) {
+    writeFileSync(join(wt, 'feature.txt'), 'implemented\n')
+    git(wt, 'add', 'feature.txt')
+    git(wt, 'commit', '-q', '-m', 'feat: implement the fixture issue')
+  }
   session?.(wt, p)
-  git(wt, 'push', '-q', 'origin', 'cc/issue-1-session')
-  const sessionTip = git(wt, 'rev-parse', 'HEAD')
+  if (commit && push) git(wt, 'push', '-q', 'origin', 'cc/issue-1-session')
+  const sessionTip = existsSync(wt) ? git(wt, 'rev-parse', 'HEAD') : undefined
+  let detect
+  if (gate) {
+    detect = runStep(p, flavor, DETECT[flavor], {
+      GH_TOKEN: 'fixture-token',
+      PRE_HEAD_SHA: record.outputs.head_sha,
+      BASELINE_KIND: record.outputs.baseline_kind,
+      PR_NUMBER: '',
+      REPO: SLUG,
+      REFS_SHA: record.outputs.refs_sha,
+      RUNNER_SHA: composed.outputs.guide_runner_sha,
+      DEFAULT_BRANCH: 'main',
+      GITHUB_REF_NAME: 'main',
+    }, detectSource)
+  }
+  const remoteTipOf = () => {
+    const tip = run('git', ['-C', p.bare, 'rev-parse', '--verify', '-q', 'refs/heads/cc/issue-1-session'])
+    return tip.status === 0 ? tip.stdout.trim() : undefined
+  }
+  const commentsOf = () => readdirSync(p.ghLog).filter((name) => name.startsWith('comment-')).sort().map((name) => readFileSync(join(p.ghLog, name), 'utf8'))
+  if (gate && !(detect.outputs.made_commits === 'true' || detect.outputs.guide_gate === 'true')) {
+    return { p, record, composed, detect, sessionTip, revise: join(p.ws, '.claude/worktrees/rk-guide-revise'), remoteTip: remoteTipOf(), comments: commentsOf() }
+  }
   const env = {
     FLOW: flow,
     TRUSTED_SHA: trustedSha ?? composed.outputs.trusted_sha,
@@ -614,7 +651,7 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA,
     GH_TOKEN: 'fixture-token',
   }
   const prepare = runStep(p, flavor, PREPARE, env, source)
-  const result = { p, record, composed, prepare, sessionTip, revise: join(p.ws, '.claude/worktrees/rk-guide-revise') }
+  const result = { p, record, composed, detect, prepare, sessionTip, revise: join(p.ws, '.claude/worktrees/rk-guide-revise') }
   if (prepare.outputs.state === 'ready') {
     edit?.(result.revise, p)
     result.settle = runStep(p, flavor, SETTLE[flavor], { DIGEST: prepare.outputs.digest, RUNNER_SHA: composed.outputs.guide_runner_sha, MODEL_ID: 'fixture-model', EFFORT: 'high' })
@@ -636,8 +673,8 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA,
       RUN_URL: 'https://github.com/fixture-owner/fixture-repo/actions/runs/1',
     })
   }
-  result.remoteTip = git(p.bare, 'rev-parse', 'refs/heads/cc/issue-1-session')
-  result.comments = readdirSync(p.ghLog).filter((name) => name.startsWith('comment-')).sort().map((name) => readFileSync(join(p.ghLog, name), 'utf8'))
+  result.remoteTip = remoteTipOf()
+  result.comments = commentsOf()
   return result
 }
 
@@ -853,6 +890,123 @@ for (const flavor of ['claude', 'codex']) {
       const pinned = stepOf(flavor, flavor === 'claude' ? 'Run Claude Code' : 'Run Codex').uses
       check(JSON.stringify(step.with) === JSON.stringify(old.with) && action(step.uses) === action(old.uses) && step.uses === pinned && JSON.stringify(step.env) === JSON.stringify(old.env), 'the legacy revise step keeps its action, inputs, and environment')
       check(step.if === `${old.if} && steps.guide_contract.outputs.state == 'none'`, 'the legacy condition is unchanged apart from the state test')
+    }
+  }
+
+  section = `${flavor} issue run gate`
+  {
+    const W = { ignore: true, actionBranch: true, gate: true }
+    const gateOf = (r) => JSON.stringify(r.detect.outputs)
+    const reached = (r, label) => {
+      check(r.prepare !== undefined, `${label}: the gate opens and the prepare step runs (${gateOf(r)} ${r.detect.log.slice(0, 300)})`)
+      return r.prepare !== undefined
+    }
+    const legacyStarts = (r) => r.detect.outputs.made_commits === 'true' && r.prepare?.outputs.state === 'none'
+    const commentCalls = (r) => (existsSync(join(r.p.ghLog, 'argv.log')) ? readFileSync(join(r.p.ghLog, 'argv.log'), 'utf8') : '').split('\n').filter((line) => line.includes('/comments')).length
+    const remoteBranches = (r) => git(r.p.bare, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean).sort()
+
+    if (featureAvailable) {
+      const old = postImplement(flavor, { ignore: true, gate: true, detectSource: FEATURE_BASE })
+      check(old.detect.status === 0 && old.detect.outputs.made_commits === 'false' && !('guide_gate' in old.detect.outputs), `control: with the ignore rule the ${FEATURE_BASE.slice(0, 7)} detect step misses a worktree-only commit (${gateOf(old)})`)
+      const visible = postImplement(flavor, { gate: true, detectSource: FEATURE_BASE })
+      check(visible.detect.status === 0 && visible.detect.outputs.made_commits === 'true', `control: with no ignore rule the ${FEATURE_BASE.slice(0, 7)} detect step sees the untracked work tree folder (${gateOf(visible)})`)
+    }
+
+    {
+      const r = postImplement(flavor, W)
+      check(r.detect.status === 0 && r.detect.outputs.made_commits === 'false' && r.detect.outputs.guide_gate === 'true', `a worktree-only commit opens the gate (${gateOf(r)} ${r.detect.log.slice(0, 300)})`)
+      check(r.prepare?.outputs.state === 'ready' && r.prepare.outputs.branch === 'cc/issue-1-session', `prepare selects the session branch beside the unmoved action branch (${JSON.stringify(r.prepare?.outputs)})`)
+      check(r.settle?.outputs.result === 'none' && r.remoteTip === r.sessionTip && r.comments.length === 0, `no source edit makes no commit and no comment (${r.settle?.log})`)
+      const landed = postImplement(flavor, { ...W, edit: addRule })
+      const settled = flavor === 'claude' ? 'committed' : 'pushed'
+      check(landed.settle?.outputs.result === settled, `with a source edit settle reports ${settled} (${landed.settle?.log})`)
+      if (flavor === 'claude') check(landed.push?.status === 0, `the exact push-only command pushes to the session branch (${landed.push?.stderr})`)
+      check(landed.remoteTip !== landed.sessionTip && git(landed.p.bare, 'rev-parse', `${landed.remoteTip}^`) === landed.sessionTip, 'the guide commit sits on the session tip on the remote')
+      check(JSON.stringify(remoteBranches(landed)) === JSON.stringify(['cc/issue-1-session', 'main']) && git(landed.p.bare, 'rev-parse', 'main') === landed.record.outputs.head_sha, `only the session branch moved on the remote, and the action branch was never pushed (${remoteBranches(landed)})`)
+      check(landed.comments.length === 0, 'a successful pass through the gate posts no comment')
+    }
+
+    for (const [label, options] of [['no session branch', { worktree: false }], ['a session work tree branch at the start commit', { worktree: true }]]) {
+      const r = postImplement(flavor, { ...W, commit: false, ...options })
+      check(r.detect.status === 0 && r.detect.outputs.made_commits === 'false' && r.detect.outputs.guide_gate === 'false', `${label}: a session with no commit leaves the gate closed (${gateOf(r)} ${r.detect.log.slice(0, 300)})`)
+      check(r.prepare === undefined && r.comments.length === 0 && commentCalls(r) === 0, `${label}: no prepare step runs and no comment is posted`)
+    }
+
+    for (const [label, hook] of [['an emptied branch list', (_wt, p) => writeFileSync(join(p.rt, 'rk-shared/refs-before.txt'), '')], ['a deleted branch list', (_wt, p) => rmSync(join(p.rt, 'rk-shared/refs-before.txt'))]]) {
+      const r = postImplement(flavor, { ...W, session: hook })
+      check(r.detect.status === 0 && r.detect.outputs.guide_gate === 'true', `${label}: the gate opens (${gateOf(r)})`)
+      if (reached(r, label)) {
+        const reason = r.prepare.outputs.reason ?? ''
+        check(r.prepare.outputs.state === 'stop' && reason.includes('branch list'), `${label}: prepare stops with the branch list reason (${JSON.stringify(r.prepare.outputs)})`)
+        check(r.comments.length === 1 && r.comments[0].includes(`Reason: ${reason}.`) && r.remoteTip === r.sessionTip, `${label}: one comment states the reason (${r.comments.join(' | ')})`)
+      }
+    }
+
+    {
+      const r = postImplement(flavor, { ...W, session: (wt) => git(wt, 'branch', 'cc/issue-1-other') })
+      check(r.detect.outputs.guide_gate === 'true', `two session-commit branches open the gate (${gateOf(r)})`)
+      if (reached(r, 'two session-commit branches')) {
+        const reason = r.prepare.outputs.reason ?? ''
+        check(r.prepare.outputs.state === 'stop' && reason.includes('2 new or moved') && reason.includes('cc/issue-1-other') && reason.includes('cc/issue-1-session') && !reason.includes('claude/issue-1-'), `two session-commit branches stop with the branch-count reason, and the unmoved action branch is no candidate (${reason})`)
+        check(r.settle === undefined && r.remoteTip === r.sessionTip && r.comments.length === 1, 'two session-commit branches make no commit and post one comment')
+      }
+    }
+
+    {
+      const r = postImplement(flavor, { ...W, kind: 'plain', permit: '' })
+      check(r.detect.outputs.made_commits === 'false' && r.detect.outputs.guide_gate === 'true', `with no contract and no permit a worktree-only commit opens the gate (${gateOf(r)})`)
+      check(r.prepare?.outputs.state === 'none' && r.report === undefined && r.comments.length === 0, `with no contract and no permit the state is none and no comment is posted (${JSON.stringify(r.prepare?.outputs)})`)
+      check(!legacyStarts(r), 'with no contract and no permit the legacy revise step does not start')
+    }
+
+    {
+      const r = postImplement(flavor, { ...W, kind: 'plain' })
+      if (reached(r, 'a permit with no readable contract')) checkReviseStop(r, NO_LINE, 'a permit with no readable contract through the gate')
+    }
+
+    {
+      const r = postImplement(flavor, { ...W, session: (wt) => { writeFileSync(join(wt, 'scripts/gen-guide.sh'), 'touch pwned\n'); git(wt, 'commit', '-q', '-am', 'change the generator') } })
+      if (reached(r, 'a session that changed the generator')) {
+        check(r.prepare.outputs.state === 'stop' && (r.prepare.outputs.reason ?? '').includes('scripts/gen-guide.sh'), `a session that changed the generator stops prepare (${JSON.stringify(r.prepare.outputs)})`)
+        check(r.settle === undefined && !existsSync(r.revise) && !existsSync(join(r.p.ws, 'pwned')) && !existsSync(join(r.p.ws, '.claude/worktrees/cc/issue-1-session/pwned')), 'the changed generator never runs and no revise work tree exists')
+        check(r.remoteTip === r.sessionTip && r.comments.length === 1 && r.comments[0].includes('scripts/gen-guide.sh'), `one comment names the changed command file (${r.comments.join(' | ')})`)
+      }
+      check(![JSON.stringify(r.detect.outputs), r.detect.log].some((text) => text.includes(REGENERATE) || text.includes(VERIFY)), 'no permit command appears in the detect step output or log')
+      const unpushed = postImplement(flavor, { ...W, push: false })
+      if (reached(unpushed, 'an unpushed session branch')) {
+        check(unpushed.prepare.outputs.state === 'stop' && (unpushed.prepare.outputs.reason ?? '').includes('not on the remote'), `an unpushed session branch stops prepare (${JSON.stringify(unpushed.prepare.outputs)})`)
+        check(unpushed.settle === undefined && !existsSync(unpushed.revise) && unpushed.remoteTip === undefined, 'an unpushed session branch gets no revise work tree and no push')
+      }
+    }
+
+    {
+      const changeRunner = (_wt, p) => {
+        const file = join(p.rt, 'rk-shared/scripts/guide_contract.py')
+        writeFileSync(file, `${readFileSync(file, 'utf8')}\n`)
+      }
+      const r = postImplement(flavor, { ...W, session: changeRunner })
+      check(r.detect.status === 0 && r.detect.outputs.guide_gate === 'true', `a changed runner opens the gate (${gateOf(r)})`)
+      if (reached(r, 'a changed runner')) check(r.prepare.outputs.state === 'stop' && (r.prepare.outputs.reason ?? '').includes('runner changed'), `a changed runner stops prepare (${JSON.stringify(r.prepare.outputs)})`)
+    }
+
+    if (featureAvailable) {
+      const detect = stepOf(flavor, DETECT[flavor])
+      const old = stepOf(flavor, DETECT[flavor], FEATURE_BASE)
+      const pre = flavor === 'claude' ? 'pre_claude' : 'pre_codex'
+      const changes = `${flavor}_changes`
+      const legacy = stepOf(flavor, REVISE_LEGACY[flavor])
+      check(detect.run.startsWith(old.run) && detect.run.length > old.run.length, `the detect step keeps its ${FEATURE_BASE.slice(0, 7)} text, the pr baseline included, and appends the gate`)
+      check(detect.if === old.if && detect.id === old.id && detect.id === changes, `the detect step keeps its condition and id (${detect.if}, ${detect.id})`)
+      check(Object.entries(old.env).every(([key, value]) => detect.env[key] === value) && Object.keys(detect.env).length === Object.keys(old.env).length + 3, 'the detect step keeps its environment and adds only the three gate inputs')
+      check(detect.env.REFS_SHA === `\${{ steps.${pre}.outputs.refs_sha }}` && detect.env.RUNNER_SHA === '${{ steps.compose_prompt.outputs.guide_runner_sha }}' && detect.env.DEFAULT_BRANCH === '${{ github.event.repository.default_branch }}', `the detect step reads the recorded hashes and the default branch (${JSON.stringify(detect.env)})`)
+      check(!JSON.stringify(detect.env).includes('guide_contract_permit') && !detect.run.includes('RK_GUIDE_PERMIT'), 'the detect step never reads guide_contract_permit')
+      check(stepOf(flavor, PREPARE).if === `inputs.mode == 'implement' && steps.${flavor}.outcome == 'success' && (steps.${changes}.outputs.made_commits == 'true' || steps.${changes}.outputs.guide_gate == 'true')`, `the prepare step runs on either detect result (${stepOf(flavor, PREPARE).if})`)
+      check(stepIndex(flavor, DETECT[flavor]) < stepIndex(flavor, PREPARE), 'the detect step runs before the prepare step')
+      check(legacy.if.includes(`steps.${changes}.outputs.made_commits == 'true'`) && !legacy.if.includes('guide_gate'), 'the legacy revise step reads made_commits and never the gate')
+      if (flavor === 'codex') {
+        const tail = (f) => stepOf(f, DETECT[f]).run.slice(stepOf(f, DETECT[f], FEATURE_BASE).run.length)
+        check(tail('claude') !== '' && tail('claude') === tail('codex'), 'the two flavors append the same gate text')
+      }
     }
   }
 }

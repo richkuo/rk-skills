@@ -101,6 +101,12 @@ differences:
 - `Report a stopped documentation sync` posts with the job token and reads no
   `bot_login`, so a stopped docs sync gets its comment also when `bot_login` is
   empty. The generic failure note still needs `bot_login`.
+- `Detect if Codex made commits` opens `Prepare the guide contract revise pass`
+  by the same session branch rule as the Claude workflow: a changed main
+  checkout, one or more session branches (also when the session commits only in
+  a work tree under `.claude/worktrees/`), or a branch list or runner that it
+  cannot prove. The legacy `Revise AGENTS.md with session learnings` step still
+  reads only the main checkout result.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 
