@@ -11,9 +11,9 @@ Runs three operations in strict sequence, all in the main session. Do not skip s
 
 Invoke the `sync-docs` skill via the Skill tool and follow it to completion here, passing the user's request plus any session context (target branch, last-sync SHA, specific files).
 
-sync-docs works in its own worktree off the latest `origin/<default>` and ends with "no doc changes", an open docs PR, or **blocked** (sync-docs step 11: a guide that the sync made larger fails a mandatory size limit or falls under an unresolved size-policy conflict, and no decision resolved it). Summarize the doc edits and the PR for the user before proceeding.
+sync-docs works in its own worktree off the latest `origin/<default>` and ends with "no doc changes", an open docs PR, or **blocked** (sync-docs step 11: a guide that the sync made larger fails a mandatory size limit or falls under an unresolved size-policy conflict, and no decision resolved it; or an agent guide contract failure in `sync-docs` `guide-contract.md`: a malformed statement, a changed command file, or a regenerate or verify command that failed or changed a file it must not change). Summarize the doc edits and the PR for the user before proceeding.
 
-On **blocked**, stop here: skip Steps 2 and 3, start no release, and report the blocked sync with each guide, its original and proposed byte counts, the limit and its source, and the worktree sync-docs kept.
+On **blocked**, stop here: skip Steps 2 and 3, start no release, and report the blocked sync with each guide, its original and proposed byte counts, the limit and its source, and the worktree sync-docs kept. For an agent guide contract failure, report instead the cause, the command, its exit status, and its output, and the worktree sync-docs kept.
 
 ## Step 2 — Decide how the docs PR relates to the release
 
