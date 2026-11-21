@@ -142,7 +142,11 @@ block on a session branch.
   `$RUNNER_TEMP/rk-guide-stage`, names each one in the prompt, and adds that
   directory with `--add-dir`. The runner run command copies each changed staged
   copy over its source before it regenerates, under the same stop rules as the
-  settle step, and it checks the contract block again after the copy. Any other state
+  settle step, and it checks the contract block again after the copy. It
+  records the last copy it applied for each source in
+  `$RUNNER_TEMP/rk-guide-stage.applied.json`, so a later staged edit of the same
+  source, such as a condense pass, applies, and an in-place edit after a run
+  that differs from the applied copy stops the run. Any other state
   is a blocked sync with a comment. With a permit entry and no readable
   contract at the default-branch commit (no trusted commit, a `CLAUDE.md` that
   is missing, is not a regular file, or has no exact heading line, or a heading

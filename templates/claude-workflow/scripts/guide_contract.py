@@ -528,7 +528,35 @@ def stage_sources(stage_dir, items):
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         files.append({"name": name, "path": path, "oid": oid})
-    return {"dir": stage_dir, "files": files}
+    return {"dir": stage_dir, "record": applied_record_path(stage_dir), "files": files}
+
+
+def applied_record_path(stage_dir):
+    return f"{stage_dir}.applied.json"
+
+
+def read_applied(path):
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return {}
+    if not stat.S_ISREG(info.st_mode):
+        raise Stop("the record of applied staged copies is a symbolic link or not a regular file")
+    try:
+        value = json.loads(read_nofollow(path))
+    except ValueError:
+        raise Stop("the record of applied staged copies is not valid JSON")
+    if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+        raise Stop("the record of applied staged copies is not a map of paths to blob ids")
+    return value
+
+
+def write_applied(path, record):
+    temp = f"{path}.{secrets.token_hex(6)}"
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        json.dump(record, handle, sort_keys=True)
+    os.replace(temp, path)
 
 
 def stage_items(root, rev, contract, algo):
@@ -558,6 +586,8 @@ def check_stage_dir(stage_dir, repo, state_file):
         raise Stop("the staging directory and the state file directory overlap")
     if os.path.lexists(stage_dir):
         raise Stop(f"the staging directory {stage_dir} already exists")
+    if os.path.lexists(applied_record_path(stage_dir)):
+        raise Stop(f"the record {applied_record_path(stage_dir)} of applied staged copies already exists")
 
 
 def apply_staged(root, stage, algo):
@@ -572,6 +602,8 @@ def apply_staged(root, stage, algo):
     extra = sorted(name for name in os.listdir(directory) if name not in known)
     if extra:
         raise Stop(f"the staging directory holds {extra[0]}, which is no staged copy of a stated source, so no staged copy is applied")
+    record_path = stage.get("record") or applied_record_path(directory)
+    applied = read_applied(record_path)
     plan = []
     for item in stage["files"]:
         full = os.path.join(directory, item["name"])
@@ -583,20 +615,24 @@ def apply_staged(root, stage, algo):
             raise Stop(f"the staged copy {item['name']} of {item['path']} is a symbolic link or not a regular file")
         data = read_nofollow(full)
         staged = blob_id(data, algo)
-        if staged == item["oid"]:
+        last = applied.get(item["path"], item["oid"])
+        if staged == last and last == item["oid"]:
             continue
         target = safe_target(root, item["path"])
         current = blob_id(read_nofollow(target), algo)
         if current == staged:
             continue
-        if current != item["oid"]:
+        if current != last:
             raise Stop(f"the source {item['path']} changed both in place and in its staged copy {item['name']}, so neither edit is applied")
-        plan.append((item["path"], target, data))
-    for path, target, data in plan:
+        plan.append((item["path"], target, data, staged))
+    for path, target, data, staged in plan:
         fd = os.open(target, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
-    return [path for path, _, _ in plan]
+        applied[path] = staged
+    if plan:
+        write_applied(record_path, applied)
+    return [path for path, _, _, _ in plan]
 
 
 def emit(pairs):
@@ -1124,13 +1160,17 @@ def permission_denials(path, worktree):
         if worktree and target.startswith(worktree.rstrip("/") + "/"):
             target = target[len(worktree.rstrip("/")) + 1:]
         target = one_line(target).replace("`", "'")[:200]
-        found.append(f"`{tool}` on `{target}`" if target else f"`{tool}`")
+        found.append((tool, target))
     return found
 
 
-def denial_lines(denials):
+def denial_lines(denials, committed_paths=()):
     lines = [f"Claude Code denied {len(denials)} tool call{'' if len(denials) == 1 else 's'} in the revise step:", ""]
-    lines += [f"- {entry}" for entry in denials[:10]]
+    for tool, target in denials[:10]:
+        entry = f"`{tool}` on `{target}`" if target else f"`{tool}`"
+        if target and target in committed_paths:
+            entry += " (the commit changes this path)"
+        lines.append(f"- {entry}")
     if len(denials) > 10:
         lines.append(f"- and {len(denials) - 10} more")
     return lines
@@ -1183,11 +1223,14 @@ def cmd_report(args):
         stage_dir = (data.get("stage") or {}).get("dir")
         if stage_dir and os.path.isdir(stage_dir) and not os.path.islink(stage_dir):
             shutil.rmtree(stage_dir, ignore_errors=True)
+        record_path = (data.get("stage") or {}).get("record")
+        if record_path and os.path.isfile(record_path) and not os.path.islink(record_path):
+            os.remove(record_path)
     if committed and denials:
         print(f"::notice::Agent guide contract revise pass: the guide commit landed, and Claude Code denied {len(denials)} tool call{'' if len(denials) == 1 else 's'} in the revise step.")
-        lines.append("**The agent guide commit landed, but Claude Code denied some tool calls in the revise step.** An edit that a denied call tried to make is not in the commit.")
+        lines.append("**The agent guide commit landed, but Claude Code denied some tool calls in the revise step.** An edit that a denied call tried to make can be missing from the commit, or it can have landed through a staged copy. Compare each path below with the commit.")
         lines.append("")
-        lines += denial_lines(denials)
+        lines += denial_lines(denials, record.get("paths") or [])
         if args.run_url:
             lines.append("")
             lines.append(f"See the [run log]({args.run_url}).")

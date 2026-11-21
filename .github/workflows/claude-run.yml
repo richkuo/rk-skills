@@ -1212,7 +1212,7 @@ jobs:
             if [ -d "$GUIDE_DIR" ]; then
               chmod -R u+w "$GUIDE_DIR"
             fi
-            rm -rf "$GUIDE_DIR" "$GUIDE_STAGE_DIR"
+            rm -rf "$GUIDE_DIR" "$GUIDE_STAGE_DIR" "$GUIDE_STAGE_DIR.applied.json"
             mkdir -p "$GUIDE_DIR"
             GUIDE_OUT=""
             if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
@@ -1618,7 +1618,7 @@ jobs:
             stop "the branch list recorded before the session ran is missing or changed, so the session branch cannot be found"
           fi
           STAGE_DIR="$RUNNER_TEMP/rk-guide-stage"
-          rm -rf "$GUIDE_DIR" "$STAGE_DIR"
+          rm -rf "$GUIDE_DIR" "$STAGE_DIR" "$STAGE_DIR.applied.json"
           mkdir -p "$GUIDE_DIR"
           OUT=$(python3 -I "$RUNNER" prepare --repo "$GITHUB_WORKSPACE" --trusted "$TRUSTED_SHA" --start "$START_SHA" --default-branch "$DEFAULT_BRANCH" --refs-before "$RUNNER_TEMP/rk-shared/refs-before.txt" --slug "$REPO" --state-file "$GUIDE_DIR/state.json" --prompt-template "$RUNNER_TEMP/rk-shared/prompts/revise-guide-contract.md" --prompt-out "$GUIDE_DIR/prompt.md" --flavor claude --flow "$FLOW" --stage-dir "$STAGE_DIR") || OUT=""
           value() { printf '%s\n' "$OUT" | sed -n "s/^$1=//p" | head -n 1; }
