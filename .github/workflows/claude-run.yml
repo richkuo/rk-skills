@@ -266,8 +266,8 @@ jobs:
         run: |
           git config --local core.repositoryformatversion 1
           git config --local extensions.worktreeConfig true
-          git config --worktree credential.helper ""
-          git config --worktree "credential.${GITHUB_SERVER_URL}.helper" ""
+          git config --worktree --replace-all credential.helper ""
+          git config --worktree --replace-all "credential.${GITHUB_SERVER_URL}.helper" ""
           git config --worktree --add "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
 
       - name: Resolve immutable runtime revisions
