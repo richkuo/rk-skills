@@ -639,7 +639,9 @@ for (const flavor of ['claude', 'codex']) {
     check(step.if.endsWith(" && steps.guide_contract.outputs.state == 'none'"), 'the legacy revise step runs only when the state is none')
     if (legacyAvailable) {
       const old = stepOf(flavor, REVISE_LEGACY[flavor], LEGACY_BASE)
-      check(JSON.stringify(step.with) === JSON.stringify(old.with) && step.uses === old.uses && JSON.stringify(step.env) === JSON.stringify(old.env), 'the legacy revise step keeps its action, inputs, and environment')
+      const action = (uses) => uses.split('@')[0]
+      const pinned = stepOf(flavor, flavor === 'claude' ? 'Run Claude Code' : 'Run Codex').uses
+      check(JSON.stringify(step.with) === JSON.stringify(old.with) && action(step.uses) === action(old.uses) && step.uses === pinned && JSON.stringify(step.env) === JSON.stringify(old.env), 'the legacy revise step keeps its action, inputs, and environment')
       check(step.if === `${old.if} && steps.guide_contract.outputs.state == 'none'`, 'the legacy condition is unchanged apart from the state test')
     }
   }
