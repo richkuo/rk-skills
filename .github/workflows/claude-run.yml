@@ -1169,22 +1169,25 @@ jobs:
             guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
             GUIDE_STATE=$(guide_value state)
             GUIDE_REASON=$(guide_value reason | tr -d '"`$')
+            GUIDE_EXTRA=""
             if [ -z "$GUIDE_STATE" ]; then
               GUIDE_STATE=unavailable
               GUIDE_REASON="python3 is missing or the guide contract runner failed, so no project command runs"
-              ROUTE_EXTRA=""
             else
-              ROUTE_EXTRA=$(guide_value filtered_extra)
+              GUIDE_EXTRA=$(guide_value filtered_extra)
             fi
             echo "::notice::Agent guide contract state: $GUIDE_STATE."
-            PROMPT="$PROMPT $(flatten < "$PROMPTS_DIR/sync-docs-guide-contract.md")"
-            if [ "$GUIDE_STATE" = "ready" ]; then
-              GUIDE_CHECK=$(guide_value check_command)
-              GUIDE_RUN=$(guide_value run_command)
-              ALLOWED="$ALLOWED,Bash($GUIDE_CHECK),Bash($GUIDE_RUN)"
-              PROMPT="$PROMPT The agent guide contract state for this run is ready, read from the default-branch commit ${TRUSTED_SHA}. The runner check command is [[${GUIDE_CHECK}]] and the runner run command is [[${GUIDE_RUN}]]."
-            else
-              PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
+            if [ "$GUIDE_STATE" != "none" ]; then
+              ROUTE_EXTRA="$GUIDE_EXTRA"
+              PROMPT="$PROMPT $(flatten < "$PROMPTS_DIR/sync-docs-guide-contract.md")"
+              if [ "$GUIDE_STATE" = "ready" ]; then
+                GUIDE_CHECK=$(guide_value check_command)
+                GUIDE_RUN=$(guide_value run_command)
+                ALLOWED="$ALLOWED,Bash($GUIDE_CHECK),Bash($GUIDE_RUN)"
+                PROMPT="$PROMPT The agent guide contract state for this run is ready, read from the default-branch commit ${TRUSTED_SHA}. The runner check command is [[${GUIDE_CHECK}]] and the runner run command is [[${GUIDE_RUN}]]."
+              else
+                PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
+              fi
             fi
           fi
           if [ -n "$ROUTE_EXTRA" ]; then
@@ -1529,10 +1532,12 @@ jobs:
 
       - name: Revise the guide sources
         if: steps.guide_contract.outputs.state == 'ready'
+        id: guide_revise
         continue-on-error: true
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'claude'
           prompt: ${{ steps.guide_contract.outputs.prompt }}
           claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Edit,Write,Read,Grep,Glob"
 
@@ -1564,6 +1569,7 @@ jobs:
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'claude'
           prompt: "Run exactly one Bash command, git -C .claude/worktrees/rk-guide-revise push, then stop. Run no other command, edit no file, and report the command output."
           claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort low --permission-mode default --max-turns 4 --allowedTools "Bash(git -C .claude/worktrees/rk-guide-revise push)"
 
@@ -1574,6 +1580,7 @@ jobs:
           STATE: ${{ steps.guide_contract.outputs.state }}
           REASON: ${{ steps.guide_contract.outputs.reason }}
           DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          REVISE_OUTCOME: ${{ steps.guide_revise.outcome }}
           RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
@@ -1589,7 +1596,7 @@ jobs:
             gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited. Reason: ${REASON}. See the [run log](${RUN_URL})." || echo "::warning::The guide contract comment could not be posted."
             exit 0
           fi
-          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
+          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --revise-outcome "$REVISE_OUTCOME" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
           exit 0
 
       - name: Append LLM footer to Claude comment

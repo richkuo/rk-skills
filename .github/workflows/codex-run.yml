@@ -332,12 +332,14 @@ jobs:
               GUIDE_REASON="python3 is missing or the guide contract runner failed, so no project command runs"
             fi
             echo "::notice::Agent guide contract state: $GUIDE_STATE."
-            printf '\n' >> "$PROMPT_OUT"
-            cat "$PROMPTS_DIR/sync-docs-guide-contract.md" >> "$PROMPT_OUT"
-            if [ "$GUIDE_STATE" = "ready" ]; then
-              printf '\nThe agent guide contract state for this run is ready, read from the default-branch commit %s. The runner check command is [[%s]] and the runner run command is [[%s]].\n' "$TRUSTED_SHA" "$(guide_value check_command)" "$(guide_value run_command)" >> "$PROMPT_OUT"
-            else
-              printf '\nThe agent guide contract state for this run is %s, read from the default-branch commit %s, for this reason: %s.\n' "$GUIDE_STATE" "$TRUSTED_SHA" "$GUIDE_REASON" >> "$PROMPT_OUT"
+            if [ "$GUIDE_STATE" != "none" ]; then
+              printf '\n' >> "$PROMPT_OUT"
+              cat "$PROMPTS_DIR/sync-docs-guide-contract.md" >> "$PROMPT_OUT"
+              if [ "$GUIDE_STATE" = "ready" ]; then
+                printf '\nThe agent guide contract state for this run is ready, read from the default-branch commit %s. The runner check command is [[%s]] and the runner run command is [[%s]].\n' "$TRUSTED_SHA" "$(guide_value check_command)" "$(guide_value run_command)" >> "$PROMPT_OUT"
+              else
+                printf '\nThe agent guide contract state for this run is %s, read from the default-branch commit %s, for this reason: %s.\n' "$GUIDE_STATE" "$TRUSTED_SHA" "$GUIDE_REASON" >> "$PROMPT_OUT"
+              fi
             fi
           fi
           if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$LOCAL_PATH" 2>/dev/null; then
@@ -568,6 +570,7 @@ jobs:
 
       - name: Revise the guide sources
         if: steps.guide_contract.outputs.state == 'ready'
+        id: guide_revise
         continue-on-error: true
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
         with:
@@ -610,6 +613,7 @@ jobs:
           STATE: ${{ steps.guide_contract.outputs.state }}
           REASON: ${{ steps.guide_contract.outputs.reason }}
           DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          REVISE_OUTCOME: ${{ steps.guide_revise.outcome }}
           RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
@@ -625,7 +629,7 @@ jobs:
             gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited. Reason: ${REASON}. See the [run log](${RUN_URL})." || echo "::warning::The guide contract comment could not be posted."
             exit 0
           fi
-          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
+          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --revise-outcome "$REVISE_OUTCOME" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
           exit 0
 
       - name: Append the LLM footer to the Codex comment

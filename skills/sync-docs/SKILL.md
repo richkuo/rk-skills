@@ -15,7 +15,7 @@ Audiences: **CLAUDE.md** is the organized agent reference (architecture, symbol 
 
 Preconditions: `gh auth status` succeeds. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)`, run `git fetch origin`, record the range end `T0=$(git rev-parse "origin/$DEFAULT")`, and create a worktree off that tip with the harness branch prefix (`cc/` on Claude Code): `git worktree add .claude/worktrees/cc+sync-docs-<YYYY-MM-DD> -b cc/sync-docs-<YYYY-MM-DD> "$T0"`. Every range below ends at `$T0`, never at a later `origin/$DEFAULT`. When that branch already exists locally or on `origin`, never delete or reuse it: add the next free suffix to the branch and the worktree name (`-2`, then `-3`). Read, edit, and run every git command in that worktree (`-C <worktree>`), never in the main checkout.
 
-Agent guide contract: run `git show "$T0:CLAUDE.md" | grep -qxF '## Agent guide contract'`. No match: the steps below run as written. A match: the project generates its agent guides with a command, so read [guide-contract.md](guide-contract.md) before step 3 and apply its statement form and its rules for steps 3, 6, 10, and 12 and the blocked outcome. Read the statement from that `$T0` text only.
+Agent guide contract: run `git show "$T0:CLAUDE.md" | grep -qxF '## Agent guide contract'`. No match: the steps below run as written. A match that sits only inside a code fence is an example and no statement, so the steps below also run as written. A match outside a code fence: the project generates its agent guides with a command, so read [guide-contract.md](guide-contract.md) before step 3 and apply its statement form and its rules for steps 3, 6, 10, and 12 and the blocked outcome. Read the statement from that `$T0` text only.
 
 ## Steps
 

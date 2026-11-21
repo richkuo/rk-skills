@@ -648,9 +648,9 @@ def check_push_config(data):
             raise Stop(f"the push configuration key {key} is not what the prepare step set, so nothing is pushed")
 
 
-def ignored_sources(worktree, contract):
+def ignored_files(worktree):
     out = git(worktree, "ls-files", "-z", "--others", "--ignored", "--exclude-standard").stdout.decode("utf-8", "surrogateescape")
-    return sorted(path for path in out.split("\0") if path and matches_any(contract["sources"], path))
+    return sorted(path for path in out.split("\0") if path)
 
 
 def write_prompt(template, out, data, contract):
@@ -799,6 +799,9 @@ def cmd_settle(args):
             raise Stop("the revise work tree no longer sits on the session commit, so nothing is committed")
         message = commit_message(worktree, args.model, args.effort, args.harness)
         algo = data["object_format"]
+        hidden = ignored_files(worktree)
+        if hidden:
+            raise Stop(f"the revise pass left the ignored file {hidden[0]} in the work tree, so no project command runs")
         edits = changed_vs_tree(worktree, "HEAD", algo)
         if not edits:
             write_result(result_file, {"result": "none", "reason": "the revise pass changed no guide source"})
@@ -809,9 +812,6 @@ def cmd_settle(args):
             raise Stop(f"the revise pass changed {outside_sources[0]}, which is not a stated source")
         if worktree_block(worktree) != contract["block"]:
             raise Stop("the revise pass changed the agent guide contract block")
-        hidden = ignored_sources(worktree, contract)
-        if hidden:
-            raise Stop(f"the revise pass left the ignored file {hidden[0]} under a stated source path")
         trusted_entries = tree_entries(repo, data["trusted"])
         compare_command_files(worktree, contract, trusted_entries, algo)
         regenerate_and_verify(worktree, contract, data["path"])
@@ -894,6 +894,8 @@ def cmd_report(args):
                 reason = f"the agent guide commit {record.get('commit')} is not the tip of {data['branch']} on the remote, so the push did not land"
         elif data is not None and result != "none":
             reason = "the regenerate, verify, and commit step did not record a result"
+        elif data is not None and args.revise_outcome not in ("success", ""):
+            reason = f"the revise step ended with the outcome {one_line(args.revise_outcome)} before it edited a guide source, so the session learnings are not recorded"
     if data is not None:
         git(data["repo"], "worktree", "remove", "--force", data["worktree"], check=False)
         git(data["repo"], "worktree", "prune", check=False)
@@ -959,6 +961,7 @@ def main():
     p.set_defaults(func=cmd_settle)
     p = sub.add_parser("report")
     p.add_argument("--prepare-state", default="")
+    p.add_argument("--revise-outcome", default="")
     p.add_argument("--prepare-reason", default="")
     p.add_argument("--state-file", default="")
     p.add_argument("--state", default="")

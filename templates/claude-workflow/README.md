@@ -126,7 +126,9 @@ docs flows run through that job). A wildcard entry does not permit a command.
   .claude/worktrees/rk-guide-revise push)`, because only the action holds the
   `claude[bot]` push identity that starts CI, and it removes that credential
   when its step ends. `Report the guide contract result` posts a comment that
-  names the reason, the command, and its output on any stop. The job result
+  names the reason, the command, and its output on any stop, and also when the
+  revise step fails before it edits a source. The settle step refuses to run a
+  project command while the work tree holds any git-ignored file. The job result
   does not change, because the implementation is already pushed. A session that
   changed a command file or the contract block gets that comment, and no project
   command runs.

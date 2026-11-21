@@ -338,8 +338,20 @@ for (const flavor of ['claude', 'codex']) {
       check(bracketed(c.prompt).length === 0, `${label}: no runner command is given`)
       if (flavor === 'claude') check(!(c.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? '').split(',').includes(`Bash(${REGENERATE})`), `${label}: the raw command stays off the allowlist`)
     }
-    const fenced = compose(flavor, project('plain', { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`) }), 'sync-docs', PERMIT)
-    check(fenced.status === 0 && fenced.prompt.includes('state for this run is none'), 'a heading inside a code fence is no statement')
+    const fencedText = `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`
+    const fence = (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedText)
+    for (const flow of ['sync-docs', 'sync-release']) {
+      const fenced = compose(flavor, project('plain', { mutate: fence }), flow, OTHER_EXTRA)
+      check(fenced.status === 0 && !fenced.prompt.includes('state for this run') && !fenced.prompt.includes('runner check command'), `${flow}: a heading inside a code fence adds no fragment and no state sentence (${fenced.log.slice(0, 300)})`)
+      if (flavor === 'claude') check((fenced.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? '').split(',').includes(OTHER_EXTRA), `${flow}: a fenced heading keeps the caller entry ${OTHER_EXTRA}`)
+      if (legacyAvailable) {
+        const before = compose(flavor, project('plain', { mutate: fence }), flow, OTHER_EXTRA, LEGACY_BASE)
+        const strip = (result) => result.prompt.replaceAll(result.dir, '<project>').replace(/RK_TRIGGER_[0-9a-f]+/g, 'RK_TRIGGER_X')
+        check(before.status === 0 && strip(before) === strip(fenced), `${flow}: with a fenced heading the composed output equals the ${LEGACY_BASE.slice(0, 7)} result`)
+      }
+    }
+    const both = compose(flavor, project('contract', { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `${readFileSync(join(s, 'CLAUDE.md'), 'utf8')}\n## Example\n\n\`\`\`\n${HEADING}\n- Generated: \`OTHER.md\`\n\`\`\`\n`) }), 'sync-docs', PERMIT)
+    check(both.status === 0 && both.prompt.includes('state for this run is ready') && bracketed(both.prompt).length === 2, `a fenced example beside a valid statement reads the statement outside the fence (${both.log.slice(0, 300)})`)
   }
 
   section = `${flavor} compose, statement only in pull request content`
@@ -365,7 +377,7 @@ for (const flavor of ['claude', 'codex']) {
   }
 }
 
-function postImplement(flavor, { kind = 'contract', mutate, extra = `${OTHER_EXTRA},${PERMIT}`, session, edit, flow = '' } = {}) {
+function postImplement(flavor, { kind = 'contract', mutate, extra = `${OTHER_EXTRA},${PERMIT}`, session, edit, flow = '', reviseOutcome = 'success' } = {}) {
   const p = project(kind, { mutate })
   stage(p, flavor)
   const record = runStep(p, flavor, RECORD[flavor], { GH_TOKEN: 'fixture-token', PR_NUMBER: '', REPO: SLUG })
@@ -405,6 +417,7 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = `${OTHER_EXT
       STATE: prepare.outputs.state,
       REASON: prepare.outputs.reason ?? '',
       DIGEST: prepare.outputs.digest ?? '',
+      REVISE_OUTCOME: reviseOutcome,
       RUNNER_SHA: composed.outputs.guide_runner_sha,
       REPO: SLUG,
       ISSUE_NUMBER: '1',
@@ -447,6 +460,11 @@ for (const flavor of ['claude', 'codex']) {
   {
     const r = postImplement(flavor, {})
     check(r.settle?.outputs.result === 'none' && r.remoteTip === r.sessionTip && r.comments.length === 0, 'no source edit makes no commit and no comment')
+    const failed = postImplement(flavor, { reviseOutcome: 'failure' })
+    check(failed.settle?.outputs.result === 'none' && failed.remoteTip === failed.sessionTip, 'a failed revise step with no edit makes no commit')
+    check(failed.comments.length === 1 && failed.comments[0].includes('the revise step ended with the outcome failure'), `a failed revise step with no edit posts one comment that names the failed step (${failed.comments.join(' | ')})`)
+    const edited = postImplement(flavor, { reviseOutcome: 'failure', edit: addRule })
+    check(['committed', 'pushed'].includes(edited.settle?.outputs.result) && edited.comments.length === 0, `a failed revise step that left a valid source edit still lands the commit with no comment (${edited.settle?.log})`)
   }
 
   const failing = [
@@ -466,6 +484,8 @@ for (const flavor of ['claude', 'codex']) {
     ['a filter driver added to the git configuration', { edit: (wt) => { addRule(wt); git(wt, 'config', 'filter.fixture.clean', 'touch pwned'); writeFileSync(join(wt, '.claude/rules/.gitattributes'), '*.md filter=fixture\n') } }, 'settle', 'configuration key'],
     ['a changed push target', { edit: (wt) => { addRule(wt); git(wt, 'config', 'branch.rk-guide/revise.merge', 'refs/heads/main') } }, 'settle', 'configuration key'],
     ['an ignored file under a source path', { mutate: (s) => writeFileSync(join(s, '.gitignore'), '.claude/rules/local-*.md\n'), edit: (wt) => { addRule(wt); writeFileSync(join(wt, '.claude/rules/local-notes.md'), 'hidden\n') } }, 'settle', 'ignored file'],
+    ['an ignored file outside the sources', { mutate: (s) => writeFileSync(join(s, '.gitignore'), 'vendor/\n'), edit: (wt) => { addRule(wt); mkdirSync(join(wt, 'vendor'), { recursive: true }); writeFileSync(join(wt, 'vendor/planted.sh'), 'touch pwned\n') } }, 'settle', 'vendor/planted.sh'],
+    ['an ignored file with no source edit', { mutate: (s) => writeFileSync(join(s, '.gitignore'), 'vendor/\n'), edit: (wt) => { mkdirSync(join(wt, 'vendor'), { recursive: true }); writeFileSync(join(wt, 'vendor/planted.sh'), 'touch pwned\n') } }, 'settle', 'vendor/planted.sh'],
     ['two session branches', { session: (wt) => git(wt, 'branch', 'cc/issue-1-other') }, 'prepare', '2 new or moved'],
   ]
   for (const [label, options, where, needle] of failing) {
@@ -524,6 +544,18 @@ for (const flavor of ['claude', 'codex']) {
     git(p.ws, 'push', '-q', 'origin', 'cc/issue-1-session')
     const prepare = runStep(p, flavor, PREPARE, { FLOW: '', TRUSTED_SHA: composed.outputs.trusted_sha, RUNNER_SHA: composed.outputs.guide_runner_sha, REFS_SHA: record.outputs.refs_sha, DEFAULT_BRANCH: 'main', REPO: SLUG, RK_EXTRA_ALLOWED: PERMIT, GH_TOKEN: 'x' })
     check(prepare.outputs.state === 'none', 'a statement only on the session branch is ignored')
+  }
+
+  section = `${flavor} revise step wiring`
+  {
+    const revise = stepOf(flavor, 'Revise the guide sources')
+    const report = stepOf(flavor, REPORT)
+    check(revise.id === 'guide_revise' && revise['continue-on-error'] === true, 'the revise step has the id that the report step reads')
+    check(report.env.REVISE_OUTCOME === '${{ steps.guide_revise.outcome }}' && report.run.includes('--revise-outcome "$REVISE_OUTCOME"'), 'the report step passes the revise step outcome to the runner')
+    if (flavor === 'claude') {
+      const main = stepOf(flavor, 'Push the agent guide commit')
+      check(revise.with.allowed_bots === 'claude' && main.with.allowed_bots === 'claude', 'both new action steps admit the claude bot actor')
+    }
   }
 
   section = `${flavor} legacy revise step`

@@ -31,7 +31,7 @@ Every writer of agent guides (this skill, both workflow sync prompts, and both p
 
 1. Read the trusted statement.
 2. Never edit a stated generated file, a stated command file, or the contract block.
-3. Edit the stated sources only, under the step 6 placement rule.
+3. Among the agent guide files, edit the stated sources only, under the step 6 placement rule. Other documentation files follow the normal procedure.
 4. Run the regenerate command after the last edit and before the size check, then the verify command.
 5. Accept only stated generated files as generator output, and a verify command that changes nothing.
 6. On any failure, stop before any commit.
