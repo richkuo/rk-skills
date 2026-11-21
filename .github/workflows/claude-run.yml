@@ -1186,10 +1186,20 @@ jobs:
             exit 1
           }
           if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ "$GUIDE_REQUIRED" = true ]; then
+            GUIDE_ENTRY=""
+            if [ -n "$TRUSTED_SHA" ]; then
+              GUIDE_ENTRY=$(git ls-tree "$TRUSTED_SHA" -- CLAUDE.md 2>/dev/null) || GUIDE_ENTRY=""
+            fi
+            case "$GUIDE_ENTRY" in
+              "100644 blob "*|"100755 blob "*) GUIDE_REGULAR=true ;;
+              *) GUIDE_REGULAR=false ;;
+            esac
             if [ -z "$TRUSTED_SHA" ]; then
               guide_stop "the caller sets guide_contract_permit, but the default branch could not be fetched and this run is not on it, so no agent guide contract can be read"
-            elif ! git cat-file -e "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null; then
+            elif [ -z "$GUIDE_ENTRY" ]; then
               guide_stop "the caller sets guide_contract_permit, but CLAUDE.md is missing at the default-branch commit ${TRUSTED_SHA}"
+            elif [ "$GUIDE_REGULAR" != true ]; then
+              guide_stop "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} is not a regular file"
             elif ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
               guide_stop "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} has no line that is exactly ## Agent guide contract"
             fi
@@ -1551,10 +1561,20 @@ jobs:
             echo "state=none" >> "$GITHUB_OUTPUT"
             exit 0
           }
+          GUIDE_ENTRY=""
+          if [ -n "$TRUSTED_SHA" ]; then
+            GUIDE_ENTRY=$(git ls-tree "$TRUSTED_SHA" -- CLAUDE.md 2>/dev/null) || GUIDE_ENTRY=""
+          fi
+          case "$GUIDE_ENTRY" in
+            "100644 blob "*|"100755 blob "*) GUIDE_REGULAR=true ;;
+            *) GUIDE_REGULAR=false ;;
+          esac
           if [ -z "$TRUSTED_SHA" ]; then
             no_contract "the caller sets guide_contract_permit, but the trusted default-branch commit was not recorded before the session ran, so no guide revision runs"
-          elif ! git cat-file -e "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null; then
+          elif [ -z "$GUIDE_ENTRY" ]; then
             no_contract "the caller sets guide_contract_permit, but CLAUDE.md is missing at the default-branch commit ${TRUSTED_SHA}, so no guide revision runs"
+          elif [ "$GUIDE_REGULAR" != true ]; then
+            no_contract "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} is not a regular file, so no guide revision runs"
           elif ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
             no_contract "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} has no line that is exactly ## Agent guide contract, so no guide revision runs"
           fi

@@ -140,8 +140,8 @@ block on a session branch.
   command lines and adds only those two lines to the allowlist. Any other state
   is a blocked sync with a comment. With a permit entry and no readable
   contract at the default-branch commit (no trusted commit, a `CLAUDE.md` that
-  is missing or has no exact heading line, or a heading only inside a code
-  fence), the compose step records the reason, prints it as an error, and fails
+  is missing, is not a regular file, or has no exact heading line, or a heading
+  only inside a code fence), the compose step records the reason, prints it as an error, and fails
   the job before the agent starts. `Report a stopped documentation sync` then
   posts one comment that states the reason, and the generic failure note is
   skipped when that comment posts. The `create-release` flow reads no contract

@@ -226,6 +226,7 @@ const NOTE = { claude: 'Note workflow cancellation/failure on Claude comment', c
 const STOP_PREFIX = 'the caller sets guide_contract_permit, but '
 const NO_LINE = 'has no line that is exactly ## Agent guide contract'
 const NO_FILE = 'CLAUDE.md is missing at the default-branch commit'
+const NOT_REGULAR = 'is not a regular file'
 const FENCED = 'the root CLAUDE.md has no contract heading outside a code fence'
 const UNREACHABLE = 'the default branch could not be fetched and this run is not on it'
 const NOT_RECORDED = 'the trusted default-branch commit was not recorded before the session ran'
@@ -237,6 +238,7 @@ const MUTATE = {
   missing: (s) => { rmSync(join(s, 'CLAUDE.md')); writeFileSync(join(s, 'README.md'), '# Fixture\n') },
   trailing: (s) => writeFileSync(join(s, 'CLAUDE.md'), `# Plain\n\n${HEADING} \n- Generated: \`AGENTS.md\`\n`),
   symlink: (s) => { mkdirSync(join(s, 'docs')); writeFileSync(join(s, 'docs/GUIDE.md'), `# Guide\n\n${HEADING}\n`); rmSync(join(s, 'CLAUDE.md')); symlinkSync('docs/GUIDE.md', join(s, 'CLAUDE.md')) },
+  directory: (s) => { rmSync(join(s, 'CLAUDE.md')); mkdirSync(join(s, 'CLAUDE.md')); writeFileSync(join(s, 'CLAUDE.md/notes.md'), `${HEADING}\n`) },
 }
 
 function compose(flavor, p, flow, extra, { source = 'current', permit = '', mode = 'implement', afterStage, env = {} } = {}) {
@@ -487,7 +489,8 @@ for (const flavor of ['claude', 'codex']) {
       ['a missing CLAUDE.md', 'plain', MUTATE.missing, NO_FILE],
       ['a heading only inside a code fence', 'plain', MUTATE.fenced, FENCED],
       ['a heading with a trailing space', 'plain', MUTATE.trailing, NO_LINE],
-      ['a CLAUDE.md symbolic link', 'plain', MUTATE.symlink, NO_LINE],
+      ['a CLAUDE.md symbolic link', 'plain', MUTATE.symlink, NOT_REGULAR],
+      ['a CLAUDE.md directory', 'plain', MUTATE.directory, NOT_REGULAR],
     ]
     for (const [label, kind, mutate, needle, env] of cases) {
       const c = compose(flavor, project(kind, { mutate }), flow, `${OTHER_EXTRA},${RAW}`, { permit: PERMIT, env })
@@ -787,7 +790,8 @@ for (const flavor of ['claude', 'codex']) {
       ['a missing CLAUDE.md', { kind: 'plain', mutate: MUTATE.missing }, NO_FILE],
       ['a heading only inside a code fence', { kind: 'plain', mutate: MUTATE.fenced }, FENCED],
       ['a heading with a trailing space', { kind: 'plain', mutate: MUTATE.trailing }, NO_LINE],
-      ['a CLAUDE.md symbolic link', { kind: 'plain', mutate: MUTATE.symlink }, NO_LINE],
+      ['a CLAUDE.md symbolic link', { kind: 'plain', mutate: MUTATE.symlink }, NOT_REGULAR],
+      ['a CLAUDE.md directory', { kind: 'plain', mutate: MUTATE.directory }, NOT_REGULAR],
       ['an unavailable trusted commit', { kind: 'contract', trustedSha: '' }, NOT_RECORDED],
     ]
     for (const [label, options, needle] of cases) {
