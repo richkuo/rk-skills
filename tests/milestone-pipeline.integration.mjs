@@ -371,8 +371,8 @@ for (const route of VALIDATE_ROUTES) {
     check(!String(dependentRecord?.blocker).includes(testCase.reason), `${label}: dependency diagnosis copies the validator reason`)
     check(String(dependentRecord?.blocker).includes('closure candidate') === testCase.advisory, `${label}: closure advisory ${testCase.advisory ? 'missing' : 'present'}`)
     check(/closure|close #/i.test(String(dependentRecord?.blocker)) === testCase.advisory, `${label}: dependency blocker ${testCase.advisory ? 'lacks' : 'carries'} closure wording`)
-    if (testCase.advisory) check(String(dependentRecord?.blocker).includes("get the user's authorization"), `${label}: advisory does not keep the authorization check`)
-    if (testCase.advisory) check(String(dependentRecord?.blocker).includes(`get the user's authorization for #${prerequisite} itself (run-plan approval does not give it)`), `${label}: advisory lets run-plan approval stand in for the per-issue authorization`)
+    if (testCase.advisory) check(String(dependentRecord?.blocker).includes(`run validate-issue on #${prerequisite} in the session`), `${label}: advisory does not route the closure through validate-issue`)
+    if (testCase.advisory) check(String(dependentRecord?.blocker).includes(`close it only through its step 13, on the user's explicit close issue reply for #${prerequisite} (run-plan approval does not give it)`), `${label}: advisory lets run-plan approval stand in for the per-issue authorization`)
   }
 
   {

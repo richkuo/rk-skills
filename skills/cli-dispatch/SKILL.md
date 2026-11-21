@@ -113,7 +113,7 @@ done
 
 ## 9. Validate pass
 
-A validate pass runs the `validate-issue` skill on the Codex CLI. Before any other step of a validate pass, read [validate-pass.md](validate-pass.md) completely; it holds the full section 9 text. Of this file, a validate pass uses sections 1, 2, 4 (2-hour cap, with the validate shim in `validate-pass.md` in place of the section 4 shims), 5, and 6, and only (a) of section 8; on any difference, `validate-pass.md` wins. A missing `validate-pass.md` blocks the pass. A build or fix pass does not read it.
+A validate pass runs the `validate-issue` skill on the Codex CLI. Before any other step of a validate pass, read [validate-pass.md](validate-pass.md) completely; it holds the full section 9 text and names the sections of this file that a validate pass uses. A missing `validate-pass.md` blocks the pass. A build or fix pass does not read it.
 
 ## Failure modes
 

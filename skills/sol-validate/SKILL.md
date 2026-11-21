@@ -7,7 +7,7 @@ description: Validates a GitHub issue with Sol on the Codex CLI. It runs the val
 
 Delegate issue validation to **Sol 6.2 on the Codex CLI**, then act on its verdict in the main agent. The Codex run only validates: it runs in the `cli-dispatch` section 9 no-edit mode and never edits files or the issue. The main agent handles all follow-on actions. This is `fable-validate` with the Codex CLI validate pass in place of the Fable subagent.
 
-The session is the driver named in `cli-dispatch` section 9. **Load the `cli-dispatch` skill and read sections 1, 2, 4, 5, 6, 8 (a), and 9, and the [validate-pass.md](../cli-dispatch/validate-pass.md) file that section 9 points to, completely before step 1.** That skill owns the shim, the sandbox, the limits, the snapshot guard, the issue check, the read time of record, and the retry rule. Steps 2 and 3 summarize the run limits, the no-edit blockers, the retry rule, and the read-time rule where they apply them. Those summaries are pointers: on any difference, the `cli-dispatch` text wins. `docs/contract-inventory.md` lists this skill on the rows that own those rules.
+The session is the driver named in `cli-dispatch` section 9. **Load the `cli-dispatch` skill and read section 9, the [validate-pass.md](../cli-dispatch/validate-pass.md) file that section 9 points to, and the `cli-dispatch` sections that `validate-pass.md` names, completely before step 1.** That skill owns the shim, the sandbox, the limits, the snapshot guard, the issue check, the read time of record, and the retry rule. Steps 2 and 3 summarize the run limits, the no-edit blockers, the retry rule, and the read-time rule where they apply them. Those summaries are pointers: on any difference, the `cli-dispatch` text wins. `docs/contract-inventory.md` lists this skill on the rows that own those rules.
 
 ## Input
 
@@ -69,7 +69,7 @@ Handle the user's reply per the validate-issue procedure. These are main-agent a
 - **"work on issue"** → hand off to the `work-on-issue` skill per validate-issue step 9, surfacing any step-7 scope disposition first.
 - **"split issue" / "decompose"** → apply validate-issue step 12 with the step 7 disposition from the relayed verdict.
 - **"issueplan"** or **"fableplan"** → apply validate-issue step 10.
-- **"close issue"** → apply validate-issue step 13 to a `Close issue?` verdict, reading the [close-issue.md](../validate-issue/close-issue.md) file that step 13 points to completely, with the footer from the "update issue" bullet. This agent never ran step 0, so step 13 first rebuilds `REPO`, `DEFAULT`, and `BASE` from the step 1 reference and the baseline line the Codex agent returned.
+- **"close issue"** → apply validate-issue step 13 to a `Close issue?` verdict, reading the [close-issue.md](../validate-issue/close-issue.md) file that step 13 points to completely, with the footer from the "update issue" bullet. `close-issue.md` owns the rebuild of `REPO`, `DEFAULT`, and `BASE`; the baseline is the line the Codex agent returned.
 
 ## Notes
 

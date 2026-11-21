@@ -18,7 +18,7 @@ A validate pass runs the `validate-issue` skill on the Codex CLI: in `milestone-
 
 ## Codex only
 
-- **Codex only.** A Cursor validate stamp blocks the issue.
+- A Cursor validate stamp blocks the issue.
 
 ## The shim
 

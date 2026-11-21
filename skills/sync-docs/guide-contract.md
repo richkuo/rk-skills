@@ -39,7 +39,7 @@ Every writer of agent guides (this skill, both workflow sync prompts, and both p
 ## In this skill
 
 - **Command check.** Before each run of a command, `git diff --quiet "$T0" -- <each Command files entry>` must report no change, and `git status --porcelain -- <each Command files entry>` must print nothing. Otherwise the sync is **blocked**: a changed command file is code that the default branch did not review.
-- **Step 3.** Record each stated generated guide with only the policy the repository states for that path by name. The pair rule and the fallback apply to the stated sources as written.
+- **Step 3.** Record each stated generated guide under the **Size** rule above. The pair rule and the fallback apply to the stated sources as written.
 - **Step 6.** Never open a stated generated file for writing. When `AGENTS.md` is a stated generated file, the step 6 mirror does not apply to it: its content comes from the regenerate command.
 - **Regenerate and verify.** After the last edit and before step 10, run the regenerate command from the worktree root, then the verify command. Run both again after the last condense edit of step 10. Compare `git status --porcelain` before and after each command: the regenerate command may change only the stated generated files, each a regular file, and the verify command must change nothing.
 - **Condense.** A condense pass keeps the contract block byte for byte.
