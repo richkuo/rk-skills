@@ -43,7 +43,12 @@ on:
         type: string
         default: ''
       extra_allowed_tools:
-        description: 'Codex has no per-tool allowlist, so this value grants no tool; it is read only as the agent guide contract permit (the exact entries Bash(<regenerate command>) and Bash(<verify command>))'
+        description: 'Codex has no per-tool allowlist, so this value grants no tool and permits no agent guide contract command; a non-empty value logs a notice'
+        required: false
+        type: string
+        default: ''
+      guide_contract_permit:
+        description: 'Comma-separated plain commands, each exactly equal to the agent guide contract Regenerate or Verify command, that permit the trusted runner to run them; no Bash() wrapper, no wildcard'
         required: false
         type: string
         default: ''
@@ -198,7 +203,7 @@ jobs:
 
       - name: Note that extra_allowed_tools does not apply to Codex
         if: inputs.extra_allowed_tools != ''
-        run: echo "::notice::extra_allowed_tools grants no tool here, because Codex has no per-tool allowlist. It is read only as the agent guide contract permit. The Codex sandbox and the job permissions are the boundary on this route."
+        run: echo "::notice::extra_allowed_tools grants no tool here, because Codex has no per-tool allowlist, and it permits no agent guide contract command (use guide_contract_permit). The Codex sandbox and the job permissions are the boundary on this route."
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
@@ -270,10 +275,14 @@ jobs:
           SKILLS_DIR: ${{ runner.temp }}/rk-shared/skills
           PR_METADATA_FILE: ${{ runner.temp }}/rk-shared/pr-metadata.json
           PROMPT_OUT: ${{ runner.temp }}/rk-shared/prompt.md
-          EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
           GH_TOKEN: ${{ github.token }}
         run: |
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
+          if [ -n "$GUIDE_PERMIT" ] && printf '%s' "$GUIDE_PERMIT" | grep -q '["`$]'; then
+            echo "::error::guide_contract_permit must not contain double quotes, backticks, or dollar signs (it reaches shell-composed text)."
+            exit 1
+          fi
           echo "guide_runner_sha=$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           if [ -n "$FLOW" ]; then
             PROMPT_FILE="$PROMPTS_DIR/sync-docs-release.md"
@@ -321,7 +330,7 @@ jobs:
             mkdir -p "$GUIDE_DIR"
             GUIDE_OUT=""
             if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
-              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$EXTRA_ALLOWED" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
+              GUIDE_OUT=$(RK_GUIDE_PERMIT="$GUIDE_PERMIT" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
             fi
             chmod 555 "$GUIDE_DIR"
             guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
@@ -517,7 +526,7 @@ jobs:
           START_SHA: ${{ steps.pre_codex.outputs.head_sha }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPO: ${{ github.repository }}
-          RK_EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          RK_GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
           GH_TOKEN: ${{ github.token }}
         run: |
           stop() {

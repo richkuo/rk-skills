@@ -43,7 +43,12 @@ on:
         type: string
         default: ''
       extra_allowed_tools:
-        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow'
+        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow; when the default-branch CLAUDE.md states an agent guide contract, the exact entries Bash(<regenerate command>) and Bash(<verify command>) are removed on every route'
+        required: false
+        type: string
+        default: ''
+      guide_contract_permit:
+        description: 'Comma-separated plain commands, each exactly equal to the agent guide contract Regenerate or Verify command, that permit the trusted runner to run them; no Bash() wrapper, no wildcard; never added to any agent allowlist'
         required: false
         type: string
         default: ''
@@ -1079,6 +1084,7 @@ jobs:
           MODE: ${{ inputs.mode }}
           FLOW: ${{ inputs.flow }}
           EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
           BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
@@ -1117,6 +1123,22 @@ jobs:
               echo "::notice::extra_allowed_tools is ignored in the create-release flow (hard-locked allowlist)."
             else
               ROUTE_EXTRA="$EXTRA_ALLOWED"
+            fi
+          fi
+          if [ -n "$GUIDE_PERMIT" ]; then
+            if printf '%s' "$GUIDE_PERMIT" | grep -q '["`$]'; then
+              echo "::error::guide_contract_permit must not contain double quotes, backticks, or dollar signs (it reaches shell-composed text)."
+              exit 1
+            fi
+            if [ -n "$ROUTE_EXTRA" ]; then
+              ROUTE_EXTRA=$(RK_EXTRA="$ROUTE_EXTRA" RK_PERMIT="$GUIDE_PERMIT" awk 'BEGIN {
+                n = split(ENVIRON["RK_PERMIT"], permit, ",")
+                for (i = 1; i <= n; i++) { v = permit[i]; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v != "") drop["Bash(" v ")"] = 1 }
+                m = split(ENVIRON["RK_EXTRA"], extra, ",")
+                out = ""
+                for (i = 1; i <= m; i++) { v = extra[i]; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v != "" && !(v in drop)) out = out (out == "" ? "" : ",") v }
+                print out
+              }')
             fi
           fi
 
@@ -1163,7 +1185,7 @@ jobs:
             mkdir -p "$GUIDE_DIR"
             GUIDE_OUT=""
             if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
-              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
+              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" RK_GUIDE_PERMIT="$GUIDE_PERMIT" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
             fi
             chmod 555 "$GUIDE_DIR"
             guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
@@ -1189,6 +1211,20 @@ jobs:
                 PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
               fi
             fi
+          elif [ -z "$FLOW" ] && [ -n "$ROUTE_EXTRA" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            ROUTE_OUT=""
+            if command -v python3 >/dev/null 2>&1; then
+              ROUTE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" python3 -I "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" route-extra --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA") || ROUTE_OUT=""
+            fi
+            ROUTE_STATE=$(printf '%s\n' "$ROUTE_OUT" | sed -n 's/^state=//p' | head -n 1)
+            case "$ROUTE_STATE" in
+              none) ;;
+              ok) ROUTE_EXTRA=$(printf '%s\n' "$ROUTE_OUT" | sed -n 's/^filtered_extra=//p' | head -n 1) ;;
+              *)
+                echo "::warning::The default-branch CLAUDE.md has an agent guide contract heading, but the contract state is ${ROUTE_STATE:-unknown, because python3 is missing or the guide contract runner failed}, so the project commands cannot be removed from extra_allowed_tools and every extra_allowed_tools entry is dropped for this run."
+                ROUTE_EXTRA=""
+                ;;
+            esac
           fi
           if [ -n "$ROUTE_EXTRA" ]; then
             ALLOWED="$ALLOWED,$ROUTE_EXTRA"
@@ -1474,7 +1510,7 @@ jobs:
           START_SHA: ${{ steps.pre_claude.outputs.head_sha }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPO: ${{ github.repository }}
-          RK_EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          RK_GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
           GH_TOKEN: ${{ github.token }}
         run: |
           stop() {

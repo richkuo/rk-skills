@@ -59,7 +59,8 @@ to hosted runners while `classify` keeps working.
 | `runs_on` | `ubuntu-latest` | Runner label (e.g. `self-hosted`). |
 | `timeout_minutes` | `45` | Job timeout; raise for long implement runs. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
-| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to the main agent of every route EXCEPT the hard-locked `create-release` flow. The post-implementation steps never add it to an agent allowlist: they read it only as the agent guide contract permit. In a docs flow of a repository with an agent guide contract, the two exact permit entries are removed from the agent allowlist (see **Agent guide contract**). Same character rule as prompts. |
+| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to the main agent of every route EXCEPT the hard-locked `create-release` flow. It permits no agent guide contract command. In a repository with an agent guide contract, the entries `Bash(<regenerate command>)` and `Bash(<verify command>)` are removed from it on every route (see **Agent guide contract**). Same character rule as prompts. |
+| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them, for example `python3 -I tools/build_agent_guide.py,bash tools/check_agent_guide.sh`. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. It is never added to any agent allowlist. Same character rule as prompts. |
 | `review_subprocess_scrub` | `true` | Review route only. `false` turns the secret scrub off on every runner; the review then runs only for a trusted pull request author and only with `review_subprocess_scrub_off_accepted: true`. See the security model. |
 | `review_subprocess_scrub_off_accepted` | `false` | Review route only. Accepts the credential exposure of `review_subprocess_scrub: false` for a trusted author. It never admits an untrusted author. |
 | `review_subprocess_scrub_self_hosted` | `false` | Ignored. Kept so an older caller that passes it still runs. It skips no layout detection, preparation, protection check, or author gate. |
@@ -91,9 +92,24 @@ owned by `skills/sync-docs/guide-contract.md`. A repository with no block sees
 no change: both docs flows and the post-implementation `Revise CLAUDE.md with
 session learnings` step run as before.
 
-To enable it, add the two exact entries `Bash(<regenerate command>)` and
-`Bash(<verify command>)` to `extra_allowed_tools` of the `implement` job (the
-docs flows run through that job). A wildcard entry does not permit a command.
+To enable it, set `guide_contract_permit` of the `implement` job (the docs
+flows run through that job) to the two exact commands, joined by a comma, for
+example `guide_contract_permit: 'python3 -I tools/build_agent_guide.py,bash
+tools/check_agent_guide.sh'`. A `Bash(...)` entry or a wildcard entry does not
+permit a command, and `extra_allowed_tools` permits nothing.
+
+- **Separate permit.** The permit is its own input so that it never adds a
+  command to an agent allowlist. `extra_allowed_tools` reaches the agent of the
+  review, `fix-pr`, and implement routes, and the review route checks out the
+  pull request head, so a raw project command on that list would let the review
+  agent run code that the pull request wrote. For the same reason, when the
+  default-branch `CLAUDE.md` states a contract, the compose step removes the
+  entries `Bash(<regenerate command>)` and `Bash(<verify command>)` from
+  `extra_allowed_tools` on every route, and it removes `Bash(<entry>)` for each
+  `guide_contract_permit` entry. When the heading is there but the runner cannot
+  report a parsed contract (a malformed statement, no `python3`, or a runner
+  failure), every `extra_allowed_tools` entry is dropped for that run with a
+  warning.
 
 - **Trusted read.** The `Compose Claude prompt` step reads the block from
   `CLAUDE.md` at the default-branch tip (the fetched `FETCH_HEAD`; when the

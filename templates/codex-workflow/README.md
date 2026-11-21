@@ -69,7 +69,8 @@ five in agreement.
 | `runs_on` | `ubuntu-latest` | Runner label. |
 | `timeout_minutes` | `45` | Job timeout. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. |
-| `extra_allowed_tools` | (empty) | Grants no tool, because Codex has no per-tool allowlist. It is read only as the agent guide contract permit: the exact entries `Bash(<regenerate command>)` and `Bash(<verify command>)`. A non-empty value logs a notice. |
+| `extra_allowed_tools` | (empty) | Grants no tool, because Codex has no per-tool allowlist, and permits no agent guide contract command. A non-empty value logs a notice. |
+| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. Same character rule as the Claude bundle: no double quote, backtick, or dollar sign. |
 | `bot_login` | (empty) | Pass `${{ vars.CODEX_BOT_LOGIN }}`; see install step 3. |
 
 Self-hosted runners need `git`, `gh`, `node`, `npm` (the action installs the
@@ -85,9 +86,10 @@ release workflow that parses the `docs-release/*` branch name.
 The Claude bundle README section **Agent guide contract** applies, with these
 differences:
 
-- The permit rule is the only gate. Codex has no allowlist, so a docs-flow
-  agent can run a raw project command inside its sandbox; the prompt tells it
-  to call the runner only.
+- The permit rule is the only gate, and the permit comes only from
+  `guide_contract_permit`. Codex has no allowlist, so a docs-flow agent can run
+  a raw project command inside its sandbox; the prompt tells it to call the
+  runner only.
 - When `AGENTS.md` is a stated generated file, the docs flows never treat it as
   the primary file, and the byte-identical rule does not apply to it.
 - `Revise the guide sources` runs with a fresh Codex home that has no

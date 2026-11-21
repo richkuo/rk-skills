@@ -241,11 +241,15 @@ def split_extra(extra):
     return [entry.strip() for entry in extra.split(",") if entry.strip()]
 
 
-def permit_state(contract, extra):
-    entries = split_extra(extra)
+def permit_list(permit):
+    return [entry for entry in split_extra(permit) if COMMAND_RE.match(entry)]
+
+
+def permit_state(contract, permit):
+    entries = permit_list(permit)
     for label, command in (("regenerate", contract["regenerate"]), ("verify", contract["verify"])):
-        if f"Bash({command})" not in entries:
-            return False, f"the caller workflow does not permit the {label} command {command}: add the exact entry Bash({command}) to extra_allowed_tools"
+        if command not in entries:
+            return False, f"the caller workflow does not permit the {label} command {command}: add the exact command {command} to the guide_contract_permit input"
     return True, ""
 
 
@@ -498,6 +502,7 @@ def print_stop(stop):
 def cmd_sync_state(args):
     repo = os.path.abspath(args.repo)
     extra = os.environ.get("RK_EXTRA_ALLOWED", "")
+    permit = os.environ.get("RK_GUIDE_PERMIT", "")
     runner = os.path.abspath(args.runner)
     state_file = os.path.abspath(args.state_file)
     data = {"kind": "sync", "repo": repo, "trusted": args.ref, "path": os.environ.get("PATH", "")}
@@ -514,7 +519,7 @@ def cmd_sync_state(args):
         except Stop as stop:
             state, reason = "unavailable", stop.reason
         if state == "ok":
-            permitted, why = permit_state(contract, extra)
+            permitted, why = permit_state(contract, permit)
             state, reason = ("ready", "") if permitted else ("denied", why)
     data.update({"state": state, "reason": reason, "contract": contract, "object_format": object_format(repo)})
     digest = write_state(state_file, data)
@@ -528,6 +533,31 @@ def cmd_sync_state(args):
         ("check_command", check_line),
         ("run_command", run_line),
     ])
+    return 0
+
+
+def cmd_route_extra(args):
+    repo = os.path.abspath(args.repo)
+    extra = os.environ.get("RK_EXTRA_ALLOWED", "")
+    contract = None
+    if not SHA_RE.match(args.ref or ""):
+        state, reason = "unavailable", "the trusted default-branch commit is not a full commit identifier"
+    else:
+        try:
+            entry = tree_entries(repo, args.ref).get("CLAUDE.md")
+            if entry is None or entry[1] != "blob" or entry[0] not in ("100644", "100755"):
+                state, reason = "none", "the default branch has no regular CLAUDE.md file"
+            else:
+                state, reason, contract = parse_contract(read_blob(repo, entry[2]).decode("utf-8", "replace"))
+        except Stop as stop:
+            state, reason = "unavailable", stop.reason
+    if state == "none":
+        kept = extra
+    elif state == "ok":
+        kept = filtered_extra(contract, extra)
+    else:
+        kept = ""
+    emit([("state", state), ("reason", reason), ("filtered_extra", kept)])
     return 0
 
 
@@ -673,7 +703,7 @@ def write_prompt(template, out, data, contract):
 
 def cmd_prepare(args):
     repo = os.path.abspath(args.repo)
-    extra = os.environ.get("RK_EXTRA_ALLOWED", "")
+    permit = os.environ.get("RK_GUIDE_PERMIT", "")
     try:
         if not SHA_RE.match(args.trusted or ""):
             raise Stop("the trusted default-branch commit was not recorded before the session ran")
@@ -688,7 +718,7 @@ def cmd_prepare(args):
             return 0
         if state != "ok":
             raise Stop(f"the agent guide contract on the default branch is malformed: {reason}")
-        permitted, why = permit_state(contract, extra)
+        permitted, why = permit_state(contract, permit)
         if not permitted:
             raise Stop(why)
         with open(args.refs_before) as handle:
@@ -933,6 +963,10 @@ def main():
     p.add_argument("--state-file", required=True)
     p.add_argument("--runner", required=True)
     p.set_defaults(func=cmd_sync_state)
+    p = sub.add_parser("route-extra")
+    p.add_argument("--repo", required=True)
+    p.add_argument("--ref", required=True)
+    p.set_defaults(func=cmd_route_extra)
     for name, func in (("check", cmd_check), ("run", cmd_run)):
         p = sub.add_parser(name)
         p.add_argument("--state-file", required=True)

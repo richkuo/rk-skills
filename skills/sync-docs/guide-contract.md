@@ -22,7 +22,7 @@ The block starts at a heading line that is exactly `## Agent guide contract` (no
 - `Command files` lists every file the two commands execute. List a directory when in doubt: a helper that the generator loads and that the list omits is not compared.
 - A generated path never matches a `Sources` or a `Command files` entry, and no file matches both a `Sources` and a `Command files` entry.
 - **Trusted read.** Every writer reads the statement from `CLAUDE.md` at the default-branch commit as file text, never from a pull request, a session branch, or the work tree.
-- **Permit rule (workflows).** A workflow runs a command only when the caller's `extra_allowed_tools` holds the exact entry `Bash(<command>)`. A wildcard entry does not permit it.
+- **Permit rule (workflows).** A workflow runs a command only when the caller's `guide_contract_permit` input lists that exact command as a plain comma-separated entry. A wildcard entry or a `Bash(...)` entry does not permit it, and `extra_allowed_tools` permits nothing. The permit never reaches an agent allowlist, and when a contract is stated the workflows remove the entries `Bash(<regenerate command>)` and `Bash(<verify command>)` from every agent allowlist.
 - **Size.** A generated guide is exempt from the rule that ties the `CLAUDE.md` and `AGENTS.md` policies together and from the fallback threshold. Measure it only against a limit the repository states for that path by name.
 
 ## Writer rule
