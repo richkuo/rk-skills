@@ -54,6 +54,10 @@ const fakeBin = join(scratch, 'bin')
 mkdirSync(fakeBin)
 writeFileSync(join(fakeBin, 'gh'), `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$RK_GH_LOG/argv.log"
+if [ "$1" = pr ] && [ "$2" = view ] && [ -n "\${RK_GH_PR_HEAD+set}" ]; then
+  printf '%s\\n' "$RK_GH_PR_HEAD"
+  exit 0
+fi
 [ "$1" = api ] || exit 1
 shift
 path=""
@@ -942,6 +946,23 @@ for (const flavor of ['claude', 'codex']) {
       const r = postImplement(flavor, { ...W, session: changeRunner })
       check(r.detect.status === 0 && r.detect.outputs.guide_gate === 'true', `a changed runner opens the gate (${gateOf(r)})`)
       if (reached(r, 'a changed runner')) check(r.prepare.outputs.state === 'stop' && (r.prepare.outputs.reason ?? '').includes('runner changed'), `a changed runner stops prepare (${JSON.stringify(r.prepare.outputs)})`)
+    }
+
+    {
+      const p = project('contract')
+      stage(p, flavor)
+      const start = 'a'.repeat(40)
+      const prDetect = (env) => runStep(p, flavor, DETECT[flavor], { GH_TOKEN: 'fixture-token', PRE_HEAD_SHA: start, BASELINE_KIND: 'pr', PR_NUMBER: '7', REPO: SLUG, REFS_SHA: '', RUNNER_SHA: '', DEFAULT_BRANCH: 'main', GITHUB_REF_NAME: 'main', ...env })
+      for (const [label, env, expected] of [
+        ['a pull request head that moved', { RK_GH_PR_HEAD: 'b'.repeat(40) }, 'true'],
+        ['a pull request head at the start commit', { RK_GH_PR_HEAD: start }, 'false'],
+        ['an empty pull request head', { RK_GH_PR_HEAD: '' }, 'false'],
+        ['a failed pull request read', {}, 'false'],
+      ]) {
+        const d = prDetect(env)
+        check(d.status === 0 && d.outputs.made_commits === expected, `${label}: the pull request baseline gives made_commits=${expected} and exits 0 (exit ${d.status}, ${JSON.stringify(d.outputs)} ${d.log.slice(0, 300)})`)
+      }
+      check(readFileSync(join(p.ghLog, 'argv.log'), 'utf8').includes(`pr view 7 --repo ${SLUG} --json headRefOid -q .headRefOid`), 'the pull request baseline reads the head of the run pull request')
     }
 
     {
