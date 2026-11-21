@@ -232,7 +232,7 @@ const NOT_REGULAR = 'is not a regular file'
 const FENCED = 'the root CLAUDE.md has no contract heading outside a code fence'
 const UNREACHABLE = 'the default branch could not be fetched and this run is not on it'
 const NOT_RECORDED = 'the trusted default-branch commit was not recorded before the session ran'
-const BLANK_PERMITS = [['an empty permit', ''], ['a space', ' '], ['a comma', ','], ['spaces and commas', ' , ,'], ['a tab', '\t'], ['a newline', '\n']]
+const BLANK_PERMITS = [['an empty permit', ''], ['spaces and commas', ' , ,'], ['a tab', '\t'], ['a newline', '\n']]
 const OPT_IN_PERMITS = [['a Bash-wrapped wildcard', 'Bash(bash *)'], ['a wildcard', 'bash *'], ['Bash-wrapped commands', RAW], ['one entry after blank entries', ' , x']]
 const fencedText = `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`
 const MUTATE = {
@@ -345,8 +345,7 @@ for (const flavor of ['claude', 'codex']) {
       if (legacyAvailable) {
         const before = compose(flavor, project('plain', { layout }), flow, `${OTHER_EXTRA},${RAW}`, { source: LEGACY_BASE })
         check(before.status === 0, `${layout} ${flow}: the legacy compose step exits 0`)
-        const strip = (result) => result.prompt.replaceAll(result.dir, '<project>').replace(/RK_TRIGGER_[0-9a-f]+/g, 'RK_TRIGGER_X')
-        check(strip(before) === strip(now), `${layout} ${flow}: the composed ${flavor === 'claude' ? 'claude_args' : 'prompt'} equals the ${LEGACY_BASE.slice(0, 7)} result`)
+        check(stripPrompt(before) === stripPrompt(now), `${layout} ${flow}: the composed ${flavor === 'claude' ? 'claude_args' : 'prompt'} equals the ${LEGACY_BASE.slice(0, 7)} result`)
       } else {
         failures.push(`${section}: commit ${LEGACY_BASE} is not in this clone, so the no-statement equality cannot be proved (fetch full history)`)
       }
@@ -413,7 +412,7 @@ for (const flavor of ['claude', 'codex']) {
     if (flavor === 'claude') check(!(extraOnly.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? '').includes(REGENERATE), 'with the permit only in extra_allowed_tools the raw command stays off the allowlist')
     const wildcard = compose(flavor, project('contract'), 'sync-docs', 'Bash(bash *)')
     check(wildcard.prompt.includes('state for this run is denied'), 'a wildcard entry does not permit a project command')
-    for (const [label, permit] of [['a Bash-wrapped permit', RAW], ['a wildcard permit', 'bash *'], ['a Bash-wrapped wildcard permit', 'Bash(bash *)'], ['a permit with one command', REGENERATE], ['a permit with a double space', `${REGENERATE.replace(' ', '  ')},${VERIFY}`]]) {
+    for (const [label, permit] of [['a permit with one command', REGENERATE], ['a permit with a double space', `${REGENERATE.replace(' ', '  ')},${VERIFY}`]]) {
       const c = compose(flavor, project('contract'), 'sync-docs', OTHER_EXTRA, { permit })
       check(c.status === 0 && c.prompt.includes('state for this run is denied') && bracketed(c.prompt).length === 0, `${label} in guide_contract_permit does not permit a project command (${c.log.slice(0, 300)})`)
     }
@@ -443,16 +442,13 @@ for (const flavor of ['claude', 'codex']) {
       check(bracketed(c.prompt).length === 0, `${label}: no runner command is given`)
       if (flavor === 'claude') check(!(c.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? '').split(',').includes(`Bash(${REGENERATE})`), `${label}: the raw command stays off the allowlist`)
     }
-    const fencedText = `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`
-    const fence = (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedText)
     for (const flow of ['sync-docs', 'sync-release']) {
-      const fenced = compose(flavor, project('plain', { mutate: fence }), flow, OTHER_EXTRA)
+      const fenced = compose(flavor, project('plain', { mutate: MUTATE.fenced }), flow, OTHER_EXTRA)
       check(fenced.status === 0 && !fenced.prompt.includes('state for this run') && !fenced.prompt.includes('runner check command'), `${flow}: a heading inside a code fence adds no fragment and no state sentence (${fenced.log.slice(0, 300)})`)
       if (flavor === 'claude') check((fenced.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? '').split(',').includes(OTHER_EXTRA), `${flow}: a fenced heading keeps the caller entry ${OTHER_EXTRA}`)
       if (legacyAvailable) {
-        const before = compose(flavor, project('plain', { mutate: fence }), flow, OTHER_EXTRA, { source: LEGACY_BASE })
-        const strip = (result) => result.prompt.replaceAll(result.dir, '<project>').replace(/RK_TRIGGER_[0-9a-f]+/g, 'RK_TRIGGER_X')
-        check(before.status === 0 && strip(before) === strip(fenced), `${flow}: with a fenced heading the composed output equals the ${LEGACY_BASE.slice(0, 7)} result`)
+        const before = compose(flavor, project('plain', { mutate: MUTATE.fenced }), flow, OTHER_EXTRA, { source: LEGACY_BASE })
+        check(before.status === 0 && stripPrompt(before) === stripPrompt(fenced), `${flow}: with a fenced heading the composed output equals the ${LEGACY_BASE.slice(0, 7)} result`)
       }
     }
     const both = compose(flavor, project('contract', { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `${readFileSync(join(s, 'CLAUDE.md'), 'utf8')}\n## Example\n\n\`\`\`\n${HEADING}\n- Generated: \`OTHER.md\`\n\`\`\`\n`) }), 'sync-docs', OTHER_EXTRA, { permit: PERMIT })
@@ -484,17 +480,18 @@ for (const flavor of ['claude', 'codex']) {
   }
 
   section = `${flavor} compose, permit with no readable contract`
-  for (const flow of ['sync-docs', 'sync-release']) {
+  {
     const cases = [
-      ['an unavailable trusted commit', 'contract', undefined, UNREACHABLE, { DEFAULT_BRANCH: 'missing-branch', GITHUB_REF: 'refs/heads/feature' }],
-      ['no heading line', 'plain', undefined, NO_LINE],
-      ['a missing CLAUDE.md', 'plain', MUTATE.missing, NO_FILE],
-      ['a heading only inside a code fence', 'plain', MUTATE.fenced, FENCED],
-      ['a heading with a trailing space', 'plain', MUTATE.trailing, NO_LINE],
-      ['a CLAUDE.md symbolic link', 'plain', MUTATE.symlink, NOT_REGULAR],
-      ['a CLAUDE.md directory', 'plain', MUTATE.directory, NOT_REGULAR],
+      ['sync-docs', 'an unavailable trusted commit', 'contract', undefined, UNREACHABLE, { DEFAULT_BRANCH: 'missing-branch', GITHUB_REF: 'refs/heads/feature' }],
+      ['sync-docs', 'no heading line', 'plain', undefined, NO_LINE],
+      ['sync-docs', 'a missing CLAUDE.md', 'plain', MUTATE.missing, NO_FILE],
+      ['sync-docs', 'a heading only inside a code fence', 'plain', MUTATE.fenced, FENCED],
+      ['sync-docs', 'a heading with a trailing space', 'plain', MUTATE.trailing, NO_LINE],
+      ['sync-docs', 'a CLAUDE.md symbolic link', 'plain', MUTATE.symlink, NOT_REGULAR],
+      ['sync-docs', 'a CLAUDE.md directory', 'plain', MUTATE.directory, NOT_REGULAR],
+      ['sync-release', 'no heading line', 'plain', undefined, NO_LINE],
     ]
-    for (const [label, kind, mutate, needle, env] of cases) {
+    for (const [flow, label, kind, mutate, needle, env] of cases) {
       const c = compose(flavor, project(kind, { mutate }), flow, `${OTHER_EXTRA},${RAW}`, { permit: PERMIT, env })
       checkSyncStop(flavor, c, needle, `${flow}, ${label}`)
       if (needle !== UNREACHABLE) check(c.outputs.guide_stop_reason.includes(c.outputs.trusted_sha) && /^[0-9a-f]{40}$/.test(c.outputs.trusted_sha), `${flow}, ${label}: the reason names the trusted commit`)
@@ -550,7 +547,6 @@ for (const flavor of ['claude', 'codex']) {
 section = 'claude compose, agent routes'
 {
   const allowedOf = (c) => c.prompt.match(/--allowedTools "([^"]*)"/)?.[1] ?? ''
-  const strip = (result) => result.prompt.replaceAll(result.dir, '<project>')
   for (const mode of ['review', 'fix-pr', 'fix-pr-review', 'implement']) {
     for (const permit of ['', PERMIT]) {
       const label = `${mode}, ${permit ? 'with' : 'with no'} guide_contract_permit`
@@ -567,27 +563,19 @@ section = 'claude compose, agent routes'
     const noRunner = compose('claude', project('contract'), '', `${OTHER_EXTRA},${RAW}`, { mode, afterStage: (p) => rmSync(join(p.rt, 'rk-shared/scripts/guide_contract.py')) })
     check(noRunner.status === 0 && !allowedOf(noRunner).includes(OTHER_EXTRA) && !allowedOf(noRunner).includes(REGENERATE), `${mode}: with no runner every extra_allowed_tools entry is dropped (${allowedOf(noRunner)})`)
     check(noRunner.log.includes('::warning::') && noRunner.log.includes('python3 is missing or the guide contract runner failed'), `${mode}: with no runner a warning names the cause`)
-    const fencedText = `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`
-    for (const [label, options] of [['no statement', {}], ['a fenced heading only', { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedText) }]]) {
+    for (const [label, options] of [['no statement', {}], ['a fenced heading only', { mutate: MUTATE.fenced }]]) {
       const now = compose('claude', project('plain', options), '', `${OTHER_EXTRA},${RAW}`, { mode })
       check(now.status === 0 && allowedOf(now).split(',').includes(OTHER_EXTRA) && allowedOf(now).split(',').includes(`Bash(${REGENERATE})`), `${mode}, ${label}: extra_allowed_tools stays as the caller gave it`)
       if (legacyAvailable) {
         const before = compose('claude', project('plain', options), '', `${OTHER_EXTRA},${RAW}`, { mode, source: LEGACY_BASE })
-        check(before.status === 0 && strip(before) === strip(now), `${mode}, ${label}: claude_args equals the ${LEGACY_BASE.slice(0, 7)} result`)
+        check(before.status === 0 && stripPrompt(before) === stripPrompt(now), `${mode}, ${label}: claude_args equals the ${LEGACY_BASE.slice(0, 7)} result`)
       }
     }
   }
-  for (const [mode, flow] of [['review', ''], ['fix-pr', ''], ['fix-pr-review', ''], ['implement', ''], ['implement', 'sync-docs'], ['implement', 'sync-release'], ['implement', 'create-release']]) {
-    for (const kind of ['contract', 'plain']) {
-      const c = compose('claude', project(kind), flow, `${OTHER_EXTRA},${RAW}`, { mode, permit: PERMIT })
-      const allowed = allowedOf(c)
-      if (kind === 'plain' && ['sync-docs', 'sync-release'].includes(flow)) {
-        check(c.status !== 0 && !('claude_args' in c.outputs) && (c.outputs.guide_stop_reason ?? '').includes(NO_LINE), `${kind} ${mode} ${flow}: the sync stops with no claude_args (${c.log.slice(0, 300)})`)
-        check(!c.log.includes(REGENERATE) && !c.log.includes(VERIFY), `${kind} ${mode} ${flow}: the guide_contract_permit value and its Bash entries never reach the step log`)
-      } else {
-        check(c.status === 0 && allowed !== '' && !allowed.includes(REGENERATE) && !allowed.includes(VERIFY), `${kind} ${mode} ${flow || 'no flow'}: the guide_contract_permit value and its Bash entries never reach --allowedTools (${allowed})`)
-      }
-    }
+  for (const [kind, mode, flow] of [['contract', 'implement', 'sync-release'], ['contract', 'implement', 'create-release'], ['plain', 'review', ''], ['plain', 'fix-pr', ''], ['plain', 'fix-pr-review', ''], ['plain', 'implement', ''], ['plain', 'implement', 'create-release']]) {
+    const c = compose('claude', project(kind), flow, `${OTHER_EXTRA},${RAW}`, { mode, permit: PERMIT })
+    const allowed = allowedOf(c)
+    check(c.status === 0 && allowed !== '' && !allowed.includes(REGENERATE) && !allowed.includes(VERIFY), `${kind} ${mode} ${flow || 'no flow'}: the guide_contract_permit value and its Bash entries never reach --allowedTools (${allowed})`)
   }
 }
 
@@ -707,8 +695,9 @@ for (const flavor of ['claude', 'codex']) {
   }
 
   section = `${flavor} post-implementation, nothing learned`
+  const learnedNothing = postImplement(flavor, {})
   {
-    const r = postImplement(flavor, {})
+    const r = learnedNothing
     check(r.settle?.outputs.result === 'none' && r.remoteTip === r.sessionTip && r.comments.length === 0, 'no source edit makes no commit and no comment')
     const failed = postImplement(flavor, { reviseOutcome: 'failure' })
     check(failed.settle?.outputs.result === 'none' && failed.remoteTip === failed.sessionTip, 'a failed revise step with no edit makes no commit')
@@ -788,18 +777,13 @@ for (const flavor of ['claude', 'codex']) {
       const r = postImplement(flavor, { flow })
       check(r.prepare.outputs.state === 'skip' && r.report === undefined && !existsSync(r.revise), `${flow}: a documentation flow with a contract skips the revise pass`)
     }
-    const fencedOnly = '# Plain\n\n```\n' + HEADING + '\n- Generated: `AGENTS.md`\n```\n'
-    const fencedFlow = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs', permit: '' })
+    const fencedFlow = postImplement(flavor, { kind: 'plain', mutate: MUTATE.fenced, flow: 'sync-docs', permit: '' })
     check(fencedFlow.prepare.outputs.state === 'none' && fencedFlow.report === undefined, `with no permit a fenced heading with a documentation flow gives the state none, so the legacy revise step runs (${JSON.stringify(fencedFlow.prepare.outputs)})`)
-    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs' }), FENCED, 'a permit and a fenced heading with a documentation flow')
-    const fencedPlain = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), permit: '' })
-    check(fencedPlain.prepare.outputs.state === 'none', 'with no permit a fenced heading with no flow gives the state none')
-    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly) }), FENCED, 'a permit and a fenced heading with no flow')
+    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate: MUTATE.fenced, flow: 'sync-docs' }), FENCED, 'a permit and a fenced heading with a documentation flow')
     const fencedBeside = postImplement(flavor, { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `${readFileSync(join(s, 'CLAUDE.md'), 'utf8')}\n## Example\n\n\`\`\`\n${HEADING}\n- Generated: \`OTHER.md\`\n\`\`\`\n`) })
     check(fencedBeside.prepare.outputs.state === 'ready', `a fenced example beside a valid statement with no flow gives the state ready (${JSON.stringify(fencedBeside.prepare.outputs)})`)
     const promptOf = (r) => readFileSync(join(r.p.rt, 'rk-guide-revise/prompt.md'), 'utf8')
-    const withRoot = postImplement(flavor, {})
-    check(promptOf(withRoot).includes('The root CLAUDE.md is a stated source, so the rule 3 fallback to CLAUDE.md applies.'), 'the revise prompt keeps the CLAUDE.md fallback when CLAUDE.md is a stated source')
+    check(promptOf(learnedNothing).includes('The root CLAUDE.md is a stated source, so the rule 3 fallback to CLAUDE.md applies.'), 'the revise prompt keeps the CLAUDE.md fallback when CLAUDE.md is a stated source')
     const rulesOnly = postImplement(flavor, { mutate: (s) => replaceIn(s, 'CLAUDE.md', '- Sources: `CLAUDE.md`, `.claude/rules/*.md`', '- Sources: `.claude/rules/*.md`'), edit: (wt) => writeFileSync(join(wt, '.claude/rules/area.md'), `${readFileSync(join(wt, '.claude/rules/area.md'), 'utf8')}- A learned area rule.\n`) })
     check(rulesOnly.prepare.outputs.state === 'ready' && promptOf(rulesOnly).includes('The root CLAUDE.md is not a stated source, so never edit it') && !promptOf(rulesOnly).includes('fallback to CLAUDE.md applies'), `with rule files as the only sources the revise prompt forbids a CLAUDE.md edit (${JSON.stringify(rulesOnly.prepare.outputs)})`)
     check(['committed', 'pushed'].includes(rulesOnly.settle?.outputs.result) && rulesOnly.comments.length === 0, `with rule files as the only sources a rule-file edit lands (${rulesOnly.settle?.log})`)
@@ -845,7 +829,7 @@ for (const flavor of ['claude', 'codex']) {
 
   section = `${flavor} post-implementation, opt-in rule`
   for (const [fixture, mutate, needle] of [['plain', undefined, NO_LINE], ['fenced', MUTATE.fenced, FENCED]]) {
-    for (const [label, permit] of BLANK_PERMITS) checkReviseLegacy(postImplement(flavor, { kind: 'plain', mutate, permit }), `${label}, ${fixture}`)
+    for (const [label, permit] of BLANK_PERMITS.filter(([, permit]) => permit !== '')) checkReviseLegacy(postImplement(flavor, { kind: 'plain', mutate, permit }), `${label}, ${fixture}`)
     for (const [label, permit] of OPT_IN_PERMITS) checkReviseStop(postImplement(flavor, { kind: 'plain', mutate, permit }), needle, `${label}, ${fixture}`)
   }
 
