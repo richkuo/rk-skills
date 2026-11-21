@@ -622,6 +622,8 @@ def read_refs(text):
 
 
 def remote_head(slug, branch):
+    if not SLUG_RE.match(slug) or not BRANCH_RE.match(branch) or ".." in branch:
+        return None
     proc = subprocess.run(["gh", "api", f"repos/{slug}/git/ref/heads/{branch}", "--jq", ".object.sha"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode != 0:
         return None
