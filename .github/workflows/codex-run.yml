@@ -207,7 +207,7 @@ jobs:
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ inputs.go_version }}
 
@@ -442,7 +442,7 @@ jobs:
 
       - name: Run Codex
         id: codex
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         with:
@@ -558,7 +558,7 @@ jobs:
 
       - name: Revise AGENTS.md with session learnings
         if: inputs.mode == 'implement' && steps.codex.outcome == 'success' && steps.codex_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none'
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         with:
@@ -576,7 +576,7 @@ jobs:
         if: steps.guide_contract.outputs.state == 'ready'
         id: guide_revise
         continue-on-error: true
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ runner.temp }}/rk-guide-revise/prompt.md
