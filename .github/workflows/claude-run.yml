@@ -1500,6 +1500,9 @@ jobs:
           BASELINE_KIND: ${{ steps.pre_claude.outputs.baseline_kind }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          REFS_SHA: ${{ steps.pre_claude.outputs.refs_sha }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           if [ "$BASELINE_KIND" = "pr" ]; then
             AFTER_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
@@ -1519,6 +1522,22 @@ jobs:
               echo "::notice::Claude made no code changes — skipping CLAUDE.md revision."
             fi
           fi
+          GUIDE_GATE=true
+          COUNT=""
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          REFS_FILE="$RUNNER_TEMP/rk-shared/refs-before.txt"
+          if [ -n "$REFS_SHA" ] && [ "$(git hash-object --no-filters "$REFS_FILE" 2>/dev/null || true)" = "$REFS_SHA" ] && [ -n "$RUNNER_SHA" ] && [ "$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)" = "$RUNNER_SHA" ] && command -v python3 >/dev/null 2>&1; then
+            COUNT=$(python3 -I "$RUNNER" session-branches --repo "$GITHUB_WORKSPACE" --refs-before "$REFS_FILE" --start "$PRE_HEAD_SHA" --default-branch "$DEFAULT_BRANCH" | sed -n 's/^count=//p' | head -n 1) || COUNT=""
+            if [ "$COUNT" = "0" ]; then
+              GUIDE_GATE=false
+            fi
+          fi
+          echo "guide_gate=$GUIDE_GATE" >> "$GITHUB_OUTPUT"
+          if [ "$GUIDE_GATE" = true ]; then
+            echo "::notice::The agent guide contract gate is open (session branches: ${COUNT:-not proved})."
+          else
+            echo "::notice::The agent guide contract gate is closed: the session left no branch with session commits."
+          fi
 
       - name: Capture primary Claude comment before revise pass
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success'
@@ -1532,7 +1551,7 @@ jobs:
         run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
 
       - name: Prepare the guide contract revise pass
-        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && (steps.claude_changes.outputs.made_commits == 'true' || steps.claude_changes.outputs.guide_gate == 'true')
         id: guide_contract
         env:
           FLOW: ${{ inputs.flow }}
