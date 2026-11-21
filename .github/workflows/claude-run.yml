@@ -53,7 +53,7 @@ on:
         type: string
         default: ''
       review_subprocess_scrub:
-        description: 'Review route only. true (the default) runs the action secret scrub on every runner; on Linux the scrub installs bubblewrap and socat with sudo apt-get and sets kernel.apparmor_restrict_unprivileged_userns=0. On a self-hosted Linux runner whose layout breaks the scrub sandbox (the workspace inside $HOME/actions-runner or $HOME/runners, anthropics/claude-code#97730, or a root review with a workspace ancestor owned by another uid, anthropics/claude-code#97731), the workflow prepares the run so the scrub stays on: a temporary HOME for the action step and root-owned .claude and .mcp.json stubs in those ancestors. When that preparation fails, the review stops before Claude starts; it never turns the scrub off. false turns the scrub off on every runner, so tool subprocesses can see the Claude credential; it runs only for a pull request author with the OWNER, MEMBER, or COLLABORATOR association (or claude[bot]) and only with review_subprocess_scrub_off_accepted: true.'
+        description: 'Review route only. true (the default) runs the action secret scrub on every runner; on Linux the scrub installs bubblewrap and socat with sudo apt-get and sets kernel.apparmor_restrict_unprivileged_userns=0. On a self-hosted Linux runner whose layout breaks the scrub sandbox (the workspace inside $HOME/actions-runner or $HOME/runners, anthropics/claude-code#97730, or a root review with a workspace ancestor owned by another uid, anthropics/claude-code#97731), the workflow prepares the run so the scrub stays on: a temporary HOME for the action step and root-owned .claude and .mcp.json stubs in those ancestors. On every self-hosted Linux runner, the workflow also installs bubblewrap and socat when they are missing, checks that the sandbox can keep tool commands out of the runner work directory outside the workspace, and refuses unsupported runner layouts. When that preparation or check fails, or the sandbox programs are unavailable, the review stops before Claude starts; it never turns the scrub off. false turns the scrub off on every runner, so tool subprocesses can see the Claude credential; it runs only for a pull request author with the OWNER, MEMBER, or COLLABORATOR association (or claude[bot]) and only with review_subprocess_scrub_off_accepted: true.'
         required: false
         type: boolean
         default: true
@@ -137,6 +137,8 @@ jobs:
           NEEDS_TEMP_HOME=false
           STUB_SCAN=false
           HOME_PARENT_DENY=false
+          WORK_DIR=""
+          WORK_PARENT=""
           if [ "$SCRUB" != "true" ]; then
             if [ -n "$ISSUE_PR_URL" ]; then
               AUTHOR_ASSOC="$ISSUE_AUTHOR_ASSOC"
@@ -204,6 +206,43 @@ jobs:
               STUB_SCAN=true
               echo "The review runs as root, so workspace ancestors owned by another user ID get .claude and .mcp.json stubs (anthropics/claude-code#97731)."
             fi
+            RT_LITERAL="${RUNNER_TEMP:-}"
+            [ -n "$RT_LITERAL" ] || fail "RUNNER_TEMP is empty, so the runner work directory cannot be found and the sandbox cannot keep review writes out of it."
+            one_line RUNNER_TEMP "$RT_LITERAL"
+            [ "$(basename "$RT_LITERAL")" = _temp ] || fail "RUNNER_TEMP $RT_LITERAL does not end in _temp, so it is not the <work directory>/_temp of a runner layout, and the sandbox cannot keep review writes out of the work directory."
+            WORK_DIR=$(cd -P "$(dirname "$RT_LITERAL")" 2>/dev/null && pwd -P) || fail "the work directory $(dirname "$RT_LITERAL") cannot be resolved."
+            WORK_PARENT=$(dirname "$WORK_DIR")
+            case "$WORK_PARENT" in
+              /*/*) ;;
+              *) fail "the work directory $WORK_DIR has the parent $WORK_PARENT, which is / or a directory directly under /. The sandbox hides the parent of the work directory and binds the work directory back read-only, and a top-level directory can be a writable root of the sandbox, which it binds back writable. Move the runner so that its work directory is at least three levels below /, for example /srv/actions-runner/_work." ;;
+            esac
+            RT_RESOLVED=$(cd -P "$RT_LITERAL" 2>/dev/null && pwd -P) || fail "RUNNER_TEMP $RT_LITERAL cannot be resolved."
+            [ "$RT_RESOLVED" = "$WORK_DIR/_temp" ] || fail "RUNNER_TEMP $RT_LITERAL resolves to $RT_RESOLVED, which is not the _temp directory of the work directory $WORK_DIR."
+            case "$WS_RESOLVED" in
+              "$WORK_DIR"/?*) ;;
+              *) fail "the workspace $GITHUB_WORKSPACE resolves to $WS_RESOLVED, which is outside the work directory $WORK_DIR, so the sandbox cannot keep it writable inside the read-only work directory." ;;
+            esac
+            for h in "$HOME" "$HOME_RESOLVED"; do
+              case "${h%/}/" in
+                "$WORK_PARENT"/*) fail "the job home $h is at or under $WORK_PARENT, the parent of the work directory, which the sandbox hides from tool commands. Move the runner out of the job home, or set the runner user's home outside $WORK_PARENT." ;;
+              esac
+            done
+            for p in "$WORK_DIR" "$WORK_PARENT" "$WS_RESOLVED" "$GITHUB_WORKSPACE"; do
+              case "$p" in
+                *'*'*|*'?'*|*'['*) fail "the path $p holds a *, ?, or [ character, which the sandbox settings read as a pattern, so the work directory boundary cannot name it exactly. Rename the runner directory or the repository directory." ;;
+              esac
+            done
+            for var in TMPDIR CLAUDE_CODE_TMPDIR; do
+              value="${!var:-}"
+              [ -n "$value" ] || continue
+              value_resolved=$(cd -P "$value" 2>/dev/null && pwd -P) || value_resolved="$value"
+              for t in "$value" "$value_resolved"; do
+                case "${t%/}/" in
+                  "$WORK_PARENT"/*) fail "$var is $value, which is at or under $WORK_PARENT, the parent of the work directory, which the sandbox hides or makes read-only for tool commands. Set $var outside $WORK_PARENT, or unset it." ;;
+                esac
+              done
+            done
+            echo "Sandboxed commands see $WORK_PARENT as an empty directory, the work directory $WORK_DIR read-only, and the workspace $WS_RESOLVED writable."
             echo "Review subprocess scrub on: self-hosted Linux runner, temporary HOME: $NEEDS_TEMP_HOME, ancestor stub scan: $STUB_SCAN."
           fi
           {
@@ -212,6 +251,8 @@ jobs:
             printf 'needs_temp_home=%s\n' "$NEEDS_TEMP_HOME"
             printf 'stub_scan=%s\n' "$STUB_SCAN"
             printf 'home_parent_deny=%s\n' "$HOME_PARENT_DENY"
+            printf 'work_dir=%s\n' "$WORK_DIR"
+            printf 'work_parent=%s\n' "$WORK_PARENT"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
@@ -225,8 +266,8 @@ jobs:
         run: |
           git config --local core.repositoryformatversion 1
           git config --local extensions.worktreeConfig true
-          git config --worktree credential.helper ""
-          git config --worktree "credential.${GITHUB_SERVER_URL}.helper" ""
+          git config --worktree --replace-all credential.helper ""
+          git config --worktree --replace-all "credential.${GITHUB_SERVER_URL}.helper" ""
           git config --worktree --add "credential.${GITHUB_SERVER_URL}.helper" "!f() { test \"\$1\" = get || return 0; echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f"
 
       - name: Resolve immutable runtime revisions
@@ -436,6 +477,14 @@ jobs:
           test ! -e .rk-skills-shared
           test ! -e .rk-plugin-official
 
+      - name: Check the scrub sandbox before Claude runs
+        id: sandbox_preflight
+        if: inputs.mode == 'review' && steps.review_contract.outputs.home_parent_deny == 'true'
+        env:
+          WORK_DIR: ${{ steps.review_contract.outputs.work_dir }}
+          WORK_PARENT: ${{ steps.review_contract.outputs.work_parent }}
+        run: bash "$RUNNER_TEMP/rk-shared/scripts/review_sandbox_preflight.sh"
+
       - name: Prepare workspace ancestor stubs for the scrub sandbox
         id: ancestor_stubs
         if: inputs.mode == 'review' && steps.review_contract.outputs.stub_scan == 'true'
@@ -510,6 +559,8 @@ jobs:
           TEMP_AGENT_HOME: ${{ steps.agent_home.outputs.temp }}
           HOME_PARENT: ${{ steps.agent_home.outputs.parent }}
           HOME_PARENT_DENY: ${{ steps.review_contract.outputs.home_parent_deny }}
+          WORK_DIR: ${{ steps.review_contract.outputs.work_dir }}
+          WORK_PARENT: ${{ steps.review_contract.outputs.work_parent }}
         run: |
           if [ -z "$REAL_HOME" ] || [ -z "$AGENT_HOME" ]; then
             echo "::error::The run contract has no job home or agent home, so the credential guard cannot cover them."
@@ -808,6 +859,14 @@ jobs:
             exit 1
           fi
 
+      - name: Record the work directory entries before Claude runs
+        id: work_entries
+        if: inputs.mode == 'review' && steps.review_contract.outputs.home_parent_deny == 'true'
+        env:
+          WORK_DIR: ${{ steps.review_contract.outputs.work_dir }}
+          ENTRIES_FILE: ${{ runner.temp }}/claude-review-work-entries.txt
+        run: bash "$RUNNER_TEMP/rk-shared/scripts/review_record_work_entries.sh"
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
@@ -871,6 +930,54 @@ jobs:
             echo "::error::The job token persisted on disk while Claude ran."
             exit 1
           fi
+
+      - name: Check that no work directory entry appeared while Claude ran
+        if: always() && inputs.mode == 'review' && steps.work_entries.outputs.oid != ''
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          WORK_DIR: ${{ steps.review_contract.outputs.work_dir }}
+          ENTRIES_FILE: ${{ runner.temp }}/claude-review-work-entries.txt
+          ENTRIES_OID: ${{ steps.work_entries.outputs.oid }}
+        run: |
+          PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          export PATH
+          export LC_ALL=C
+          if [ -z "$ENTRIES_OID" ] || [ "$(git hash-object "$ENTRIES_FILE" 2>/dev/null)" != "$ENTRIES_OID" ]; then
+            echo "::error::The record of the work directory entries changed or is missing, so new entries cannot be found."
+            exit 1
+          fi
+          WS_RESOLVED=$(cd -P "$GITHUB_WORKSPACE" 2>/dev/null && pwd -P) || { echo "::error::The workspace $GITHUB_WORKSPACE cannot be resolved."; exit 1; }
+          case "$WS_RESOLVED" in
+            "$WORK_DIR"/?*) ;;
+            *) echo "::error::The workspace $WS_RESOLVED is outside the work directory $WORK_DIR."; exit 1 ;;
+          esac
+          DIRS=("$WORK_DIR")
+          d="$WORK_DIR"
+          IFS=/ read -r -a PARTS <<< "${WS_RESOLVED#"$WORK_DIR"/}"
+          for ((i = 0; i < ${#PARTS[@]} - 1; i++)); do
+            d="$d/${PARTS[$i]}"
+            DIRS+=("$d")
+          done
+          AFTER=$(mktemp)
+          for d in "${DIRS[@]}"; do
+            printf 'D %q\n' "$d"
+            for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+              if [ -e "$e" ] || [ -L "$e" ]; then
+                printf 'E %q\n' "$e"
+              fi
+            done
+          done > "$AFTER"
+          ADDED=$(comm -13 <(sort "$ENTRIES_FILE") <(sort "$AFTER"))
+          REMOVED=$(comm -23 <(sort "$ENTRIES_FILE") <(sort "$AFTER"))
+          rm -f "$AFTER"
+          if [ -n "$REMOVED" ]; then
+            echo "::notice::These recorded entries are gone after the action: $(printf '%s' "$REMOVED" | sed 's/^[DE] //' | tr '\n' ' ')"
+          fi
+          if [ -n "$ADDED" ]; then
+            echo "::error::New entries appeared in the work directory, or between it and the workspace, while the action ran. A later job on this runner can read them. Inspect and remove them: $(printf '%s' "$ADDED" | sed 's/^[DE] //' | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "No new entry appeared in the work directory or between it and the workspace while the action ran."
 
       - name: Empty the temporary agent home
         id: agent_home_cleanup
