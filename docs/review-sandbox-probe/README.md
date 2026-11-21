@@ -19,8 +19,9 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   operator's home or a live runner directory. It changes the host; see
   "Host changes" below.
 - `mock_messages_api.py`: a standard-library mock of the Messages API. It
-  answers each Claude Code request with the next scripted Bash call and logs
-  each tool result.
+  answers each Claude Code request with the next scripted tool call and logs
+  each tool result. A script entry that is a string is a Bash command; an
+  object with `name` and `input` is a call to that tool.
 - `run-fixtures.sh`: shell-level checks of the contract, guard, settings,
   cleanup, agent home, stub, sandbox check, and work directory entry steps.
   The contract, guard, settings, cleanup, and work entries suites run on macOS
@@ -29,7 +30,10 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   `RK_PROBE_USER`; the sandbox check suite also masks `/usr/bin/bwrap` and
   `/usr/bin/apt-get` inside `unshare -m` and requires a refusal.
 - `extract-step.mjs`: prints a step's `run` script from a workflow, with Bun's
-  YAML parser.
+  YAML parser. The probe and the fixtures extract the contract and cleanup
+  steps from `claude-run.yml`, and read the stub, agent home, guard, and
+  settings scripts from `templates/claude-workflow/scripts/review_*.sh`, which
+  the workflow runs from its staged copy.
 
 ## Run it
 

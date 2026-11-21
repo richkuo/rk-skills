@@ -5,6 +5,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 REPO_ROOT=$(cd "$HERE/../.." && pwd -P)
 WORKFLOW="$REPO_ROOT/.github/workflows/claude-run.yml"
 EXTRACT="$HERE/extract-step.mjs"
+SCRIPTS="$REPO_ROOT/templates/claude-workflow/scripts"
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/rk-fixtures.XXXXXXXX")
 PASS=0
 FAIL=0
@@ -43,6 +44,12 @@ expect_output() {
 
 expect_log() {
   if grep -qF -- "$1" "$LAST_LOG"; then ok "$2"; else bad "$2 (log lacks: $1)"; fi
+}
+
+shared_script() {
+  local out="$SCRATCH/step-$RANDOM-$RANDOM.sh"
+  cp "$SCRIPTS/$1" "$out" || { echo "cannot copy script: $1" >&2; exit 2; }
+  printf '%s' "$out"
 }
 
 step_script() {
@@ -262,7 +269,7 @@ test_contract_linux() {
 
 make_guard() {
   local dir="$1" script
-  script=$(step_script "Stage the pull request under review" 'rm -f "$GUARD_FILE" "$SETTINGS_FILE"' 'echo "guard_oid=$GUARD_OID" >> "$GITHUB_OUTPUT"')
+  script="$SCRIPTS/review_write_guard.sh"
   run_script "$script" -i "PATH=$PATH" "GUARD_FILE=$dir/guard.sh" "SETTINGS_FILE=$dir/settings.json" "REAL_HOME=$dir/real-home" "AGENT_HOME=$dir/agent-home" "XDG_CONFIG_HOME=$dir/xdg" "GITHUB_OUTPUT=$dir/guard.out"
 }
 
@@ -338,7 +345,7 @@ make_settings() {
   work="${WORK_DIR_IN-$work}"
   work_parent=$(dirname "$work")
   work_parent="${WORK_PARENT_IN-$work_parent}"
-  script=$(step_script "Stage the pull request under review" 'cat > "$SETTINGS_FILE" <<EOF' 'chmod 400 "$SETTINGS_FILE"')
+  script="$SCRIPTS/review_write_settings.sh"
   rm -f "$dir/settings.json"
   run_script "$script" -i "PATH=${PATH_IN:-$PATH}" "GITHUB_WORKSPACE=$dir/runner/_work/repo/repo" "RUNNER_TEMP=$rt" "RUNNER_TOOL_CACHE=${RUNNER_TOOL_CACHE_IN:-}" "SETTINGS_FILE=$dir/settings.json" "GUARD_FILE=$dir/guard.sh" "GUARD_OID=0123" "REAL_HOME=$dir/real-home" "AGENT_HOME=${AGENT_HOME_IN:-${temp_home:-$dir/real-home}}" "TEMP_AGENT_HOME=$temp_home" "HOME_PARENT=$parent" "HOME_PARENT_DENY=$parent_deny" "WORK_DIR=$work" "WORK_PARENT=$work_parent" "GITHUB_OUTPUT=$dir/settings.out"
 }
@@ -596,7 +603,7 @@ test_agent_home() {
   fi
   local script out ws="$SCRATCH/ah-ws" t parent pw_home old_empty old_full fresh_empty
   mkdir -p "$ws"
-  script=$(step_script "Select the agent home")
+  script="$SCRIPTS/review_agent_home.sh"
   out="$SCRATCH/ah.out"
   : > "$out"
   run_script "$script" -i "PATH=$PATH" "HOME=$SCRATCH" "GITHUB_WORKSPACE=$ws" "GITHUB_OUTPUT=$out" "NEEDS_TEMP_HOME=false"
@@ -706,7 +713,7 @@ test_preflight() {
   work=$(cd -P "$root/runner/_work" && pwd -P)
   parent=$(dirname "$work")
   ws="$work/repo/repo"
-  script=$(step_script "Check the scrub sandbox before Claude runs")
+  script=$(shared_script review_sandbox_preflight.sh)
   chmod 644 "$script"
 
   run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent"
@@ -755,7 +762,7 @@ test_work_entries() {
   mkdir -p "$root/runner/_work/_temp" "$root/runner/_work/repo/repo" "$root/runner/_work/_actions"
   work=$(cd -P "$root/runner/_work" && pwd -P)
   ws="$work/repo/repo"
-  before=$(step_script "Record the work directory entries before Claude runs")
+  before=$(shared_script review_record_work_entries.sh)
   after=$(step_script "Check that no work directory entry appeared while Claude ran")
   out="$SCRATCH/entries.out"
 
@@ -812,7 +819,7 @@ test_work_entries() {
 
 stub_run() {
   local ws="$1" script
-  script=$(step_script "Prepare workspace ancestor stubs for the scrub sandbox")
+  script="$SCRIPTS/review_ancestor_stubs.sh"
   run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws"
 }
 

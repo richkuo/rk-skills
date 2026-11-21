@@ -76,7 +76,7 @@ Compare the output's model with the requested id; compare a Cursor display name 
 
 - Branch prefix `codex/` or `cursor/` (CLAUDE.md Git Workflow).
 - PR title bracket `[C<score>, <Name>, <tier>]`, e.g. `[C33, Luna, max]`; append `, plan` when the caller says a plan stage drove the build (CLAUDE.md PR title convention), never for a failed plan stage.
-- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`, as the final lines of every commit message, PR body, issue body, and comment, with a `---` line on its own directly above the first footer line (the CLI agent does not load the global CLAUDE.md that defines this shape, and a repo check such as go-trader's `pr-metadata` fails a commit without the separator, which only a history rewrite can repair); on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
+- Footer `Created with LLM: <Name> | <tier> | Harness: Codex` or `Harness: Cursor`, as the final lines of every commit message, PR body, issue body, and comment, with a `---` line on its own directly above the first footer line (the CLI agent does not load the global CLAUDE.md that defines this shape, and a repository's own commit metadata check can fail a commit without the separator, which only a history rewrite can repair); on a fix pass the commit uses `Updated`, while a new comment or issue the pass posts uses `Created` per CLAUDE.md. `<Name>` is the stamped display name, or the output's model after a section 6 substitution.
 
 ## 8. Dispatch hygiene, every caller
 
@@ -113,7 +113,7 @@ done
 
 ## 9. Validate pass
 
-A validate pass runs the `validate-issue` skill on the Codex CLI. Before any other step of a validate pass, read [validate-pass.md](validate-pass.md) completely; it holds the full section 9 text. Of this file, a validate pass uses sections 1, 2, 4 (2-hour cap, with the validate shim in `validate-pass.md` in place of the section 4 shims), 5, and 6, and only (a) of section 8; on any difference, `validate-pass.md` wins. A missing `validate-pass.md` blocks the pass. A build or fix pass does not read it.
+A validate pass runs the `validate-issue` skill on the Codex CLI. Before any other step of a validate pass, read [validate-pass.md](validate-pass.md) completely; it holds the full section 9 text and names the sections of this file that a validate pass uses. A missing `validate-pass.md` blocks the pass. A build or fix pass does not read it.
 
 ## Failure modes
 
