@@ -60,7 +60,7 @@ to hosted runners while `classify` keeps working.
 | `timeout_minutes` | `45` | Job timeout; raise for long implement runs. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
 | `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to the main agent of every route EXCEPT the hard-locked `create-release` flow. It permits no agent guide contract command. In a repository with an agent guide contract, the entries `Bash(<regenerate command>)` and `Bash(<verify command>)` are removed from it on every route (see **Agent guide contract**). Same character rule as prompts. |
-| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them, for example `python3 -I tools/build_agent_guide.py,bash tools/check_agent_guide.sh`. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. It is never added to any agent allowlist. Same character rule as prompts. |
+| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them, for example `python3 -I tools/build_agent_guide.py,bash tools/check_agent_guide.sh`. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. It is never added to any agent allowlist. Any non-blank entry makes the contract mandatory: a docs sync or a guide revision that reads no contract at the default-branch commit stops with a comment (see **Agent guide contract**). Same character rule as prompts. |
 | `review_subprocess_scrub` | `true` | Review route only. `false` turns the secret scrub off on every runner; the review then runs only for a trusted pull request author and only with `review_subprocess_scrub_off_accepted: true`. See the security model. |
 | `review_subprocess_scrub_off_accepted` | `false` | Review route only. Accepts the credential exposure of `review_subprocess_scrub: false` for a trusted author. It never admits an untrusted author. |
 | `review_subprocess_scrub_self_hosted` | `false` | Ignored. Kept so an older caller that passes it still runs. It skips no layout detection, preparation, protection check, or author gate. |
@@ -88,15 +88,23 @@ branch name.
 A repository that generates its agent guides (for example `AGENTS.md`) from
 `CLAUDE.md` and rule files with a project command states this in an
 `## Agent guide contract` block in its root `CLAUDE.md`. The block form is
-owned by `skills/sync-docs/guide-contract.md`. A repository with no block sees
-no change: both docs flows and the post-implementation `Revise CLAUDE.md with
-session learnings` step run as before.
+owned by `skills/sync-docs/guide-contract.md`. A caller with no block and no
+`guide_contract_permit` entry sees no change: both docs flows and the
+post-implementation `Revise CLAUDE.md with session learnings` step run as
+before. A permit of blank entries only is no permit.
 
 To enable it, set `guide_contract_permit` of the `implement` job (the docs
 flows run through that job) to the two exact commands, joined by a comma, for
 example `guide_contract_permit: 'python3 -I tools/build_agent_guide.py,bash
 tools/check_agent_guide.sh'`. A `Bash(...)` entry or a wildcard entry does not
 permit a command, and `extra_allowed_tools` permits nothing.
+
+A permit with any non-blank entry makes the contract mandatory for that caller,
+also when no entry permits a command. Put the contract block on the default
+branch before you set the permit, or in the same change: from the time the
+permit is set, a docs sync or a guide revision that reads no contract at the
+default-branch commit stops. That includes the implement run that adds the
+block on a session branch.
 
 - **Separate permit.** The permit is its own input so that it never adds a
   command to an agent allowlist. `extra_allowed_tools` reaches the agent of the
@@ -130,7 +138,14 @@ permit a command, and `extra_allowed_tools` permits nothing.
   `-local.md` override, names the state (`ready`, `denied`, `malformed`, or
   `unavailable`), and, when it is `ready`, gives the agent two exact runner
   command lines and adds only those two lines to the allowlist. Any other state
-  is a blocked sync with a comment.
+  is a blocked sync with a comment. With a permit entry and no readable
+  contract at the default-branch commit (no trusted commit, a `CLAUDE.md` that
+  is missing or has no exact heading line, or a heading only inside a code
+  fence), the compose step records the reason, prints it as an error, and fails
+  the job before the agent starts. `Report a stopped documentation sync` then
+  posts one comment that states the reason, and the generic failure note is
+  skipped when that comment posts. The `create-release` flow reads no contract
+  and does not stop.
 - **Implement route.** `Prepare the guide contract revise pass` finds the one
   session branch that the run created or moved and pushed, compares its
   contract block and command files with the default branch, and creates the
@@ -147,7 +162,11 @@ permit a command, and `extra_allowed_tools` permits nothing.
   project command while the work tree holds any git-ignored file. The job result
   does not change, because the implementation is already pushed. A session that
   changed a command file or the contract block gets that comment, and no project
-  command runs.
+  command runs. With a permit entry and no readable contract at the
+  default-branch commit, the prepare step reports `stop` with the reason in
+  place of `none`: no revise work tree is made, the legacy `Revise CLAUDE.md
+  with session learnings` step does not run, `Report the guide contract result`
+  posts the reason, and the implementation commit stays on the session branch.
 - **Limits.** A docs-flow agent must call the runner; Claude Code enforces this
   only because the raw command entries are off its allowlist. The command-file
   list is the repository's statement: a helper that the generator loads and the
@@ -155,6 +174,9 @@ permit a command, and `extra_allowed_tools` permits nothing.
   The runner finds each program on the `PATH` that the trusted step recorded;
   an agent that can write into a directory on that `PATH` already controls
   every command it runs, so the runner adds no exposure there.
+  A caller that states a contract and sets no permit still gets the legacy
+  editors when no trusted commit is available, because the workflow then has no
+  signal from that caller.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 

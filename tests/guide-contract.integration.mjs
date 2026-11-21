@@ -10,6 +10,7 @@ const WORKFLOWS = {
   codex: join(root, '.github/workflows/codex-run.yml'),
 }
 const LEGACY_BASE = 'c3aaea7b01c3885ff7d73850f577bf0e6aa3c6b6'
+const FEATURE_BASE = 'b4fe4ff4226779e640d9b239edcb5762389811e7'
 const HEADING = '## Agent guide contract'
 const REGENERATE = 'bash scripts/gen-guide.sh'
 const VERIFY = 'bash scripts/check-guide.sh'
@@ -82,6 +83,13 @@ case "$path" in
 esac
 `)
 chmodSync(join(fakeBin, 'gh'), 0o755)
+const failBin = join(scratch, 'fail-bin')
+mkdirSync(failBin)
+writeFileSync(join(failBin, 'gh'), `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$RK_GH_LOG/argv.log"
+exit 1
+`)
+chmodSync(join(failBin, 'gh'), 0o755)
 
 const yamlCache = new Map()
 function stepOf(flavor, name, source = 'current') {
@@ -94,6 +102,12 @@ function stepOf(flavor, name, source = 'current') {
   const matches = steps.filter((step) => step.name === name)
   if (matches.length !== 1) throw new Error(`expected one step named ${name} in ${flavor} (${source}), found ${matches.length}`)
   return matches[0]
+}
+
+function stepIndex(flavor, name) {
+  stepOf(flavor, name)
+  const jobs = Object.values(yamlCache.get(`${flavor}:current`).jobs).filter((job) => (job.steps ?? []).some((step) => step.name === name))
+  return jobs.length === 1 ? jobs[0].steps.findIndex((step) => step.name === name) : -1
 }
 
 function stepFile(flavor, name, source = 'current') {
@@ -207,11 +221,28 @@ const PREPARE = 'Prepare the guide contract revise pass'
 const SETTLE = { claude: 'Regenerate, verify, and commit the agent guides', codex: 'Regenerate, verify, commit, and push the agent guides' }
 const REPORT = 'Report the guide contract result'
 const REVISE_LEGACY = { claude: 'Revise CLAUDE.md with session learnings', codex: 'Revise AGENTS.md with session learnings' }
+const STOP_REPORT = 'Report a stopped documentation sync'
+const NOTE = { claude: 'Note workflow cancellation/failure on Claude comment', codex: 'Note workflow cancellation or failure on the Codex comment' }
+const STOP_PREFIX = 'the caller sets guide_contract_permit, but '
+const NO_LINE = 'has no line that is exactly ## Agent guide contract'
+const NO_FILE = 'CLAUDE.md is missing at the default-branch commit'
+const FENCED = 'the root CLAUDE.md has no contract heading outside a code fence'
+const UNREACHABLE = 'the default branch could not be fetched and this run is not on it'
+const NOT_RECORDED = 'the trusted default-branch commit was not recorded before the session ran'
+const BLANK_PERMITS = [['an empty permit', ''], ['a space', ' '], ['a comma', ','], ['spaces and commas', ' , ,'], ['a tab', '\t'], ['a newline', '\n']]
+const OPT_IN_PERMITS = [['a Bash-wrapped wildcard', 'Bash(bash *)'], ['a wildcard', 'bash *'], ['Bash-wrapped commands', RAW], ['one entry after blank entries', ' , x']]
+const fencedText = `# Plain\n\n\`\`\`\n${HEADING}\n- Generated: \`AGENTS.md\`\n\`\`\`\n`
+const MUTATE = {
+  fenced: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedText),
+  missing: (s) => { rmSync(join(s, 'CLAUDE.md')); writeFileSync(join(s, 'README.md'), '# Fixture\n') },
+  trailing: (s) => writeFileSync(join(s, 'CLAUDE.md'), `# Plain\n\n${HEADING} \n- Generated: \`AGENTS.md\`\n`),
+  symlink: (s) => { mkdirSync(join(s, 'docs')); writeFileSync(join(s, 'docs/GUIDE.md'), `# Guide\n\n${HEADING}\n`); rmSync(join(s, 'CLAUDE.md')); symlinkSync('docs/GUIDE.md', join(s, 'CLAUDE.md')) },
+}
 
-function compose(flavor, p, flow, extra, { source = 'current', permit = '', mode = 'implement', afterStage } = {}) {
+function compose(flavor, p, flow, extra, { source = 'current', permit = '', mode = 'implement', afterStage, env = {} } = {}) {
   stage(p, flavor)
   afterStage?.(p)
-  const result = runStep(p, flavor, COMPOSE[flavor], composeEnv(flavor, p, flow, { extra, permit, mode }), source)
+  const result = runStep(p, flavor, COMPOSE[flavor], { ...composeEnv(flavor, p, flow, { extra, permit, mode }), ...env }, source)
   const prompt = flavor === 'claude' ? result.outputs.claude_args ?? '' : existsSync(join(p.rt, 'rk-shared/prompt.md')) ? readFileSync(join(p.rt, 'rk-shared/prompt.md'), 'utf8') : ''
   return { ...result, prompt, dir: p.dir }
 }
@@ -246,6 +277,58 @@ function statusPaths(cwd) {
 }
 
 const legacyAvailable = run('git', ['-C', root, 'cat-file', '-e', `${LEGACY_BASE}^{commit}`]).status === 0
+const featureAvailable = run('git', ['-C', root, 'cat-file', '-e', `${FEATURE_BASE}^{commit}`]).status === 0
+if (!featureAvailable) failures.push(`setup: commit ${FEATURE_BASE} is not in this clone, so the unchanged-behavior cases cannot be proved (fetch full history)`)
+const stripPrompt = (result) => result.prompt.replaceAll(result.dir, '<project>').replace(/RK_TRIGGER_[0-9a-f]+/g, 'RK_TRIGGER_X')
+
+function checkSyncStop(flavor, c, needle, label) {
+  const reason = c.outputs.guide_stop_reason ?? ''
+  check(c.status !== 0, `${label}: the compose step exits non-zero (exit ${c.status}, ${c.log.slice(0, 300)})`)
+  check(reason.startsWith(STOP_PREFIX) && reason.includes(needle), `${label}: guide_stop_reason names the cause (${reason})`)
+  check(c.log.includes(`::error::The documentation sync is stopped: ${reason}`), `${label}: the run log states the reason`)
+  if (flavor === 'claude') check(!('claude_args' in c.outputs), `${label}: the compose step writes no claude_args output`)
+  else check(!existsSync(join(c.dir, 'runner-temp/rk-shared/prompt.md')), `${label}: the compose step leaves no prompt file`)
+  check(![JSON.stringify(c.outputs), c.log].some((text) => text.includes(REGENERATE) || text.includes(VERIFY)), `${label}: no permit command appears in the step output or the log`)
+}
+
+function reportStop(flavor, c, flow, env = {}) {
+  const p = { dir: c.dir, ws: join(c.dir, 'ws'), rt: join(c.dir, 'runner-temp'), bare: join(c.dir, 'origin.git'), ghLog: join(c.dir, 'gh-log') }
+  const result = runStep(p, flavor, STOP_REPORT, {
+    GH_TOKEN: 'fixture-token',
+    REASON: c.outputs.guide_stop_reason ?? '',
+    FLOW: flow,
+    REPO: SLUG,
+    ISSUE_NUMBER: '7',
+    RUN_URL: 'https://github.com/fixture-owner/fixture-repo/actions/runs/1',
+    BOT_LOGIN: '',
+    ...env,
+  })
+  const comments = readdirSync(p.ghLog).filter((name) => name.startsWith('comment-')).sort().map((name) => readFileSync(join(p.ghLog, name), 'utf8'))
+  return { ...result, comments }
+}
+
+function checkReported(c, flow, report, label) {
+  const reason = c.outputs.guide_stop_reason ?? ''
+  check(report.status === 0 && report.outputs.posted === 'true', `${label}: the report step posts and exits 0 (${report.log.slice(0, 300)})`)
+  check(report.comments.length === 1 && report.comments[0].includes(`**The ${flow} flow did not start.**`) && report.comments[0].includes(`Reason: ${reason}.`), `${label}: one comment states the reason (${report.comments.join(' | ')})`)
+  check(report.comments.length === 1 && report.comments[0].includes('No release follows in this run.') === (flow === 'sync-release'), `${label}: the comment names the skipped release only for sync-release`)
+  check(!report.comments.some((text) => text.includes(REGENERATE) || text.includes(VERIFY)), `${label}: the comment holds no permit command`)
+}
+
+function checkReviseStop(r, needle, label) {
+  const reason = r.prepare.outputs.reason ?? ''
+  check(r.prepare.outputs.state === 'stop', `${label}: prepare reports state=stop (${JSON.stringify(r.prepare.outputs)} ${r.prepare.log.slice(0, 300)})`)
+  check(reason.startsWith(STOP_PREFIX) && reason.includes(needle) && reason.endsWith('so no guide revision runs'), `${label}: the stop reason names the cause (${reason})`)
+  check(r.prepare.log.includes(`::notice::Agent guide contract revise pass: stop. ${reason}`), `${label}: the run log states the reason`)
+  check(r.settle === undefined && !existsSync(r.revise), `${label}: no revise work tree exists and no settle runs`)
+  check(r.remoteTip === r.sessionTip, `${label}: the implementation commit stays the session branch tip on the remote`)
+  check(r.report?.status === 0 && r.comments.length === 1 && r.comments[0].includes(`Reason: ${reason}.`), `${label}: the report step posts one comment that states the reason (${r.comments.join(' | ')})`)
+  check(![JSON.stringify(r.prepare.outputs), r.prepare.log, ...r.comments].some((text) => text.includes(REGENERATE) || text.includes(VERIFY)), `${label}: no permit command appears in the output, the log, or the comment`)
+}
+
+function checkReviseLegacy(r, label) {
+  check(r.prepare.outputs.state === 'none' && r.report === undefined && r.comments.length === 0, `${label}: the state is none, so only the legacy revise step runs (${JSON.stringify(r.prepare.outputs)})`)
+}
 
 for (const flavor of ['claude', 'codex']) {
   section = `${flavor} compose, no statement`
@@ -378,20 +461,84 @@ for (const flavor of ['claude', 'codex']) {
     git(p.ws, 'checkout', '-q', '-b', 'feature')
     cpSync(join(FIXTURES, 'contract/CLAUDE.md'), join(p.ws, 'CLAUDE.md'))
     git(p.ws, 'commit', '-q', '-am', 'add a contract on a branch')
+    const legacy = compose(flavor, p, 'sync-docs', OTHER_EXTRA)
+    check(legacy.status === 0 && !legacy.prompt.includes('Agent guide contract'), 'with no permit a statement on the checked-out branch alone is ignored')
+    check(legacy.outputs.trusted_sha === git(p.bare, 'rev-parse', 'main'), 'with no permit the trusted commit is the default-branch tip')
     const c = compose(flavor, p, 'sync-docs', OTHER_EXTRA, { permit: PERMIT })
-    check(c.status === 0 && !c.prompt.includes('Agent guide contract'), 'a statement on the checked-out branch alone is ignored')
-    const fallback = compose(flavor, p, 'sync-docs', OTHER_EXTRA, { permit: PERMIT })
-    check(fallback.outputs.trusted_sha === git(p.bare, 'rev-parse', 'main'), 'the trusted commit is the default-branch tip')
+    checkSyncStop(flavor, c, NO_LINE, 'with a permit a statement on the checked-out branch alone')
+    check(c.outputs.trusted_sha === git(p.bare, 'rev-parse', 'main'), 'with a permit the trusted commit is the default-branch tip')
   }
 
   section = `${flavor} compose, default branch unreachable`
   {
-    const p = project('contract')
-    stage(p, flavor)
-    const env = { ...composeEnv(flavor, p, 'sync-docs', { extra: OTHER_EXTRA, permit: PERMIT }), DEFAULT_BRANCH: 'missing-branch', GITHUB_REF: 'refs/heads/feature' }
-    const c = runStep(p, flavor, COMPOSE[flavor], env)
-    const prompt = flavor === 'claude' ? c.outputs.claude_args ?? '' : readFileSync(join(p.rt, 'rk-shared/prompt.md'), 'utf8')
-    check(c.status === 0 && c.outputs.trusted_sha === '' && !prompt.includes('Agent guide contract'), 'off the default branch with no fetch, the contract is not read')
+    const unreachable = { DEFAULT_BRANCH: 'missing-branch', GITHUB_REF: 'refs/heads/feature' }
+    const legacy = compose(flavor, project('contract'), 'sync-docs', OTHER_EXTRA, { env: unreachable })
+    check(legacy.status === 0 && legacy.outputs.trusted_sha === '' && legacy.prompt !== '' && !legacy.prompt.includes('Agent guide contract'), 'with no permit, off the default branch with no fetch, the contract is not read')
+    const c = compose(flavor, project('contract'), 'sync-docs', OTHER_EXTRA, { permit: PERMIT, env: unreachable })
+    checkSyncStop(flavor, c, UNREACHABLE, 'with a permit, off the default branch with no fetch')
+    check(c.outputs.trusted_sha === '', 'with a permit, off the default branch with no fetch, no trusted commit is recorded')
+  }
+
+  section = `${flavor} compose, permit with no readable contract`
+  for (const flow of ['sync-docs', 'sync-release']) {
+    const cases = [
+      ['an unavailable trusted commit', 'contract', undefined, UNREACHABLE, { DEFAULT_BRANCH: 'missing-branch', GITHUB_REF: 'refs/heads/feature' }],
+      ['no heading line', 'plain', undefined, NO_LINE],
+      ['a missing CLAUDE.md', 'plain', MUTATE.missing, NO_FILE],
+      ['a heading only inside a code fence', 'plain', MUTATE.fenced, FENCED],
+      ['a heading with a trailing space', 'plain', MUTATE.trailing, NO_LINE],
+      ['a CLAUDE.md symbolic link', 'plain', MUTATE.symlink, NO_LINE],
+    ]
+    for (const [label, kind, mutate, needle, env] of cases) {
+      const c = compose(flavor, project(kind, { mutate }), flow, `${OTHER_EXTRA},${RAW}`, { permit: PERMIT, env })
+      checkSyncStop(flavor, c, needle, `${flow}, ${label}`)
+      if (needle !== UNREACHABLE) check(c.outputs.guide_stop_reason.includes(c.outputs.trusted_sha) && /^[0-9a-f]{40}$/.test(c.outputs.trusted_sha), `${flow}, ${label}: the reason names the trusted commit`)
+      checkReported(c, flow, reportStop(flavor, c, flow), `${flow}, ${label}`)
+    }
+  }
+
+  section = `${flavor} compose, stopped sync report`
+  {
+    const c = compose(flavor, project('plain'), 'sync-docs', OTHER_EXTRA, { permit: PERMIT })
+    const failed = reportStop(flavor, c, 'sync-docs', { PATH: `${failBin}:${process.env.PATH}` })
+    check(failed.status === 0 && failed.outputs.posted === undefined && failed.comments.length === 0, `a failed post writes no posted output and exits 0 (${failed.log.slice(0, 300)})`)
+    check(failed.log.includes('::warning::The comment for the stopped documentation sync could not be posted.'), 'a failed post prints a warning')
+    const noIssue = reportStop(flavor, compose(flavor, project('plain'), 'sync-docs', OTHER_EXTRA, { permit: PERMIT }), 'sync-docs', { ISSUE_NUMBER: '' })
+    check(noIssue.status === 0 && noIssue.outputs.posted === undefined && noIssue.comments.length === 0 && noIssue.log.includes('::warning::'), 'with no issue number the step posts nothing, writes no posted output, and warns')
+  }
+
+  section = `${flavor} compose, opt-in rule`
+  for (const [label, permit] of BLANK_PERMITS) {
+    for (const [fixture, mutate] of [['plain', undefined], ['fenced', MUTATE.fenced]]) {
+      const now = compose(flavor, project('plain', { mutate }), 'sync-docs', OTHER_EXTRA, { permit })
+      check(now.status === 0 && now.outputs.guide_stop_reason === undefined && now.prompt !== '', `${label}, ${fixture}: the sync composes with no stop (${now.log.slice(0, 300)})`)
+      if (featureAvailable) {
+        const before = compose(flavor, project('plain', { mutate }), 'sync-docs', OTHER_EXTRA, { permit, source: FEATURE_BASE })
+        check(before.status === 0 && stripPrompt(before) === stripPrompt(now), `${label}, ${fixture}: the composed output equals the ${FEATURE_BASE.slice(0, 7)} result`)
+      }
+    }
+  }
+  for (const [label, permit] of OPT_IN_PERMITS) {
+    checkSyncStop(flavor, compose(flavor, project('plain'), 'sync-docs', OTHER_EXTRA, { permit }), NO_LINE, `${label}, plain`)
+    checkSyncStop(flavor, compose(flavor, project('plain', { mutate: MUTATE.fenced }), 'sync-docs', OTHER_EXTRA, { permit }), FENCED, `${label}, fenced`)
+    const denied = compose(flavor, project('contract'), 'sync-docs', OTHER_EXTRA, { permit })
+    check(denied.status === 0 && denied.prompt.includes('state for this run is denied') && bracketed(denied.prompt).length === 0, `${label}, contract: a readable contract gives the denied state (${denied.log.slice(0, 300)})`)
+  }
+
+  section = `${flavor} compose, unchanged behavior`
+  if (featureAvailable) {
+    for (const [label, kind, mutate, permit, flow] of [
+      ['create-release with a permit and no statement', 'plain', undefined, PERMIT, 'create-release'],
+      ['create-release with a permit and a fenced heading', 'plain', MUTATE.fenced, PERMIT, 'create-release'],
+      ['sync-docs with no permit and no statement', 'plain', undefined, '', 'sync-docs'],
+      ['sync-release with no permit and a fenced heading', 'plain', MUTATE.fenced, '', 'sync-release'],
+      ['sync-docs with no permit and a missing CLAUDE.md', 'plain', MUTATE.missing, '', 'sync-docs'],
+    ]) {
+      const now = compose(flavor, project(kind, { mutate }), flow, `${OTHER_EXTRA},${RAW}`, { permit })
+      const before = compose(flavor, project(kind, { mutate }), flow, `${OTHER_EXTRA},${RAW}`, { permit, source: FEATURE_BASE })
+      check(now.status === 0 && before.status === 0 && now.prompt !== '' && stripPrompt(before) === stripPrompt(now), `${label}: the composed output equals the ${FEATURE_BASE.slice(0, 7)} result (${now.log.slice(0, 300)})`)
+      check(now.outputs.guide_stop_reason === undefined, `${label}: no stop reason is recorded`)
+    }
   }
 }
 
@@ -429,12 +576,17 @@ section = 'claude compose, agent routes'
     for (const kind of ['contract', 'plain']) {
       const c = compose('claude', project(kind), flow, `${OTHER_EXTRA},${RAW}`, { mode, permit: PERMIT })
       const allowed = allowedOf(c)
-      check(c.status === 0 && allowed !== '' && !allowed.includes(REGENERATE) && !allowed.includes(VERIFY), `${kind} ${mode} ${flow || 'no flow'}: the guide_contract_permit value and its Bash entries never reach --allowedTools (${allowed})`)
+      if (kind === 'plain' && ['sync-docs', 'sync-release'].includes(flow)) {
+        check(c.status !== 0 && !('claude_args' in c.outputs) && (c.outputs.guide_stop_reason ?? '').includes(NO_LINE), `${kind} ${mode} ${flow}: the sync stops with no claude_args (${c.log.slice(0, 300)})`)
+        check(!c.log.includes(REGENERATE) && !c.log.includes(VERIFY), `${kind} ${mode} ${flow}: the guide_contract_permit value and its Bash entries never reach the step log`)
+      } else {
+        check(c.status === 0 && allowed !== '' && !allowed.includes(REGENERATE) && !allowed.includes(VERIFY), `${kind} ${mode} ${flow || 'no flow'}: the guide_contract_permit value and its Bash entries never reach --allowedTools (${allowed})`)
+      }
     }
   }
 }
 
-function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success' } = {}) {
+function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success', trustedSha, source = 'current' } = {}) {
   const p = project(kind, { mutate })
   stage(p, flavor)
   const record = runStep(p, flavor, RECORD[flavor], { GH_TOKEN: 'fixture-token', PR_NUMBER: '', REPO: SLUG })
@@ -449,7 +601,7 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA,
   const sessionTip = git(wt, 'rev-parse', 'HEAD')
   const env = {
     FLOW: flow,
-    TRUSTED_SHA: composed.outputs.trusted_sha,
+    TRUSTED_SHA: trustedSha ?? composed.outputs.trusted_sha,
     RUNNER_SHA: composed.outputs.guide_runner_sha,
     REFS_SHA: record.outputs.refs_sha,
     START_SHA: record.outputs.head_sha,
@@ -458,7 +610,7 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA,
     RK_GUIDE_PERMIT: permit,
     GH_TOKEN: 'fixture-token',
   }
-  const prepare = runStep(p, flavor, PREPARE, env)
+  const prepare = runStep(p, flavor, PREPARE, env, source)
   const result = { p, record, composed, prepare, sessionTip, revise: join(p.ws, '.claude/worktrees/rk-guide-revise') }
   if (prepare.outputs.state === 'ready') {
     edit?.(result.revise, p)
@@ -586,8 +738,9 @@ for (const flavor of ['claude', 'codex']) {
 
   section = `${flavor} post-implementation, no statement`
   for (const layout of ['symlink', 'hand-mirror']) {
-    const r = postImplement(flavor, { kind: 'plain', mutate: (s) => { if (layout === 'symlink') symlinkSync('CLAUDE.md', join(s, 'AGENTS.md')); else cpSync(join(s, 'CLAUDE.md'), join(s, 'AGENTS.md')) } })
-    check(r.prepare.outputs.state === 'none' && r.comments.length === 0 && r.report === undefined, `${layout}: the state is none, so only the legacy revise step runs`)
+    const mutate = (s) => { if (layout === 'symlink') symlinkSync('CLAUDE.md', join(s, 'AGENTS.md')); else cpSync(join(s, 'CLAUDE.md'), join(s, 'AGENTS.md')) }
+    checkReviseLegacy(postImplement(flavor, { kind: 'plain', mutate, permit: '' }), `${layout}, no permit`)
+    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate }), NO_LINE, `${layout}, a permit`)
   }
   {
     for (const flow of ['sync-docs', 'sync-release']) {
@@ -595,10 +748,12 @@ for (const flavor of ['claude', 'codex']) {
       check(r.prepare.outputs.state === 'skip' && r.report === undefined && !existsSync(r.revise), `${flow}: a documentation flow with a contract skips the revise pass`)
     }
     const fencedOnly = '# Plain\n\n```\n' + HEADING + '\n- Generated: `AGENTS.md`\n```\n'
-    const fencedFlow = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs' })
-    check(fencedFlow.prepare.outputs.state === 'none' && fencedFlow.report === undefined, `a fenced heading with a documentation flow gives the state none, so the legacy revise step runs (${JSON.stringify(fencedFlow.prepare.outputs)})`)
-    const fencedPlain = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly) })
-    check(fencedPlain.prepare.outputs.state === 'none', 'a fenced heading with no flow gives the state none')
+    const fencedFlow = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs', permit: '' })
+    check(fencedFlow.prepare.outputs.state === 'none' && fencedFlow.report === undefined, `with no permit a fenced heading with a documentation flow gives the state none, so the legacy revise step runs (${JSON.stringify(fencedFlow.prepare.outputs)})`)
+    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), flow: 'sync-docs' }), FENCED, 'a permit and a fenced heading with a documentation flow')
+    const fencedPlain = postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly), permit: '' })
+    check(fencedPlain.prepare.outputs.state === 'none', 'with no permit a fenced heading with no flow gives the state none')
+    checkReviseStop(postImplement(flavor, { kind: 'plain', mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), fencedOnly) }), FENCED, 'a permit and a fenced heading with no flow')
     const fencedBeside = postImplement(flavor, { mutate: (s) => writeFileSync(join(s, 'CLAUDE.md'), `${readFileSync(join(s, 'CLAUDE.md'), 'utf8')}\n## Example\n\n\`\`\`\n${HEADING}\n- Generated: \`OTHER.md\`\n\`\`\`\n`) })
     check(fencedBeside.prepare.outputs.state === 'ready', `a fenced example beside a valid statement with no flow gives the state ready (${JSON.stringify(fencedBeside.prepare.outputs)})`)
     const promptOf = (r) => readFileSync(join(r.p.rt, 'rk-guide-revise/prompt.md'), 'utf8')
@@ -617,8 +772,59 @@ for (const flavor of ['claude', 'codex']) {
     cpSync(join(FIXTURES, 'contract/CLAUDE.md'), join(p.ws, 'CLAUDE.md'))
     git(p.ws, 'commit', '-q', '-am', 'add a contract in the session')
     git(p.ws, 'push', '-q', 'origin', 'cc/issue-1-session')
-    const prepare = runStep(p, flavor, PREPARE, { FLOW: '', TRUSTED_SHA: composed.outputs.trusted_sha, RUNNER_SHA: composed.outputs.guide_runner_sha, REFS_SHA: record.outputs.refs_sha, DEFAULT_BRANCH: 'main', REPO: SLUG, RK_GUIDE_PERMIT: PERMIT, GH_TOKEN: 'x' })
-    check(prepare.outputs.state === 'none', 'a statement only on the session branch is ignored')
+    const prepareEnv = { FLOW: '', TRUSTED_SHA: composed.outputs.trusted_sha, RUNNER_SHA: composed.outputs.guide_runner_sha, REFS_SHA: record.outputs.refs_sha, DEFAULT_BRANCH: 'main', REPO: SLUG, RK_GUIDE_PERMIT: PERMIT, GH_TOKEN: 'x' }
+    const legacy = runStep(p, flavor, PREPARE, { ...prepareEnv, RK_GUIDE_PERMIT: '' })
+    check(legacy.outputs.state === 'none', 'with no permit a statement only on the session branch is ignored')
+    const prepare = runStep(p, flavor, PREPARE, prepareEnv)
+    check(prepare.outputs.state === 'stop' && (prepare.outputs.reason ?? '').startsWith(STOP_PREFIX) && (prepare.outputs.reason ?? '').includes(NO_LINE), `with a permit a statement only on the session branch stops the revise pass (${JSON.stringify(prepare.outputs)})`)
+    check(!existsSync(join(p.ws, '.claude/worktrees/rk-guide-revise')), 'with a permit a statement only on the session branch makes no revise work tree')
+  }
+
+  section = `${flavor} post-implementation, permit with no readable contract`
+  {
+    const cases = [
+      ['no heading line', { kind: 'plain' }, NO_LINE],
+      ['a missing CLAUDE.md', { kind: 'plain', mutate: MUTATE.missing }, NO_FILE],
+      ['a heading only inside a code fence', { kind: 'plain', mutate: MUTATE.fenced }, FENCED],
+      ['a heading with a trailing space', { kind: 'plain', mutate: MUTATE.trailing }, NO_LINE],
+      ['a CLAUDE.md symbolic link', { kind: 'plain', mutate: MUTATE.symlink }, NO_LINE],
+      ['an unavailable trusted commit', { kind: 'contract', trustedSha: '' }, NOT_RECORDED],
+    ]
+    for (const [label, options, needle] of cases) {
+      checkReviseStop(postImplement(flavor, options), needle, label)
+      const legacy = postImplement(flavor, { ...options, permit: '' })
+      checkReviseLegacy(legacy, `${label}, no permit`)
+      if (featureAvailable) {
+        const before = postImplement(flavor, { ...options, permit: '', source: FEATURE_BASE })
+        check(JSON.stringify(before.prepare.outputs) === JSON.stringify(legacy.prepare.outputs), `${label}, no permit: the prepare outputs equal the ${FEATURE_BASE.slice(0, 7)} result (${JSON.stringify(before.prepare.outputs)})`)
+      }
+    }
+  }
+
+  section = `${flavor} post-implementation, opt-in rule`
+  for (const [fixture, mutate, needle] of [['plain', undefined, NO_LINE], ['fenced', MUTATE.fenced, FENCED]]) {
+    for (const [label, permit] of BLANK_PERMITS) checkReviseLegacy(postImplement(flavor, { kind: 'plain', mutate, permit }), `${label}, ${fixture}`)
+    for (const [label, permit] of OPT_IN_PERMITS) checkReviseStop(postImplement(flavor, { kind: 'plain', mutate, permit }), needle, `${label}, ${fixture}`)
+  }
+
+  section = `${flavor} stopped sync wiring`
+  {
+    const reporter = stepOf(flavor, STOP_REPORT)
+    const composeStep = stepOf(flavor, COMPOSE[flavor])
+    const expectedIf = "always() && steps.compose_prompt.outputs.guide_stop_reason != ''" + (flavor === 'claude' ? " && steps.agent_home_cleanup.outcome != 'failure'" : '')
+    check(composeStep.id === 'compose_prompt' && reporter.id === 'guide_stop_report', 'the compose and report steps have the ids that the conditions read')
+    check(reporter.if === expectedIf, `the report step runs on a recorded stop reason (${reporter.if})`)
+    check(reporter.env.REASON === '${{ steps.compose_prompt.outputs.guide_stop_reason }}' && reporter.env.GH_TOKEN === '${{ github.token }}', 'the report step reads the stop reason and posts with the job token')
+    check(!/bot_login|BOT_LOGIN/.test(JSON.stringify(reporter)) && !reporter.run.includes('python3'), 'the report step reads no bot login and needs no python3')
+    check(stepIndex(flavor, COMPOSE[flavor]) < stepIndex(flavor, STOP_REPORT) && stepIndex(flavor, STOP_REPORT) < stepIndex(flavor, NOTE[flavor]), 'the report step runs after the compose step and before the failure note')
+    if (featureAvailable) {
+      const note = stepOf(flavor, NOTE[flavor])
+      const oldNote = stepOf(flavor, NOTE[flavor], FEATURE_BASE)
+      check(note.if === `${oldNote.if} && steps.guide_stop_report.outputs.posted != 'true'`, `the failure note skips only a posted stop comment (${note.if})`)
+      check(JSON.stringify({ ...note, if: '' }) === JSON.stringify({ ...oldNote, if: '' }), 'the failure note is otherwise unchanged')
+      check(stepOf(flavor, REVISE_LEGACY[flavor]).if === stepOf(flavor, REVISE_LEGACY[flavor], FEATURE_BASE).if, `the legacy revise step condition equals the ${FEATURE_BASE.slice(0, 7)} condition`)
+      check(JSON.stringify(stepOf(flavor, REPORT)) === JSON.stringify(stepOf(flavor, REPORT, FEATURE_BASE)), `the guide contract report step equals the ${FEATURE_BASE.slice(0, 7)} step`)
+    }
   }
 
   section = `${flavor} revise step wiring`

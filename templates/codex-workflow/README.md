@@ -70,7 +70,7 @@ five in agreement.
 | `timeout_minutes` | `45` | Job timeout. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. |
 | `extra_allowed_tools` | (empty) | Grants no tool, because Codex has no per-tool allowlist, and permits no agent guide contract command. A non-empty value logs a notice. |
-| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. Same character rule as the Claude bundle: no double quote, backtick, or dollar sign. |
+| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. Any non-blank entry makes the contract mandatory, as in the Claude bundle. Same character rule as the Claude bundle: no double quote, backtick, or dollar sign. |
 | `bot_login` | (empty) | Pass `${{ vars.CODEX_BOT_LOGIN }}`; see install step 3. |
 
 Self-hosted runners need `git`, `gh`, `node`, `npm` (the action installs the
@@ -98,6 +98,9 @@ differences:
 - `Regenerate, verify, commit, and push the agent guides` pushes the commit with
   the persisted app token (`git push origin HEAD:refs/heads/<session branch>`),
   so there is no push-only step.
+- `Report a stopped documentation sync` posts with the job token and reads no
+  `bot_login`, so a stopped docs sync gets its comment also when `bot_login` is
+  empty. The generic failure note still needs `bot_login`.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 

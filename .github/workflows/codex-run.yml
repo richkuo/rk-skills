@@ -48,7 +48,7 @@ on:
         type: string
         default: ''
       guide_contract_permit:
-        description: 'Comma-separated plain commands, each exactly equal to the agent guide contract Regenerate or Verify command, that permit the trusted runner to run them; no Bash() wrapper, no wildcard'
+        description: 'Comma-separated plain commands, each exactly equal to the agent guide contract Regenerate or Verify command, that permit the trusted runner to run them; no Bash() wrapper, no wildcard; any non-blank entry makes the contract mandatory: when no contract is readable at the default-branch commit, the sync-docs and sync-release flows stop before the agent starts and the post-implementation guide revision stops, each with an issue comment that states the reason'
         required: false
         type: string
         default: ''
@@ -320,6 +320,26 @@ jobs:
             echo "::warning::The default branch could not be fetched and this run is not on it, so the agent guide contract is not read this run."
           fi
           echo "trusted_sha=$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+          GUIDE_REQUIRED=false
+          if [ -n "$(printf '%s' "$GUIDE_PERMIT" | LC_ALL=C tr -d ',[:space:]')" ]; then
+            GUIDE_REQUIRED=true
+          fi
+          guide_stop() {
+            GUIDE_STOP_REASON=$(printf '%s' "$1" | tr '\r\n' '  ')
+            echo "guide_stop_reason=$GUIDE_STOP_REASON" >> "$GITHUB_OUTPUT"
+            echo "::error::The documentation sync is stopped: $GUIDE_STOP_REASON"
+            rm -f "$PROMPT_OUT"
+            exit 1
+          }
+          if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ "$GUIDE_REQUIRED" = true ]; then
+            if [ -z "$TRUSTED_SHA" ]; then
+              guide_stop "the caller sets guide_contract_permit, but the default branch could not be fetched and this run is not on it, so no agent guide contract can be read"
+            elif ! git cat-file -e "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null; then
+              guide_stop "the caller sets guide_contract_permit, but CLAUDE.md is missing at the default-branch commit ${TRUSTED_SHA}"
+            elif ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+              guide_stop "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} has no line that is exactly ## Agent guide contract"
+            fi
+          fi
           if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
             GUIDE_DIR="$RUNNER_TEMP/rk-guide"
             GUIDE_RUNNER="$GUIDE_DIR/guide_contract.py"
@@ -341,6 +361,9 @@ jobs:
               GUIDE_REASON="python3 is missing or the guide contract runner failed, so no project command runs"
             fi
             echo "::notice::Agent guide contract state: $GUIDE_STATE."
+            if [ "$GUIDE_STATE" = "none" ] && [ "$GUIDE_REQUIRED" = true ]; then
+              guide_stop "the caller sets guide_contract_permit, but ${GUIDE_REASON}, read from the default-branch commit ${TRUSTED_SHA}"
+            fi
             if [ "$GUIDE_STATE" != "none" ]; then
               printf '\n' >> "$PROMPT_OUT"
               cat "$PROMPTS_DIR/sync-docs-guide-contract.md" >> "$PROMPT_OUT"
@@ -531,11 +554,26 @@ jobs:
         run: |
           stop() {
             printf 'state=stop\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"
+            echo "::notice::Agent guide contract revise pass: stop. $1"
             exit 0
           }
-          if [ -z "$TRUSTED_SHA" ] || ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+          GUIDE_REQUIRED=false
+          if [ -n "$(printf '%s' "$RK_GUIDE_PERMIT" | LC_ALL=C tr -d ',[:space:]')" ]; then
+            GUIDE_REQUIRED=true
+          fi
+          no_contract() {
+            if [ "$GUIDE_REQUIRED" = true ]; then
+              stop "$1"
+            fi
             echo "state=none" >> "$GITHUB_OUTPUT"
             exit 0
+          }
+          if [ -z "$TRUSTED_SHA" ]; then
+            no_contract "the caller sets guide_contract_permit, but the trusted default-branch commit was not recorded before the session ran, so no guide revision runs"
+          elif ! git cat-file -e "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null; then
+            no_contract "the caller sets guide_contract_permit, but CLAUDE.md is missing at the default-branch commit ${TRUSTED_SHA}, so no guide revision runs"
+          elif ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            no_contract "the caller sets guide_contract_permit, but CLAUDE.md at the default-branch commit ${TRUSTED_SHA} has no line that is exactly ## Agent guide contract, so no guide revision runs"
           fi
           RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
           GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
@@ -610,6 +648,29 @@ jobs:
           RESULT=$(printf '%s\n' "$OUT" | sed -n 's/^result=//p' | head -n 1)
           echo "result=${RESULT:-stop}" >> "$GITHUB_OUTPUT"
 
+      - name: Report a stopped documentation sync
+        id: guide_stop_report
+        if: always() && steps.compose_prompt.outputs.guide_stop_reason != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ steps.compose_prompt.outputs.guide_stop_reason }}
+          FLOW: ${{ inputs.flow }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          RELEASE_NOTE=''
+          if [ "$FLOW" = "sync-release" ]; then
+            RELEASE_NOTE=' No release follows in this run.'
+          fi
+          BODY=$(printf '**The %s flow did not start.** No agent ran, and no file changed. Reason: %s.%s\n\nTo run the flow, put the agent guide contract block, outside any code fence, in the root CLAUDE.md on the default branch and start the flow from the default branch, or remove the `guide_contract_permit` input from the caller workflow. See the [run log](%s).' "$FLOW" "$REASON" "$RELEASE_NOTE" "$RUN_URL")
+          if [ -n "$ISSUE_NUMBER" ] && gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="$BODY" >/dev/null; then
+            echo "posted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The comment for the stopped documentation sync could not be posted."
+          fi
+          exit 0
+
       - name: Report the guide contract result
         if: always() && (steps.guide_contract.outputs.state == 'ready' || steps.guide_contract.outputs.state == 'stop')
         env:
@@ -653,7 +714,7 @@ jobs:
         run: echo "IS_CANCELLED=true" >> "$GITHUB_ENV"
 
       - name: Note workflow cancellation or failure on the Codex comment
-        if: always() && (cancelled() || failure()) && env.BOT_LOGIN != ''
+        if: always() && (cancelled() || failure()) && env.BOT_LOGIN != '' && steps.guide_stop_report.outputs.posted != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           MODEL_ID: ${{ steps.resolve.outputs.model_id }}
