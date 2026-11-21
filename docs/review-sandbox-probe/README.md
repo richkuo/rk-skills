@@ -126,7 +126,7 @@ run; K13 a sandboxed loop on L1 and L5w that writes a heartbeat file in the
 workspace and both targets every second, and that can outlive the kill of
 Claude Code; the heartbeat must show that the loop ran, and both targets
 must stay absent at every poll and after the last process ends; K14 a control run on every
-second-base layout except L2ew, L2h, and L4h with `denyRead` and `allowRead` removed from
+second-base layout except L2ew, and on L2h and L4h, with `denyRead` and `allowRead` removed from
 the settings, which must leave both targets on the host (the probe removes
 them), so a pass of K12 there is not a default denial; K15 a read of a file
 in `$RUNNER_TOOL_CACHE` succeeds and a write fails; K3R reads of the runner
