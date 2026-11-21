@@ -69,7 +69,7 @@ five in agreement.
 | `runs_on` | `ubuntu-latest` | Runner label. |
 | `timeout_minutes` | `45` | Job timeout. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. |
-| `extra_allowed_tools` | (empty) | Accepted for parity with `claude-run.yml` and **ignored**: Codex has no per-tool allowlist. A non-empty value logs a notice. |
+| `extra_allowed_tools` | (empty) | Grants no tool, because Codex has no per-tool allowlist. It is read only as the agent guide contract permit: the exact entries `Bash(<regenerate command>)` and `Bash(<verify command>)`. A non-empty value logs a notice. |
 | `bot_login` | (empty) | Pass `${{ vars.CODEX_BOT_LOGIN }}`; see install step 3. |
 
 Self-hosted runners need `git`, `gh`, `node`, `npm` (the action installs the
@@ -79,6 +79,23 @@ use the last two and fail without `jq`.
 `flow` also accepts `sync-release`, which `codex.yml` does not detect by default;
 add it to the flow candidate list only if your repo has a merge-triggered
 release workflow that parses the `docs-release/*` branch name.
+
+## Agent guide contract
+
+The Claude bundle README section **Agent guide contract** applies, with these
+differences:
+
+- The permit rule is the only gate. Codex has no allowlist, so a docs-flow
+  agent can run a raw project command inside its sandbox; the prompt tells it
+  to call the runner only.
+- When `AGENTS.md` is a stated generated file, the docs flows never treat it as
+  the primary file, and the byte-identical rule does not apply to it.
+- `Revise the guide sources` runs with a fresh Codex home that has no
+  `network_access` setting, so its commands have no network, and it gets no
+  `GH_TOKEN`.
+- `Regenerate, verify, commit, and push the agent guides` pushes the commit with
+  the persisted app token (`git push origin HEAD:refs/heads/<session branch>`),
+  so there is no push-only step.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 

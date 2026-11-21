@@ -43,7 +43,7 @@ on:
         type: string
         default: ''
       extra_allowed_tools:
-        description: 'Accepted for call-site parity with claude-run.yml; ignored here (Codex has no per-tool allowlist)'
+        description: 'Codex has no per-tool allowlist, so this value grants no tool; it is read only as the agent guide contract permit (the exact entries Bash(<regenerate command>) and Bash(<verify command>))'
         required: false
         type: string
         default: ''
@@ -198,7 +198,7 @@ jobs:
 
       - name: Note that extra_allowed_tools does not apply to Codex
         if: inputs.extra_allowed_tools != ''
-        run: echo "::notice::extra_allowed_tools is accepted for call-site parity with claude-run.yml but has no effect here — Codex has no per-tool allowlist. The Codex sandbox and the job permissions are the boundary on this route."
+        run: echo "::notice::extra_allowed_tools grants no tool here, because Codex has no per-tool allowlist. It is read only as the agent guide contract permit. The Codex sandbox and the job permissions are the boundary on this route."
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
@@ -252,8 +252,11 @@ jobs:
           fi
           echo "head_sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "baseline_kind=$KIND" >> "$GITHUB_OUTPUT"
+          git for-each-ref --format='%(objectname) %(refname)' refs/heads > "$RUNNER_TEMP/rk-shared/refs-before.txt"
+          echo "refs_sha=$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/refs-before.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Compose the Codex prompt
+        id: compose_prompt
         env:
           MODE: ${{ inputs.mode }}
           FLOW: ${{ inputs.flow }}
@@ -267,9 +270,11 @@ jobs:
           SKILLS_DIR: ${{ runner.temp }}/rk-shared/skills
           PR_METADATA_FILE: ${{ runner.temp }}/rk-shared/pr-metadata.json
           PROMPT_OUT: ${{ runner.temp }}/rk-shared/prompt.md
+          EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
           GH_TOKEN: ${{ github.token }}
         run: |
           PROMPTS_DIR="$RUNNER_TEMP/rk-shared/prompts"
+          echo "guide_runner_sha=$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           if [ -n "$FLOW" ]; then
             PROMPT_FILE="$PROMPTS_DIR/sync-docs-release.md"
           elif [ "$MODE" = "implement" ]; then
@@ -296,6 +301,44 @@ jobs:
             git show "$TRUSTED_REF:$REPLACEMENT_PATH" >> "$PROMPT_OUT"
           else
             cat "$PROMPT_FILE" >> "$PROMPT_OUT"
+          fi
+          TRUSTED_SHA=""
+          if [ -n "$TRUSTED_REF" ]; then
+            TRUSTED_SHA=$(git rev-parse "$TRUSTED_REF")
+          elif [ "${GITHUB_REF:-}" = "refs/heads/$DEFAULT_BRANCH" ]; then
+            TRUSTED_SHA=$(git rev-parse HEAD)
+          else
+            echo "::warning::The default branch could not be fetched and this run is not on it, so the agent guide contract is not read this run."
+          fi
+          echo "trusted_sha=$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+          if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            GUIDE_DIR="$RUNNER_TEMP/rk-guide"
+            GUIDE_RUNNER="$GUIDE_DIR/guide_contract.py"
+            if [ -d "$GUIDE_DIR" ]; then
+              chmod -R u+w "$GUIDE_DIR"
+            fi
+            rm -rf "$GUIDE_DIR"
+            mkdir -p "$GUIDE_DIR"
+            GUIDE_OUT=""
+            if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
+              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$EXTRA_ALLOWED" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
+            fi
+            chmod 555 "$GUIDE_DIR"
+            guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
+            GUIDE_STATE=$(guide_value state)
+            GUIDE_REASON=$(guide_value reason)
+            if [ -z "$GUIDE_STATE" ]; then
+              GUIDE_STATE=unavailable
+              GUIDE_REASON="python3 is missing or the guide contract runner failed, so no project command runs"
+            fi
+            echo "::notice::Agent guide contract state: $GUIDE_STATE."
+            printf '\n' >> "$PROMPT_OUT"
+            cat "$PROMPTS_DIR/sync-docs-guide-contract.md" >> "$PROMPT_OUT"
+            if [ "$GUIDE_STATE" = "ready" ]; then
+              printf '\nThe agent guide contract state for this run is ready, read from the default-branch commit %s. The runner check command is [[%s]] and the runner run command is [[%s]].\n' "$TRUSTED_SHA" "$(guide_value check_command)" "$(guide_value run_command)" >> "$PROMPT_OUT"
+            else
+              printf '\nThe agent guide contract state for this run is %s, read from the default-branch commit %s, for this reason: %s.\n' "$GUIDE_STATE" "$TRUSTED_SHA" "$GUIDE_REASON" >> "$PROMPT_OUT"
+            fi
           fi
           if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$LOCAL_PATH" 2>/dev/null; then
             printf '\n' >> "$PROMPT_OUT"
@@ -461,8 +504,54 @@ jobs:
           SELECT_ONLY: '1'
         run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
 
-      - name: Revise AGENTS.md with session learnings
+      - name: Prepare the guide contract revise pass
         if: inputs.mode == 'implement' && steps.codex.outcome == 'success' && steps.codex_changes.outputs.made_commits == 'true'
+        id: guide_contract
+        env:
+          FLOW: ${{ inputs.flow }}
+          TRUSTED_SHA: ${{ steps.compose_prompt.outputs.trusted_sha }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          REFS_SHA: ${{ steps.pre_codex.outputs.refs_sha }}
+          START_SHA: ${{ steps.pre_codex.outputs.head_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO: ${{ github.repository }}
+          RK_EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stop() {
+            printf 'state=stop\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ -z "$TRUSTED_SHA" ] || ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            echo "state=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$FLOW" ]; then
+            echo "state=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice::A documentation flow keeps the agent guides through its own sync, so the guide contract revise pass does not run."
+            exit 0
+          fi
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          command -v python3 >/dev/null 2>&1 || stop "python3 is missing, so the guide contract revise pass cannot run"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            stop "the guide contract runner changed after the prompt was composed, so it does not run"
+          fi
+          if [ -z "$REFS_SHA" ] || [ "$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/refs-before.txt" 2>/dev/null || true)" != "$REFS_SHA" ]; then
+            stop "the branch list recorded before the session ran is missing or changed, so the session branch cannot be found"
+          fi
+          rm -rf "$GUIDE_DIR" "$RUNNER_TEMP/codex-home-guide"
+          mkdir -p "$GUIDE_DIR" "$RUNNER_TEMP/codex-home-guide"
+          OUT=$(python3 -I "$RUNNER" prepare --repo "$GITHUB_WORKSPACE" --trusted "$TRUSTED_SHA" --start "$START_SHA" --default-branch "$DEFAULT_BRANCH" --refs-before "$RUNNER_TEMP/rk-shared/refs-before.txt" --slug "$REPO" --state-file "$GUIDE_DIR/state.json" --prompt-template "$RUNNER_TEMP/rk-shared/prompts/revise-guide-contract.md" --prompt-out "$GUIDE_DIR/prompt.md" --flavor codex --flow "$FLOW") || OUT=""
+          value() { printf '%s\n' "$OUT" | sed -n "s/^$1=//p" | head -n 1; }
+          STATE=$(value state)
+          [ -n "$STATE" ] || stop "the guide contract runner failed while it prepared the revise pass"
+          printf 'state=%s\nreason=%s\ndigest=%s\nbranch=%s\n' "$STATE" "$(value reason)" "$(value digest)" "$(value branch)" >> "$GITHUB_OUTPUT"
+          echo "::notice::Agent guide contract revise pass: $STATE. $(value reason)"
+
+      - name: Revise AGENTS.md with session learnings
+        if: inputs.mode == 'implement' && steps.codex.outcome == 'success' && steps.codex_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none'
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
@@ -476,6 +565,68 @@ jobs:
           sandbox: workspace-write
           allow-users: '*'
           allow-bot-users: ${{ inputs.bot_login }}
+
+      - name: Revise the guide sources
+        if: steps.guide_contract.outputs.state == 'ready'
+        continue-on-error: true
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/rk-guide-revise/prompt.md
+          codex-home: ${{ runner.temp }}/codex-home-guide
+          model: ${{ steps.resolve.outputs.model_id }}
+          effort: ${{ steps.resolve.outputs.effort }}
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          allow-users: '*'
+          allow-bot-users: ${{ inputs.bot_login }}
+
+      - name: Regenerate, verify, commit, and push the agent guides
+        if: steps.guide_contract.outputs.state == 'ready'
+        id: guide_settle
+        env:
+          DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          MODEL_ID: ${{ steps.resolve.outputs.model_id }}
+          EFFORT: ${{ steps.resolve.outputs.effort }}
+        run: |
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            printf '{"result": "stop", "reason": "the guide contract runner changed after the prompt was composed, so it does not run"}\n' > "$GUIDE_DIR/result.json"
+            echo "result=stop" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OUT=$(python3 -I "$RUNNER" settle --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --model "$MODEL_ID" --effort "$EFFORT" --harness "$CLAUDE_HARNESS") || OUT=""
+          printf '%s\n' "$OUT"
+          RESULT=$(printf '%s\n' "$OUT" | sed -n 's/^result=//p' | head -n 1)
+          echo "result=${RESULT:-stop}" >> "$GITHUB_OUTPUT"
+
+      - name: Report the guide contract result
+        if: always() && (steps.guide_contract.outputs.state == 'ready' || steps.guide_contract.outputs.state == 'stop')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.guide_contract.outputs.state }}
+          REASON: ${{ steps.guide_contract.outputs.reason }}
+          DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if ! command -v python3 >/dev/null 2>&1 || [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            if [ "$STATE" != "stop" ] || [ -z "$REASON" ]; then
+              REASON="the guide contract runner is missing or changed after the prompt was composed"
+            fi
+            gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited. Reason: ${REASON}. See the [run log](${RUN_URL})." || echo "::warning::The guide contract comment could not be posted."
+            exit 0
+          fi
+          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
+          exit 0
 
       - name: Append the LLM footer to the Codex comment
         if: env.BOT_LOGIN != ''
