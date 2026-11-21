@@ -730,7 +730,35 @@ test_preflight() {
   expect_log "work:denied sibling:denied workspace:writable" "preflight: a user other than root sees the work directory read-only and the workspace writable"
   left=$(find "$work" "$work/repo" "$ws" -maxdepth 1 -name 'rk-preflight-*' -print)
   if [ -z "$left" ]; then ok "preflight: a user other than root leaves no check file on the host"; else bad "preflight: a user other than root left $left"; fi
+  expect_log "no work directory layers: work:writable sibling:writable workspace:writable" "preflight: the control run of a user other than root shows the gap"
+  expect_log "is created when the work directory layers are absent and refused when they are present" "preflight: a user other than root reports the gap closed by the layers"
+
+  chown 0 "$work" "$work/repo"
+  LAST_LOG="$SCRATCH/log-$RANDOM-$RANDOM.txt"
+  (cd / && runuser -u "$RK_PROBE_USER" -- env -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent" bash --noprofile --norc -eo pipefail "$script") > "$LAST_LOG" 2>&1
+  LAST_STATUS=$?
+  expect_status 0 "preflight: a user who cannot write the work directory passes the boundary check"
+  expect_log "could not create every check entry" "preflight: a user who cannot write the work directory gets a notice that the control showed no gap"
+  expect_log "work:denied sibling:denied workspace:writable" "preflight: a user who cannot write the work directory still runs the boundary check"
+  left=$(find "$work" "$work/repo" "$ws" -maxdepth 1 -name 'rk-preflight-*' -print)
+  if [ -z "$left" ]; then ok "preflight: a user who cannot write the work directory leaves no check file on the host"; else bad "preflight: a user who cannot write the work directory left $left"; fi
   chown -R 0 "$root/runner"
+
+  local nolayers
+  nolayers="$SCRATCH/preflight-no-layers.sh"
+  sed 's| --tmpfs "\$WORK_PARENT" --ro-bind "\$WORK_DIR" "\$WORK_DIR"||' "$script" > "$nolayers"
+  if grep -q -- '--tmpfs "$WORK_PARENT"' "$nolayers"; then
+    bad "preflight: the copy without the work directory layers still has them"
+  else
+    run_script "$nolayers" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent"
+    expect_status 1 "preflight: a mount plan without the work directory layers is refused"
+    expect_log "did not give work:denied" "preflight: the refusal without the work directory layers names the write that was not denied"
+    left=$(find "$work" "$work/repo" "$ws" -maxdepth 1 -name 'rk-preflight-*' -print)
+    if [ -z "$left" ]; then ok "preflight: a mount plan without the work directory layers leaves no check file on the host"; else bad "preflight: a mount plan without the work directory layers left $left"; fi
+  fi
+
+  run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$parent"
+  expect_log "no work directory layers: work:writable sibling:writable workspace:writable" "preflight: the root control run shows the gap"
 
   run_script "$script" -i "PATH=$PATH" "GITHUB_WORKSPACE=$ws" "WORK_DIR=$work" "WORK_PARENT=$root/missing-parent"
   expect_status 1 "preflight: a mount plan that bubblewrap cannot run is refused"

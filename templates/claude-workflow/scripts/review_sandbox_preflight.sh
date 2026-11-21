@@ -45,6 +45,9 @@ SOCAT=$(find_tool socat)
 [ -n "$BWRAP" ] || fail "bubblewrap (bwrap) is not installed and could not be installed, so the scrub sandbox cannot run. Install the bubblewrap package on the runner."
 [ -n "$SOCAT" ] || fail "socat is not installed and could not be installed, so the scrub sandbox cannot run. Install the socat package on the runner."
 echo "Sandbox programs: $BWRAP, $SOCAT."
+[ -d "$WORK_PARENT" ] && [ ! -L "$WORK_PARENT" ] || fail "the work directory parent $WORK_PARENT is not a directory, so bubblewrap cannot run the mount plan of the sandbox boundary."
+[ -d "$WORK_DIR" ] && [ ! -L "$WORK_DIR" ] || fail "the work directory $WORK_DIR is not a directory, so bubblewrap cannot run the mount plan of the sandbox boundary."
+BASE=$(dirname "$WORK_PARENT")
 NONCE="rk-preflight-$$-$(date +%s)-$RANDOM$RANDOM"
 T_WORK="$WORK_DIR/$NONCE"
 T_SIBLING="$(dirname "$WS_RESOLVED")/$NONCE"
@@ -60,20 +63,46 @@ if ( : > "$2" ) 2>/dev/null; then echo sibling:writable; else echo sibling:denie
 if ( : > "$3" ) 2>/dev/null && rm -f "$3"; then echo workspace:writable; else echo workspace:denied; fi
 SH
 )
-set +e
-OUT=$("$BWRAP" --unshare-user --unshare-pid --die-with-parent --ro-bind / / --dev /dev --proc /proc --tmpfs "$WORK_PARENT" --ro-bind "$WORK_DIR" "$WORK_DIR" --bind "$WS_RESOLVED" "$WS_RESOLVED" -- /bin/sh -c "$CHECKS" sh "$T_WORK" "$T_SIBLING" "$T_WS" 2>&1)
-STATUS=$?
-set -e
-echo "Sandbox boundary check, exit $STATUS: $(printf '%s' "$OUT" | tr '\n' ' ')"
-LEFT=()
-for t in "$T_WORK" "$T_SIBLING" "$T_WS"; do
-  if [ -e "$t" ] || [ -L "$t" ]; then
-    LEFT+=("$t")
-    if [ -f "$t" ] && [ ! -L "$t" ]; then
-      rm -f -- "$t"
+remove_check_files() {
+  LEFT=()
+  for t in "$T_WORK" "$T_SIBLING" "$T_WS"; do
+    if [ -e "$t" ] || [ -L "$t" ]; then
+      if [ -f "$t" ] && [ ! -L "$t" ]; then
+        rm -f -- "$t"
+      fi
+      if [ -e "$t" ] || [ -L "$t" ]; then
+        LEFT+=("$t")
+      fi
     fi
+  done
+}
+set +e
+CONTROL=$("$BWRAP" --unshare-user --unshare-pid --die-with-parent --ro-bind / / --bind "$BASE" "$BASE" --dev /dev --proc /proc --bind "$WS_RESOLVED" "$WS_RESOLVED" -- /bin/sh -c "$CHECKS" sh "$T_WORK" "$T_SIBLING" "$T_WS" 2>&1)
+CONTROL_STATUS=$?
+set -e
+echo "Sandbox boundary control, exit $CONTROL_STATUS, with $BASE writable and no work directory layers: $(printf '%s' "$CONTROL" | tr '\n' ' ')"
+remove_check_files
+if [ "${#LEFT[@]}" -gt 0 ]; then
+  fail "the sandbox boundary control left an entry on the host that is not a regular file: ${LEFT[*]}."
+fi
+if [ "$CONTROL_STATUS" != 0 ]; then
+  fail "bubblewrap cannot run the control mount plan of the sandbox boundary as this user. Output: $(printf '%s' "$CONTROL" | tr '\n' ' ' | head -c 600)"
+fi
+GAP=()
+for want in work:writable sibling:writable; do
+  if printf '%s\n' "$CONTROL" | grep -qx "$want"; then
+    GAP+=("${want%%:*}")
   fi
 done
+if [ "${#GAP[@]}" -lt 2 ]; then
+  echo "::notice::The control run with $BASE writable could not create every check entry (${CONTROL//$'\n'/ }), so this user cannot create those entries on the host even with no sandbox layer. The boundary check below still runs, and it shows only the mount plan for those paths."
+fi
+set +e
+OUT=$("$BWRAP" --unshare-user --unshare-pid --die-with-parent --ro-bind / / --bind "$BASE" "$BASE" --dev /dev --proc /proc --tmpfs "$WORK_PARENT" --ro-bind "$WORK_DIR" "$WORK_DIR" --bind "$WS_RESOLVED" "$WS_RESOLVED" -- /bin/sh -c "$CHECKS" sh "$T_WORK" "$T_SIBLING" "$T_WS" 2>&1)
+STATUS=$?
+set -e
+echo "Sandbox boundary check, exit $STATUS, with $BASE writable and the work directory layers: $(printf '%s' "$OUT" | tr '\n' ' ')"
+remove_check_files
 if [ "$STATUS" != 0 ]; then
   fail "bubblewrap cannot run the mount plan of the sandbox boundary as this user, so the scrub sandbox cannot keep review writes out of the work directory. Output: $(printf '%s' "$OUT" | tr '\n' ' ' | head -c 600)"
 fi
@@ -85,4 +114,8 @@ for want in work:denied sibling:denied workspace:writable; do
     fail "the sandbox boundary check did not give $want, so the work directory $WORK_DIR is not read-only around a writable workspace $WS_RESOLVED in the sandbox."
   fi
 done
-echo "The sandbox boundary holds: a new entry in $WORK_DIR and beside the workspace is refused, and the workspace is writable."
+if [ "${#GAP[@]}" -eq 2 ]; then
+  echo "The sandbox boundary holds: with $BASE writable, a new entry in $WORK_DIR and beside the workspace is created when the work directory layers are absent and refused when they are present, and the workspace is writable."
+else
+  echo "The sandbox boundary holds: a new entry in $WORK_DIR and beside the workspace is refused, and the workspace is writable. The control run showed a gap only for: ${GAP[*]:-none}."
+fi

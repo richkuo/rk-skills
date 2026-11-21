@@ -338,9 +338,13 @@ model until you copy the template again.
   commands of the action when they are missing (`sudo apt-get`, or `apt-get`
   as root) and sets `kernel.apparmor_restrict_unprivileged_userns=0` when that
   setting exists and is not `0`, as the action does; both changes stay on the
-  host. It then runs the same mount plan with `bwrap` as the job user and
-  refuses the review unless a new entry in the work directory and beside the
-  workspace fails and a file in the workspace succeeds. Without bubblewrap,
+  host. It then runs `bwrap` twice as the job user, each time with the
+  parent of the runner directory bound writable. The control run has no work
+  directory layers, and it shows whether a new entry in the work directory and
+  beside the workspace lands on the host; the step removes each entry it made
+  and gives a notice when the job user cannot create one. The check run adds
+  the same layers as the review mount plan, and the step refuses the review
+  unless both new entries fail and a file in the workspace succeeds. Without bubblewrap,
   the pinned Claude Code also refuses to start in scrub mode (probe K11), so
   no tool command runs unsandboxed. A step before the
   action records the entries of the work directory and of each directory
