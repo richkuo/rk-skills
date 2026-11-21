@@ -1175,6 +1175,7 @@ jobs:
             echo "::warning::The default branch could not be fetched and this run is not on it, so the agent guide contract is not read this run."
           fi
           echo "trusted_sha=$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+          GUIDE_ADD_DIR=""
           GUIDE_REQUIRED=false
           if [ -n "$(printf '%s' "$GUIDE_PERMIT" | LC_ALL=C tr -d ',[:space:]')" ]; then
             GUIDE_REQUIRED=true
@@ -1207,14 +1208,15 @@ jobs:
           if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
             GUIDE_DIR="$RUNNER_TEMP/rk-guide"
             GUIDE_RUNNER="$GUIDE_DIR/guide_contract.py"
+            GUIDE_STAGE_DIR="$RUNNER_TEMP/rk-guide-stage"
             if [ -d "$GUIDE_DIR" ]; then
               chmod -R u+w "$GUIDE_DIR"
             fi
-            rm -rf "$GUIDE_DIR"
+            rm -rf "$GUIDE_DIR" "$GUIDE_STAGE_DIR"
             mkdir -p "$GUIDE_DIR"
             GUIDE_OUT=""
             if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
-              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" RK_GUIDE_PERMIT="$GUIDE_PERMIT" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
+              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" RK_GUIDE_PERMIT="$GUIDE_PERMIT" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER" --stage-dir "$GUIDE_STAGE_DIR") || GUIDE_OUT=""
             fi
             chmod 555 "$GUIDE_DIR"
             guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
@@ -1239,6 +1241,11 @@ jobs:
                 GUIDE_RUN=$(guide_value run_command)
                 ALLOWED="$ALLOWED,Bash($GUIDE_CHECK),Bash($GUIDE_RUN)"
                 PROMPT="$PROMPT The agent guide contract state for this run is ready, read from the default-branch commit ${TRUSTED_SHA}. The runner check command is [[${GUIDE_CHECK}]] and the runner run command is [[${GUIDE_RUN}]]."
+                GUIDE_STAGED=$(guide_value staged | tr -d '"`$')
+                GUIDE_ADD_DIR=$(guide_value stage_dir | tr -d '"`$')
+                if [ -n "$GUIDE_ADD_DIR" ]; then
+                  PROMPT="$PROMPT The staging directory for this run is ${GUIDE_ADD_DIR}. The staged copies of the stated sources are: ${GUIDE_STAGED:-none}."
+                fi
               else
                 PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
               fi
@@ -1278,6 +1285,9 @@ jobs:
             PROMPT="$PROMPT The pull request head is checked out in this workspace already, as a detached HEAD at commit ${HEAD_SHA}. Its merge base with the target branch is ${BASE_SHA}."
           fi
           ARGS="--model ${MODEL_ID} --effort ${EFFORT} --append-system-prompt \"${PROMPT}\" --allowedTools \"${ALLOWED}\""
+          if [ -n "$GUIDE_ADD_DIR" ]; then
+            ARGS="$ARGS --add-dir \"${GUIDE_ADD_DIR}\""
+          fi
           if [ "$MODE" = "review" ]; then
             ARGS="$ARGS --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch,Skill,Agent,Task,Read(//proc/**),Bash(git *--output*),Bash(git diff*--no-index*),Bash(git fetch*--upload-pack*),Bash(gh pr comment*--body-file*),Bash(gh pr comment* -F*)\" --setting-sources user --settings ${SETTINGS_FILE}"
           fi
@@ -1607,9 +1617,10 @@ jobs:
           if [ -z "$REFS_SHA" ] || [ "$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/refs-before.txt" 2>/dev/null || true)" != "$REFS_SHA" ]; then
             stop "the branch list recorded before the session ran is missing or changed, so the session branch cannot be found"
           fi
-          rm -rf "$GUIDE_DIR"
+          STAGE_DIR="$RUNNER_TEMP/rk-guide-stage"
+          rm -rf "$GUIDE_DIR" "$STAGE_DIR"
           mkdir -p "$GUIDE_DIR"
-          OUT=$(python3 -I "$RUNNER" prepare --repo "$GITHUB_WORKSPACE" --trusted "$TRUSTED_SHA" --start "$START_SHA" --default-branch "$DEFAULT_BRANCH" --refs-before "$RUNNER_TEMP/rk-shared/refs-before.txt" --slug "$REPO" --state-file "$GUIDE_DIR/state.json" --prompt-template "$RUNNER_TEMP/rk-shared/prompts/revise-guide-contract.md" --prompt-out "$GUIDE_DIR/prompt.md" --flavor claude --flow "$FLOW") || OUT=""
+          OUT=$(python3 -I "$RUNNER" prepare --repo "$GITHUB_WORKSPACE" --trusted "$TRUSTED_SHA" --start "$START_SHA" --default-branch "$DEFAULT_BRANCH" --refs-before "$RUNNER_TEMP/rk-shared/refs-before.txt" --slug "$REPO" --state-file "$GUIDE_DIR/state.json" --prompt-template "$RUNNER_TEMP/rk-shared/prompts/revise-guide-contract.md" --prompt-out "$GUIDE_DIR/prompt.md" --flavor claude --flow "$FLOW" --stage-dir "$STAGE_DIR") || OUT=""
           value() { printf '%s\n' "$OUT" | sed -n "s/^$1=//p" | head -n 1; }
           STATE=$(value state)
           [ -n "$STATE" ] || stop "the guide contract runner failed while it prepared the revise pass"
@@ -1646,7 +1657,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: 'claude'
           prompt: ${{ steps.guide_contract.outputs.prompt }}
-          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Edit,Write,Read,Grep,Glob"
+          claude_args: --model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --add-dir ${{ runner.temp }}/rk-guide-stage --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Edit,Write,Read,Grep,Glob"
 
       - name: Regenerate, verify, and commit the agent guides
         if: steps.guide_contract.outputs.state == 'ready'
@@ -1711,6 +1722,7 @@ jobs:
           REASON: ${{ steps.guide_contract.outputs.reason }}
           DIGEST: ${{ steps.guide_contract.outputs.digest }}
           REVISE_OUTCOME: ${{ steps.guide_revise.outcome }}
+          EXECUTION_FILE: ${{ steps.guide_revise.outputs.execution_file }}
           RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
@@ -1726,7 +1738,7 @@ jobs:
             gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited. Reason: ${REASON}. See the [run log](${RUN_URL})." || echo "::warning::The guide contract comment could not be posted."
             exit 0
           fi
-          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --revise-outcome "$REVISE_OUTCOME" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
+          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --revise-outcome "$REVISE_OUTCOME" --execution-file "$EXECUTION_FILE" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
           exit 0
 
       - name: Append LLM footer to Claude comment

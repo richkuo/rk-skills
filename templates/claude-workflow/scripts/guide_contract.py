@@ -487,6 +487,118 @@ def outside(path, repo):
     return not (real == root or real.startswith(root + os.sep))
 
 
+def safe_target(root, path):
+    segments = path.split("/")
+    if not SAFE_ARG_RE.match(path) or any(segment in ("", ".", "..") for segment in segments):
+        raise Stop(f"the source path {path} is not a plain relative path")
+    current = root
+    for segment in segments[:-1]:
+        current = os.path.join(current, segment)
+        try:
+            info = os.lstat(current)
+        except FileNotFoundError:
+            raise Stop(f"the directory of the source {path} is missing")
+        if not stat.S_ISDIR(info.st_mode):
+            raise Stop(f"the source {path} has a parent that is a symbolic link or not a directory, so no staged copy is applied to it")
+    full = os.path.join(current, segments[-1])
+    try:
+        info = os.lstat(full)
+    except FileNotFoundError:
+        raise Stop(f"the source {path} is missing")
+    if not stat.S_ISREG(info.st_mode):
+        raise Stop(f"the source {path} is a symbolic link or not a regular file, so no staged copy is applied to it")
+    if outside(full, root):
+        raise Stop(f"the source {path} resolves outside the work tree")
+    return full
+
+
+def read_nofollow(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as handle:
+        return handle.read()
+
+
+def stage_sources(stage_dir, items):
+    os.makedirs(os.path.dirname(stage_dir), exist_ok=True)
+    os.mkdir(stage_dir, 0o700)
+    files = []
+    for index, (path, data, oid) in enumerate(items):
+        name = f"{index + 1:02d}-{path.rsplit('/', 1)[-1]}"
+        fd = os.open(os.path.join(stage_dir, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        files.append({"name": name, "path": path, "oid": oid})
+    return {"dir": stage_dir, "files": files}
+
+
+def stage_items(root, rev, contract, algo):
+    items = []
+    for path, (mode, kind, _) in sorted(tree_entries(root, rev).items()):
+        if kind != "blob" or mode not in ("100644", "100755") or not SAFE_ARG_RE.match(path) or not matches_any(contract["sources"], path):
+            continue
+        try:
+            full = safe_target(root, path)
+        except Stop:
+            continue
+        data = read_nofollow(full)
+        items.append((path, data, blob_id(data, algo)))
+    return items
+
+
+def stage_listing(stage):
+    return "; ".join(f"{os.path.join(stage['dir'], item['name'])} for {item['path']}" for item in stage["files"])
+
+
+def check_stage_dir(stage_dir, repo, state_file):
+    if not SAFE_ARG_RE.match(stage_dir) or not os.path.isabs(stage_dir):
+        raise Stop("the staging directory path is not an absolute path of A-Z a-z 0-9 . _ / - characters")
+    if not outside(stage_dir, repo):
+        raise Stop("the staging directory is inside the workspace")
+    if not outside(state_file, stage_dir) or not outside(stage_dir, os.path.dirname(os.path.abspath(state_file))):
+        raise Stop("the staging directory and the state file directory overlap")
+    if os.path.lexists(stage_dir):
+        raise Stop(f"the staging directory {stage_dir} already exists")
+
+
+def apply_staged(root, stage, algo):
+    directory = stage["dir"]
+    try:
+        info = os.lstat(directory)
+    except FileNotFoundError:
+        raise Stop("the staging directory is missing")
+    if not stat.S_ISDIR(info.st_mode):
+        raise Stop("the staging directory is a symbolic link or not a directory")
+    known = {item["name"] for item in stage["files"]} | {MESSAGE_FILE}
+    extra = sorted(name for name in os.listdir(directory) if name not in known)
+    if extra:
+        raise Stop(f"the staging directory holds {extra[0]}, which is no staged copy of a stated source, so no staged copy is applied")
+    plan = []
+    for item in stage["files"]:
+        full = os.path.join(directory, item["name"])
+        try:
+            info = os.lstat(full)
+        except FileNotFoundError:
+            raise Stop(f"the staged copy {item['name']} of {item['path']} is missing")
+        if not stat.S_ISREG(info.st_mode):
+            raise Stop(f"the staged copy {item['name']} of {item['path']} is a symbolic link or not a regular file")
+        data = read_nofollow(full)
+        staged = blob_id(data, algo)
+        if staged == item["oid"]:
+            continue
+        target = safe_target(root, item["path"])
+        current = blob_id(read_nofollow(target), algo)
+        if current == staged:
+            continue
+        if current != item["oid"]:
+            raise Stop(f"the source {item['path']} changed both in place and in its staged copy {item['name']}, so neither edit is applied")
+        plan.append((item["path"], target, data))
+    for path, target, data in plan:
+        fd = os.open(target, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+    return [path for path, _, _ in plan]
+
+
 def emit(pairs):
     for key, value in pairs:
         print(f"{key}={one_line(value)}")
@@ -525,7 +637,17 @@ def cmd_sync_state(args):
         if state == "ok":
             permitted, why = permit_state(contract, permit)
             state, reason = ("ready", "") if permitted else ("denied", why)
-    data.update({"state": state, "reason": reason, "contract": contract, "object_format": object_format(repo)})
+    algo = object_format(repo)
+    stage = None
+    if state == "ready" and args.stage_dir:
+        try:
+            check_stage_dir(args.stage_dir, repo, state_file)
+            stage = stage_sources(args.stage_dir, stage_items(repo, "HEAD", contract, algo))
+        except (Stop, OSError) as error:
+            state, reason = "unavailable", f"the staged copies of the stated sources could not be made: {one_line(getattr(error, 'reason', error))}"
+    data.update({"state": state, "reason": reason, "contract": contract, "object_format": algo})
+    if stage:
+        data["stage"] = stage
     digest = write_state(state_file, data)
     check_line = f"python3 -I {runner} check --state-file {state_file} --state {digest}"
     run_line = f"python3 -I {runner} run --state-file {state_file} --state {digest}"
@@ -536,6 +658,8 @@ def cmd_sync_state(args):
         ("digest", digest),
         ("check_command", check_line),
         ("run_command", run_line),
+        ("stage_dir", stage["dir"] if stage else ""),
+        ("staged", stage_listing(stage) if stage else ""),
     ])
     return 0
 
@@ -603,11 +727,14 @@ def cmd_run(args):
     try:
         data = load_state(args.state_file, args.state)
         repo, contract = sync_preflight(data)
+        applied = apply_staged(repo, data["stage"], data["object_format"]) if data.get("stage") else []
+        if applied:
+            sync_preflight(data)
         regen_output, verify_output = regenerate_and_verify(repo, contract, data["path"])
     except Stop as stop:
         print_stop(stop)
         return 1
-    emit([("result", "ok"), ("regenerate", contract["regenerate"]), ("verify", contract["verify"]), ("generated", ", ".join(contract["generated"]))])
+    emit([("result", "ok"), ("regenerate", contract["regenerate"]), ("verify", contract["verify"]), ("generated", ", ".join(contract["generated"])), ("applied", ", ".join(applied))])
     print("----- regenerate output -----")
     print(regen_output.rstrip("\n"))
     print("----- verify output -----")
@@ -690,16 +817,27 @@ def ignored_files(worktree):
 def write_prompt(template, out, data, contract):
     with open(template) as handle:
         text = handle.read().rstrip("\n")
+    stage = data.get("stage")
+    if stage:
+        where = [
+            f"The work tree for this pass is {data['worktree']}. Read files there, and edit no file there.",
+            f"The staging directory for this pass is {stage['dir']}. It holds one staged copy of each stated source file that exists in the work tree. To change a stated source, read its staged copy and edit that staged copy. The later trusted step copies each changed staged copy over its source in the work tree. Never create a file in the staging directory, except the optional commit message file named below.",
+            f"The staged copies are: {stage_listing(stage) or 'none'}.",
+        ]
+        message_path = os.path.join(stage["dir"], MESSAGE_FILE)
+    else:
+        where = [f"The work tree for this pass is {data['worktree']}. Edit files only inside it."]
+        message_path = os.path.join(data["worktree"], MESSAGE_FILE)
     details = [
         "",
         "",
-        f"The work tree for this pass is {data['worktree']}. Edit files only inside it.",
+        *where,
         f"The stated source files are: {', '.join(contract['sources'])}.",
         "The root CLAUDE.md is a stated source, so the rule 3 fallback to CLAUDE.md applies." if matches_any(contract["sources"], "CLAUDE.md") else "The root CLAUDE.md is not a stated source, so never edit it: when no existing stated source fits a rule, change nothing for that rule.",
         f"The stated generated files are: {', '.join(contract['generated'])}.",
         f"The stated command files are: {', '.join(contract['command_files'])}.",
         f"The session changes are the commits from refs/rk-guide/base to refs/rk-guide/session, the session branch {data['branch']}.",
-        f"The optional commit message file is {os.path.join(data['worktree'], MESSAGE_FILE)}.",
+        f"The optional commit message file is {message_path}.",
     ]
     with open(out, "w") as handle:
         handle.write(text + "\n".join(details) + "\n")
@@ -732,6 +870,7 @@ def cmd_session_branches(args):
 def cmd_prepare(args):
     repo = os.path.abspath(args.repo)
     permit = os.environ.get("RK_GUIDE_PERMIT", "")
+    staged_dir = None
     try:
         if not SHA_RE.match(args.trusted or ""):
             raise Stop("the trusted default-branch commit was not recorded before the session ran")
@@ -770,6 +909,8 @@ def cmd_prepare(args):
         worktree = os.path.join(repo, args.worktree)
         if os.path.lexists(worktree):
             raise Stop(f"the revise work tree path {args.worktree} already exists")
+        if args.stage_dir:
+            check_stage_dir(args.stage_dir, repo, args.state_file)
         base = ""
         for start in (args.start, args.trusted):
             if start and SHA_RE.match(start):
@@ -800,17 +941,36 @@ def cmd_prepare(args):
             "slug": args.slug,
         }
         data["config"] = config_state(worktree, args.flavor)
+        if args.stage_dir:
+            staged_dir = args.stage_dir
+            try:
+                data["stage"] = stage_sources(args.stage_dir, stage_items(worktree, "HEAD", contract, data["object_format"]))
+            except OSError as error:
+                raise Stop(f"the staged copies of the stated sources could not be made: {one_line(error)}")
         write_prompt(args.prompt_template, args.prompt_out, data, contract)
         digest = write_state(args.state_file, data)
     except Stop as stop:
+        if staged_dir and os.path.isdir(staged_dir) and not os.path.islink(staged_dir):
+            shutil.rmtree(staged_dir, ignore_errors=True)
         emit([("state", "stop"), ("reason", stop.reason)])
         return 0
     emit([("state", "ready"), ("reason", ""), ("branch", branch), ("digest", digest)])
     return 0
 
 
-def commit_message(worktree, model, effort, harness):
-    path = os.path.join(worktree, MESSAGE_FILE)
+def commit_message(directories, model, effort, harness):
+    text = ""
+    for directory in directories:
+        found = read_message(os.path.join(directory, MESSAGE_FILE))
+        text = text or found
+    if not text:
+        text = "docs: record session learnings in the agent guide sources and regenerate the agent guides"
+    if not FOOTER_RE.search(text):
+        text = f"{text}\n\n---\nUpdated with LLM: {model} | {effort} | Harness: {harness}"
+    return text + "\n"
+
+
+def read_message(path):
     text = ""
     if os.path.lexists(path):
         if os.path.islink(path) or not os.path.isfile(path):
@@ -834,11 +994,7 @@ def commit_message(worktree, model, effort, harness):
         )
         if ok:
             text = "\n".join(lines)
-    if not text:
-        text = "docs: record session learnings in the agent guide sources and regenerate the agent guides"
-    if not FOOTER_RE.search(text):
-        text = f"{text}\n\n---\nUpdated with LLM: {model} | {effort} | Harness: {harness}"
-    return text + "\n"
+    return text
 
 
 def cmd_settle(args):
@@ -855,11 +1011,14 @@ def cmd_settle(args):
         current = git_text(worktree, "symbolic-ref", "-q", "HEAD", check=False).strip()
         if head != data["session"] or tip != data["session"] or current != f"refs/heads/{WORK_BRANCH}":
             raise Stop("the revise work tree no longer sits on the session commit, so nothing is committed")
-        message = commit_message(worktree, args.model, args.effort, args.harness)
+        stage = data.get("stage")
+        message = commit_message([stage["dir"], worktree] if stage else [worktree], args.model, args.effort, args.harness)
         algo = data["object_format"]
         hidden = ignored_files(worktree)
         if hidden:
             raise Stop(f"the revise pass left the ignored file {hidden[0]} in the work tree, so no project command runs")
+        if stage:
+            apply_staged(worktree, stage, algo)
         edits = changed_vs_tree(worktree, "HEAD", algo)
         if not edits:
             write_result(result_file, {"result": "none", "reason": "the revise pass changed no guide source"})
@@ -922,6 +1081,61 @@ def post_comment(slug, issue, body):
         os.remove(name)
 
 
+def execution_records(path):
+    with open(path, "rb") as handle:
+        text = handle.read().decode("utf-8", "replace")
+    try:
+        values = [json.loads(text)]
+    except ValueError:
+        values = []
+        for line in text.splitlines():
+            try:
+                values.append(json.loads(line))
+            except ValueError:
+                continue
+    records = []
+    stack = list(reversed(values))
+    while stack:
+        value = stack.pop()
+        if isinstance(value, list):
+            stack.extend(reversed(value))
+        elif isinstance(value, dict):
+            records.append(value)
+    return records
+
+
+def permission_denials(path, worktree):
+    if not path:
+        return None
+    try:
+        records = execution_records(path)
+    except OSError:
+        return None
+    results = [record for record in records if record.get("type") == "result"]
+    if not results:
+        return None
+    found = []
+    for item in results[-1].get("permission_denials") or []:
+        if not isinstance(item, dict):
+            continue
+        tool = one_line(item.get("tool_name") or "a tool").replace("`", "'")[:60]
+        given = item.get("tool_input") if isinstance(item.get("tool_input"), dict) else {}
+        target = str(given.get("file_path") or given.get("notebook_path") or given.get("path") or given.get("command") or "")
+        if worktree and target.startswith(worktree.rstrip("/") + "/"):
+            target = target[len(worktree.rstrip("/")) + 1:]
+        target = one_line(target).replace("`", "'")[:200]
+        found.append(f"`{tool}` on `{target}`" if target else f"`{tool}`")
+    return found
+
+
+def denial_lines(denials):
+    lines = [f"Claude Code denied {len(denials)} tool call{'' if len(denials) == 1 else 's'} in the revise step:", ""]
+    lines += [f"- {entry}" for entry in denials[:10]]
+    if len(denials) > 10:
+        lines.append(f"- and {len(denials) - 10} more")
+    return lines
+
+
 def cmd_report(args):
     lines = []
     reason = ""
@@ -929,6 +1143,8 @@ def cmd_report(args):
     exit_code = None
     output = ""
     data = None
+    denials = []
+    committed = False
     if args.prepare_state == "stop":
         reason = args.prepare_reason or "the revise pass could not be prepared"
     elif args.prepare_state == "ready":
@@ -941,6 +1157,8 @@ def cmd_report(args):
             with open(args.result_file) as handle:
                 record = json.load(handle)
         result = record.get("result") or "missing"
+        if data is not None:
+            denials = permission_denials(args.execution_file, data["worktree"]) or []
         if data is not None and result == "stop":
             reason = record.get("reason") or "the revise pass stopped"
             command = record.get("command") or ""
@@ -950,20 +1168,43 @@ def cmd_report(args):
             remote = remote_head(data["slug"], data["branch"])
             if remote != record.get("commit"):
                 reason = f"the agent guide commit {record.get('commit')} is not the tip of {data['branch']} on the remote, so the push did not land"
+            else:
+                committed = True
         elif data is not None and result != "none":
             reason = "the regenerate, verify, and commit step did not record a result"
+        elif data is not None and denials:
+            reason = f"Claude Code denied {len(denials)} tool call{'' if len(denials) == 1 else 's'} in the revise step, so the revise pass changed no guide source"
         elif data is not None and args.revise_outcome not in ("success", ""):
             reason = f"the revise step ended with the outcome {one_line(args.revise_outcome)} before it edited a guide source, so the session learnings are not recorded"
     if data is not None:
         git(data["repo"], "worktree", "remove", "--force", data["worktree"], check=False)
         git(data["repo"], "worktree", "prune", check=False)
         git(data["repo"], "branch", "-D", WORK_BRANCH, check=False)
+        stage_dir = (data.get("stage") or {}).get("dir")
+        if stage_dir and os.path.isdir(stage_dir) and not os.path.islink(stage_dir):
+            shutil.rmtree(stage_dir, ignore_errors=True)
+    if committed and denials:
+        print(f"::notice::Agent guide contract revise pass: the guide commit landed, and Claude Code denied {len(denials)} tool call{'' if len(denials) == 1 else 's'} in the revise step.")
+        lines.append("**The agent guide commit landed, but Claude Code denied some tool calls in the revise step.** An edit that a denied call tried to make is not in the commit.")
+        lines.append("")
+        lines += denial_lines(denials)
+        if args.run_url:
+            lines.append("")
+            lines.append(f"See the [run log]({args.run_url}).")
+        print("\n".join(lines))
+        if args.slug and args.issue and SLUG_RE.match(args.slug) and args.issue.isdigit():
+            post_comment(args.slug, args.issue, "\n".join(lines) + "\n")
+        return 0
     if not reason:
         print("The guide contract step finished with nothing to report.")
         return 0
+    print(f"::notice::Agent guide contract revise pass: no guide commit. Reason: {one_line(reason)}.")
     lines.append("**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited.")
     lines.append("")
     lines.append(f"Reason: {reason}.")
+    if denials:
+        lines.append("")
+        lines += denial_lines(denials)
     if command:
         lines.append("")
         fence = fence_for(output)
@@ -989,6 +1230,7 @@ def main():
     p.add_argument("--ref", required=True)
     p.add_argument("--state-file", required=True)
     p.add_argument("--runner", required=True)
+    p.add_argument("--stage-dir", default="")
     p.set_defaults(func=cmd_sync_state)
     p = sub.add_parser("route-extra")
     p.add_argument("--repo", required=True)
@@ -1012,6 +1254,7 @@ def main():
     p.add_argument("--prompt-out", required=True)
     p.add_argument("--flavor", choices=("claude", "codex"), required=True)
     p.add_argument("--flow", default="")
+    p.add_argument("--stage-dir", default="")
     p.set_defaults(func=cmd_prepare)
     p = sub.add_parser("session-branches")
     p.add_argument("--repo", required=True)
@@ -1037,6 +1280,7 @@ def main():
     p.add_argument("--slug", default="")
     p.add_argument("--issue", default="")
     p.add_argument("--run-url", default="")
+    p.add_argument("--execution-file", default="")
     p.set_defaults(func=cmd_report)
     args = parser.parse_args()
     return args.func(args)

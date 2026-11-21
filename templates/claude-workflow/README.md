@@ -137,7 +137,12 @@ block on a session branch.
   `prompts/sync-docs-guide-contract.md` after the base prompt and before any
   `-local.md` override, names the state (`ready`, `denied`, `malformed`, or
   `unavailable`), and, when it is `ready`, gives the agent two exact runner
-  command lines and adds only those two lines to the allowlist. Any other state
+  command lines and adds only those two lines to the allowlist. A `ready` state
+  also writes staged copies of the stated sources into
+  `$RUNNER_TEMP/rk-guide-stage`, names each one in the prompt, and adds that
+  directory with `--add-dir`. The runner run command copies each changed staged
+  copy over its source before it regenerates, under the same stop rules as the
+  settle step, and it checks the contract block again after the copy. Any other state
   is a blocked sync with a comment. With a permit entry and no readable
   contract at the default-branch commit (no trusted commit, a `CLAUDE.md` that
   is missing, is not a regular file, or has no exact heading line, or a heading
@@ -149,8 +154,16 @@ block on a session branch.
 - **Implement route.** `Prepare the guide contract revise pass` finds the one
   session branch that the run created or moved and pushed, compares its
   contract block and command files with the default branch, and creates the
-  work tree `.claude/worktrees/rk-guide-revise`. `Revise the guide sources` edits
-  only the stated sources there (no project command, no commit, no push).
+  work tree `.claude/worktrees/rk-guide-revise`. Claude Code denies an edit to a
+  rule file under `.claude/rules/` as a sensitive file, so the prepare step also writes one staged copy
+  of each stated source that exists into `$RUNNER_TEMP/rk-guide-stage`, outside
+  the workspace. `Revise the guide sources` runs with `--add-dir` on that
+  directory and edits only the staged copies (no project command, no commit, no
+  push). The settle step copies each changed staged copy over its source in the
+  revise work tree before its checks. It stops with no write when a staging
+  file is no staged copy of a stated source, a staged copy is a symbolic link or
+  is missing, a source or one of its parent directories is a symbolic link, or a
+  source changed both in place and in its staged copy.
   `Regenerate, verify, and commit the agent guides` runs the runner and commits
   the sources with the regenerated guides in one commit. `Push the agent guide
   commit` is an action step whose allowlist is exactly `Bash(git -C
@@ -158,7 +171,10 @@ block on a session branch.
   `claude[bot]` push identity that starts CI, and it removes that credential
   when its step ends. `Report the guide contract result` posts a comment that
   names the reason, the command, and its output on any stop, and also when the
-  revise step fails before it edits a source. The settle step refuses to run a
+  revise step fails before it edits a source. It reads the revise step's
+  execution file: when Claude Code denied a tool call, the run notice states
+  the denial and the comment names each denied tool and path, also when the
+  commit landed. The settle step refuses to run a
   project command while the work tree holds any git-ignored file. The job result
   does not change, because the implementation is already pushed. A session that
   changed a command file or the contract block gets that comment, and no project
