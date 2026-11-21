@@ -43,7 +43,12 @@ on:
         type: string
         default: ''
       extra_allowed_tools:
-        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow'
+        description: 'Comma-separated allowlist entries appended to every route except the hard-locked create-release flow; when the default-branch CLAUDE.md states an agent guide contract, the exact entries Bash(<regenerate command>) and Bash(<verify command>) are removed on every route'
+        required: false
+        type: string
+        default: ''
+      guide_contract_permit:
+        description: 'Comma-separated plain commands, each exactly equal to the agent guide contract Regenerate or Verify command, that permit the trusted runner to run them; no Bash() wrapper, no wildcard; never added to any agent allowlist'
         required: false
         type: string
         default: ''
@@ -1407,7 +1412,7 @@ jobs:
 
       - name: Set up Go (gofmt only)
         if: inputs.go_version != ''
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ inputs.go_version }}
 
@@ -1431,6 +1436,8 @@ jobs:
           fi
           echo "head_sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "baseline_kind=$KIND" >> "$GITHUB_OUTPUT"
+          git for-each-ref --format='%(objectname) %(refname)' refs/heads > "$RUNNER_TEMP/rk-shared/refs-before.txt"
+          echo "refs_sha=$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/refs-before.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Compose Claude prompt
         id: compose_prompt
@@ -1440,6 +1447,7 @@ jobs:
           MODE: ${{ inputs.mode }}
           FLOW: ${{ inputs.flow }}
           EXTRA_ALLOWED: ${{ inputs.extra_allowed_tools }}
+          GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
           BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
@@ -1471,6 +1479,7 @@ jobs:
             ALLOWED='Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git fetch origin),Bash(git fetch origin *),Bash(git branch*),Bash(git rev-parse*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr comment*),Bash(gh issue view*)'
           fi
 
+          ROUTE_EXTRA=""
           if [ -n "$EXTRA_ALLOWED" ]; then
             if printf '%s' "$EXTRA_ALLOWED" | grep -q '["`$]'; then
               echo "::error::extra_allowed_tools must not contain double quotes, backticks, or dollar signs (claude_args is shell-evaluated)."
@@ -1479,11 +1488,28 @@ jobs:
             if [ "$FLOW" = "create-release" ]; then
               echo "::notice::extra_allowed_tools is ignored in the create-release flow (hard-locked allowlist)."
             else
-              ALLOWED="$ALLOWED,$EXTRA_ALLOWED"
+              ROUTE_EXTRA="$EXTRA_ALLOWED"
+            fi
+          fi
+          if [ -n "$GUIDE_PERMIT" ]; then
+            if printf '%s' "$GUIDE_PERMIT" | grep -q '["`$]'; then
+              echo "::error::guide_contract_permit must not contain double quotes, backticks, or dollar signs (it reaches shell-composed text)."
+              exit 1
+            fi
+            if [ -n "$ROUTE_EXTRA" ]; then
+              ROUTE_EXTRA=$(RK_EXTRA="$ROUTE_EXTRA" RK_PERMIT="$GUIDE_PERMIT" awk 'BEGIN {
+                n = split(ENVIRON["RK_PERMIT"], permit, ",")
+                for (i = 1; i <= n; i++) { v = permit[i]; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v != "") drop["Bash(" v ")"] = 1 }
+                m = split(ENVIRON["RK_EXTRA"], extra, ",")
+                out = ""
+                for (i = 1; i <= m; i++) { v = extra[i]; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v != "" && !(v in drop)) out = out (out == "" ? "" : ",") v }
+                print out
+              }')
             fi
           fi
 
           flatten() { tr '\n' ' ' | sed -e 's/[[:space:]]\{2,\}/ /g' -e 's/^ *//' -e 's/ *$//'; }
+          echo "guide_runner_sha=$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           TRUSTED_REF=""
           if git fetch --quiet --depth 1 origin "refs/heads/$DEFAULT_BRANCH" 2>/dev/null; then
             TRUSTED_REF=FETCH_HEAD
@@ -1505,6 +1531,69 @@ jobs:
             PROMPT=$(git show "$TRUSTED_REF:$LEGACY_REPLACEMENT_PATH" | flatten)
           else
             PROMPT=$(flatten < "$PROMPT_FILE")
+          fi
+          TRUSTED_SHA=""
+          if [ -n "$TRUSTED_REF" ]; then
+            TRUSTED_SHA=$(git rev-parse "$TRUSTED_REF")
+          elif [ "${GITHUB_REF:-}" = "refs/heads/$DEFAULT_BRANCH" ]; then
+            TRUSTED_SHA=$(git rev-parse HEAD)
+          else
+            echo "::warning::The default branch could not be fetched and this run is not on it, so the agent guide contract is not read this run."
+          fi
+          echo "trusted_sha=$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+          if [ -n "$FLOW" ] && [ "$FLOW" != "create-release" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            GUIDE_DIR="$RUNNER_TEMP/rk-guide"
+            GUIDE_RUNNER="$GUIDE_DIR/guide_contract.py"
+            if [ -d "$GUIDE_DIR" ]; then
+              chmod -R u+w "$GUIDE_DIR"
+            fi
+            rm -rf "$GUIDE_DIR"
+            mkdir -p "$GUIDE_DIR"
+            GUIDE_OUT=""
+            if command -v python3 >/dev/null 2>&1 && cp "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" "$GUIDE_RUNNER" && chmod 444 "$GUIDE_RUNNER"; then
+              GUIDE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" RK_GUIDE_PERMIT="$GUIDE_PERMIT" python3 -I "$GUIDE_RUNNER" sync-state --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA" --state-file "$GUIDE_DIR/sync-state.json" --runner "$GUIDE_RUNNER") || GUIDE_OUT=""
+            fi
+            chmod 555 "$GUIDE_DIR"
+            guide_value() { printf '%s\n' "$GUIDE_OUT" | sed -n "s/^$1=//p" | head -n 1; }
+            GUIDE_STATE=$(guide_value state)
+            GUIDE_REASON=$(guide_value reason | tr -d '"`$')
+            GUIDE_EXTRA=""
+            if [ -z "$GUIDE_STATE" ]; then
+              GUIDE_STATE=unavailable
+              GUIDE_REASON="python3 is missing or the guide contract runner failed, so no project command runs"
+            else
+              GUIDE_EXTRA=$(guide_value filtered_extra)
+            fi
+            echo "::notice::Agent guide contract state: $GUIDE_STATE."
+            if [ "$GUIDE_STATE" != "none" ]; then
+              ROUTE_EXTRA="$GUIDE_EXTRA"
+              PROMPT="$PROMPT $(flatten < "$PROMPTS_DIR/sync-docs-guide-contract.md")"
+              if [ "$GUIDE_STATE" = "ready" ]; then
+                GUIDE_CHECK=$(guide_value check_command)
+                GUIDE_RUN=$(guide_value run_command)
+                ALLOWED="$ALLOWED,Bash($GUIDE_CHECK),Bash($GUIDE_RUN)"
+                PROMPT="$PROMPT The agent guide contract state for this run is ready, read from the default-branch commit ${TRUSTED_SHA}. The runner check command is [[${GUIDE_CHECK}]] and the runner run command is [[${GUIDE_RUN}]]."
+              else
+                PROMPT="$PROMPT The agent guide contract state for this run is ${GUIDE_STATE}, read from the default-branch commit ${TRUSTED_SHA}, for this reason: ${GUIDE_REASON}."
+              fi
+            fi
+          elif [ -z "$FLOW" ] && [ -n "$ROUTE_EXTRA" ] && [ -n "$TRUSTED_SHA" ] && grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            ROUTE_OUT=""
+            if command -v python3 >/dev/null 2>&1; then
+              ROUTE_OUT=$(RK_EXTRA_ALLOWED="$ROUTE_EXTRA" python3 -I "$RUNNER_TEMP/rk-shared/scripts/guide_contract.py" route-extra --repo "$GITHUB_WORKSPACE" --ref "$TRUSTED_SHA") || ROUTE_OUT=""
+            fi
+            ROUTE_STATE=$(printf '%s\n' "$ROUTE_OUT" | sed -n 's/^state=//p' | head -n 1)
+            case "$ROUTE_STATE" in
+              none) ;;
+              ok) ROUTE_EXTRA=$(printf '%s\n' "$ROUTE_OUT" | sed -n 's/^filtered_extra=//p' | head -n 1) ;;
+              *)
+                echo "::warning::The default-branch CLAUDE.md has an agent guide contract heading, but the contract state is ${ROUTE_STATE:-unknown, because python3 is missing or the guide contract runner failed}, so the project commands cannot be removed from extra_allowed_tools and every extra_allowed_tools entry is dropped for this run."
+                ROUTE_EXTRA=""
+                ;;
+            esac
+          fi
+          if [ -n "$ROUTE_EXTRA" ]; then
+            ALLOWED="$ALLOWED,$ROUTE_EXTRA"
           fi
           if [ -n "$TRUSTED_REF" ] && git cat-file -e "$TRUSTED_REF:$LOCAL_PATH" 2>/dev/null; then
             PROMPT="$PROMPT $(git show "$TRUSTED_REF:$LOCAL_PATH" | flatten)"
@@ -1540,12 +1629,20 @@ jobs:
             ARGS="$ARGS$POLICY_SUFFIX"
           fi
           GUIDE_ARGS="--model ${MODEL_ID} --effort ${EFFORT} --permission-mode default --allowedTools \"Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write\"$POLICY_SUFFIX"
+          SOURCES_ARGS="--model ${MODEL_ID} --effort ${EFFORT} --permission-mode default --allowedTools \"Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Edit,Write,Read,Grep,Glob\"$POLICY_SUFFIX"
+          PUSH_ARGS="--model ${MODEL_ID} --effort low --permission-mode default --max-turns 4 --allowedTools \"Bash(git -C .claude/worktrees/rk-guide-revise push)\"$POLICY_SUFFIX"
           {
             printf 'claude_args<<CLAUDE_ARGS_EOF\n'
             printf '%s\n' "$ARGS"
             printf 'CLAUDE_ARGS_EOF\n'
             printf 'guide_claude_args<<CLAUDE_ARGS_EOF\n'
             printf '%s\n' "$GUIDE_ARGS"
+            printf 'CLAUDE_ARGS_EOF\n'
+            printf 'guide_sources_claude_args<<CLAUDE_ARGS_EOF\n'
+            printf '%s\n' "$SOURCES_ARGS"
+            printf 'CLAUDE_ARGS_EOF\n'
+            printf 'guide_push_claude_args<<CLAUDE_ARGS_EOF\n'
+            printf '%s\n' "$PUSH_ARGS"
             printf 'CLAUDE_ARGS_EOF\n'
           } >> "$GITHUB_OUTPUT"
 
@@ -1645,7 +1742,7 @@ jobs:
             exit 1
           }
           case "$PHASE" in
-            before-main|after-main|before-guide|after-guide) ;;
+            before-main|after-main|before-guide|after-guide|before-sources|after-sources|before-push|after-push) ;;
             *) fail "the phase is not known." ;;
           esac
           for name in POLICY_DIR POLICY_CHECKER POLICY_CHECKER_OID POLICY_SETTINGS POLICY_SETTINGS_OID POLICY_INTERPRETER POLICY_INTERPRETER_REAL POLICY_INTERPRETER_OID POLICY_CALL_RECORD POLICY_USER_SETTINGS POLICY_USER_SETTINGS_DIGEST POLICY_USER_SETTINGS_KEYS POLICY_USER_SETTINGS_BASE POLICY_USER_SETTINGS_ALLOWED POLICY_WORKSPACE; do
@@ -1731,7 +1828,7 @@ jobs:
           if not isinstance(base, dict) or not isinstance(allowed, dict):
               problems.append("the recorded user settings baseline or the expected plugin settings are not JSON objects.")
               base, allowed = {}, {}
-          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"]}.get(phase, [])
+          stages = {"before-main": [], "after-main": ["main"], "before-guide": ["main"], "after-guide": ["main", "guide"], "before-sources": ["main"], "after-sources": ["main"], "before-push": ["main"], "after-push": ["main"]}.get(phase, [])
           markets = {}
           plugins = set()
           for stage in stages:
@@ -1840,7 +1937,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         env:
           HOME: ${{ steps.agent_home.outputs.path }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: ${{ steps.review_contract.outputs.scrub }}
@@ -1894,6 +1991,7 @@ jobs:
           LD_PRELOAD: ''
           LD_LIBRARY_PATH: ''
         run: *policy_check_script
+
       - name: Confirm no job credential persisted on disk while Claude ran
         if: always() && inputs.mode == 'review' && steps.claude.outcome != 'skipped'
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
@@ -2056,9 +2154,58 @@ jobs:
           SELECT_ONLY: '1'
         run: echo "id=$(bash "$RUNNER_TEMP/rk-shared/scripts/patch_claude_comment.sh")" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare the guide contract revise pass
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
+        id: guide_contract
+        env:
+          FLOW: ${{ inputs.flow }}
+          TRUSTED_SHA: ${{ steps.compose_prompt.outputs.trusted_sha }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          REFS_SHA: ${{ steps.pre_claude.outputs.refs_sha }}
+          START_SHA: ${{ steps.pre_claude.outputs.head_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO: ${{ github.repository }}
+          RK_GUIDE_PERMIT: ${{ inputs.guide_contract_permit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stop() {
+            printf 'state=stop\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ -z "$TRUSTED_SHA" ] || ! grep -qxF '## Agent guide contract' <(git show "$TRUSTED_SHA:CLAUDE.md" 2>/dev/null); then
+            echo "state=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          command -v python3 >/dev/null 2>&1 || stop "python3 is missing, so the guide contract revise pass cannot run"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            stop "the guide contract runner changed after the prompt was composed, so it does not run"
+          fi
+          if [ -z "$REFS_SHA" ] || [ "$(git hash-object --no-filters "$RUNNER_TEMP/rk-shared/refs-before.txt" 2>/dev/null || true)" != "$REFS_SHA" ]; then
+            stop "the branch list recorded before the session ran is missing or changed, so the session branch cannot be found"
+          fi
+          rm -rf "$GUIDE_DIR"
+          mkdir -p "$GUIDE_DIR"
+          OUT=$(python3 -I "$RUNNER" prepare --repo "$GITHUB_WORKSPACE" --trusted "$TRUSTED_SHA" --start "$START_SHA" --default-branch "$DEFAULT_BRANCH" --refs-before "$RUNNER_TEMP/rk-shared/refs-before.txt" --slug "$REPO" --state-file "$GUIDE_DIR/state.json" --prompt-template "$RUNNER_TEMP/rk-shared/prompts/revise-guide-contract.md" --prompt-out "$GUIDE_DIR/prompt.md" --flavor claude --flow "$FLOW") || OUT=""
+          value() { printf '%s\n' "$OUT" | sed -n "s/^$1=//p" | head -n 1; }
+          STATE=$(value state)
+          [ -n "$STATE" ] || stop "the guide contract runner failed while it prepared the revise pass"
+          printf 'state=%s\nreason=%s\ndigest=%s\nbranch=%s\n' "$STATE" "$(value reason)" "$(value digest)" "$(value branch)" >> "$GITHUB_OUTPUT"
+          echo "::notice::Agent guide contract revise pass: $STATE. $(value reason)"
+          if [ "$STATE" = "ready" ]; then
+            DELIM="RK_GUIDE_PROMPT_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+            {
+              printf 'prompt<<%s\n' "$DELIM"
+              cat "$GUIDE_DIR/prompt.md"
+              printf '%s\n' "$DELIM"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check the staged command policy before the CLAUDE.md revision
         id: policy_before_guide
-        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true' && steps.runtime_sources.outputs.command_policy == 'true'
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none' && steps.runtime_sources.outputs.command_policy == 'true'
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
         env:
           PHASE: before-guide
@@ -2086,10 +2233,11 @@ jobs:
           LD_PRELOAD: ''
           LD_LIBRARY_PATH: ''
         run: *policy_check_script
+
       - name: Revise CLAUDE.md with session learnings
         id: revise_guide
-        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true'
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none'
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         env:
           CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: ${{ steps.command_policy.outputs.instructions_env }}
         with:
@@ -2131,6 +2279,203 @@ jobs:
           LD_PRELOAD: ''
           LD_LIBRARY_PATH: ''
         run: *policy_check_script
+
+      - name: Check the staged command policy before the guide source revision
+        id: policy_before_sources
+        if: steps.guide_contract.outputs.state == 'ready' && steps.runtime_sources.outputs.command_policy == 'true'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: before-sources
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_sources_claude_args }}
+          POLICY_CALLS_BEFORE: ''
+          EXECUTION_FILE: ''
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: *policy_check_script
+
+      - name: Revise the guide sources
+        if: steps.guide_contract.outputs.state == 'ready'
+        id: guide_revise
+        continue-on-error: true
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        env:
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: ${{ steps.command_policy.outputs.instructions_env }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'claude'
+          prompt: ${{ steps.guide_contract.outputs.prompt }}
+          claude_args: ${{ steps.compose_prompt.outputs.guide_sources_claude_args }}
+
+      - name: Check the staged command policy after the guide source revision
+        if: always() && steps.runtime_sources.outputs.command_policy == 'true' && steps.guide_revise.outcome != 'skipped' && steps.guide_revise.outcome != ''
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: after-sources
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_sources_claude_args }}
+          POLICY_CALLS_BEFORE: ${{ steps.policy_before_sources.outputs.call_lines }}
+          EXECUTION_FILE: ${{ steps.guide_revise.outputs.execution_file }}
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: *policy_check_script
+
+      - name: Regenerate, verify, and commit the agent guides
+        if: steps.guide_contract.outputs.state == 'ready'
+        id: guide_settle
+        env:
+          DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          MODEL_ID: ${{ steps.resolve.outputs.model_id }}
+          EFFORT: ${{ steps.resolve.outputs.effort }}
+        run: |
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            printf '{"result": "stop", "reason": "the guide contract runner changed after the prompt was composed, so it does not run"}\n' > "$GUIDE_DIR/result.json"
+            echo "result=stop" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OUT=$(python3 -I "$RUNNER" settle --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --model "$MODEL_ID" --effort "$EFFORT" --harness "$CLAUDE_HARNESS") || OUT=""
+          printf '%s\n' "$OUT"
+          RESULT=$(printf '%s\n' "$OUT" | sed -n 's/^result=//p' | head -n 1)
+          echo "result=${RESULT:-stop}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the staged command policy before the agent guide push
+        id: policy_before_push
+        if: steps.guide_settle.outputs.result == 'committed' && steps.runtime_sources.outputs.command_policy == 'true'
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: before-push
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_push_claude_args }}
+          POLICY_CALLS_BEFORE: ''
+          EXECUTION_FILE: ''
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: *policy_check_script
+
+      - name: Push the agent guide commit
+        if: steps.guide_settle.outputs.result == 'committed'
+        id: guide_push
+        continue-on-error: true
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        env:
+          CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: ${{ steps.command_policy.outputs.instructions_env }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: 'claude'
+          prompt: "Run exactly one Bash command, git -C .claude/worktrees/rk-guide-revise push, then stop. Run no other command, edit no file, and report the command output."
+          claude_args: ${{ steps.compose_prompt.outputs.guide_push_claude_args }}
+
+      - name: Check the staged command policy after the agent guide push
+        if: always() && steps.runtime_sources.outputs.command_policy == 'true' && steps.guide_push.outcome != 'skipped' && steps.guide_push.outcome != ''
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        env:
+          PHASE: after-push
+          POLICY_ARGS: ${{ steps.compose_prompt.outputs.guide_push_claude_args }}
+          POLICY_CALLS_BEFORE: ${{ steps.policy_before_push.outputs.call_lines }}
+          EXECUTION_FILE: ${{ steps.guide_push.outputs.execution_file }}
+          POLICY_DIR: ${{ steps.command_policy.outputs.dir }}
+          POLICY_CHECKER: ${{ steps.command_policy.outputs.checker }}
+          POLICY_CHECKER_OID: ${{ steps.command_policy.outputs.checker_oid }}
+          POLICY_SETTINGS: ${{ steps.command_policy.outputs.settings_file }}
+          POLICY_SETTINGS_OID: ${{ steps.command_policy.outputs.settings_oid }}
+          POLICY_INTERPRETER: ${{ steps.command_policy.outputs.interpreter }}
+          POLICY_INTERPRETER_REAL: ${{ steps.command_policy.outputs.interpreter_real }}
+          POLICY_INTERPRETER_OID: ${{ steps.command_policy.outputs.interpreter_oid }}
+          POLICY_CALL_RECORD: ${{ steps.command_policy.outputs.call_record }}
+          POLICY_USER_SETTINGS: ${{ steps.command_policy.outputs.user_settings }}
+          POLICY_USER_SETTINGS_DIGEST: ${{ steps.command_policy.outputs.user_settings_digest }}
+          POLICY_USER_SETTINGS_KEYS: ${{ steps.command_policy.outputs.user_settings_keys }}
+          POLICY_USER_SETTINGS_BASE: ${{ steps.command_policy.outputs.user_settings_base }}
+          POLICY_USER_SETTINGS_ALLOWED: ${{ steps.command_policy.outputs.user_settings_allowed }}
+          POLICY_WORKSPACE: ${{ github.workspace }}
+          POLICY_MANAGED_DIRS: '/etc/claude-code:/Library/Application Support/ClaudeCode'
+          BASH_ENV: ''
+          ENV: ''
+          LD_PRELOAD: ''
+          LD_LIBRARY_PATH: ''
+        run: *policy_check_script
+
+      - name: Report the guide contract result
+        if: always() && (steps.guide_contract.outputs.state == 'ready' || steps.guide_contract.outputs.state == 'stop')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.guide_contract.outputs.state }}
+          REASON: ${{ steps.guide_contract.outputs.reason }}
+          DIGEST: ${{ steps.guide_contract.outputs.digest }}
+          REVISE_OUTCOME: ${{ steps.guide_revise.outcome }}
+          RUNNER_SHA: ${{ steps.compose_prompt.outputs.guide_runner_sha }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          RUNNER="$RUNNER_TEMP/rk-shared/scripts/guide_contract.py"
+          GUIDE_DIR="$RUNNER_TEMP/rk-guide-revise"
+          NOW_SHA=$(git hash-object --no-filters "$RUNNER" 2>/dev/null || true)
+          if ! command -v python3 >/dev/null 2>&1 || [ -z "$RUNNER_SHA" ] || [ "$NOW_SHA" != "$RUNNER_SHA" ]; then
+            if [ "$STATE" != "stop" ] || [ -z "$REASON" ]; then
+              REASON="the guide contract runner is missing or changed after the prompt was composed"
+            fi
+            gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" --raw-field body="**The agent guide revise pass landed no guide commit.** The implementation is already pushed, and this step left the agent guides on the session branch unedited. Reason: ${REASON}. See the [run log](${RUN_URL})." || echo "::warning::The guide contract comment could not be posted."
+            exit 0
+          fi
+          python3 -I "$RUNNER" report --prepare-state "$STATE" --prepare-reason "$REASON" --state-file "$GUIDE_DIR/state.json" --state "$DIGEST" --result-file "$GUIDE_DIR/result.json" --revise-outcome "$REVISE_OUTCOME" --slug "$REPO" --issue "$ISSUE_NUMBER" --run-url "$RUN_URL" || echo "::warning::The guide contract report step failed."
+          exit 0
+
       - name: Append LLM footer to Claude comment
         env:
           GH_TOKEN: ${{ github.token }}

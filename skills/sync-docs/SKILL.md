@@ -9,11 +9,13 @@ Keep CLAUDE.md, AGENTS.md, existing path-scoped rule files, SKILL.md, and README
 
 Edit the docs that exist; never create a new top-level doc (AGENTS.md, CHANGELOG.md, SKILL.md) or a new rule file during a sync. If one seems warranted, tell the user.
 
-A sync ends in one of three outcomes: "no doc changes", an open docs PR, or **blocked** (step 11), which leaves no commit, push, or PR. A caller such as `sync-docs-release` reads that outcome.
+A sync ends in one of three outcomes: "no doc changes", an open docs PR, or **blocked** (step 11, or a failed agent guide contract rule in [guide-contract.md](guide-contract.md)), which leaves no commit, push, or PR. A caller such as `sync-docs-release` reads that outcome.
 
 Audiences: **CLAUDE.md** is the organized agent reference (architecture, symbol and file names, `file:line` cues, grouped by area) and describes current behavior, never history. **AGENTS.md** mirrors it for other agent tools (step 6). **Path-scoped rule files** are the existing tracked `.claude/rules/**/*.md` files; each holds the rules for one area, and its `paths:` frontmatter, when present, limits it to matching files. Claude Code loads them; Codex and other AGENTS.md readers load one only when the shared guide tells them to read it. **SKILL.md** is operator-facing and imperative (config keys, setup, CLI flows); no symbol or field names in its tables. **README.md** is the newcomer entry point and changes only when the public surface changes. **CHANGELOG.md**, when present, holds per-issue rationale and migration history.
 
 Preconditions: `gh auth status` succeeds. Resolve `DEFAULT=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)`, run `git fetch origin`, record the range end `T0=$(git rev-parse "origin/$DEFAULT")`, and create a worktree off that tip with the harness branch prefix (`cc/` on Claude Code): `git worktree add .claude/worktrees/cc+sync-docs-<YYYY-MM-DD> -b cc/sync-docs-<YYYY-MM-DD> "$T0"`. Every range below ends at `$T0`, never at a later `origin/$DEFAULT`. When that branch already exists locally or on `origin`, never delete or reuse it: add the next free suffix to the branch and the worktree name (`-2`, then `-3`). Read, edit, and run every git command in that worktree (`-C <worktree>`), never in the main checkout.
+
+Agent guide contract: run `git show "$T0:CLAUDE.md" | grep -qxF '## Agent guide contract'`. No match: the steps below run as written. A match that sits only inside a code fence is an example and no statement, so the steps below also run as written. A match outside a code fence: the project generates its agent guides with a command, so read [guide-contract.md](guide-contract.md) before step 3 and apply its statement form and its rules for steps 3, 6, 10, and 12 and the blocked outcome. Read the statement from that `$T0` text only.
 
 ## Steps
 

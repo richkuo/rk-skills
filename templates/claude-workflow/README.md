@@ -59,7 +59,8 @@ to hosted runners while `classify` keeps working.
 | `runs_on` | `ubuntu-latest` | Runner label (e.g. `self-hosted`). |
 | `timeout_minutes` | `45` | Job timeout; raise for long implement runs. |
 | `go_version` | (empty) | If set, installs Go for `gofmt` on edited files only. Pair with `extra_allowed_tools: 'Bash(gofmt *)'`. |
-| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to every route EXCEPT the hard-locked `create-release` flow. Same character rule as prompts. |
+| `extra_allowed_tools` | (empty) | Comma-separated allowlist entries appended to the main agent of every route EXCEPT the hard-locked `create-release` flow. It permits no agent guide contract command. In a repository with an agent guide contract, the entries `Bash(<regenerate command>)` and `Bash(<verify command>)` are removed from it on every route (see **Agent guide contract**). Same character rule as prompts. |
+| `guide_contract_permit` | (empty) | Comma-separated plain commands that permit the agent guide contract runner to run them, for example `python3 -I tools/build_agent_guide.py,bash tools/check_agent_guide.sh`. Each entry must equal the stated `Regenerate` or `Verify` command exactly; a `Bash(...)` entry or a wildcard permits nothing. It is never added to any agent allowlist. Same character rule as prompts. |
 | `review_subprocess_scrub` | `true` | Review route only. `false` turns the secret scrub off on every runner; the review then runs only for a trusted pull request author and only with `review_subprocess_scrub_off_accepted: true`. See the security model. |
 | `review_subprocess_scrub_off_accepted` | `false` | Review route only. Accepts the credential exposure of `review_subprocess_scrub: false` for a trusted author. It never admits an untrusted author. |
 | `review_subprocess_scrub_self_hosted` | `false` | Ignored. Kept so an older caller that passes it still runs. It skips no layout detection, preparation, protection check, or author gate. |
@@ -114,6 +115,11 @@ The checker contract:
   `git-push.sh`, `git-add.sh`, and `git-rm.sh` in the action directory),
   because the action allows them on the implement and fix-pr routes. A checker
   that pins the wrapper digests needs a new digest when the action pin moves.
+- In a repository with an agent guide contract, it also judges the Bash calls
+  of the two guide contract launches: read-only git commands in the guide
+  source revision, and `git -C .claude/worktrees/rk-guide-revise push` in the
+  agent guide push. A checker that blocks that push keeps the guide commit off
+  the session branch.
 
 What the run does:
 
@@ -134,8 +140,9 @@ What the run does:
   its last arguments, and `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`.
   The project and local settings of the checkout do not load, so a hook file
   that a pull request or a branch change puts in the checkout does not run.
-- A check step before and after each launch (the main launch and the
-  CLAUDE.md revision) fails the job when the staged checker, the settings
+- A check step before and after each launch (the main launch, the CLAUDE.md
+  revision, and the two launches of an agent guide contract: the guide source
+  revision and the agent guide push) fails the job when the staged checker, the settings
   file, the interpreter, or the user settings changed, when the staged
   directory holds another file, or when the launch arguments do not end with
   the policy flags. Before a launch it also refuses `disableAllHooks: true` in
@@ -167,6 +174,79 @@ missing interpreter, a checker that is missing, empty, a symlink, or does not
 compile, a hook-disabling user or managed setting, or an action pin that the
 hook proof does not cover stops the run before Claude starts, with the reason
 in the log.
+
+## Agent guide contract
+
+A repository that generates its agent guides (for example `AGENTS.md`) from
+`CLAUDE.md` and rule files with a project command states this in an
+`## Agent guide contract` block in its root `CLAUDE.md`. The block form is
+owned by `skills/sync-docs/guide-contract.md`. A repository with no block sees
+no change: both docs flows and the post-implementation `Revise CLAUDE.md with
+session learnings` step run as before.
+
+To enable it, set `guide_contract_permit` of the `implement` job (the docs
+flows run through that job) to the two exact commands, joined by a comma, for
+example `guide_contract_permit: 'python3 -I tools/build_agent_guide.py,bash
+tools/check_agent_guide.sh'`. A `Bash(...)` entry or a wildcard entry does not
+permit a command, and `extra_allowed_tools` permits nothing.
+
+- **Separate permit.** The permit is its own input so that it never adds a
+  command to an agent allowlist. `extra_allowed_tools` reaches the agent of the
+  review, `fix-pr`, and implement routes, and the review route checks out the
+  pull request head, so a raw project command on that list would let the review
+  agent run code that the pull request wrote. For the same reason, when the
+  default-branch `CLAUDE.md` states a contract, the compose step removes the
+  entries `Bash(<regenerate command>)` and `Bash(<verify command>)` from
+  `extra_allowed_tools` on every route, and it removes `Bash(<entry>)` for each
+  `guide_contract_permit` entry. When the heading is there but the runner cannot
+  report a parsed contract (a malformed statement, no `python3`, or a runner
+  failure), every `extra_allowed_tools` entry is dropped for that run with a
+  warning.
+
+- **Trusted read.** The `Compose Claude prompt` step reads the block from
+  `CLAUDE.md` at the default-branch tip (the fetched `FETCH_HEAD`; when the
+  fetch fails, `HEAD` only on a run of the default branch). Pull request
+  content and session branches are never read for the block.
+- **Runner.** `scripts/guide_contract.py` runs the two commands. It refuses to
+  run unless the work-tree contract block and every stated command file equal
+  the default-branch blobs. It starts each command with no shell, a 600-second
+  limit, and an environment of only `PATH`, an empty `HOME`, and git overrides
+  that turn hooks and the file monitor off. It refuses a regenerate command that
+  changes a file outside the stated generated files and a verify command that
+  changes any file. The clean environment keeps the job secrets out of the
+  command environment; on Linux a process can still read the environment of
+  other processes of the same user, so the trust in the command comes from its
+  equality with the default-branch files.
+- **Docs flows.** The compose step appends
+  `prompts/sync-docs-guide-contract.md` after the base prompt and before any
+  `-local.md` override, names the state (`ready`, `denied`, `malformed`, or
+  `unavailable`), and, when it is `ready`, gives the agent two exact runner
+  command lines and adds only those two lines to the allowlist. Any other state
+  is a blocked sync with a comment.
+- **Implement route.** `Prepare the guide contract revise pass` finds the one
+  session branch that the run created or moved and pushed, compares its
+  contract block and command files with the default branch, and creates the
+  work tree `.claude/worktrees/rk-guide-revise`. `Revise the guide sources` edits
+  only the stated sources there (no project command, no commit, no push).
+  `Regenerate, verify, and commit the agent guides` runs the runner and commits
+  the sources with the regenerated guides in one commit. `Push the agent guide
+  commit` is an action step whose allowlist is exactly `Bash(git -C
+  .claude/worktrees/rk-guide-revise push)`, because only the action holds the
+  `claude[bot]` push identity that starts CI, and it removes that credential
+  when its step ends. `Report the guide contract result` posts a comment that
+  names the reason, the command, and its output on any stop, and also when the
+  revise step fails before it edits a source. The settle step refuses to run a
+  project command while the work tree holds any git-ignored file. The job result
+  does not change, because the implementation is already pushed. A session that
+  changed a command file or the contract block gets that comment, and no project
+  command runs.
+- **Limits.** A docs-flow agent must call the runner; Claude Code enforces this
+  only because the raw command entries are off its allowlist. The command-file
+  list is the repository's statement: a helper that the generator loads and the
+  list omits is not compared, so list a directory when in doubt.
+  The runner finds each program on the `PATH` that the trusted step recorded;
+  an agent that can write into a directory on that `PATH` already controls
+  every command it runs, so the runner adds no exposure there.
 
 ## Triggers (comments by OWNER / MEMBER / COLLABORATOR only)
 

@@ -829,6 +829,8 @@ policy_launch_args() {
     implement) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-implement.out" claude_args)" ;;
     fix-pr) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-fix-pr.out" claude_args)" ;;
     guide) policy_args "$run/compose-implement.out" guide_claude_args ;;
+    sources) policy_args "$run/compose-implement.out" guide_sources_claude_args ;;
+    push) policy_args "$run/compose-implement.out" guide_push_claude_args ;;
     off) printf '%s %s' "$TAG_PREFIX" "$(policy_args "$run/compose-off.out" claude_args)" ;;
   esac
 }
@@ -850,7 +852,11 @@ policy_check_run() {
 }
 
 policy_launch() {
-  local run="$1" args="$2" commands="$3" port mock_pid status
+  local run="$1" args="$2" commands="$3" port mock_pid status market="$POLICY_MARKET" plugins="$POLICY_PLUGIN@rk-probe-market"
+  if [ "${4:-}" = no-plugins ]; then
+    market=""
+    plugins=""
+  fi
   rm -f "$run/port" "$run/mock.jsonl" "$run/rt/claude-execution-output.json"
   python3 -I "$HERE/mock_messages_api.py" --port-file "$run/port" --script "$commands" --log "$run/mock.jsonl" --marker "$POLICY_MD_MARKER" &
   mock_pid=$!
@@ -862,7 +868,7 @@ policy_launch() {
   (
     AS_USER_DIR="$run/ws" as_user "$PROBE_USER" env -i "PATH=$SYS_PATH" "HOME=$run/home" "RUNNER_TEMP=$run/rt" "GITHUB_WORKSPACE=$run/ws" "GITHUB_OUTPUT=$run/action.out" \
       "ANTHROPIC_API_KEY=$SYNTH_KEY" "ANTHROPIC_BASE_URL=http://127.0.0.1:$port" "INPUT_PROMPT_FILE=$run/prompt.txt" "INPUT_CLAUDE_ARGS=$args" \
-      "INPUT_PATH_TO_CLAUDE_CODE_EXECUTABLE=$CLAUDE" "INPUT_PLUGIN_MARKETPLACES=$POLICY_MARKET" "INPUT_PLUGINS=$POLICY_PLUGIN@rk-probe-market" \
+      "INPUT_PATH_TO_CLAUDE_CODE_EXECUTABLE=$CLAUDE" "INPUT_PLUGIN_MARKETPLACES=$market" "INPUT_PLUGINS=$plugins" \
       "INPUT_SHOW_FULL_OUTPUT=true" "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1" DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 DISABLE_AUTOUPDATER=1 \
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 timeout 300 "$POLICY_BUN" run "$POLICY_ACTION/base-action/src/index.ts"
   ) > "$run/launch.log" 2>&1
@@ -897,7 +903,7 @@ policy_block_cmd() {
 }
 
 policy_cp1_shape() {
-  local shape="$1" run="$POLICY_BASE/cp1-$1" args block allow
+  local shape="$1" run="$POLICY_BASE/cp1-$1" args block allow phase=main plugins="" lines
   if ! policy_prepare "$run"; then
     gate fail "CP1 $shape: preparation failed: $(tail -n 3 "$run"/stage.log "$run"/compose-*.log 2>/dev/null | tr '\n' ' ' | head -c 600)"
     return 1
@@ -905,20 +911,38 @@ policy_cp1_shape() {
   args=$(policy_launch_args "$run" "$shape")
   block="$run/markers/block"
   allow="$run/markers/allow"
-  policy_write_commands "$run/commands.json" "$(policy_block_cmd "$block" rk-policy-block-marker)" "$(policy_block_cmd "$allow" ok)"
-  if [ "$shape" = guide ]; then
-    policy_check_run "$run" before-guide "$args"
+  case "$shape" in
+    guide) phase=guide ;;
+    sources|push) phase="$shape"; plugins=no-plugins ;;
+  esac
+  if [ "$shape" = push ]; then
+    policy_write_commands "$run/commands.json" "$(policy_block_cmd "$block" rk-policy-block-marker)" "git -C .claude/worktrees/rk-guide-revise push"
   else
-    policy_check_run "$run" before-main "$args"
+    policy_write_commands "$run/commands.json" "$(policy_block_cmd "$block" rk-policy-block-marker)" "$(policy_block_cmd "$allow" ok)"
   fi
+  policy_check_run "$run" "before-$phase" "$args"
   POLICY_BEFORE_STATUS=$?
   POLICY_BEFORE_LINES=$(out_value "$run/check.out" call_lines)
-  policy_launch "$run" "$args" "$run/commands.json"
+  policy_launch "$run" "$args" "$run/commands.json" "$plugins"
   policy_note "$run" "CP1 $shape"
-  if [ ! -e "$block" ] && policy_result "$run" 0 | grep -qF "rk-policy-fixture: the command policy blocked" && [ -e "$allow" ]; then
+  lines=$(wc -l < "$(out_value "$run/stage.out" call_record)" 2>/dev/null | tr -d ' ')
+  if [ "$shape" = push ]; then
+    if [ ! -e "$block" ] && policy_result "$run" 0 | grep -qF "rk-policy-fixture: the command policy blocked" && [ "${lines:-0}" -ge 2 ] && ! policy_result "$run" 1 | grep -qF "rk-policy-fixture"; then
+      gate pass "CP1 $shape: the staged policy blocks the block marker command, and the one allowed push command passes the hook (call record lines: $lines)"
+    else
+      gate fail "CP1 $shape: block marker file present: $([ -e "$block" ] && echo yes || echo no), fixture message in the first result: $(policy_result "$run" 0 | grep -qF 'rk-policy-fixture' && echo yes || echo no), fixture message in the push result: $(policy_result "$run" 1 | grep -qF 'rk-policy-fixture' && echo yes || echo no), call record lines: ${lines:-0}"
+    fi
+  elif [ ! -e "$block" ] && policy_result "$run" 0 | grep -qF "rk-policy-fixture: the command policy blocked" && [ -e "$allow" ]; then
     gate pass "CP1 $shape: the staged policy blocks the block marker command and allows the harmless command"
   else
     gate fail "CP1 $shape: block marker file present: $([ -e "$block" ] && echo yes || echo no), fixture message in the result: $(policy_result "$run" 0 | grep -qF 'rk-policy-fixture' && echo yes || echo no), allow marker file present: $([ -e "$allow" ] && echo yes || echo no)"
+  fi
+  if [ "$phase" != main ]; then
+    if [ "$POLICY_BEFORE_STATUS" = 0 ] && policy_check_run "$run" "after-$phase" "$args" "$POLICY_BEFORE_LINES" "$run/rt/claude-execution-output.json"; then
+      gate pass "CP6 $shape: the before-phase and after-phase checks pass around a real launch"
+    else
+      gate fail "CP6 $shape: before-phase status $POLICY_BEFORE_STATUS; after-phase: $(grep '::error::' "$run/check-after-$phase.log" 2>/dev/null | tr '\n' ' ' | head -c 600); user settings: $(jq -c '{keys: keys, enableAllProjectMcpServers, enabledPlugins, extraKnownMarketplaces}' "$run/home/.claude/settings.json" 2>&1 | head -c 400)"
+    fi
   fi
   if [ -n "$(find "$run/markers" -name 'project-*' -print -quit)" ]; then
     gate fail "CP3 $shape: a hook from the workspace settings ran: $(ls "$run/markers" | tr '\n' ' ')"
@@ -1017,7 +1041,7 @@ if ! policy_setup; then
   gate fail "CP setup: cannot fetch or install the action at $ACTION_SHA ($(tail -n 5 "$OUT/policy-setup.log" 2>/dev/null | tr '\n' ' ' | head -c 400))"
 else
   say "  action source: $(git -C "$POLICY_ACTION" rev-parse HEAD), launched through base-action/src/index.ts with bun $("$POLICY_BUN" --version 2>/dev/null)"
-  for shape in implement fix-pr guide; do
+  for shape in implement fix-pr guide sources push; do
     policy_cp1_shape "$shape"
     if [ "$shape" = implement ]; then
       cp1="$POLICY_BASE/cp1-implement"

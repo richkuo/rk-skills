@@ -26,7 +26,8 @@ step scripts from `claude-run.yml` verbatim, so a pass proves the shipped code.
   suite needs Linux. The stub suite needs Linux, root, and `RK_PROBE_USER`.
   The `policy` suite runs the revision check, the staging step with a local
   fixture repository, the hook command, the compose step for every route and
-  flow, the four check steps, and the cleanup step.
+  flow, the eight check steps and their wiring to the four launches, and the
+  cleanup step.
 - `command_policy_fixture.py`: a standard-library checker with the caller
   contract. It blocks a Bash command that holds `rk-policy-block-marker`,
   raises on `rk-policy-crash-marker`, sleeps 60 seconds on
@@ -116,9 +117,14 @@ a pull request state: an allow-all checker, a `.claude/settings.json` and a
 `.claude/settings.local.json` whose hooks write marker files, and a
 `CLAUDE.md` with a marker text.
 
-- CP1: for the implement, fix-pr, and CLAUDE.md revision launch shapes, the
-  harmless block command (`git log --format=rk-policy-block-marker --output=<file>`)
-  is blocked with the fixture message, and the allow command writes its file.
+- CP1: for the implement, fix-pr, CLAUDE.md revision, and guide source
+  revision launch shapes, the harmless block command
+  (`git log --format=rk-policy-block-marker --output=<file>`) is blocked with
+  the fixture message, and the allow command writes its file. For the agent
+  guide push shape, whose allowlist holds one command, the block command is
+  blocked with the fixture message, and the push command passes the hook and
+  adds its call record line. The two agent guide contract shapes launch with
+  no plugin input, as the workflow steps do.
 - CP2: the call is blocked when the hook interpreter does not exist, when the
   staged checker is removed or changed, when the checker raises, and when it
   runs past the timeout. A control without `onFailure` is reported only.
@@ -136,6 +142,9 @@ a pull request state: an allow-all checker, a `.claude/settings.json` and a
   plugin install, and fails after a marketplace is added, after a plugin is
   enabled, and after a `hooks` key is added to the user settings. The results
   record the plugin keys that the launch wrote.
+  For the CLAUDE.md revision, guide source revision, and agent guide push
+  shapes, the before-phase and after-phase checks of that launch pass around a
+  real launch.
 - CP7: an executed Bash call leaves a call record line, and a control launch
   without the policy flags fails the after-launch check.
 - CP8: `COMMAND_POLICY_PROOF_ACTION_SHA` in `claude-run.yml` equals the action

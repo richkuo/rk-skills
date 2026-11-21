@@ -811,6 +811,33 @@ test_policy() {
   expect_field "Revise CLAUDE.md with session learnings" with.claude_args '${{ steps.compose_prompt.outputs.guide_claude_args }}' "policy launch: the guide revision reads guide_claude_args"
   expect_field "Run Claude Code" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the main launch loads instruction files from added directories"
   expect_field "Revise CLAUDE.md with session learnings" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy launch: the guide revision loads instruction files from added directories"
+  local wiring launch before_name after_name args_key before_id launch_id phase_key step_names key
+  step_names=$(grep -E '^      - name: ' "$WORKFLOW" | sed -e 's/^      - name: //')
+  for wiring in \
+    "Run Claude Code|before Claude runs|after Claude runs|claude_args|policy_before_main|claude|main" \
+    "Revise CLAUDE.md with session learnings|before the CLAUDE.md revision|after the CLAUDE.md revision|guide_claude_args|policy_before_guide|revise_guide|guide" \
+    "Revise the guide sources|before the guide source revision|after the guide source revision|guide_sources_claude_args|policy_before_sources|guide_revise|sources" \
+    "Push the agent guide commit|before the agent guide push|after the agent guide push|guide_push_claude_args|policy_before_push|guide_push|push"; do
+    IFS='|' read -r launch before_name after_name args_key before_id launch_id phase_key <<< "$wiring"
+    before_name="Check the staged command policy $before_name"
+    after_name="Check the staged command policy $after_name"
+    expect_field "$launch" with.claude_args "\${{ steps.compose_prompt.outputs.$args_key }}" "policy wiring: $launch reads $args_key"
+    expect_field "$launch" id "$launch_id" "policy wiring: $launch has the id $launch_id"
+    expect_field "$launch" env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD '${{ steps.command_policy.outputs.instructions_env }}' "policy wiring: $launch loads instruction files from added directories"
+    expect_field "$before_name" id "$before_id" "policy wiring: the check before $launch has the id $before_id"
+    expect_field "$before_name" env.PHASE "before-$phase_key" "policy wiring: the check before $launch runs the phase before-$phase_key"
+    expect_field "$after_name" env.PHASE "after-$phase_key" "policy wiring: the check after $launch runs the phase after-$phase_key"
+    expect_field "$before_name" env.POLICY_ARGS "\${{ steps.compose_prompt.outputs.$args_key }}" "policy wiring: the check before $launch reads the arguments of that launch"
+    expect_field "$after_name" env.POLICY_ARGS "\${{ steps.compose_prompt.outputs.$args_key }}" "policy wiring: the check after $launch reads the arguments of that launch"
+    expect_field "$after_name" env.POLICY_CALLS_BEFORE "\${{ steps.$before_id.outputs.call_lines }}" "policy wiring: the check after $launch reads the line count of its before check"
+    expect_field "$after_name" env.EXECUTION_FILE "\${{ steps.$launch_id.outputs.execution_file }}" "policy wiring: the check after $launch reads the execution file of that launch"
+    if printf '%s\n' "$step_names" | grep -A 2 -xF "$before_name" | tr '\n' '|' | grep -qxF "$before_name|$launch|$after_name|"; then ok "policy wiring: no step runs between $launch and its two checks"; else bad "policy wiring: the checks of $launch are not the steps next to it"; fi
+  done
+  for launch in "Revise the guide sources" "Push the agent guide commit"; do
+    for key in with.plugins with.plugin_marketplaces; do
+      if field_of "$launch" "$key" >/dev/null; then bad "policy wiring: $launch sets $key, and its check phases expect no plugin install"; else ok "policy wiring: $launch sets no $key, so its check phases expect the main launch entries only"; fi
+    done
+  done
 
   policy_caller
   policy_stage "$POLICY_WS" "$rt" "$C_GOOD" "$C_GOOD"
@@ -914,7 +941,7 @@ test_policy() {
   expect_status 0 "policy stage: a symlink at the staging path is replaced"
   if [ ! -L "$rt/rk-command-policy" ] && [ -d "$POLICY_ROOT/elsewhere" ] && [ -z "$(ls -A "$POLICY_ROOT/elsewhere")" ]; then ok "policy stage: the symlink target is untouched"; else bad "policy stage: the symlink target changed"; fi
 
-  local compose_rt="$POLICY_ROOT/compose-rt" off_args on_args off_guide on_guide suffix guide_literal flow
+  local compose_rt="$POLICY_ROOT/compose-rt" off_args on_args off_guide on_guide suffix guide_literal flow sources_literal push_literal
   mkdir -p "$compose_rt/rk-shared" "$POLICY_ROOT/compose-ws"
   cp -R "$REPO_ROOT/templates/claude-workflow/prompts" "$compose_rt/rk-shared/prompts"
   git -C "$POLICY_ROOT/compose-ws" init -q
@@ -922,6 +949,8 @@ test_policy() {
   settings=$(out_of settings_file)
   suffix=$(policy_suffix)
   guide_literal='--model claude-opus-5-5 --effort high --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"'
+  sources_literal='--model claude-opus-5-5 --effort high --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Edit,Write,Read,Grep,Glob"'
+  push_literal='--model claude-opus-5-5 --effort low --permission-mode default --max-turns 4 --allowedTools "Bash(git -C .claude/worktrees/rk-guide-revise push)"'
   for shape in implement: fix-pr: fix-pr-review: review: implement:sync-docs implement:create-release implement:sync-release; do
     mode="${shape%%:*}"
     flow="${shape#*:}"
@@ -937,6 +966,8 @@ test_policy() {
       *) ok "policy compose: $shape with the opt-in off holds no --settings" ;;
     esac
     if [ "$off_guide" = "$guide_literal" ]; then ok "policy compose: $shape with the opt-in off keeps the guide revision arguments"; else bad "policy compose: $shape guide revision arguments differ: $off_guide"; fi
+    if [ "$(heredoc_output "$POLICY_ROOT/off.out" guide_sources_claude_args)" = "$sources_literal" ]; then ok "policy compose: $shape with the opt-in off keeps the guide source revision arguments"; else bad "policy compose: $shape guide source revision arguments differ: $(heredoc_output "$POLICY_ROOT/off.out" guide_sources_claude_args)"; fi
+    if [ "$(heredoc_output "$POLICY_ROOT/off.out" guide_push_claude_args)" = "$push_literal" ]; then ok "policy compose: $shape with the opt-in off keeps the agent guide push arguments"; else bad "policy compose: $shape agent guide push arguments differ: $(heredoc_output "$POLICY_ROOT/off.out" guide_push_claude_args)"; fi
     policy_compose "$POLICY_ROOT/on.out" "$mode" "$flow" true "$settings"
     expect_status 0 "policy compose: $shape with the opt-in on runs"
     on_args=$(heredoc_output "$POLICY_ROOT/on.out" claude_args)
@@ -946,6 +977,8 @@ test_policy() {
     else
       if [ "$on_args" = "$off_args$suffix" ]; then ok "policy compose: $shape with the opt-in on adds exactly the policy flags at the end"; else bad "policy compose: $shape with the opt-in on does not equal the off arguments plus the policy flags"; fi
       if [ "$on_guide" = "$guide_literal$suffix" ]; then ok "policy compose: $shape guide revision arguments add exactly the policy flags"; else bad "policy compose: $shape guide revision arguments with the opt-in on are wrong"; fi
+      if [ "$(heredoc_output "$POLICY_ROOT/on.out" guide_sources_claude_args)" = "$sources_literal$suffix" ]; then ok "policy compose: $shape guide source revision arguments add exactly the policy flags"; else bad "policy compose: $shape guide source revision arguments with the opt-in on are wrong"; fi
+      if [ "$(heredoc_output "$POLICY_ROOT/on.out" guide_push_claude_args)" = "$push_literal$suffix" ]; then ok "policy compose: $shape agent guide push arguments add exactly the policy flags"; else bad "policy compose: $shape agent guide push arguments with the opt-in on are wrong"; fi
     fi
   done
   policy_compose "$POLICY_ROOT/on.out" implement "" true ""
@@ -955,10 +988,14 @@ test_policy() {
 
   local args_on="--model m$suffix" home_settings="$POLICY_ROOT/home/.claude/settings.json" exec_file="$POLICY_ROOT/execution.json"
   local bodies=() n
-  for n in "before Claude runs" "after Claude runs" "before the CLAUDE.md revision" "after the CLAUDE.md revision"; do
+  local same=1
+  for n in "before Claude runs" "after Claude runs" "before the CLAUDE.md revision" "after the CLAUDE.md revision" "before the guide source revision" "after the guide source revision" "before the agent guide push" "after the agent guide push"; do
     bodies+=("$(step_script "Check the staged command policy $n")")
   done
-  if cmp -s "${bodies[0]}" "${bodies[1]}" && cmp -s "${bodies[0]}" "${bodies[2]}" && cmp -s "${bodies[0]}" "${bodies[3]}"; then ok "policy check: the four check steps share one script body"; else bad "policy check: the four check step bodies differ"; fi
+  for n in 1 2 3 4 5 6 7; do
+    cmp -s "${bodies[0]}" "${bodies[$n]}" || same=0
+  done
+  if [ "$same" = 1 ] && [ -s "${bodies[0]}" ] && [ "$(grep -c -E '^      - name: Check the staged command policy ' "$WORKFLOW")" = 8 ]; then ok "policy check: the eight check steps share one script body"; else bad "policy check: the eight check step bodies differ, or the workflow does not hold eight check steps"; fi
 
   policy_check before-main "$args_on"
   expect_status 0 "policy check: an unchanged policy passes before the launch"
@@ -995,6 +1032,17 @@ test_policy() {
   expect_status 0 "policy check: the marketplaces and plugins of the main launch pass after it"
   policy_check before-guide "$args_on"
   expect_status 0 "policy check: the marketplaces and plugins of the main launch pass before the guide revision"
+  for n in before-sources before-push; do
+    policy_check "$n" "$args_on"
+    expect_status 0 "policy check: the marketplaces and plugins of the main launch pass in the phase $n"
+  done
+  for n in after-sources after-push; do
+    policy_check "$n" "$args_on" 0
+    expect_status 0 "policy check: the marketplaces and plugins of the main launch pass in the phase $n"
+  done
+  policy_check before-other "$args_on"
+  expect_status 1 "policy check: a phase that the script does not know fails"
+  expect_log "the phase is not known" "policy check: a phase that the script does not know fails (reason)"
   policy_check before-main "$args_on"
   expect_status 1 "policy check: plugin entries before the main launch installs them fail"
   expect_log "enabledPlugins holds the entry" "policy check: the early plugin entry is named"
@@ -1017,6 +1065,10 @@ test_policy() {
   expect_status 1 "policy check: a guide revision plugin before the guide revision launch fails"
   policy_check after-guide "$args_on" 0
   expect_status 0 "policy check: a guide revision plugin after the guide revision launch passes"
+  for n in after-sources after-push; do
+    policy_check "$n" "$args_on" 0
+    expect_status 1 "policy check: a guide revision plugin fails in the phase $n, where no launch installs it"
+  done
   write_user '{enabledPlugins: {"code-review@rk-pinned-claude-plugins": false}}'
   policy_check after-main "$args_on" 0
   expect_status 1 "policy check: an expected plugin with a value other than true fails"
