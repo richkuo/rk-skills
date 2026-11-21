@@ -591,7 +591,7 @@ section = 'claude compose, agent routes'
   }
 }
 
-function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success', trustedSha, source = 'current', ignore = false, actionBranch = false, commit = true, worktree = true, push = true, gate = false, detectSource = 'current' } = {}) {
+function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA, permit = PERMIT, session, edit, flow = '', reviseOutcome = 'success', executionFile, trustedSha, source = 'current', ignore = false, actionBranch = false, commit = true, worktree = true, push = true, gate = false, detectSource = 'current' } = {}) {
   const fixtureMutate = ignore
     ? (s) => {
       mutate?.(s)
@@ -667,6 +667,7 @@ function postImplement(flavor, { kind = 'contract', mutate, extra = OTHER_EXTRA,
       REASON: prepare.outputs.reason ?? '',
       DIGEST: prepare.outputs.digest ?? '',
       REVISE_OUTCOME: reviseOutcome,
+      EXECUTION_FILE: executionFile?.(result) ?? '',
       RUNNER_SHA: composed.outputs.guide_runner_sha,
       REPO: SLUG,
       ISSUE_NUMBER: '1',
@@ -864,7 +865,12 @@ for (const flavor of ['claude', 'codex']) {
       check(note.if === `${oldNote.if} && steps.guide_stop_report.outputs.posted != 'true'`, `the failure note skips only a posted stop comment (${note.if})`)
       check(JSON.stringify({ ...note, if: '' }) === JSON.stringify({ ...oldNote, if: '' }), 'the failure note is otherwise unchanged')
       check(stepOf(flavor, REVISE_LEGACY[flavor]).if === stepOf(flavor, REVISE_LEGACY[flavor], FEATURE_BASE).if, `the legacy revise step condition equals the ${FEATURE_BASE.slice(0, 7)} condition`)
-      check(JSON.stringify(stepOf(flavor, REPORT)) === JSON.stringify(stepOf(flavor, REPORT, FEATURE_BASE)), `the guide contract report step equals the ${FEATURE_BASE.slice(0, 7)} step`)
+      const withoutDenials = (step) => {
+        const env = { ...step.env }
+        delete env.EXECUTION_FILE
+        return JSON.stringify({ ...step, env, run: step.run.replace(' --execution-file "$EXECUTION_FILE"', '') })
+      }
+      check(withoutDenials(stepOf(flavor, REPORT)) === withoutDenials(stepOf(flavor, REPORT, FEATURE_BASE)), `the guide contract report step equals the ${FEATURE_BASE.slice(0, 7)} step apart from the denial input`)
     }
   }
 
@@ -1011,6 +1017,172 @@ for (const flavor of ['claude', 'codex']) {
   }
 }
 
+const STAGE_RULE = '- Area rule learned through the staged copy.'
+function stageDir(p) {
+  return join(p.rt, 'rk-guide-stage')
+}
+function stagedCopy(p, path) {
+  const base = path.split('/').pop()
+  const names = existsSync(stageDir(p)) ? readdirSync(stageDir(p)).filter((name) => /^\d\d-/.test(name) && name.slice(3) === base) : []
+  if (names.length !== 1) throw new Error(`expected one staged copy of ${path}, found ${names.join(', ') || 'none'}`)
+  return join(stageDir(p), names[0])
+}
+function stageRule(p) {
+  const file = stagedCopy(p, '.claude/rules/area.md')
+  writeFileSync(file, readFileSync(file, 'utf8').replace('- Area rule one.', `- Area rule one.\n${STAGE_RULE}`))
+}
+function writeExecution(r, records, { lines = false } = {}) {
+  const file = join(r.p.dir, `execution-${(counter += 1)}.json`)
+  writeFileSync(file, lines ? records.map((record) => JSON.stringify(record)).join('\n') + '\n' : JSON.stringify(records))
+  return file
+}
+const denialRecords = (r) => [
+  { type: 'system', subtype: 'init' },
+  { type: 'result', subtype: 'success', permission_denials: [{ tool_name: 'Edit', tool_use_id: 'toolu_fixture', tool_input: { file_path: join(r.revise, '.claude/rules/area.md'), old_string: 'a', new_string: 'b' } }] },
+]
+
+section = 'claude staged copies, prepare'
+{
+  const r = postImplement('claude', { edit: (wt, p) => { stageRule(p); writeFileSync(join(stageDir(p), '.rk-guide-commit-message.txt'), 'docs: record the staged rule\n\nThe session learned one area rule.\n') } })
+  const prompt = r.prepare.outputs.prompt ?? ''
+  check(r.prepare.outputs.state === 'ready', `prepare is ready (${r.prepare.log})`)
+  check(prompt.includes(`The staging directory for this pass is ${stageDir(r.p)}.`) && prompt.includes('Read files there, and edit no file there.'), 'the Claude revise prompt names the staging directory and forbids edits in the work tree')
+  check(prompt.includes(`${stageDir(r.p)}/01-area.md for .claude/rules/area.md`) && prompt.includes(`${stageDir(r.p)}/02-CLAUDE.md for CLAUDE.md`), `the prompt lists each staged copy with its source (${prompt.slice(-900)})`)
+  check(prompt.includes(`The optional commit message file is ${stageDir(r.p)}/.rk-guide-commit-message.txt.`), 'the commit message file lives in the staging directory')
+  check(r.settle?.outputs.result === 'committed' && r.push?.status === 0, `settle commits the staged edit and the push lands (${r.settle?.log})`)
+  const files = git(r.p.bare, 'show', '--name-only', '--format=', r.remoteTip).split('\n').sort()
+  check(JSON.stringify(files) === JSON.stringify(['.claude/rules/area.md', 'AGENTS.md']), `one commit holds the rule file edit and the regenerated guide (${files})`)
+  check(git(r.p.bare, 'show', `${r.remoteTip}:.claude/rules/area.md`).includes(STAGE_RULE) && git(r.p.bare, 'show', `${r.remoteTip}:AGENTS.md`).includes(STAGE_RULE), 'the rule file and the regenerated guide hold the staged edit')
+  check(git(r.p.bare, 'log', '-1', '--format=%B', r.remoteTip).startsWith('docs: record the staged rule'), 'the commit uses the message file from the staging directory')
+  check(r.comments.length === 0, `a staged edit with no denial posts no comment (${r.comments.join(' | ')})`)
+  check(!existsSync(stageDir(r.p)) && !existsSync(r.revise), 'the report step removes the staging directory and the revise work tree')
+}
+{
+  const r = postImplement('codex', {})
+  check(r.prepare.outputs.state === 'ready' && !existsSync(stageDir(r.p)), 'the Codex prepare step makes no staging directory')
+  check(readFileSync(join(r.p.rt, 'rk-guide-revise/prompt.md'), 'utf8').includes('Edit files only inside it.'), 'the Codex revise prompt keeps the in-place edit rule')
+}
+{
+  const r = postImplement('claude', { edit: (wt, p) => { addRule(wt); stageRule(p) } })
+  check(r.settle?.outputs.result === 'stop' && (r.settle?.log ?? '').includes('changed both in place and in its staged copy'), `an in-place edit and a different staged edit of one source stop settle (${r.settle?.log})`)
+  check(r.remoteTip === r.sessionTip && r.comments.length === 1 && r.comments[0].includes('changed both in place'), 'the conflict makes no commit and posts one comment')
+}
+{
+  const r = postImplement('claude', { edit: (wt, p) => { addRule(wt); writeFileSync(stagedCopy(p, '.claude/rules/area.md'), readFileSync(join(wt, '.claude/rules/area.md'))) } })
+  check(r.settle?.outputs.result === 'committed', `an in-place edit equal to the staged edit commits (${r.settle?.log})`)
+}
+
+const stagedStops = [
+  ['a staged copy that is a symbolic link', (wt, p) => { const outsideFile = join(p.dir, 'outside.md'); writeFileSync(outsideFile, '# Outside\n'); const copy = stagedCopy(p, '.claude/rules/area.md'); rmSync(copy); symlinkSync(outsideFile, copy) }, 'is a symbolic link or not a regular file'],
+  ['a file in the staging directory that names a path outside the sources', (wt, p) => { stageRule(p); writeFileSync(join(stageDir(p), '99-README.md'), 'planted\n'); writeFileSync(join(stageDir(p), 'README.md'), 'planted\n') }, 'which is no staged copy of a stated source'],
+  ['a missing staged copy', (wt, p) => { rmSync(stagedCopy(p, 'CLAUDE.md')) }, 'is missing'],
+]
+for (const [label, edit, needle] of stagedStops) {
+  section = `claude staged copies, ${label}`
+  const r = postImplement('claude', { edit })
+  check(r.settle?.outputs.result === 'stop' && (r.settle?.log ?? '').includes(needle), `settle stops (${r.settle?.log})`)
+  check(r.remoteTip === r.sessionTip && r.comments.length === 1 && r.comments[0].includes(needle), `no commit and one comment names the reason (${r.comments.join(' | ')})`)
+  check(!existsSync(join(r.p.ws, 'README.md')) && !existsSync(join(r.revise, 'README.md')), 'no planted file reaches the workspace')
+  if (label.includes('symbolic link')) check(readFileSync(join(r.p.dir, 'outside.md'), 'utf8') === '# Outside\n', 'the link target outside the work tree is unchanged')
+}
+
+section = 'claude staged copies, a symbolic link parent'
+{
+  let outsideRules
+  const r = postImplement('claude', {
+    edit: (wt, p) => {
+      outsideRules = join(p.dir, 'outside-rules')
+      cpSync(join(wt, '.claude/rules'), outsideRules, { recursive: true })
+      rmSync(join(wt, '.claude/rules'), { recursive: true })
+      symlinkSync(outsideRules, join(wt, '.claude/rules'))
+      stageRule(p)
+    },
+  })
+  check(r.settle?.outputs.result === 'stop' && (r.settle?.log ?? '').includes('has a parent that is a symbolic link'), `a source under a linked directory stops settle (${r.settle?.log})`)
+  check(!readFileSync(join(outsideRules, 'area.md'), 'utf8').includes(STAGE_RULE), 'no staged copy is written through the link outside the work tree')
+  check(r.remoteTip === r.sessionTip && r.comments.length === 1, 'no commit and one comment')
+}
+
+section = 'claude staged copies, denied tool calls'
+{
+  const none = postImplement('claude', { executionFile: (r) => writeExecution(r, denialRecords(r)) })
+  check(none.settle?.outputs.result === 'none' && none.remoteTip === none.sessionTip, 'a denied edit with no other edit makes no commit')
+  check(none.comments.length === 1 && none.comments[0].includes('Claude Code denied 1 tool call in the revise step, so the revise pass changed no guide source') && none.comments[0].includes('`Edit` on `.claude/rules/area.md`'), `one comment names the denied call and its path (${none.comments.join(' | ')})`)
+  check(none.report.log.includes('::notice::Agent guide contract revise pass: no guide commit. Reason: Claude Code denied 1 tool call'), 'the run notice states the denial')
+  check(!none.report.log.includes('nothing to report'), 'the report step no longer says nothing to report')
+  const lined = postImplement('claude', { executionFile: (r) => writeExecution(r, denialRecords(r), { lines: true }) })
+  check(lined.comments.length === 1 && lined.comments[0].includes('`Edit` on `.claude/rules/area.md`'), 'a line-delimited execution file gives the same comment')
+  const landed = postImplement('claude', { edit: (wt, p) => stageRule(p), executionFile: (r) => writeExecution(r, denialRecords(r)) })
+  check(landed.settle?.outputs.result === 'committed' && landed.remoteTip !== landed.sessionTip, 'a staged edit lands beside a denied call')
+  check(landed.comments.length === 1 && landed.comments[0].startsWith('**The agent guide commit landed, but Claude Code denied some tool calls in the revise step.**') && landed.comments[0].includes('`Edit` on `.claude/rules/area.md` (the commit changes this path)'), `a landed commit with a denied call posts one comment that names it and marks the path the commit changes (${landed.comments.join(' | ')})`)
+  check(!landed.comments.join('').includes('is not in the commit') && landed.comments[0].includes('can be missing from the commit, or it can have landed through a staged copy'), 'the comment does not say that a denied edit is absent from the commit')
+  const otherDenial = (r) => [{ type: 'result', subtype: 'success', permission_denials: [{ tool_name: 'Edit', tool_input: { file_path: join(r.revise, 'CLAUDE.md') } }] }]
+  const beside = postImplement('claude', { edit: (wt, p) => stageRule(p), executionFile: (r) => writeExecution(r, otherDenial(r)) })
+  check(beside.settle?.outputs.result === 'committed' && beside.comments.length === 1 && beside.comments[0].includes('- `Edit` on `CLAUDE.md`\n'), `a denied call on a source that the commit leaves unchanged is named with no commit mark (${beside.comments.join(' | ')})`)
+  const clean = postImplement('claude', { executionFile: (r) => writeExecution(r, [{ type: 'result', subtype: 'success', permission_denials: [] }]) })
+  check(clean.comments.length === 0 && clean.report.log.includes('nothing to report'), 'an execution file with no denial keeps the quiet result')
+  const broken = postImplement('claude', { executionFile: (r) => { const file = join(r.p.dir, 'broken.json'); writeFileSync(file, 'not json\n'); return file } })
+  check(broken.comments.length === 0 && broken.report?.status === 0, 'an unreadable execution file changes nothing')
+  const missing = postImplement('claude', { executionFile: (r) => join(r.p.dir, 'no-such-file.json') })
+  check(missing.comments.length === 0 && missing.report?.status === 0, 'a missing execution file changes nothing')
+}
+
+section = 'claude staged copies, wiring'
+{
+  const prepare = stepOf('claude', PREPARE)
+  const revise = stepOf('claude', 'Revise the guide sources')
+  const report = stepOf('claude', REPORT)
+  check(prepare.run.includes('STAGE_DIR="$RUNNER_TEMP/rk-guide-stage"') && prepare.run.includes('rm -rf "$GUIDE_DIR" "$STAGE_DIR" "$STAGE_DIR.applied.json"') && prepare.run.includes('--stage-dir "$STAGE_DIR"'), 'the prepare step clears and passes the staging directory')
+  check(revise.with.claude_args.includes('--add-dir ${{ runner.temp }}/rk-guide-stage --allowedTools'), 'the revise step can edit the staging directory')
+  check(report.env.EXECUTION_FILE === '${{ steps.guide_revise.outputs.execution_file }}' && report.run.includes('--execution-file "$EXECUTION_FILE"'), 'the report step reads the revise step execution file')
+  check(!stepOf('codex', PREPARE).run.includes('--stage-dir'), 'the Codex prepare step passes no staging directory')
+  check(!revise.with.claude_args.includes('guide_contract_permit') && !JSON.stringify(report.env).includes('guide_contract_permit'), 'no new step input reads the permit value')
+}
+
+section = 'claude compose, staged copies in a documentation sync'
+{
+  const p = project('contract')
+  const c = compose('claude', p, 'sync-docs', `${OTHER_EXTRA},${RAW}`, { permit: PERMIT })
+  const [checkLine, runLine] = bracketed(c.prompt)
+  check(c.prompt.includes(`--add-dir "${stageDir(p)}"`), `the agent can edit the staging directory (${c.prompt.slice(-300)})`)
+  check(c.prompt.includes(`The staging directory for this run is ${stageDir(p)}. The staged copies of the stated sources are: ${stageDir(p)}/01-area.md for .claude/rules/area.md; ${stageDir(p)}/02-CLAUDE.md for CLAUDE.md.`), 'the prompt lists each staged copy with its source')
+  check(readFileSync(stagedCopy(p, '.claude/rules/area.md'), 'utf8') === readFileSync(join(p.ws, '.claude/rules/area.md'), 'utf8'), 'the staged copy starts equal to its source')
+  check(runBracketed(p, checkLine).stdout.includes('result=ok'), 'the runner check passes')
+  stageRule(p)
+  const applied = runBracketed(p, runLine)
+  check(applied.status === 0 && applied.stdout.includes('applied=.claude/rules/area.md'), `the run command applies the staged copy (${applied.stdout})`)
+  check(JSON.stringify(statusPaths(p.ws)) === JSON.stringify(['.claude/rules/area.md', 'AGENTS.md']), `only the source and the regenerated guide change (${statusPaths(p.ws)})`)
+  check(readFileSync(join(p.ws, 'AGENTS.md'), 'utf8').includes(STAGE_RULE), 'the regenerated guide holds the staged edit')
+  const again = runBracketed(p, runLine)
+  check(again.status === 0 && again.stdout.includes('applied=\n'), `a second run applies nothing more (${again.stdout})`)
+  const SECOND_RULE = '- Area rule condensed in a second staged edit.'
+  replaceIn(stageDir(p), '01-area.md', STAGE_RULE, SECOND_RULE)
+  const second = runBracketed(p, runLine)
+  check(second.status === 0 && second.stdout.includes('result=ok') && second.stdout.includes('applied=.claude/rules/area.md'), `a second, different staged edit applies after the first run (${second.stdout})`)
+  check(readFileSync(join(p.ws, '.claude/rules/area.md'), 'utf8').includes(SECOND_RULE) && !readFileSync(join(p.ws, '.claude/rules/area.md'), 'utf8').includes(STAGE_RULE), 'the source holds the second staged edit')
+  check(readFileSync(join(p.ws, 'AGENTS.md'), 'utf8').includes(SECOND_RULE) && !readFileSync(join(p.ws, 'AGENTS.md'), 'utf8').includes(STAGE_RULE), 'the regenerated guide holds the second staged edit')
+  const guideBefore = readFileSync(join(p.ws, 'AGENTS.md'), 'utf8')
+  replaceIn(p.ws, '.claude/rules/area.md', SECOND_RULE, '- A different in-place rule.')
+  const conflict = runBracketed(p, runLine)
+  check(conflict.status !== 0 && conflict.stdout.includes('changed both in place and in its staged copy'), `an in-place edit after a run that differs from the applied staged copy is refused (${conflict.stdout})`)
+  check(readFileSync(join(p.ws, '.claude/rules/area.md'), 'utf8').includes('- A different in-place rule.') && readFileSync(join(p.ws, 'AGENTS.md'), 'utf8') === guideBefore && readFileSync(join(stageDir(p), '01-area.md'), 'utf8').includes(SECOND_RULE), 'the refused run writes nothing')
+  replaceIn(p.ws, '.claude/rules/area.md', '- A different in-place rule.', SECOND_RULE)
+  replaceIn(stageDir(p), '01-area.md', SECOND_RULE, STAGE_RULE)
+  const back = runBracketed(p, runLine)
+  check(back.status === 0 && readFileSync(join(p.ws, '.claude/rules/area.md'), 'utf8').includes(STAGE_RULE), `a staged edit back to earlier text applies (${back.stdout})`)
+  replaceIn(stageDir(p), '02-CLAUDE.md', `- Verify: \`${VERIFY}\``, '- Verify: `bash scripts/other.sh`')
+  const block = runBracketed(p, runLine)
+  check(block.status !== 0 && block.stdout.includes('contract block in the work tree'), 'a staged contract block change is refused before any project command runs')
+  git(p.ws, 'checkout', '--', 'CLAUDE.md')
+  replaceIn(stageDir(p), '02-CLAUDE.md', '- Verify: `bash scripts/other.sh`', `- Verify: \`${VERIFY}\``)
+  writeFileSync(join(stageDir(p), '03-README.md'), 'planted\n')
+  const planted = runBracketed(p, runLine)
+  check(planted.status !== 0 && planted.stdout.includes('which is no staged copy of a stated source') && !existsSync(join(p.ws, 'README.md')), 'a planted staging file is refused with no write')
+  const codexProject = project('contract')
+  const codex = compose('codex', codexProject, 'sync-docs', '', { permit: PERMIT })
+  check(!codex.prompt.includes('staging directory') && !existsSync(stageDir(codexProject)), 'the Codex sync makes no staging directory')
+}
+
 section = 'Claude allowlist'
 const claudeBin = process.env.RK_CLAUDE_BIN
 if (claudeBin) {
@@ -1070,6 +1242,61 @@ if (claudeBin) {
   }
   check(run('git', ['-C', p.bare, 'rev-parse', '--verify', '-q', 'refs/heads/allowlist-target']).status === 0, 'the permitted push-only command pushed to the upstream branch')
   check(git(p.bare, 'rev-parse', 'main') === mainBefore, 'the denied push to another branch did not run')
+  section = 'Claude revise step with the real binary'
+  const probe = {}
+  const revised = postImplement('claude', {
+    edit: (wt, rp) => {
+      const dir = fresh('revise-binary')
+      const copy = stagedCopy(rp, '.claude/rules/area.md')
+      const inPlace = join(wt, '.claude/rules/area.md')
+      const before = '- Area rule one.'
+      const after = `- Area rule one.\n${STAGE_RULE}`
+      const script = join(dir, 'commands.json')
+      writeFileSync(script, JSON.stringify([
+        { name: 'Read', input: { file_path: copy } },
+        { name: 'Edit', input: { file_path: copy, old_string: before, new_string: after } },
+        { name: 'Read', input: { file_path: inPlace } },
+        { name: 'Edit', input: { file_path: inPlace, old_string: before, new_string: after } },
+      ]))
+      const portFile = join(dir, 'port')
+      const log = join(dir, 'mock.jsonl')
+      const mock = Bun.spawn(['python3', '-I', join(root, 'docs/review-sandbox-probe/mock_messages_api.py'), '--port-file', portFile, '--script', script, '--log', log], { stdout: 'ignore', stderr: 'ignore' })
+      for (let i = 0; i < 100 && !(existsSync(portFile) && readFileSync(portFile, 'utf8')); i += 1) Bun.sleepSync(100)
+      const port = readFileSync(portFile, 'utf8')
+      const home = join(dir, 'home')
+      mkdirSync(home)
+      const args = stepOf('claude', 'Revise the guide sources').with.claude_args
+        .replaceAll('${{ steps.resolve.outputs.model_id }}', 'claude-sonnet-5-5')
+        .replaceAll('${{ steps.resolve.outputs.effort }}', 'high')
+        .replaceAll('${{ runner.temp }}', rp.rt)
+      const claude = run('bash', ['-c', 'eval "set -- $1"; exec "$0" -p "run the revise probe" --output-format stream-json --verbose "$@"', claudeBin, args], {
+        cwd: rp.ws,
+        env: { PATH: process.env.PATH, HOME: home, ANTHROPIC_API_KEY: 'sk-ant-fixture', ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`, DISABLE_TELEMETRY: '1', DISABLE_ERROR_REPORTING: '1', DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' },
+      })
+      mock.kill()
+      probe.execution = join(dir, 'execution.jsonl')
+      writeFileSync(probe.execution, claude.stdout)
+      probe.status = claude.status
+      probe.stderr = claude.stderr
+      probe.records = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []
+    },
+    executionFile: () => probe.execution,
+  })
+  const resultOf = (index) => (probe.records ?? []).find((entry) => entry.event === 'tool_result' && entry.index === index)
+  const stagedEdit = resultOf(1)
+  const inPlaceEdit = resultOf(3)
+  check(stagedEdit !== undefined && !stagedEdit.is_error, `Claude Code edits the staged copy with the revise step arguments (exit ${probe.status}, ${probe.stderr?.slice(0, 300)}, ${stagedEdit?.text?.slice(0, 200)})`)
+  check(inPlaceEdit !== undefined, `Claude Code returned a result for the in-place rule file edit (${probe.stderr?.slice(0, 300)})`)
+  check(revised.settle?.outputs.result === 'committed' && revised.push?.status === 0, `settle commits the staged edit (${revised.settle?.log})`)
+  const revisedFiles = revised.remoteTip ? git(revised.p.bare, 'show', '--name-only', '--format=', revised.remoteTip).split('\n').sort() : []
+  check(JSON.stringify(revisedFiles) === JSON.stringify(['.claude/rules/area.md', 'AGENTS.md']), `one commit holds the rule file edit and the regenerated guide (${revisedFiles})`)
+  check(revised.remoteTip !== undefined && git(revised.p.bare, 'show', `${revised.remoteTip}:.claude/rules/area.md`).includes(STAGE_RULE), 'the rule file under .claude/rules receives the edit')
+  if (inPlaceEdit?.is_error) {
+    check(revised.comments.length === 1 && revised.comments[0].includes('`Edit` on `.claude/rules/area.md`'), `the report names the denied in-place edit from the real execution output (${revised.comments.join(' | ')})`)
+  } else {
+    check(revised.comments.length === 0, `with no denial the report posts no comment (${revised.comments.join(' | ')})`)
+  }
+  console.log(`Claude revise case: the in-place rule file edit was ${inPlaceEdit?.is_error ? 'denied' : 'permitted'} (${(inPlaceEdit?.text ?? '').slice(0, 160)}).`)
   console.log(`Claude allowlist cases ran with ${run(claudeBin, ['--version']).stdout.trim()}.`)
 } else {
   console.log('Claude allowlist cases skipped: set RK_CLAUDE_BIN to a Claude Code binary to run them.')

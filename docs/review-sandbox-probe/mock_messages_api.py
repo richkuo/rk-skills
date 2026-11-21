@@ -132,7 +132,12 @@ class Handler(BaseHTTPRequestHandler):
             index = len(results)
             if index < len(COMMANDS):
                 log({"event": "dispatch", "index": index})
-                block = {"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": "Bash", "input": {"command": COMMANDS[index], "description": f"probe step {index}"}}
+                entry = COMMANDS[index]
+                if isinstance(entry, dict):
+                    name, given = entry["name"], entry["input"]
+                else:
+                    name, given = "Bash", {"command": entry, "description": f"probe step {index}"}
+                block = {"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": name, "input": given}
                 stop = "tool_use"
             else:
                 log({"event": "done"})
