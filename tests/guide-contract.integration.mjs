@@ -804,7 +804,10 @@ for (const flavor of ['claude', 'codex']) {
     check(!/bot_login|BOT_LOGIN/.test(JSON.stringify(reporter)) && !reporter.run.includes('python3'), 'the report step reads no bot login and needs no python3')
     check(stepIndex(flavor, COMPOSE[flavor]) < stepIndex(flavor, STOP_REPORT) && stepIndex(flavor, STOP_REPORT) < stepIndex(flavor, NOTE[flavor]), 'the report step runs after the compose step and before the failure note')
     const note = stepOf(flavor, NOTE[flavor])
-    check(note.if.endsWith(" && steps.guide_stop_report.outputs.posted != 'true'"), `the failure note skips a posted stop comment (${note.if})`)
+    const noteIf = flavor === 'claude'
+      ? "always() && (cancelled() || failure()) && steps.agent_home_cleanup.outcome != 'failure' && steps.guide_stop_report.outputs.posted != 'true'"
+      : "always() && (cancelled() || failure()) && env.BOT_LOGIN != '' && steps.guide_stop_report.outputs.posted != 'true'"
+    check(note.if === noteIf, `the failure note runs on a cancel or failure and skips a posted stop comment (${note.if})`)
   }
 
   section = `${flavor} revise step wiring`
@@ -822,8 +825,34 @@ for (const flavor of ['claude', 'codex']) {
   section = `${flavor} legacy revise step`
   {
     const step = stepOf(flavor, REVISE_LEGACY[flavor])
-    check(step.if.endsWith(" && steps.guide_contract.outputs.state == 'none'"), 'the legacy revise step runs only when the state is none')
+    check(step.if === `inputs.mode == 'implement' && steps.${flavor}.outcome == 'success' && steps.${flavor}_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none'`, `the legacy revise step runs only after a successful implement session that made commits, and only when the state is none (${step.if})`)
     check(step.uses === stepOf(flavor, flavor === 'claude' ? 'Run Claude Code' : 'Run Codex').uses, 'the legacy revise step uses the same pinned action as the main run step')
+    const settings = flavor === 'claude'
+      ? {
+        with: {
+          claude_code_oauth_token: '${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}',
+          plugin_marketplaces: '${{ runner.temp }}/rk-plugin-sources/rk-pinned-claude-plugins\n',
+          plugins: 'code-review@rk-pinned-claude-plugins\nclaude-md-management@rk-pinned-claude-plugins\n',
+          claude_args: '--model ${{ steps.resolve.outputs.model_id }} --effort ${{ steps.resolve.outputs.effort }} --permission-mode default --allowedTools "Bash(git status*),Bash(git log*),Bash(git diff*),Bash(git show*),Bash(git add*),Bash(git commit*),Bash(git push origin HEAD),Edit,Read,Grep,Glob,Write"',
+        },
+      }
+      : {
+        with: {
+          'openai-api-key': '${{ secrets.OPENAI_API_KEY }}',
+          'codex-home': '${{ runner.temp }}/codex-home',
+          model: '${{ steps.resolve.outputs.model_id }}',
+          effort: '${{ steps.resolve.outputs.effort }}',
+          'safety-strategy': 'drop-sudo',
+          sandbox: 'workspace-write',
+          'allow-users': '*',
+          'allow-bot-users': '${{ inputs.bot_login }}',
+        },
+        env: { GH_TOKEN: '${{ steps.app_token.outputs.token }}' },
+      }
+    const actual = { with: { ...step.with } }
+    delete actual.with.prompt
+    if (step.env !== undefined) actual.env = step.env
+    check(JSON.stringify(actual) === JSON.stringify(settings), `the legacy revise step keeps its credentials, tool allowlist, permission mode, sandbox, and environment (${JSON.stringify(actual)})`)
   }
 
   section = `${flavor} issue run gate`
@@ -920,8 +949,18 @@ for (const flavor of ['claude', 'codex']) {
       const pre = flavor === 'claude' ? 'pre_claude' : 'pre_codex'
       const changes = `${flavor}_changes`
       const legacy = stepOf(flavor, REVISE_LEGACY[flavor])
-      check(detect.id === changes, `the detect step has the id that the prepare and legacy revise conditions read (${detect.id})`)
-      check(detect.env.REFS_SHA === `\${{ steps.${pre}.outputs.refs_sha }}` && detect.env.RUNNER_SHA === '${{ steps.compose_prompt.outputs.guide_runner_sha }}' && detect.env.DEFAULT_BRANCH === '${{ github.event.repository.default_branch }}', `the detect step reads the recorded hashes and the default branch (${JSON.stringify(detect.env)})`)
+      check(detect.id === changes && detect.if === `inputs.mode == 'implement' && steps.${flavor}.outcome == 'success'`, `the detect step has the id that the prepare and legacy revise conditions read and runs only after a successful implement session (${detect.id}, ${detect.if})`)
+      const detectEnv = {
+        GH_TOKEN: '${{ github.token }}',
+        PRE_HEAD_SHA: `\${{ steps.${pre}.outputs.head_sha }}`,
+        BASELINE_KIND: `\${{ steps.${pre}.outputs.baseline_kind }}`,
+        PR_NUMBER: '${{ github.event.issue.number || github.event.pull_request.number }}',
+        REPO: '${{ github.repository }}',
+        REFS_SHA: `\${{ steps.${pre}.outputs.refs_sha }}`,
+        RUNNER_SHA: '${{ steps.compose_prompt.outputs.guide_runner_sha }}',
+        DEFAULT_BRANCH: '${{ github.event.repository.default_branch }}',
+      }
+      check(JSON.stringify(detect.env) === JSON.stringify(detectEnv), `the detect step reads the job token, the recorded head and hashes, and the default branch, and nothing more (${JSON.stringify(detect.env)})`)
       check(!JSON.stringify(detect.env).includes('guide_contract_permit') && !detect.run.includes('RK_GUIDE_PERMIT'), 'the detect step never reads guide_contract_permit')
       check(stepOf(flavor, PREPARE).if === `inputs.mode == 'implement' && steps.${flavor}.outcome == 'success' && (steps.${changes}.outputs.made_commits == 'true' || steps.${changes}.outputs.guide_gate == 'true')`, `the prepare step runs on either detect result (${stepOf(flavor, PREPARE).if})`)
       check(stepIndex(flavor, DETECT[flavor]) < stepIndex(flavor, PREPARE), 'the detect step runs before the prepare step')
