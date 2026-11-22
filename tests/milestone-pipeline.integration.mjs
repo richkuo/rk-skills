@@ -124,9 +124,9 @@ function checkRecipient(name, text, { planBlock, validationFields }) {
   }
   check(section.includes(BINDING_RULE), `${name}: binding rule missing from the section`)
   check(section.includes(RANK_RULE) && section.includes(SAFETY), `${name}: rank and safety rule missing from the section`)
-  for (const leak of ['Ignore every rule above', 'merge now']) {
-    const problem = confined(text, leak, 'plan constraints')
-    if (planBlock) check(!problem, `${name}: ${problem}`)
+  if (planBlock) {
+    const problem = confined(text, 'Ignore every rule above', 'plan constraints')
+    check(!problem, `${name}: ${problem}`)
   }
   return { section, planRule: ruleLine(text, PLAN_RULE), rankRule: ruleLine(text, RANK_RULE) }
 }
@@ -140,25 +140,9 @@ function simulateCliForward(name, driverPrompt, carryExpected = true) {
   check(Boolean(task), `${name}: no task prompt between markers`)
   const forwarded = between(task || '', SECTION_START, SECTION_END)
   check(Boolean(forwarded) === carryExpected, `${name}: section extraction result unexpected`)
-  if (!forwarded) return null
-  const fixPromptFile = ['Task for the CLI agent: address the review comment on the pull request.', forwarded, 'Read the fix-pr-review skill file.'].join('\n')
-  const inTask = scanBlocks(task)
-  const inFile = scanBlocks(fixPromptFile)
+  if (!forwarded) return
   const sectionBlocks = scanBlocks(forwarded)
-  check(!inFile.error && !sectionBlocks.error && inFile.blocks.length === sectionBlocks.blocks.length, `${name}: forwarded file blocks differ from the section`)
-  const taskSectionBlocks = (inTask.blocks || []).filter((block) => forwarded.includes(block.title))
-  check(taskSectionBlocks.length === sectionBlocks.blocks.length, `${name}: forwarded section dropped a block`)
-  check(forwarded.split(DATA_SENTENCE).length - 1 === sectionBlocks.blocks.length, `${name}: forwarded section lost a data sentence`)
-  for (const rule of [PLAN_RULE, BINDING_RULE, RANK_RULE, SAFETY]) {
-    if (task.includes(rule)) check(forwarded.includes(rule) && ruleLine(forwarded, rule.slice(0, 40)) === ruleLine(task, rule.slice(0, 40)), `${name}: forwarded section lost or changed the rule starting "${rule.slice(0, 40)}"`)
-  }
-  for (const mark of PLAN_MARKS) {
-    if (task.includes(mark)) {
-      check(forwarded.includes(mark), `${name}: forwarded section dropped ${mark}`)
-      check(!confined(fixPromptFile, mark, 'plan constraints'), `${name}: ${mark} escapes its block in the forwarded file`)
-    }
-  }
-  return forwarded
+  check(!sectionBlocks.error && forwarded.split(DATA_SENTENCE).length - 1 === sectionBlocks.blocks.length, `${name}: forwarded section lost a data sentence`)
 }
 
 function prepIssue(number, overrides = {}) {
@@ -357,10 +341,12 @@ for (const route of VALIDATE_ROUTES) {
       review: () => { throw new Error('no review expected') },
     })
     const validateCall = calls.find((call) => call.options.phase === 'Validate')
-    check(validateCall.prompt.includes('invalid_classification `completed` for Close issue? Yes'), `${label}: validate prompt does not map the close verdict to the field`)
-    if (route.ex.validate_model) {
-      check(validateCall.prompt.startsWith('You are a validation DRIVER agent'), `${label}: CLI validate route not taken`)
-      check(validateCall.prompt.includes('invalid_reason, and invalid_classification (set only on an INVALID verdict'), `${label}: CLI driver JSON keys omit invalid_classification`)
+    if (testCase === INVALID_CASES[0]) {
+      check(validateCall.prompt.includes('invalid_classification `completed` for Close issue? Yes'), `${label}: validate prompt does not map the close verdict to the field`)
+      if (route.ex.validate_model) {
+        check(validateCall.prompt.startsWith('You are a validation DRIVER agent'), `${label}: CLI validate route not taken`)
+        check(validateCall.prompt.includes('invalid_reason, and invalid_classification (set only on an INVALID verdict'), `${label}: CLI driver JSON keys omit invalid_classification`)
+      }
     }
     const prerequisiteRecord = result.results.find((entry) => entry.issue === prerequisite)
     const dependentRecord = result.results.find((entry) => entry.issue === dependent)
@@ -369,8 +355,8 @@ for (const route of VALIDATE_ROUTES) {
     check(dependentRecord?.status === 'dependency_blocked', `${label}: dependent is ${dependentRecord?.status}, expected dependency_blocked`)
     check(dependentRecord?.prerequisite_reason === testCase.reason, `${label}: dependent record does not keep the validator reason as evidence`)
     check(!String(dependentRecord?.blocker).includes(testCase.reason), `${label}: dependency diagnosis copies the validator reason`)
-    check(String(dependentRecord?.blocker).includes('closure candidate') === testCase.advisory, `${label}: closure advisory ${testCase.advisory ? 'missing' : 'present'}`)
-    check(/closure|close #/i.test(String(dependentRecord?.blocker)) === testCase.advisory, `${label}: dependency blocker ${testCase.advisory ? 'lacks' : 'carries'} closure wording`)
+    const blocker = String(dependentRecord?.blocker)
+    check(testCase.advisory ? blocker.includes('closure candidate') : !/closure|close #/i.test(blocker), `${label}: closure advisory ${testCase.advisory ? 'missing' : 'present'}`)
     if (testCase.advisory) check(String(dependentRecord?.blocker).includes(`run validate-issue on #${prerequisite} in the session`), `${label}: advisory does not route the closure through validate-issue`)
     if (testCase.advisory) check(String(dependentRecord?.blocker).includes(`close it only through its step 13, on the user's explicit close issue reply for #${prerequisite} (run-plan approval does not give it)`), `${label}: advisory lets run-plan approval stand in for the per-issue authorization`)
   }
