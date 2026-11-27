@@ -869,7 +869,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
         env:
           HOME: ${{ steps.agent_home.outputs.path }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: ${{ steps.review_contract.outputs.scrub }}
@@ -1199,7 +1199,7 @@ jobs:
 
       - name: Revise CLAUDE.md with session learnings
         if: inputs.mode == 'implement' && steps.claude.outcome == 'success' && steps.claude_changes.outputs.made_commits == 'true' && steps.guide_contract.outputs.state == 'none'
-        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "Use the Skill tool to invoke the 'claude-md-management:revise-claude-md' skill. Review the changes made in this session (use git log and git diff to inspect them) and update CLAUDE.md with any new patterns, conventions, or important context learned. If you modified CLAUDE.md, you MUST persist it: commit it on the current branch following the repository commit conventions and push with git push origin HEAD — an uncommitted edit is discarded when this job ends."
@@ -1214,7 +1214,7 @@ jobs:
         if: steps.guide_contract.outputs.state == 'ready'
         id: guide_revise
         continue-on-error: true
-        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: 'claude'
@@ -1246,7 +1246,7 @@ jobs:
       - name: Push the agent guide commit
         if: steps.guide_settle.outputs.result == 'committed'
         continue-on-error: true
-        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: 'claude'
